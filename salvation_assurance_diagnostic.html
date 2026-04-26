@@ -671,7 +671,7 @@ body {
 
 <!-- STICKY PROGRESS -->
 <div class="progress-wrap">
-  <span class="progress-text" id="progressText">0 of 60 answered</span>
+  <span class="progress-text" id="progressText">0 of — answered</span>
   <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
   <button class="calc-btn" onclick="calcScore()">View Results</button>
 </div>
@@ -2176,41 +2176,41 @@ async function submitToDashboard() {
   }
 }
 
-// Allow Enter key in PIN field
-document.addEventListener('DOMContentLoaded', () => {
+// ── ALL INIT RUNS AFTER DOM IS READY ──────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+
+  // Enter key in PIN field
   const pinField = document.getElementById('facilitatorPin');
-  if (pinField) {
-    pinField.addEventListener('keydown', e => {
-      if (e.key === 'Enter') unlockFacilitator();
-    });
+  if (pinField) pinField.addEventListener('keydown', e => { if(e.key==='Enter') unlockFacilitator(); });
+
+  // ── PROGRESS TRACKER ──────────────────────────────────────────
+  function updateProgress() {
+    // Count unique radio group names — each name = one question
+    const allRadioNames = new Set();
+    document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
+    const answeredRadios = new Set();
+    document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
+    // Open text fields
+    const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]');
+    const filledTextareas = [...allTextareas].filter(t => t.value.trim().length > 5);
+    const total = allRadioNames.size + allTextareas.length;
+    const done  = answeredRadios.size + filledTextareas.length;
+    const pct   = total > 0 ? Math.round(done/total*100) : 0;
+    const ptEl  = document.getElementById('progressText');
+    const pfEl  = document.getElementById('progressFill');
+    if (ptEl) ptEl.textContent = done + ' of ' + total + ' answered';
+    if (pfEl) pfEl.style.width = pct + '%';
   }
-});
 
-// PROGRESS TRACKER — dynamically counts all radio groups + open textareas
-function updateProgress() {
-  // Count unique radio group names (each unique name = one question)
-  const allRadioNames = new Set();
-  document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
+  // Attach to all radio + textarea inputs
+  document.querySelectorAll('input[type="radio"], textarea').forEach(el => {
+    el.addEventListener('change', updateProgress);
+    el.addEventListener('input',  updateProgress);
+  });
 
-  // Count answered radio groups
-  const answeredRadios = new Set();
-  document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
+  // Initialize progress on load
+  updateProgress();
 
-  // Scorable open-text textareas
-  const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]');
-  const filledTextareas = [...allTextareas].filter(t => t.value.trim().length > 5);
-
-  const total = allRadioNames.size + allTextareas.length;
-  const done = answeredRadios.size + filledTextareas.length;
-  const pct = total > 0 ? Math.round(done/total*100) : 0;
-
-  document.getElementById('progressText').textContent = `${done} of ${total} answered`;
-  document.getElementById('progressFill').style.width = pct + '%';
-}
-
-document.querySelectorAll('input[type="radio"], textarea').forEach(el => {
-  el.addEventListener('change', updateProgress);
-  el.addEventListener('input', updateProgress);
 });
 
 function clearForm() {
@@ -2218,7 +2218,15 @@ function clearForm() {
   document.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(i => i.checked = false);
   document.querySelectorAll('textarea, input[type="text"], input[type="date"], input[type="number"], select').forEach(i => i.value = '');
   document.getElementById('scorePanel').classList.remove('visible');
-  updateProgress();
+  // Re-run progress after clear
+  const allRadioNames = new Set();
+  document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
+  const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]');
+  const total = allRadioNames.size + allTextareas.length;
+  const ptEl = document.getElementById('progressText');
+  const pfEl = document.getElementById('progressFill');
+  if (ptEl) ptEl.textContent = '0 of ' + total + ' answered';
+  if (pfEl) pfEl.style.width = '0%';
 }
 </script>
 </body>
