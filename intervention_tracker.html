@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intervention Tracker — MULTIPLY</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f5f0e8;--surface:#ffffff;--surface2:#faf6ef;
+  --border:#e2d8cc;--border2:#ccc0b0;
+  --ink:#1a1612;--muted:#6b5f4f;--lighter:#9a8f80;--text:#3a3028;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;
+  --green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;
+  --navy:#1b2a4a;
+  --z4c:#7a2020;--z4bg:#fdecea;--z4light:#fff8f8;
+  --z2c:#1a4a6b;--z2bg:#e8f0f8;--z2light:#f0f6ff;
+  --z3c:#7a4a10;--z3bg:#fef3e8;--z3light:#fffaf5;
+  --shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 12px rgba(0,0,0,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+
+/* LOADING */
+.loading{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;z-index:500;}
+.loading-logo{font-family:'Playfair Display',serif;font-size:1.5rem;color:#f0e8d4;font-weight:700;}
+.loading-sub{font-size:12px;color:rgba(255,255,255,.4);letter-spacing:.1em;text-transform:uppercase;}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* HEADER */
+.header{background:var(--navy);padding:0;border-bottom:3px solid var(--gold);}
+.header-inner{max-width:800px;margin:0 auto;padding:1.5rem 1.25rem;}
+.back-btn{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.45);cursor:pointer;margin-bottom:.85rem;border:none;background:none;font-family:'DM Sans',sans-serif;transition:color .15s;}
+.back-btn:hover{color:rgba(255,255,255,.8);}
+.member-hero{display:flex;align-items:center;gap:1rem;}
+.member-av{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0;border:2px solid rgba(255,255,255,.2);}
+.member-info{flex:1;}
+.member-name{font-family:'Playfair Display',serif;font-size:1.3rem;color:#f5edd8;font-weight:700;line-height:1.2;}
+.member-meta{font-size:12px;color:rgba(255,255,255,.45);margin-top:2px;}
+.zone-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;margin-top:4px;}
+.zc-4{background:rgba(122,32,32,.3);color:#f09090;border:1px solid rgba(122,32,32,.3);}
+.zc-2{background:rgba(26,74,107,.3);color:#80b0d8;border:1px solid rgba(26,74,107,.3);}
+.zc-3{background:rgba(122,74,16,.3);color:#d0a060;border:1px solid rgba(122,74,16,.3);}
+.score-chip{display:inline-block;font-size:11px;color:rgba(255,255,255,.4);margin-left:8px;}
+
+/* TRACK BANNER */
+.track-banner{max-width:800px;margin:1.25rem auto 0;padding:0 1.25rem;}
+.tb-inner{border-radius:10px;padding:1rem 1.25rem;border:1px solid;display:flex;align-items:flex-start;gap:14px;}
+.tb-z4{background:var(--z4light);border-color:rgba(122,32,32,.2);}
+.tb-z2{background:var(--z2light);border-color:rgba(26,74,107,.2);}
+.tb-z3{background:var(--z3light);border-color:rgba(122,74,16,.2);}
+.tb-icon{font-size:2rem;flex-shrink:0;margin-top:2px;}
+.tb-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:2px;}
+.tb-desc{font-size:12.5px;color:var(--muted);line-height:1.6;}
+.tb-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:.4rem;}
+.tb-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;letter-spacing:.04em;}
+.t4-tag{background:rgba(122,32,32,.1);color:var(--z4c);}
+.t2-tag{background:rgba(26,74,107,.1);color:var(--z2c);}
+.t3-tag{background:rgba(122,74,16,.1);color:var(--z3c);}
+
+/* FACILITATOR CARD */
+.fac-card{max-width:800px;margin:.85rem auto 0;padding:0 1.25rem;}
+.fc-inner{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);}
+.fc-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:2px;}
+.fc-name{font-size:14px;font-weight:600;color:var(--ink);}
+.fc-role{font-size:11px;color:var(--muted);}
+.fc-edit{margin-left:auto;}
+.fc-edit-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.fc-edit-btn:hover{border-color:var(--green);color:var(--green);}
+.fc-select{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--ink);display:none;}
+.fc-select:focus{outline:none;border-color:var(--green);}
+.fc-save-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:none;background:var(--green);color:white;cursor:pointer;font-family:'DM Sans',sans-serif;display:none;margin-left:6px;}
+
+/* PROGRESS BAR */
+.progress-wrap{max-width:800px;margin:.85rem auto 0;padding:0 1.25rem;}
+.prog-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.prog-label{display:flex;justify-content:space-between;margin-bottom:.4rem;}
+.prog-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+.prog-pct{font-size:13px;font-weight:700;color:var(--green);}
+.prog-track{height:10px;background:var(--surface2);border-radius:5px;overflow:hidden;border:1px solid var(--border);}
+.prog-fill{height:100%;border-radius:5px;transition:width .5s ease;}
+.prog-status{font-size:12px;color:var(--muted);margin-top:.4rem;}
+
+/* STATUS ROW */
+.status-wrap{max-width:800px;margin:.85rem auto 0;padding:0 1.25rem;}
+.status-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.status-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem;}
+.status-opts{display:flex;gap:8px;flex-wrap:wrap;}
+.stat-opt{font-size:12px;font-weight:500;padding:5px 14px;border-radius:20px;cursor:pointer;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;}
+.stat-opt:hover{border-color:var(--green);color:var(--green);}
+.stat-opt.active-stat{font-weight:700;}
+.so-not{}.so-not.active-stat{background:rgba(122,32,32,.1);border-color:var(--z4c);color:var(--z4c);}
+.so-in{}.so-in.active-stat{background:rgba(184,136,42,.1);border-color:var(--gold);color:var(--gold);}
+.so-done{}.so-done.active-stat{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+.so-ext{}.so-ext.active-stat{background:rgba(26,74,107,.1);border-color:var(--z2c);color:var(--z2c);}
+
+/* SESSIONS */
+.sessions-wrap{max-width:800px;margin:.85rem auto 1.5rem;padding:0 1.25rem;}
+.sessions-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.65rem;}
+.session-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;box-shadow:var(--shadow);}
+.session-head{display:flex;align-items:center;gap:12px;padding:.85rem 1.1rem;cursor:pointer;transition:background .12s;user-select:none;}
+.session-head:hover{background:var(--surface2);}
+.session-num{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;flex-shrink:0;}
+.sn-z4{background:var(--z4c);}
+.sn-z2{background:var(--z2c);}
+.sn-z3{background:var(--green);}
+.session-info{flex:1;}
+.session-goal{font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:2px;}
+.sg-z4{color:var(--z4c);}
+.sg-z2{color:var(--z2c);}
+.sg-z3{color:var(--green);}
+.session-title-text{font-size:13.5px;font-weight:600;color:var(--ink);}
+.session-meta-text{font-size:11px;color:var(--lighter);margin-top:1px;}
+.session-check{flex-shrink:0;display:flex;align-items:center;gap:6px;}
+.sc-cb{width:20px;height:20px;accent-color:var(--green);cursor:pointer;flex-shrink:0;}
+.sc-date{font-size:10px;color:var(--lighter);}
+.session-chev{font-size:11px;color:var(--lighter);transition:transform .2s;flex-shrink:0;}
+.session-card.open .session-chev{transform:rotate(180deg);}
+.session-body{display:none;padding:.75rem 1.1rem 1rem;border-top:1px solid var(--border);background:var(--surface2);}
+.session-card.open .session-body{display:block;}
+.session-card.completed{border-color:rgba(42,92,64,.25);}
+.session-card.completed .session-head{background:var(--green-bg);}
+
+/* Session body content */
+.sb-section{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--lighter);margin:.85rem 0 .4rem;display:flex;align-items:center;gap:8px;}
+.sb-section::after{content:'';flex:1;height:1px;background:var(--border);}
+.objective-box{background:var(--gold-bg);border-left:3px solid var(--gold);border-radius:0 7px 7px 0;padding:.75rem .9rem;margin:.4rem 0;font-size:13px;color:#3a2e10;line-height:1.7;}
+.ob-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:3px;}
+.scripture-box{background:var(--navy);border-radius:7px;padding:.75rem .9rem;margin:.4rem 0;}
+.scr-ref{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.25rem;}
+.scr-text{font-family:'Playfair Display',serif;font-size:13px;color:#f0e8d4;line-height:1.7;font-style:italic;}
+.step-list{list-style:none;counter-reset:step;margin:.4rem 0;}
+.step-list li{font-size:13px;color:var(--text);line-height:1.6;padding:5px 0 5px 1.75rem;position:relative;border-bottom:1px solid rgba(0,0,0,.04);}
+.step-list li:last-child{border-bottom:none;}
+.step-list li::before{content:counter(step);counter-increment:step;position:absolute;left:0;background:var(--green);color:white;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;top:7px;}
+.convo-q{background:#f0f4f8;border:1px solid #d0dcec;border-radius:7px;padding:.7rem .9rem;margin:.35rem 0;font-size:13px;color:var(--ink);line-height:1.6;font-style:italic;}
+.convo-q::before{content:'💬 ';font-style:normal;}
+.pastoral-note{background:rgba(122,32,32,.06);border-left:3px solid var(--z4c);border-radius:0 7px 7px 0;padding:.7rem .9rem;margin:.4rem 0;font-size:12.5px;color:#3a1010;line-height:1.7;}
+.pn-label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--z4c);margin-bottom:3px;}
+.assignment-box{background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:7px;padding:.75rem .9rem;margin:.4rem 0;}
+.as-label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--green);margin-bottom:.3rem;}
+.as-text{font-size:13px;color:#1a3028;line-height:1.7;}
+
+/* NOTES */
+.notes-wrap{max-width:800px;margin:0 auto .85rem;padding:0 1.25rem;}
+.notes-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.notes-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.65rem;}
+.note-timeline{margin-bottom:.65rem;}
+.note-item{border-left:3px solid var(--border);padding:4px 0 4px 12px;margin-bottom:6px;position:relative;}
+.note-item::before{content:'';position:absolute;left:-5px;top:9px;width:8px;height:8px;border-radius:50%;background:var(--gold);}
+.note-date{font-size:10px;color:var(--lighter);margin-bottom:1px;}
+.note-text{font-size:12.5px;color:var(--text);line-height:1.6;}
+.note-input{width:100%;border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);resize:vertical;min-height:70px;background:var(--surface2);transition:border-color .15s;}
+.note-input:focus{outline:none;border-color:var(--green);}
+.note-btn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:7px 18px;background:var(--green);color:white;border:none;border-radius:6px;cursor:pointer;margin-top:.5rem;transition:filter .15s;}
+.note-btn:hover{filter:brightness(1.1);}
+
+/* COMPLETE BUTTON */
+.complete-wrap{max-width:800px;margin:0 auto 3rem;padding:0 1.25rem;}
+.complete-btn{width:100%;padding:14px;background:var(--green);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:filter .15s;letter-spacing:.02em;}
+.complete-btn:hover{filter:brightness(1.1);}
+.complete-btn:disabled{background:var(--lighter);cursor:not-allowed;}
+.already-complete{background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:10px;padding:1rem 1.25rem;text-align:center;font-size:14px;font-weight:600;color:var(--green);}
+
+/* TOAST */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.7rem 1.1rem;font-size:13px;color:white;z-index:1000;opacity:0;transform:translateY(10px);transition:all .25s;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow2);}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* ERROR */
+.error-state{max-width:800px;margin:3rem auto;padding:0 1.25rem;text-align:center;}
+.error-icon{font-size:3rem;margin-bottom:1rem;opacity:.3;}
+.error-text{font-size:14px;color:var(--muted);}
+
+@media(max-width:600px){.member-hero{flex-wrap:wrap;}.sessions-wrap,.notes-wrap,.complete-wrap,.fac-card,.progress-wrap,.status-wrap,.track-banner{padding:0 .75rem;}.header-inner{padding:1.25rem .75rem;}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading" id="loadingScreen">
+  <div class="loading-logo">MULTIPLY</div>
+  <div class="spinner"></div>
+  <div class="loading-sub">Loading intervention tracker...</div>
+</div>
+
+<!-- HEADER -->
+<div class="header" id="mainContent" style="display:none">
+  <div class="header-inner">
+    <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+    <div class="member-hero">
+      <div class="member-av" id="memberAv">?</div>
+      <div class="member-info">
+        <div class="member-name" id="memberName">Loading...</div>
+        <div class="member-meta" id="memberMeta"></div>
+        <div style="margin-top:4px">
+          <span class="zone-chip" id="zoneChip"></span>
+          <span class="score-chip" id="scoreChip"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRACK BANNER -->
+<div class="track-banner" id="trackBanner" style="display:none">
+  <div class="tb-inner" id="tbInner">
+    <div class="tb-icon" id="tbIcon"></div>
+    <div>
+      <div class="tb-title" id="tbTitle"></div>
+      <div class="tb-desc" id="tbDesc"></div>
+      <div class="tb-meta" id="tbMeta"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FACILITATOR -->
+<div class="fac-card" id="facCard" style="display:none">
+  <div class="fc-inner">
+    <div>
+      <div class="fc-label">Assigned Facilitator</div>
+      <div class="fc-name" id="facName">—</div>
+      <div class="fc-role" id="facRole"></div>
+    </div>
+    <div class="fc-edit">
+      <button class="fc-edit-btn" id="facEditBtn" onclick="toggleFacEdit()">Override ✎</button>
+      <select class="fc-select" id="facSelect"></select>
+      <button class="fc-save-btn" id="facSaveBtn" onclick="saveFacOverride()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROGRESS -->
+<div class="progress-wrap" id="progressWrap" style="display:none">
+  <div class="prog-card">
+    <div class="prog-label">
+      <div class="prog-title" id="progTitle">Track Progress</div>
+      <div class="prog-pct" id="progPct">0%</div>
+    </div>
+    <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+    <div class="prog-status" id="progStatus"></div>
+  </div>
+</div>
+
+<!-- STATUS -->
+<div class="status-wrap" id="statusWrap" style="display:none">
+  <div class="status-card">
+    <div class="status-label">Intervention Status</div>
+    <div class="status-opts">
+      <button class="stat-opt so-not" onclick="setStatus('not_started')">Not Started</button>
+      <button class="stat-opt so-in" onclick="setStatus('in_progress')">In Progress</button>
+      <button class="stat-opt so-done" onclick="setStatus('completed')">Completed</button>
+      <button class="stat-opt so-ext" onclick="setStatus('extended')">Extended</button>
+    </div>
+  </div>
+</div>
+
+<!-- SESSIONS -->
+<div class="sessions-wrap" id="sessionsWrap" style="display:none">
+  <div class="sessions-title" id="sessionsTitle">Sessions</div>
+  <div id="sessionsList"></div>
+</div>
+
+<!-- NOTES -->
+<div class="notes-wrap" id="notesWrap" style="display:none">
+  <div class="notes-card">
+    <div class="notes-label">Facilitator Notes</div>
+    <div class="note-timeline" id="noteTimeline"></div>
+    <textarea class="note-input" id="noteInput" placeholder="Add a pastoral observation, prayer item, or session note..."></textarea>
+    <button class="note-btn" onclick="addNote()">Add Note</button>
+  </div>
+</div>
+
+<!-- COMPLETE -->
+<div class="complete-wrap" id="completeWrap" style="display:none">
+  <div id="completeBtnArea"></div>
+</div>
+
+<div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg">Saved</span></div>
+
+<script>
+// ═══════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+// ═══════════════════════════════════════
+// TRACK DATA
+// ═══════════════════════════════════════
+const TRACKS = {
+  4: {
+    label:'🔴 Zone 4 — Gospel Conversations',
+    title:'Pre-BTLI: Gospel Conversations',
+    desc:'One-on-one pastoral conversations designed to clearly present the gospel and create genuine space for personal response.',
+    tags:['3–5 Sessions','One-on-one only','Pastor or senior discipler'],
+    tagClass:'t4-tag',
+    bannerClass:'tb-z4',
+    numClass:'sn-z4',
+    goalClass:'sg-z4',
+    fillColor:'var(--z4c)',
+    sessions:[
+      {
+        id:'s1',num:'S1',
+        goal:'Session 1 · Goal: Build Trust',
+        title:'Your Story / Ang Iyong Kwento',
+        meta:'60–75 min · Do NOT present the gospel yet · Makinig lamang',
+        objective:'Build enough trust that this person will be honest in Sessions 2–5. Do not correct anything they say. Do not present the gospel. Simply listen as if their story is the most important thing you have heard all week — because it is.',
+        scripture:{ref:'',text:''},
+        steps:[
+          'Open with a meal or coffee — never start cold',
+          'Ask: "Tell me your story — how did you grow up? What shaped you?"',
+          'Ask: "What was your experience of religion or church growing up?"',
+          'Ask: "Where are you spiritually right now — if you had to describe it?"',
+          'Listen. Do not correct, advise, or present. Just receive.',
+          'Close: "Thank you for being honest with me. Can we meet again?"'
+        ],
+        questions:['What shaped you growing up?','What is your experience of church / religion?','Where are you spiritually right now?'],
+        assignment:'Pray for this person by name every day before Session 2. Write one thing you noticed about their spiritual openness.',
+        pastoralNote:'If they show significant openness in Session 1 — do not rush to Session 2. Let trust deepen. The gospel shared in a context of trust is infinitely more effective than the gospel shared too soon.'
+      },
+      {
+        id:'s2',num:'S2',
+        goal:'Session 2 · Goal: Surface Real Barriers',
+        title:'The Question You\'ve Never Asked / Ang Tanong na Hindi Mo Natanong',
+        meta:'75–90 min · Address obstacles before presenting gospel · Romans 3:23, 6:23',
+        objective:'Surface the real reason this person has not committed to Christ. Most people have a specific barrier — pain, intellectual doubt, moral struggle, fear of change. This session identifies it.',
+        scripture:{ref:'Romans 3:23',text:'"For all have sinned and fall short of the glory of God."'},
+        steps:[
+          'Review last session: "Last time you shared ___. I\'ve been thinking about that."',
+          'Ask: "If you could ask God one question right now — what would it be?"',
+          'Ask: "Is there something about Christianity that has never made sense to you?"',
+          'Ask: "Has there been a moment in your life when you felt far from God — or closest to Him?"',
+          'Gently identify the barrier. Name it without judgment.',
+          'Do not answer everything today. Let the question breathe.'
+        ],
+        questions:['If you could ask God one question — what would it be?','What about Christianity doesn\'t make sense to you?','Have you ever felt close to God? What was that like?'],
+        assignment:'Write down their specific barrier. Research one honest, non-defensive answer for next session.',
+        pastoralNote:'Do not fill the silence after the key question. This question often produces the most honest moment of the whole conversation. Wait for the answer.'
+      },
+      {
+        id:'s3',num:'S3',
+        goal:'Session 3 · Goal: Present the Gospel Clearly',
+        title:'The Answer We Didn\'t Expect / Ang Sagot na Hindi Natin Inaasahan',
+        meta:'75–90 min · Present the full gospel · John 3:16, Romans 6:23, Ephesians 2:8-9',
+        objective:'Present the gospel clearly, simply, and personally — addressing their specific barrier from Session 2. No formulas. No pressure. No invitation yet — just clarity.',
+        scripture:{ref:'Ephesians 2:8–9',text:'"For it is by grace you have been saved, through faith — and this is not from yourselves, it is the gift of God — not by works, so that no one can boast."'},
+        steps:[
+          'Address the barrier from Session 2 honestly and briefly',
+          'Share the gospel: the problem (sin), the provision (Christ), the response (faith)',
+          'Share your own story — when you moved from knowing about God to knowing Him',
+          'Ask: "Does this make sense? What questions do you have?"',
+          'Do NOT ask for a decision today. Give them room to process.',
+          'Close: "I\'d love for us to meet one more time to hear what you\'re thinking."'
+        ],
+        questions:['Does what I shared make sense to you?','What questions do you have?','What is your reaction to what I just said?'],
+        assignment:'Pray specifically for their response. Do not follow up immediately — give 3–4 days.',
+        pastoralNote:'The invitation comes in Session 4 or 5, not here. Premature invitations close doors. Let the gospel do its work.'
+      },
+      {
+        id:'s4',num:'S4',
+        goal:'Session 4 · Goal: Ground or Continue',
+        title:'What Happened? / What\'s Still Stopping You?',
+        meta:'60–75 min · Follow up on gospel response · Acts 16:31',
+        objective:'If they responded — ground the decision in Scripture. If not — identify what is still stopping them and address it with patience.',
+        scripture:{ref:'Acts 16:31',text:'"Believe in the Lord Jesus, and you will be saved."'},
+        steps:[
+          'Ask: "Since we last met — what have you been thinking about?"',
+          'If responded: Lead them through assurance scriptures. Record the date. Begin discipleship.',
+          'If still processing: Ask "What is still holding you back — honestly?"',
+          'Address the remaining barrier without pressure',
+          'If no response: "There\'s no deadline. But I\'m not going anywhere."',
+          'Schedule Session 5 or move to discipleship'
+        ],
+        questions:['What have you been thinking about since we last met?','Is there anything still holding you back?','Where are you with what we discussed?'],
+        assignment:'If they responded — complete this tracker and begin BTLI 101. If not — proceed to Session 5.',
+        pastoralNote:'Never manufacture a decision. A premature profession that is not genuine causes more harm than continued process. Trust the Spirit\'s timing.'
+      },
+      {
+        id:'s5',num:'S5',
+        goal:'Session 5 · Goal: Final Invitation with Grace',
+        title:'The Open Door / Ang Bukas na Pinto',
+        meta:'60 min · Final invitation · Revelation 3:20',
+        objective:'If still no response after 4 sessions — make a final clear, warm invitation with zero pressure. Then release the outcome to God and continue the friendship.',
+        scripture:{ref:'Revelation 3:20',text:'"Here I am! I stand at the door and knock. If anyone hears my voice and opens the door, I will come in."'},
+        steps:[
+          'Share Revelation 3:20 — simply and personally',
+          'Ask: "Is there any reason you couldn\'t open that door today?"',
+          'If yes — receive the decision with joy. Pray together.',
+          'If no — say: "I respect that. I\'m still your friend. The door stays open."',
+          'Do not enroll in the pipeline yet if no decision was made',
+          'Continue the friendship. EOLO does not end here.'
+        ],
+        questions:['Is there any reason you couldn\'t open that door today?','What would it take for you to say yes to Jesus?'],
+        assignment:'If no response: Maintain the friendship. Update the EOLO tracker. Revisit in 3 months. Do not give up.',
+        pastoralNote:'Some of the greatest disciples were slow conversions. Your faithfulness over time is itself a testimony. Mark 4:26–27 — the seed grows while the farmer sleeps.'
+      }
+    ]
+  },
+  2: {
+    label:'🟡 Zone 2 — Assurance Formation',
+    title:'BTLI 101-A: Assurance Formation',
+    desc:'Three focused sessions to move assurance from performance-based doubt to promise-based confidence. For genuine believers who struggle with certainty of salvation.',
+    tags:['3 Sessions','Small group or 1-on-1','Pastor or Director-level'],
+    tagClass:'t2-tag',
+    bannerClass:'tb-z2',
+    numClass:'sn-z2',
+    goalClass:'sg-z2',
+    fillColor:'var(--z2c)',
+    sessions:[
+      {
+        id:'a1',num:'A1',
+        goal:'Session A1 · Character: Peace',
+        title:'What Are You Actually Trusting? / Ano Talaga ang Iyong Pinagtitiwalaan?',
+        meta:'75 min · Romans 4:5 · Romans 8:1 · John 10:28-29',
+        objective:'Identify whether assurance is based on behavior (unstable) or on Christ\'s promise (unshakeable). Help the member see that doubt is not the opposite of faith — performance-dependency is.',
+        scripture:{ref:'Romans 8:1',text:'"Therefore, there is now no condemnation for those who are in Christ Jesus."'},
+        steps:[
+          'Ask: "On a scale of 1–10, how certain are you that you are saved right now? Why that number?"',
+          'Ask: "What would make that number go up? What makes it go down?"',
+          'Teach: the difference between assurance based on behavior vs. assurance based on promise',
+          'Read John 10:28-29 — Jesus holds, not us',
+          'Ask: "What would change in your daily life if you were 100% certain of your salvation?"',
+          'Close with prayer specifically addressing their doubt'
+        ],
+        questions:['On a scale of 1-10 how certain are you of salvation — and why that number?','What would make that number go up or down?','What would change if you were completely certain?'],
+        assignment:'Every morning this week: Read Romans 8:1 aloud before getting up. Write one sentence response in your journal: "Because of this verse, today I will..."',
+        pastoralNote:'Zone 2 members are often the most faithful church attendees. Their doubt comes from taking their sin seriously. Honor that seriousness while redirecting it from self-assessment to Christ\'s promise.'
+      },
+      {
+        id:'a2',num:'A2',
+        goal:'Session A2 · Character: Joy',
+        title:'The Promise That Cannot Move / Ang Pangakong Hindi Matitinag',
+        meta:'75 min · Hebrews 6:17-19 · 1 John 5:11-13',
+        objective:'Establish assurance in the objective promises of Scripture — not in feelings, not in behavior, but in what God has declared immovable.',
+        scripture:{ref:'1 John 5:13',text:'"I write these things to you who believe in the name of the Son of God so that you may know that you have eternal life."'},
+        steps:[
+          'Review Session A1 assignment — how did the verse affect them this week?',
+          'Ask: "When you doubted most this week — what triggered it?"',
+          'Teach: 1 John 5:11-13 — John wrote this specifically so that believers would KNOW',
+          'Read Hebrews 6:17-19 — God made a promise AND an oath — two immovable things',
+          'Ask: "If God Himself has sworn — what would it take to undo that promise?"',
+          'Lead them in a declaration of assurance — spoken aloud'
+        ],
+        questions:['When did you doubt most this week — what triggered it?','If God has sworn — what would it take to undo that promise?','What does it feel like to say "I know I have eternal life"?'],
+        assignment:'Write your testimony in 200 words — the story of when you believed. Read it aloud to yourself every day until Session A3.',
+        pastoralNote:'The spoken declaration is important. Many Zone 2 members have never said aloud "I know I am saved." The act of saying it — based on Scripture — begins to reshape the inner narrative.'
+      },
+      {
+        id:'a3',num:'A3',
+        goal:'Session A3 · Character: Love · Final Assessment',
+        title:'The Evidence in Your Life — Reading 1 John Rightly',
+        meta:'90 min · 1 John 3:14 · 1 John 4:13 · Re-administer Sections A & B',
+        objective:'Help the member read 1 John as assurance literature — not as a new law to fail. Re-administer Sections A and B of the diagnostic to measure movement.',
+        scripture:{ref:'1 John 3:14',text:'"We know that we have passed from death to life, because we love each other."'},
+        steps:[
+          'Share their testimony from the assignment — listen fully',
+          'Read 1 John 3:14 — love for others is evidence of life, not requirement for it',
+          'Teach: 1 John was written for assurance, not for judgment',
+          'Ask: "Where do you see evidence of God\'s work in your life — even imperfect evidence?"',
+          'Re-administer Sections A & B of the Salvation Assurance Diagnostic',
+          'If score improved — celebrate. If still low — extend with pastoral care.',
+          'Pray together and release them to BTLI 101 if ready'
+        ],
+        questions:['Where do you see evidence of God\'s work in your life?','How has your certainty changed over these 3 sessions?','What would you tell someone else who was doubting their salvation?'],
+        assignment:'Continue the daily verse reading habit. Begin BTLI 101 Session 1 with your cohort.',
+        pastoralNote:'The re-assessment at the end of A3 is critical. Do not skip it. It gives you data and gives the member visible evidence of God\'s work in them over 3 sessions.'
+      }
+    ]
+  },
+  3: {
+    label:'🟠 Zone 3 — First Steps Track',
+    title:'BTLI 101-B: First Steps Track',
+    desc:'Eight weeks of weekly discipler meetings establishing the four foundational spiritual habits before the member joins the BTLI 101 cohort.',
+    tags:['8 Weeks','Weekly 60-min meeting','3× WhatsApp check-ins/week'],
+    tagClass:'t3-tag',
+    bannerClass:'tb-z3',
+    numClass:'sn-z3',
+    goalClass:'sg-z3',
+    fillColor:'var(--green)',
+    sessions:[
+      {
+        id:'w1',num:'W1-2',
+        goal:'Weeks 1–2 · Habit: Devotional',
+        title:'The Devotional Habit / Ang Gawi ng Debosyon',
+        meta:'Week 1: 60 min · Week 2: 30-min journal review · Psalm 1:1-3',
+        objective:'Establish a consistent daily Bible reading and journaling habit using the SOAP method (Scripture, Observation, Application, Prayer).',
+        scripture:{ref:'Psalm 1:2–3',text:'"But whose delight is in the law of the Lord, and who meditates on his law day and night. That person is like a tree planted by streams of water..."'},
+        steps:[
+          'Week 1: Introduce the SOAP method — model it live with Psalm 23',
+          'Week 1: Do a SOAP entry together right there in the session',
+          'Week 1: Set a specific daily time and place for devotions',
+          'Week 2: Review the journal — read 2–3 of their entries together',
+          'Week 2: Ask "Which day was hardest? What got in the way?"',
+          'Week 2: Celebrate what they wrote — affirm the habit forming'
+        ],
+        questions:['Which day was hardest to do devotions — what got in the way?','What did God say to you this week through the Bible?','Show me one entry you\'re proud of.'],
+        assignment:'SOAP journal every day for 14 days. WhatsApp photo of journal entry to facilitator every 3 days.',
+        pastoralNote:'Do not correct their theology in the journal entries yet. The goal is the habit, not perfection. Celebrate effort. Correct gently only if something seriously wrong appears.'
+      },
+      {
+        id:'w3',num:'W3-4',
+        goal:'Weeks 3–4 · Habit: Prayer',
+        title:'The Prayer Habit / Ang Gawi ng Panalangin',
+        meta:'Week 3: 60 min · Week 4: 30-min prayer review · Matthew 6:9-13',
+        objective:'Establish a structured daily prayer habit using the ACTS framework (Adoration, Confession, Thanksgiving, Supplication).',
+        scripture:{ref:'Matthew 6:9',text:'"This, then, is how you should pray: Our Father in heaven, hallowed be your name..."'},
+        steps:[
+          'Week 3: Check devotional habit first — is it holding?',
+          'Week 3: Teach ACTS framework — model a 5-minute ACTS prayer',
+          'Week 3: Pray together using ACTS — let them lead the Thanksgiving section',
+          'Week 3: Introduce EOLO prayer — pray for their one person by name',
+          'Week 4: Ask them to lead the opening prayer of the session',
+          'Week 4: Debrief — what parts of ACTS feel natural? What feels hard?'
+        ],
+        questions:['What part of prayer feels most natural to you?','What part feels most difficult or forced?','Who are you praying for by name — your EOLO person?'],
+        assignment:'5-minute ACTS prayer every morning. Include EOLO person by name every day. WhatsApp facilitator one thing God put on your heart in prayer this week.',
+        pastoralNote:'If the devotional habit from Weeks 1–2 is not holding — address this before introducing prayer. Do not layer a new habit onto a broken foundation.'
+      },
+      {
+        id:'w5',num:'W5-6',
+        goal:'Weeks 5–6 · Habit: Community',
+        title:'The Community Habit / Ang Gawi ng Pakikipagsamahan',
+        meta:'Week 5: 60 min · Week 6: 30-min debrief · Hebrews 10:24-25',
+        objective:'Establish consistent LC group attendance and active participation — not just physical presence but genuine relational investment.',
+        scripture:{ref:'Hebrews 10:24–25',text:'"And let us consider how we may spur one another on toward love and good deeds, not giving up meeting together..."'},
+        steps:[
+          'Week 5: Discuss what authentic Christian community looks like vs. just attendance',
+          'Week 5: Ask: "Who in your LC group do you know personally — not just by name?"',
+          'Week 5: Assign: Intentionally connect with one LC group member this week',
+          'Week 5: Assign: Bring one prayer request to the LC group — not generic, real',
+          'Week 6: Debrief the connection — what happened?',
+          'Week 6: Introduce accountability — "Who can you be honest with in this group?"'
+        ],
+        questions:['Who in your LC group do you actually know personally?','What would it take for you to be fully known by someone in your group?','What prayer request can you share with your group this week — a real one?'],
+        assignment:'Attend every LC group meeting this week. Connect personally with one member. Share one real prayer request.',
+        pastoralNote:'Zone 3 members often have community without vulnerability. They attend but do not share. The goal is not more attendance — it is deeper honesty within the community they already have.'
+      },
+      {
+        id:'w7',num:'W7-8',
+        goal:'Weeks 7–8 · Habit: Mission (EOLO)',
+        title:'The Mission Habit / Ang Gawi ng Misyon',
+        meta:'Week 7: 60 min · Week 8: Final review + re-assessment · John 17:18',
+        objective:'Establish the EOLO habit — a named, prayed-for, intentionally loved non-Christian friend. Conclude the 8-week track with re-assessment.',
+        scripture:{ref:'John 17:18',text:'"As you sent me into the world, I have sent them into the world."'},
+        steps:[
+          'Week 7: Ask: "Who is your EOLO person? Tell me about them."',
+          'Week 7: Map their relationship — how often do you see them? What do they know about your faith?',
+          'Week 7: Plan one intentional conversation or invitation this week',
+          'Week 8: Debrief the EOLO conversation — what happened?',
+          'Week 8: Re-administer Sections E and G of the Salvation Assurance Diagnostic',
+          'Week 8: If habits established — release to BTLI 101 cohort and celebrate',
+          'Week 8: If habits still weak — extend by 4 weeks with specific targets'
+        ],
+        questions:['Who is your EOLO person — tell me everything about them?','What does your EOLO person know about your faith right now?','What is one thing you can do this week to love them intentionally?'],
+        assignment:'Have one intentional conversation with your EOLO person. Re-take Sections E and G of the diagnostic. Prepare your testimony for the BTLI 101 cohort.',
+        pastoralNote:'Week 8 is a milestone — celebrate it regardless of the re-assessment result. 8 weeks of intentional discipleship is itself a victory. The re-assessment determines the next step, not the worth of the journey.'
+      }
+    ]
+  }
+};
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let member = null;
+let intervention = null;
+let allMembers = [];
+let sessionChecks = {};
+let facilitatorNotes = [];
+let currentStatus = 'not_started';
+let currentFacId = null;
+let currentFacName = null;
+
+// ═══════════════════════════════════════
+// INIT — Get member ID from URL
+// ═══════════════════════════════════════
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const memberId = params.get('id');
+
+  if (!memberId) {
+    showError('No member ID provided. Please open this from the dashboard.');
+    return;
+  }
+
+  try {
+    // Load member
+    const { data: mData, error: mErr } = await db.from('members').select('*').eq('id', memberId).single();
+    if (mErr || !mData) throw new Error('Member not found');
+    member = mData;
+
+    // Load all members for facilitator override dropdown
+    const { data: allData } = await db.from('members')
+      .select('id,name,facilitator_role,is_facilitator,discipler')
+      .or('is_facilitator.eq.true,facilitator_role.not.is.null')
+      .order('name');
+    allMembers = allData || [];
+
+    // Load or create intervention record
+    const { data: intData } = await db.from('interventions')
+      .select('*').eq('member_id', memberId)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+
+    if (intData) {
+      intervention = intData;
+      sessionChecks = intData.sessions_completed || {};
+      facilitatorNotes = intData.facilitator_notes || [];
+      currentStatus = intData.status || 'not_started';
+      currentFacId = intData.facilitator_id;
+      currentFacName = intData.facilitator_name;
+    } else {
+      // Create new intervention record
+      const zone = member.diagnostic_zone || member.diag_zone;
+      const track = zone == 4 ? 'gospel_conversations' : zone == 2 ? 'assurance_formation' : 'first_steps';
+      const { data: newInt } = await db.from('interventions').insert({
+        member_id: memberId,
+        member_name: member.name,
+        diag_zone: zone,
+        track,
+        facilitator_id: member.facilitator_id || null,
+        facilitator_name: member.discipler_name || member.discipler || null,
+        status: 'not_started',
+        sessions_completed: {},
+        facilitator_notes: [],
+        start_date: new Date().toISOString().split('T')[0]
+      }).select().single();
+      intervention = newInt;
+      currentFacName = member.discipler_name || member.discipler || null;
+    }
+
+    render();
+  } catch(e) {
+    showError('Error loading member: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════
+function render() {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+
+  const zone = member.diagnostic_zone || member.diag_zone || 0;
+  if (!zone || !TRACKS[zone]) { showError('This member has no zone assigned or is Zone 1 — no intervention needed.'); return; }
+
+  const track = TRACKS[zone];
+  const ini = (member.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const avColors = {4:'#7a2020', 2:'#1a4a6b', 3:'#2a5c40'};
+
+  // Header
+  document.getElementById('memberAv').textContent = ini;
+  document.getElementById('memberAv').style.background = avColors[zone] || '#555';
+  document.getElementById('memberName').textContent = member.name;
+  document.getElementById('memberMeta').textContent =
+    `${member.discipler||'No discipler'} · ${member.lc_group||'No group'} · Enrolled: ${member.enrolled_date||'—'}`;
+
+  const zoneLabels = {1:'✅ Zone 1',2:'🟡 Zone 2',3:'🟠 Zone 3',4:'🔴 Zone 4'};
+  const zoneChip = document.getElementById('zoneChip');
+  zoneChip.textContent = zoneLabels[zone] || '—';
+  zoneChip.className = 'zone-chip zc-' + zone;
+  document.getElementById('scoreChip').textContent =
+    member.diagnostic_score != null ? '· Score: ' + member.diagnostic_score + '%' : '';
+
+  // Track banner
+  const tb = document.getElementById('tbInner');
+  tb.className = 'tb-inner ' + track.bannerClass;
+  document.getElementById('tbIcon').textContent = zone==4?'🔴':zone==2?'🟡':'🟠';
+  document.getElementById('tbTitle').textContent = track.title;
+  document.getElementById('tbDesc').textContent = track.desc;
+  document.getElementById('tbMeta').innerHTML = track.tags.map(t=>
+    `<span class="tb-tag ${track.tagClass}">${t}</span>`).join('');
+  document.getElementById('trackBanner').style.display = 'block';
+
+  // Facilitator
+  document.getElementById('facName').textContent = currentFacName || member.discipler_name || member.discipler || 'Not assigned';
+  document.getElementById('facRole').textContent = 'Assigned discipler / LC Leader';
+  buildFacDropdown();
+  document.getElementById('facCard').style.display = 'block';
+
+  // Progress
+  const total = track.sessions.length;
+  const done = track.sessions.filter(s => sessionChecks[s.id]).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('progTitle').textContent = 'Track Progress — ' + done + ' of ' + total + ' sessions';
+  document.getElementById('progPct').textContent = pct + '%';
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progFill').style.background = track.fillColor;
+  document.getElementById('progStatus').textContent = pct===100 ?
+    '✅ All sessions complete — ready for re-assessment.' :
+    'Next: ' + (track.sessions.find(s=>!sessionChecks[s.id])?.title || 'All done');
+  document.getElementById('progressWrap').style.display = 'block';
+
+  // Status
+  updateStatusUI();
+  document.getElementById('statusWrap').style.display = 'block';
+
+  // Sessions
+  buildSessions(track, zone);
+  document.getElementById('sessionsTitle').textContent = zone==3 ? 'Weekly Meetings' : 'Sessions';
+  document.getElementById('sessionsWrap').style.display = 'block';
+
+  // Notes
+  renderNotes();
+  document.getElementById('notesWrap').style.display = 'block';
+
+  // Complete button
+  buildCompleteBtn(pct);
+  document.getElementById('completeWrap').style.display = 'block';
+}
+
+function buildSessions(track, zone) {
+  const list = document.getElementById('sessionsList');
+  list.innerHTML = track.sessions.map(s => {
+    const checked = !!sessionChecks[s.id];
+    const dateStr = sessionChecks[s.id] ?
+      new Date(sessionChecks[s.id]).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '';
+
+    const scrBlock = s.scripture?.ref ?
+      `<div class="scripture-box"><div class="scr-ref">${s.scripture.ref}</div><div class="scr-text">"${s.scripture.text}"</div></div>` : '';
+
+    const stepsHtml = s.steps?.length ?
+      `<div class="sb-section">Session Steps</div>
+       <ol class="step-list">${s.steps.map(st=>`<li>${st}</li>`).join('')}</ol>` : '';
+
+    const qsHtml = s.questions?.length ?
+      `<div class="sb-section">Key Questions</div>
+       ${s.questions.map(q=>`<div class="convo-q">${q}</div>`).join('')}` : '';
+
+    const assignHtml = s.assignment ?
+      `<div class="sb-section">Assignment</div>
+       <div class="assignment-box"><div class="as-label">📝 Assignment for Next Session</div><div class="as-text">${s.assignment}</div></div>` : '';
+
+    const noteHtml = s.pastoralNote ?
+      `<div class="pastoral-note"><div class="pn-label">🎯 Pastoral Note</div>${s.pastoralNote}</div>` : '';
+
+    return `<div class="session-card ${checked?'completed':''}" id="card-${s.id}">
+      <div class="session-head" onclick="toggleSession('${s.id}')">
+        <div class="session-num ${track.numClass}">${s.num}</div>
+        <div class="session-info">
+          <div class="session-goal ${track.goalClass}">${s.goal}</div>
+          <div class="session-title-text">${s.title}</div>
+          <div class="session-meta-text">${s.meta}</div>
+        </div>
+        <div class="session-check" onclick="event.stopPropagation()">
+          <input type="checkbox" class="sc-cb" id="cb-${s.id}" ${checked?'checked':''}
+            onchange="toggleCheck('${s.id}',this.checked)">
+          <span class="sc-date" id="date-${s.id}">${dateStr}</span>
+        </div>
+        <span class="session-chev">▼</span>
+      </div>
+      <div class="session-body">
+        <div class="objective-box"><div class="ob-label">🎯 Session Objective</div>${s.objective}</div>
+        ${scrBlock}
+        ${stepsHtml}
+        ${qsHtml}
+        ${assignHtml}
+        ${noteHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSession(id) {
+  document.getElementById('card-'+id).classList.toggle('open');
+}
+
+async function toggleCheck(id, checked) {
+  if (checked) {
+    sessionChecks[id] = new Date().toISOString();
+    // Auto-set to in_progress
+    if (currentStatus === 'not_started') await setStatus('in_progress', false);
+  } else {
+    delete sessionChecks[id];
+  }
+  const dateEl = document.getElementById('date-'+id);
+  if (dateEl) dateEl.textContent = checked ?
+    new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '';
+  document.getElementById('card-'+id).classList.toggle('completed', checked);
+
+  // Update progress
+  const zone = member.diagnostic_zone || member.diag_zone;
+  const track = TRACKS[zone];
+  const total = track.sessions.length;
+  const done = track.sessions.filter(s=>sessionChecks[s.id]).length;
+  const pct = Math.round(done/total*100);
+  document.getElementById('progTitle').textContent = 'Track Progress — ' + done + ' of ' + total + ' sessions';
+  document.getElementById('progPct').textContent = pct + '%';
+  document.getElementById('progFill').style.width = pct + '%';
+  buildCompleteBtn(pct);
+
+  await saveIntervention();
+  toast('Session updated ✓');
+}
+
+// ═══════════════════════════════════════
+// STATUS
+// ═══════════════════════════════════════
+function updateStatusUI() {
+  document.querySelectorAll('.stat-opt').forEach(b => b.classList.remove('active-stat'));
+  const map = {not_started:'so-not',in_progress:'so-in',completed:'so-done',extended:'so-ext'};
+  const cls = map[currentStatus];
+  if (cls) document.querySelector('.'+cls)?.classList.add('active-stat');
+}
+
+async function setStatus(status, save=true) {
+  currentStatus = status;
+  updateStatusUI();
+  if (save) { await saveIntervention(); toast('Status updated'); }
+}
+
+// ═══════════════════════════════════════
+// FACILITATOR OVERRIDE
+// ═══════════════════════════════════════
+function buildFacDropdown() {
+  const sel = document.getElementById('facSelect');
+  sel.innerHTML = '<option value="">— Select Facilitator —</option>';
+  allMembers.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.dataset.name = m.name;
+    o.textContent = m.name + (m.facilitator_role ? ' (' + m.facilitator_role + ')' : '');
+    if (m.id === currentFacId) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function toggleFacEdit() {
+  const sel = document.getElementById('facSelect');
+  const btn = document.getElementById('facSaveBtn');
+  const editBtn = document.getElementById('facEditBtn');
+  const isShowing = sel.style.display === 'inline-block';
+  sel.style.display = isShowing ? 'none' : 'inline-block';
+  btn.style.display = isShowing ? 'none' : 'inline-block';
+  editBtn.textContent = isShowing ? 'Override ✎' : 'Cancel';
+}
+
+async function saveFacOverride() {
+  const sel = document.getElementById('facSelect');
+  const selected = sel.options[sel.selectedIndex];
+  if (!selected?.value) { toast('Please select a facilitator','⚠'); return; }
+  currentFacId = selected.value;
+  currentFacName = selected.dataset.name;
+  document.getElementById('facName').textContent = currentFacName;
+  toggleFacEdit();
+  await saveIntervention();
+
+  // Also update the member record
+  await db.from('members').update({
+    facilitator_id: currentFacId,
+    facilitator_name: currentFacName,
+    updated_at: new Date().toISOString()
+  }).eq('id', member.id);
+
+  toast('Facilitator updated ✓');
+}
+
+// ═══════════════════════════════════════
+// NOTES
+// ═══════════════════════════════════════
+function renderNotes() {
+  const tl = document.getElementById('noteTimeline');
+  tl.innerHTML = !facilitatorNotes.length ?
+    '<div style="font-size:12px;color:var(--lighter);margin-bottom:.5rem">No notes yet.</div>' :
+    [...facilitatorNotes].reverse().map(n=>
+      `<div class="note-item">
+        <div class="note-date">${new Date(n.date).toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}</div>
+        <div class="note-text">${n.text}</div>
+      </div>`).join('');
+}
+
+async function addNote() {
+  const text = document.getElementById('noteInput').value.trim();
+  if (!text) return;
+  facilitatorNotes.push({ date: new Date().toISOString(), text });
+  document.getElementById('noteInput').value = '';
+  renderNotes();
+  await saveIntervention();
+  toast('Note saved ✓');
+}
+
+// ═══════════════════════════════════════
+// COMPLETE BUTTON
+// ═══════════════════════════════════════
+function buildCompleteBtn(pct) {
+  const area = document.getElementById('completeBtnArea');
+  if (currentStatus === 'completed') {
+    area.innerHTML = `<div class="already-complete">✅ Intervention Marked Complete<br><span style="font-size:12px;font-weight:400;color:var(--green)">Member is ready for re-assessment and BTLI 101 enrollment.</span></div>`;
+  } else {
+    area.innerHTML = `<button class="complete-btn" onclick="markComplete()" ${pct<100?'':''}>
+      ${pct===100 ? '✅ Mark Intervention Complete — Enroll in BTLI 101' : '🏁 Mark as Complete ('+pct+'% done)'}
+    </button>
+    <div style="font-size:11px;color:var(--lighter);text-align:center;margin-top:.5rem">
+      ${pct<100 ? 'You can mark complete before all sessions are ticked — use your pastoral judgment.' : 'All sessions complete — ready to mark complete.'}
+    </div>`;
+  }
+}
+
+async function markComplete() {
+  if (!confirm('Mark this intervention as complete? This will update the member\'s dashboard record and clear the alert.')) return;
+
+  currentStatus = 'completed';
+  updateStatusUI();
+  buildCompleteBtn(100);
+
+  // Update intervention
+  await saveIntervention();
+
+  // Update member record — move to Zone 1
+  await db.from('members').update({
+    diagnostic_zone: 1,
+    diag_zone: 1,
+    intervention_status: 'completed',
+    updated_at: new Date().toISOString()
+  }).eq('id', member.id);
+
+  toast('Intervention complete — dashboard updated ✅');
+}
+
+// ═══════════════════════════════════════
+// SAVE TO SUPABASE
+// ═══════════════════════════════════════
+async function saveIntervention() {
+  if (!intervention?.id) return;
+  const { error } = await db.from('interventions').update({
+    sessions_completed: sessionChecks,
+    facilitator_notes: facilitatorNotes,
+    status: currentStatus,
+    facilitator_id: currentFacId,
+    facilitator_name: currentFacName,
+    updated_at: new Date().toISOString(),
+    actual_completion: currentStatus==='completed' ? new Date().toISOString().split('T')[0] : null
+  }).eq('id', intervention.id);
+  if (error) toast('Save error: ' + error.message, '❌');
+}
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function goBack() {
+  window.history.back();
+}
+
+// ═══════════════════════════════════════
+// ERROR STATE
+// ═══════════════════════════════════════
+function showError(msg) {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+  document.body.innerHTML += `<div class="error-state">
+    <div class="error-icon">⚠️</div>
+    <div class="error-text">${msg}</div>
+    <button onclick="goBack()" style="margin-top:1rem;padding:8px 20px;background:var(--green);color:white;border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;">← Back to Dashboard</button>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════
+function toast(msg, icon='✓') {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  document.getElementById('toastIcon').textContent = icon;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ═══════════════════════════════════════
+// START
+// ═══════════════════════════════════════
+init();
+</script>
+</body>
+</html>

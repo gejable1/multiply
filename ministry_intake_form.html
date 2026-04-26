@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ministry Intake Form — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a1612;--paper:#ffffff;--bg:#f5f0e8;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;
+  --navy:#1b2a4a;--navy2:#243560;
+  --green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;
+  --blue:#1a4a6b;--blue-bg:#e8f0f8;
+  --purple:#4a2a6b;--purple-bg:#f0eaf8;
+  --teal:#1a5a60;--teal-bg:#e8f5f5;
+  --red:#7a2020;--red-bg:#fdecea;
+  --muted:#6b5f4f;--lighter:#9a8f80;
+  --border:#e2d8cc;--border2:#ccc0b0;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+
+/* ── HEADER ── */
+.header{background:var(--navy);padding:2rem 1.5rem 1.75rem;border-bottom:3px solid var(--gold);}
+.header-inner{max-width:700px;margin:0 auto;}
+.h-badge{display:inline-block;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);border:1px solid rgba(255,255,255,.1);padding:3px 12px;border-radius:20px;margin-bottom:.75rem;}
+.h-title{font-family:'Playfair Display',serif;font-size:clamp(1.4rem,4vw,2rem);font-weight:700;color:#f5edd8;margin-bottom:.25rem;}
+.h-sub{font-size:12px;color:rgba(255,255,255,.4);letter-spacing:.04em;}
+.h-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:.85rem;}
+.hm{font-size:11px;padding:3px 10px;border-radius:12px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.6);}
+
+/* ── PAGE ── */
+.page{max-width:700px;margin:0 auto;padding:1.75rem 1.25rem 5rem;}
+
+/* ── SECTION BLOCKS ── */
+.section{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden;}
+.section-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.sh-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:white;flex-shrink:0;}
+.sh-info{flex:1;}
+.sh-label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;margin-bottom:1px;}
+.sh-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);}
+.sh-sub{font-size:11px;color:var(--lighter);}
+.section-body{padding:1.1rem 1.25rem;}
+
+/* Section colors */
+.s1 .sh-num{background:var(--green);}.s1 .sh-label{color:var(--green);}
+.s2 .sh-num{background:var(--blue);}.s2 .sh-label{color:var(--blue);}
+.s3 .sh-num{background:var(--purple);}.s3 .sh-label{color:var(--purple);}
+.s4 .sh-num{background:var(--teal);}.s4 .sh-label{color:var(--teal);}
+.s5 .sh-num{background:var(--gold-dim);}.s5 .sh-label{color:var(--gold);}
+.s6 .sh-num{background:var(--navy);}.s6 .sh-label{color:var(--navy2);}
+
+/* ── FORM FIELDS ── */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:.75rem;}
+.form-row.full{grid-template-columns:1fr;}
+.form-row.three{grid-template-columns:1fr 1fr 1fr;}
+.field{display:flex;flex-direction:column;gap:3px;}
+.field.full{grid-column:1/-1;}
+.field label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500;}
+.field label .tl{font-size:10px;color:var(--lighter);font-style:italic;letter-spacing:0;text-transform:none;font-weight:400;}
+.field input,.field select,.field textarea{font-family:'DM Sans',sans-serif;font-size:13.5px;background:#faf8f5;border:1px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);transition:border-color .15s;width:100%;}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold);}
+.field select option{background:white;}
+.field textarea{resize:vertical;min-height:72px;}
+.field input::placeholder,.field textarea::placeholder{color:var(--lighter);}
+
+/* Gift badges */
+.gift-row{display:flex;gap:8px;flex-wrap:wrap;margin:.35rem 0 .65rem;}
+.gift-badge{font-size:11px;padding:4px 12px;border-radius:20px;cursor:pointer;border:1.5px solid var(--border);background:#f8f5f0;color:var(--muted);transition:all .15s;user-select:none;}
+.gift-badge:hover{border-color:var(--gold);color:var(--gold-dim);}
+.gift-badge.selected-1{background:var(--green);border-color:var(--green);color:white;}
+.gift-badge.selected-2{background:var(--blue);border-color:var(--blue);color:white;}
+.gift-badge.selected-3{background:#888;border-color:#888;color:white;}
+.gift-legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:.5rem;}
+.gl-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
+.gl-dot{width:10px;height:10px;border-radius:50%;}
+
+/* Ministry grid */
+.ministry-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:.35rem 0;}
+.ministry-item{display:flex;align-items:center;gap:8px;padding:.55rem .75rem;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s;font-size:13px;color:var(--ink);}
+.ministry-item:hover{border-color:var(--gold);background:var(--gold-bg);}
+.ministry-item.selected{border-color:var(--blue);background:var(--blue-bg);color:var(--blue);}
+.ministry-item input[type=radio]{accent-color:var(--blue);width:15px;height:15px;flex-shrink:0;}
+
+/* Checklist */
+.checklist{list-style:none;margin:.35rem 0;}
+.checklist li{display:flex;align-items:flex-start;gap:9px;padding:.55rem 0;border-bottom:1px solid rgba(0,0,0,.05);font-size:13px;color:var(--ink);line-height:1.55;}
+.checklist li:last-child{border-bottom:none;}
+.checklist li input[type=checkbox]{accent-color:var(--purple);width:16px;height:16px;flex-shrink:0;margin-top:2px;cursor:pointer;}
+.checklist li .cl-tl{font-size:11px;color:var(--lighter);font-style:italic;display:block;margin-top:1px;}
+
+/* Rating */
+.rating-row{display:flex;align-items:center;gap:8px;margin:.35rem 0 .65rem;}
+.rating-label{font-size:12px;color:var(--muted);flex:1;}
+.rating-opts{display:flex;gap:5px;}
+.r-opt{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:#faf8f5;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);transition:all .15s;}
+.r-opt:hover{border-color:var(--gold);}
+.r-opt.sel{background:var(--green);border-color:var(--green);color:white;}
+
+/* Divider label */
+.divider-label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--lighter);margin:1rem 0 .5rem;display:flex;align-items:center;gap:8px;}
+.divider-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* Signature line */
+.sig-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:.75rem;}
+.sig-field{display:flex;flex-direction:column;gap:3px;}
+.sig-line{border:none;border-bottom:1.5px solid var(--border2);height:36px;background:none;width:100%;font-family:'Playfair Display',serif;font-size:14px;color:var(--ink);}
+.sig-line:focus{outline:none;border-bottom-color:var(--gold);}
+.sig-label-sm{font-size:10px;color:var(--lighter);letter-spacing:.06em;}
+
+/* Status badge */
+.status-select{font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:#faf8f5;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;}
+
+/* Info box */
+.info-box{background:var(--gold-bg);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:.75rem 1rem;margin:.5rem 0;font-size:12.5px;color:#3a2e10;line-height:1.7;}
+.info-box .ib-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:3px;}
+
+/* 30-day section */
+.thirty-card{background:var(--teal-bg);border:1px solid rgba(26,90,96,.2);border-radius:8px;padding:.85rem 1rem;margin:.5rem 0;}
+.tc-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--teal);margin-bottom:.4rem;}
+.tc-q{font-size:13px;color:var(--ink);margin-bottom:.35rem;}
+
+/* Participation tracker */
+.part-tracker{display:flex;gap:6px;flex-wrap:wrap;margin:.35rem 0;}
+.pt-btn{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--border);background:#faf8f5;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);transition:all .15s;}
+.pt-btn:hover{border-color:var(--teal);}
+.pt-btn.attended{background:var(--teal);border-color:var(--teal);color:white;}
+.pt-label{font-size:11px;color:var(--muted);align-self:center;}
+
+/* Action buttons */
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:1.5rem;}
+.btn-primary{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:10px 22px;background:var(--navy);color:white;border:none;border-radius:8px;cursor:pointer;transition:filter .15s;}
+.btn-primary:hover{filter:brightness(1.15);}
+.btn-secondary{font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 18px;background:var(--paper);border:1.5px solid var(--border2);color:var(--muted);border-radius:8px;cursor:pointer;transition:all .15s;}
+.btn-secondary:hover{border-color:var(--navy);color:var(--navy);}
+.btn-print{font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 18px;background:var(--gold-bg);border:1.5px solid var(--gold);color:var(--gold-dim);border-radius:8px;cursor:pointer;transition:all .15s;}
+.btn-print:hover{background:var(--gold);color:white;}
+
+/* Saved msg */
+.saved-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.65rem 1rem;font-size:13px;color:#1a5a30;margin-top:.75rem;}
+.saved-msg.show{display:block;}
+
+/* Form number badge */
+.form-id{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.6rem 1rem;display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;font-size:12px;color:var(--muted);}
+.form-id strong{color:var(--ink);}
+
+/* ── PRINT STYLES ── */
+@media print{
+  body{background:white;font-size:12px;}
+  .header{background:var(--navy)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:1rem 1.25rem;}
+  .h-title{font-size:1.3rem;}
+  .section{break-inside:avoid;border:1px solid #ccc;margin-bottom:.6rem;}
+  .section-head{background:#f5f5f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .btn-row,.saved-msg{display:none!important;}
+  .page{padding:0;max-width:100%;}
+  .gift-badge{border:1px solid #ccc!important;background:white!important;color:#333!important;}
+  .gift-badge.selected-1{background:var(--green)!important;color:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .gift-badge.selected-2{background:var(--blue)!important;color:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .ministry-item.selected{background:#e8f0f8!important;border-color:#1a4a6b!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .field input,.field select,.field textarea{border:none;border-bottom:1px solid #ccc;border-radius:0;background:white;padding:4px 0;}
+  .sig-line{border-bottom:1px solid #aaa;}
+  @page{margin:1.5cm;}
+}
+
+@media(max-width:600px){
+  .form-row{grid-template-columns:1fr;}
+  .form-row.three{grid-template-columns:1fr;}
+  .sig-row{grid-template-columns:1fr;}
+  .ministry-grid{grid-template-columns:1fr;}
+  .page{padding:1rem .75rem 4rem;}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="h-badge">MULTIPLY Pipeline · Ministry Placement System</div>
+    <div class="h-title">Ministry Intake Form</div>
+    <div class="h-sub">Pormularyo ng Pagsali sa Ministeryo · Rosehill Christian Church</div>
+    <div class="h-meta">
+      <span class="hm">📋 6 Sections</span>
+      <span class="hm">👥 LC Leader → Ministry Leader → Pastor</span>
+      <span class="hm">📅 30-Day Follow-up Included</span>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- FORM ID -->
+  <div class="form-id">
+    <span>Form No: <strong id="formNum">MIF-<span id="formDate"></span>-<span id="formSeq">001</span></strong></span>
+    <span>Date Filed: <strong id="todayDate"></strong></span>
+    <select class="status-select" id="formStatus">
+      <option value="pending">● Pending</option>
+      <option value="placed">✅ Placed</option>
+      <option value="30day">⏳ 30-Day Review</option>
+      <option value="completed">🏅 Completed</option>
+      <option value="withdrawn">❌ Withdrawn</option>
+    </select>
+  </div>
+
+  <div class="info-box">
+    <div class="ib-label">Paano Gamitin ang Form na Ito · How to Use This Form</div>
+    <strong>LC Leader</strong> fills Sections 1–3 at the time of referral. <strong>Ministry Leader</strong> fills Section 4 upon receiving the new member. <strong>Pastor/Director</strong> fills Sections 5–6 at the 30-day mark. Save digitally or print and file. A gift discovered but not deployed stays theoretical — this form closes the loop.
+  </div>
+
+  <!-- ══════════════════════════════════
+       SECTION 1 — MEMBER INFORMATION
+  ══════════════════════════════════ -->
+  <div class="section s1">
+    <div class="section-head">
+      <div class="sh-num">1</div>
+      <div class="sh-info">
+        <div class="sh-label">Section 1 · Filled by LC Leader</div>
+        <div class="sh-title">Member Information · Impormasyon ng Miyembro</div>
+        <div class="sh-sub">Basic profile and spiritual gifts assessment results</div>
+      </div>
+    </div>
+    <div class="section-body">
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Full Name · <span class="tl">Buong Pangalan</span></label>
+          <input type="text" id="memberName" placeholder="Full name of the member">
+        </div>
+      </div>
+
+      <div class="form-row three">
+        <div class="field">
+          <label>Birthday · <span class="tl">Kaarawan</span></label>
+          <input type="date" id="memberBday">
+        </div>
+        <div class="field">
+          <label>LC Group</label>
+          <input type="text" id="memberGroup" placeholder="LC group name">
+        </div>
+        <div class="field">
+          <label>Pipeline Level · <span class="tl">Antas</span></label>
+          <select id="memberLevel">
+            <option value="">Select...</option>
+            <option>Pre-Pipeline</option>
+            <option>Level 1 — Team Member</option>
+            <option>Level 2 — Leader</option>
+            <option>Level 3 — Coach</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Date of Spiritual Gifts Diagnostic · <span class="tl">Petsa ng Assessment</span></label>
+          <input type="date" id="diagDate">
+        </div>
+        <div class="field">
+          <label>Years Following Jesus · <span class="tl">Taon bilang Kristiyano</span></label>
+          <select id="yearsFollowing">
+            <option value="">Select...</option>
+            <option>Less than 1 year · Wala pang 1 taon</option>
+            <option>1–3 years · 1–3 taon</option>
+            <option>3–5 years · 3–5 taon</option>
+            <option>More than 5 years · Mahigit 5 taon</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="divider-label">Spiritual Gifts · Espirituwal na mga Kaloob</div>
+
+      <div class="gift-legend">
+        <div class="gl-item"><div class="gl-dot" style="background:var(--green)"></div><span>Primary Gift · Pangunahing Kaloob</span></div>
+        <div class="gl-item"><div class="gl-dot" style="background:var(--blue)"></div><span>Secondary Gift · Pangalawang Kaloob</span></div>
+        <div class="gl-item"><div class="gl-dot" style="background:#888"></div><span>Supporting Gift · Pansuportang Kaloob</span></div>
+      </div>
+
+      <div style="font-size:12px;color:var(--muted);margin-bottom:.4rem">Tap to select — first tap = Primary (green), second tap = Secondary (blue), third tap = Supporting (gray):</div>
+      <div class="gift-row" id="giftBadges"></div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Facilitator's Notes on Gifts · <span class="tl">Mga Tala ng Tagapagpaganap</span></label>
+          <textarea id="giftNotes" placeholder="Any observations about how the member responded to the gifts discovery — enthusiasm, surprise, resistance, clarity..." rows="2"></textarea>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SECTION 2 — MINISTRY PLACEMENT
+  ══════════════════════════════════ -->
+  <div class="section s2">
+    <div class="section-head">
+      <div class="sh-num">2</div>
+      <div class="sh-info">
+        <div class="sh-label">Section 2 · Filled by LC Leader</div>
+        <div class="sh-title">Ministry Placement · Paglalagay sa Ministeryo</div>
+        <div class="sh-sub">Which ministry team is this member being connected to?</div>
+      </div>
+    </div>
+    <div class="section-body">
+
+      <div class="divider-label">Ministry Selected · Napiling Ministeryo</div>
+      <div class="ministry-grid" id="ministryGrid"></div>
+
+      <div class="form-row" style="margin-top:.75rem">
+        <div class="field full">
+          <label>Other Ministry Not Listed · <span class="tl">Iba pang Ministeryo</span></label>
+          <input type="text" id="ministryOther" placeholder="If not listed above, write ministry name here">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Date of Introduction · <span class="tl">Petsa ng Pagpapakilala</span></label>
+          <input type="date" id="introDate">
+        </div>
+        <div class="field">
+          <label>Ministry Leader's Name · <span class="tl">Pangalan ng Ministry Leader</span></label>
+          <input type="text" id="ministryLeader" placeholder="Full name">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>How Was Introduction Made · <span class="tl">Paano Ipinakilala</span></label>
+          <select id="introMethod">
+            <option value="">Select...</option>
+            <option>In person · Personal na pagpapakilala</option>
+            <option>Viber / WhatsApp message</option>
+            <option>Email</option>
+            <option>During Sunday service</option>
+            <option>During LC group meeting</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Member's Enthusiasm Level · <span class="tl">Sigasig ng Miyembro</span></label>
+          <select id="enthusiasm">
+            <option value="">Select...</option>
+            <option>Very eager · Masigasig na masigasig</option>
+            <option>Interested · Interesado</option>
+            <option>Willing but hesitant · Payag pero nag-aatubili</option>
+            <option>Uncertain · Hindi pa sigurado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Second Choice Ministry · <span class="tl">Pangalawang Pagpipilian</span></label>
+          <input type="text" id="ministry2nd" placeholder="In case primary ministry is full">
+        </div>
+        <div class="field">
+          <label>Scheduled First Participation · <span class="tl">Unang Partisipasyon</span></label>
+          <input type="date" id="firstParticipation">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SECTION 3 — WARM HANDOFF
+  ══════════════════════════════════ -->
+  <div class="section s3">
+    <div class="section-head">
+      <div class="sh-num">3</div>
+      <div class="sh-info">
+        <div class="sh-label">Section 3 · Filled by LC Leader · Before Handoff</div>
+        <div class="sh-title">Warm Handoff Protocol · Maayos na Paglipat</div>
+        <div class="sh-sub">Complete all items before releasing the member to the Ministry Leader</div>
+      </div>
+    </div>
+    <div class="section-body">
+
+      <div class="info-box">
+        <div class="ib-label">Bakit Mahalaga Ito · Why This Matters</div>
+        Most ministry dropout happens in the first 30 days — and most of that dropout happens because the connection was cold, not warm. A warm handoff means the member arrives at the ministry team already knowing what to expect, already having met the leader, and already knowing they are expected. Complete every item below before releasing.
+      </div>
+
+      <ul class="checklist" id="handoffChecklist">
+        <li>
+          <input type="checkbox" id="hc1" onchange="saveData()">
+          <label for="hc1">
+            Told the member what this ministry does and what their first involvement will look like
+            <span class="cl-tl">Sinabi sa miyembro kung ano ang ginagawa ng ministeryong ito at kung ano ang hitsura ng kanilang unang partisipasyon</span>
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="hc2" onchange="saveData()">
+          <label for="hc2">
+            Member has met the Ministry Leader personally (not just by name)
+            <span class="cl-tl">Nakilala na ng miyembro ang Ministry Leader nang personal — hindi lang sa pangalan</span>
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="hc3" onchange="saveData()">
+          <label for="hc3">
+            Member knows the ministry's regular meeting schedule and location
+            <span class="cl-tl">Alam na ng miyembro ang regular na iskedyul at lugar ng pulong ng ministeryo</span>
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="hc4" onchange="saveData()">
+          <label for="hc4">
+            Member understands this is their spiritual gifts in action — not just a task to fulfill
+            <span class="cl-tl">Naiintindihan ng miyembro na ito ang kanilang espirituwal na kaloob sa pagkilos — hindi lang isang gawain na tapusin</span>
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="hc5" onchange="saveData()">
+          <label for="hc5">
+            Member knows they can return to LC group if the ministry is not the right fit after 30 days
+            <span class="cl-tl">Alam ng miyembro na maaari silang bumalik sa LC group kung ang ministeryo ay hindi angkop pagkatapos ng 30 araw</span>
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="hc6" onchange="saveData()">
+          <label for="hc6">
+            Ministry Leader has been notified and confirmed they are expecting the new member
+            <span class="cl-tl">Na-notify na ang Ministry Leader at kinumpirma nila na inaabangan nila ang bagong miyembro</span>
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="hc7" onchange="saveData()">
+          <label for="hc7">
+            Member's name has been added to the Ministry Leader's roster
+            <span class="cl-tl">Naidagdag na ang pangalan ng miyembro sa listahan ng Ministry Leader</span>
+          </label>
+        </li>
+      </ul>
+
+      <div class="form-row" style="margin-top:.75rem">
+        <div class="field full">
+          <label>LC Leader's Notes · <span class="tl">Mga Tala ng LC Leader</span></label>
+          <textarea id="lcNotes" placeholder="Any pastoral concerns, background context, or special considerations the Ministry Leader should know about this member..." rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="sig-row">
+        <div class="sig-field">
+          <input class="sig-line" type="text" id="lcLeaderName" placeholder="LC Leader Name · Pangalan ng LC Leader">
+          <span class="sig-label-sm">LC Leader — Pangalan at Pirma</span>
+        </div>
+        <div class="sig-field">
+          <input class="sig-line" type="date" id="lcSignDate">
+          <span class="sig-label-sm">Date Signed · Petsa</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SECTION 4 — MINISTRY LEADER
+  ══════════════════════════════════ -->
+  <div class="section s4">
+    <div class="section-head">
+      <div class="sh-num">4</div>
+      <div class="sh-info">
+        <div class="sh-label">Section 4 · Filled by Ministry Leader · Upon Receipt</div>
+        <div class="sh-title">Ministry Leader Confirmation · Kumpirmasyon ng Ministry Leader</div>
+        <div class="sh-sub">Complete within 48 hours of receiving the new member</div>
+      </div>
+    </div>
+    <div class="section-body">
+
+      <div class="form-row">
+        <div class="field">
+          <label>Date Member First Attended · <span class="tl">Unang Pagdalo ng Miyembro</span></label>
+          <input type="date" id="firstAttend">
+        </div>
+        <div class="field">
+          <label>Member was properly welcomed · <span class="tl">Maayos na tinanggap</span></label>
+          <select id="welcomed">
+            <option value="">Select...</option>
+            <option>Yes — introduced to the whole team · Oo — napakilala sa buong koponan</option>
+            <option>Yes — met key members · Oo — nakilala ang mga pangunahing miyembro</option>
+            <option>Partially — still working on integration · Bahagya — gumagawa pa ng paraan</option>
+            <option>Not yet — member has not attended · Hindi pa — hindi pa dumadalo ang miyembro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Initial Assessment of Gift-Ministry Fit · <span class="tl">Paunang Pagtatasa ng Angkop ng Kaloob</span></label>
+          <select id="giftFit">
+            <option value="">Select...</option>
+            <option>Excellent fit — gifts are clearly aligned · Napakagaling — malinaw na angkop ang kaloob</option>
+            <option>Good fit — some adjustment needed · Magandang angkop — may kaunting pag-aayos na kailangan</option>
+            <option>Uncertain — need more time to assess · Hindi pa sigurado — kailangan ng mas maraming oras</option>
+            <option>May need redirection — gifts may fit better elsewhere · Maaaring kailangan ng bagong direksyon</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="divider-label">Ministry Leader's Initial Observations · Mga Paunang Obserbasyon</div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Strengths Observed · <span class="tl">Mga Lakas na Naobserbahan</span></label>
+          <textarea id="mlStrengths" placeholder="What did you notice about this member in their first interaction with the ministry team?" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Concerns or Areas to Develop · <span class="tl">Mga Alalahanin o Lugar na Paunlarin</span></label>
+          <textarea id="mlConcerns" placeholder="Any concerns about fit, readiness, or areas that need development before full deployment?" rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>30-Day Check-in Scheduled For · <span class="tl">Iskedyul ng 30-Araw na Pag-check</span></label>
+          <input type="date" id="thirtyDayDate">
+        </div>
+        <div class="field">
+          <label>Buddy / Mentor Assigned · <span class="tl">Naitalaga na Kasama</span></label>
+          <input type="text" id="buddyName" placeholder="Name of team member assigned as buddy">
+        </div>
+      </div>
+
+      <div class="sig-row">
+        <div class="sig-field">
+          <input class="sig-line" type="text" id="mlName" placeholder="Ministry Leader Name · Pangalan ng Ministry Leader">
+          <span class="sig-label-sm">Ministry Leader — Pangalan at Pirma</span>
+        </div>
+        <div class="sig-field">
+          <input class="sig-line" type="date" id="mlSignDate">
+          <span class="sig-label-sm">Date Signed · Petsa</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SECTION 5 — 30-DAY CHECK-IN
+  ══════════════════════════════════ -->
+  <div class="section s5">
+    <div class="section-head">
+      <div class="sh-num">5</div>
+      <div class="sh-info">
+        <div class="sh-label">Section 5 · Filled by Pastor or Director · At 30-Day Mark</div>
+        <div class="sh-title">30-Day Follow-up Review · Pagsusuri Pagkatapos ng 30 Araw</div>
+        <div class="sh-sub">The most critical section — most dropout happens in the first month</div>
+      </div>
+    </div>
+    <div class="section-body">
+
+      <div class="thirty-card">
+        <div class="tc-label">📅 Participation Record · Talaan ng Pagdalo</div>
+        <div class="tc-q">Tap each session the member attended in their first 30 days:</div>
+        <div class="part-tracker" id="partTracker"></div>
+        <div style="font-size:12px;color:var(--teal);margin-top:.4rem" id="partCount">0 sessions attended</div>
+      </div>
+
+      <div class="divider-label">30-Day Assessment</div>
+
+      <div class="rating-row">
+        <span class="rating-label">Integration into team (1=poor, 5=excellent) · <em>Integrasyon sa koponan</em></span>
+        <div class="rating-opts" id="rate-integration"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Enthusiasm and engagement · <em>Sigasig at pakikisama</em></span>
+        <div class="rating-opts" id="rate-enthusiasm"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Gift-ministry alignment · <em>Angkop ng kaloob sa ministeryo</em></span>
+        <div class="rating-opts" id="rate-alignment"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Character fruit visible · <em>Nakikitang bunga ng Espiritu</em></span>
+        <div class="rating-opts" id="rate-character"></div>
+      </div>
+
+      <div class="form-row" style="margin-top:.75rem">
+        <div class="field full">
+          <label>Overall 30-Day Assessment · <span class="tl">Pangkalahatang Pagtatasa</span></label>
+          <select id="overallAssess">
+            <option value="">Select...</option>
+            <option>Thriving — member is flourishing in this ministry · Umuunlad — namumukadkad sa ministeryong ito</option>
+            <option>Growing — good fit, needs more time · Lumalaki — angkop, kailangan pa ng oras</option>
+            <option>Struggling — present but not integrating well · Nahihirapan — nandoon pero hindi nag-iintegrate nang maayos</option>
+            <option>Inactive — has stopped attending · Hindi aktibo — tumigil na sa pagdalo</option>
+            <option>Needs redirection — different ministry recommended · Kailangan ng bagong direksyon</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Recommended Next Step · <span class="tl">Inirerekomendang Susunod na Hakbang</span></label>
+          <textarea id="nextStep" placeholder="Continue in current ministry · Redirect to different ministry · Needs pastoral care before ministry · Promote to team leader role..." rows="2"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Pastoral Notes · <span class="tl">Mga Pastoral na Tala</span></label>
+          <textarea id="pastoralNotes30" placeholder="Any pastoral concerns, character observations, or prayer items that arose during the 30-day period..." rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="sig-row">
+        <div class="sig-field">
+          <input class="sig-line" type="text" id="reviewerName" placeholder="Pastor / Director Name">
+          <span class="sig-label-sm">Reviewer — Pangalan</span>
+        </div>
+        <div class="sig-field">
+          <input class="sig-line" type="date" id="reviewDate">
+          <span class="sig-label-sm">Date of Review · Petsa ng Pagsusuri</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SECTION 6 — PASTOR'S SUMMARY
+  ══════════════════════════════════ -->
+  <div class="section s6">
+    <div class="section-head">
+      <div class="sh-num">6</div>
+      <div class="sh-info">
+        <div class="sh-label">Section 6 · Pastor's Summary · Final</div>
+        <div class="sh-title">Pastoral Summary & Pipeline Update · Buod ng Pastor</div>
+        <div class="sh-sub">Final disposition and pipeline record update</div>
+      </div>
+    </div>
+    <div class="section-body">
+
+      <div class="form-row">
+        <div class="field">
+          <label>Final Ministry Placement · <span class="tl">Panghuling Paglalagay sa Ministeryo</span></label>
+          <input type="text" id="finalMinistry" placeholder="Confirmed ministry team">
+        </div>
+        <div class="field">
+          <label>Date Placement Confirmed · <span class="tl">Petsa ng Kumpirmasyon</span></label>
+          <input type="date" id="placementDate">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Passport Updated · <span class="tl">Na-update ang Passport</span></label>
+          <select id="passportUpdated">
+            <option value="">Select...</option>
+            <option>Yes — Ministry placement page signed · Oo — napirmahan ang pahina ng ministeryo</option>
+            <option>Pending — will update at next LC meeting · Nakabinbin — ia-update sa susunod na LC meeting</option>
+            <option>No — member withdrawn from pipeline · Hindi — inalis ang miyembro sa pipeline</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Dashboard Updated · <span class="tl">Na-update ang Dashboard</span></label>
+          <select id="dashboardUpdated">
+            <option value="">Select...</option>
+            <option>Yes — ministry field updated</option>
+            <option>Pending</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field full">
+          <label>Pastor's Final Notes · <span class="tl">Panghuling Tala ng Pastor</span></label>
+          <textarea id="pastorFinalNotes" placeholder="Any significant pastoral observations, character markers noticed, leadership potential flagged, or prayer commitments made for this member..." rows="4"></textarea>
+        </div>
+      </div>
+
+      <div class="sig-row">
+        <div class="sig-field">
+          <input class="sig-line" type="text" id="pastorName" placeholder="Pastor's Name · Pangalan ng Pastor">
+          <span class="sig-label-sm">Pastor — Pangalan at Pirma</span>
+        </div>
+        <div class="sig-field">
+          <input class="sig-line" type="date" id="pastorSignDate">
+          <span class="sig-label-sm">Date · Petsa</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="btn-row">
+    <button class="btn-primary" onclick="saveData()">💾 Save Form · I-save</button>
+    <button class="btn-print" onclick="window.print()">🖨 Print · I-print</button>
+    <button class="btn-secondary" onclick="clearForm()">🗑 Clear · I-clear</button>
+  </div>
+  <div class="saved-msg" id="savedMsg">✅ Form saved successfully to this device. · Matagumpay na na-save ang form sa device na ito.</div>
+
+</div><!-- /page -->
+
+<script>
+// ── GIFTS ──────────────────────────────────────────
+const GIFTS = [
+  'Leadership · Pamumuno','Administration · Pangangasiwa',
+  'Teaching · Pagtuturo','Knowledge · Kaalaman',
+  'Wisdom · Karunungan','Prophecy · Propesiya',
+  'Discernment · Pagkilatis','Encouragement · Pagpapalakas',
+  'Shepherding · Pagpapastol','Faith · Pananampalataya',
+  'Evangelism · Ebanghelismo','Apostleship · Pag-aapóstol',
+  'Service · Paglilingkod','Mercy · Awa',
+  'Giving · Pagbibigay','Hospitality · Pakikisama'
+];
+
+const MINISTRIES = [
+  'Worship Team · Pagsamba','Life Connect Leader · LC Leader',
+  'Children\'s Ministry · Ministeryo sa Bata','Media & Tech · Media at Tekno',
+  'EOLO Outreach · Ebanghelismo','Prayer Ministry · Panalangin',
+  'Ushering & Welcome · Pagtanggap','Youth Ministry · Kabataan',
+  'Pastoral Care · Pag-aalaga','Stewardship · Katiwala',
+  'Preaching / Teaching · Pangangaral','Administrative Support'
+];
+
+let giftSelections = {}; // gift -> 1(primary), 2(secondary), 3(supporting)
+let ministrySelected = '';
+let participationData = {};
+let ratings = {};
+
+function buildGifts() {
+  const wrap = document.getElementById('giftBadges');
+  GIFTS.forEach(g => {
+    const badge = document.createElement('div');
+    badge.className = 'gift-badge';
+    badge.textContent = g;
+    badge.onclick = () => {
+      const cur = giftSelections[g] || 0;
+      if (cur === 0) {
+        // Check max per slot
+        const p1 = Object.values(giftSelections).filter(v=>v===1).length;
+        const p2 = Object.values(giftSelections).filter(v=>v===2).length;
+        const p3 = Object.values(giftSelections).filter(v=>v===3).length;
+        if (p1 < 1) giftSelections[g] = 1;
+        else if (p2 < 1) giftSelections[g] = 2;
+        else if (p3 < 1) giftSelections[g] = 3;
+      } else {
+        delete giftSelections[g];
+      }
+      updateGiftBadges();
+      saveData();
+    };
+    wrap.appendChild(badge);
+  });
+}
+
+function updateGiftBadges() {
+  document.querySelectorAll('.gift-badge').forEach(b => {
+    b.classList.remove('selected-1','selected-2','selected-3');
+    const v = giftSelections[b.textContent];
+    if (v) b.classList.add('selected-' + v);
+  });
+}
+
+function buildMinistries() {
+  const grid = document.getElementById('ministryGrid');
+  MINISTRIES.forEach(m => {
+    const item = document.createElement('label');
+    item.className = 'ministry-item';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'ministry';
+    radio.value = m;
+    radio.onchange = () => { ministrySelected = m; saveData(); };
+    item.appendChild(radio);
+    item.appendChild(document.createTextNode(m));
+    item.onclick = () => item.classList.toggle('selected');
+    grid.appendChild(item);
+  });
+}
+
+// ── RATINGS ──────────────────────────────────────────
+function buildRatings() {
+  ['integration','enthusiasm','alignment','character'].forEach(key => {
+    const wrap = document.getElementById('rate-' + key);
+    for (let i = 1; i <= 5; i++) {
+      const btn = document.createElement('div');
+      btn.className = 'r-opt';
+      btn.textContent = i;
+      btn.onclick = () => {
+        ratings[key] = i;
+        wrap.querySelectorAll('.r-opt').forEach((b,j) => b.classList.toggle('sel', j < i));
+        saveData();
+      };
+      wrap.appendChild(btn);
+    }
+  });
+}
+
+// ── PARTICIPATION TRACKER ────────────────────────────
+function buildParticipation() {
+  const wrap = document.getElementById('partTracker');
+  for (let i = 1; i <= 8; i++) {
+    const btn = document.createElement('div');
+    btn.className = 'pt-btn';
+    btn.textContent = i;
+    btn.title = 'Session ' + i;
+    btn.onclick = () => {
+      participationData[i] = !participationData[i];
+      btn.classList.toggle('attended', participationData[i]);
+      const count = Object.values(participationData).filter(Boolean).length;
+      document.getElementById('partCount').textContent = count + ' session' + (count !== 1 ? 's' : '') + ' attended · ' + count + ' beses dumalo';
+      saveData();
+    };
+    wrap.appendChild(btn);
+  }
+  const lbl = document.createElement('span');
+  lbl.className = 'pt-label';
+  lbl.textContent = '(tap each session attended)';
+  wrap.appendChild(lbl);
+}
+
+// ── FORM NUMBER ──────────────────────────────────────
+function initFormMeta() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('formDate').textContent = y + m;
+  document.getElementById('todayDate').textContent = now.toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'});
+
+  const seq = parseInt(localStorage.getItem('mif_seq')||'0') + 1;
+  document.getElementById('formSeq').textContent = String(seq).padStart(3,'0');
+}
+
+// ── SAVE / LOAD ──────────────────────────────────────
+const FORM_KEY = 'ministry_intake_form';
+
+function collectData() {
+  const ids = ['memberName','memberBday','memberGroup','memberLevel','diagDate',
+    'yearsFollowing','giftNotes','ministryOther','introDate','ministryLeader',
+    'introMethod','enthusiasm','ministry2nd','firstParticipation','lcNotes',
+    'lcLeaderName','lcSignDate','firstAttend','welcomed','giftFit','mlStrengths',
+    'mlConcerns','thirtyDayDate','buddyName','overallAssess','nextStep',
+    'pastoralNotes30','reviewerName','reviewDate','finalMinistry','placementDate',
+    'passportUpdated','dashboardUpdated','pastorFinalNotes','pastorName','pastorSignDate'];
+  const data = {};
+  ids.forEach(id => { const el = document.getElementById(id); if (el) data[id] = el.value; });
+  // Checkboxes
+  for (let i = 1; i <= 7; i++) {
+    const cb = document.getElementById('hc' + i);
+    if (cb) data['hc' + i] = cb.checked;
+  }
+  data.giftSelections = giftSelections;
+  data.ministrySelected = ministrySelected;
+  data.participationData = participationData;
+  data.ratings = ratings;
+  data.formStatus = document.getElementById('formStatus').value;
+  return data;
+}
+
+function saveData() {
+  const data = collectData();
+  localStorage.setItem(FORM_KEY, JSON.stringify(data));
+  const msg = document.getElementById('savedMsg');
+  msg.classList.add('show');
+  setTimeout(() => msg.classList.remove('show'), 2500);
+}
+
+function loadData() {
+  const raw = localStorage.getItem(FORM_KEY);
+  if (!raw) return;
+  const data = JSON.parse(raw);
+  const ids = Object.keys(data).filter(k => !['giftSelections','ministrySelected','participationData','ratings','formStatus'].includes(k) && !k.startsWith('hc'));
+  ids.forEach(id => { const el = document.getElementById(id); if (el && data[id] !== undefined) el.value = data[id]; });
+  // Checkboxes
+  for (let i = 1; i <= 7; i++) {
+    const cb = document.getElementById('hc' + i);
+    if (cb && data['hc' + i] !== undefined) cb.checked = data['hc' + i];
+  }
+  if (data.giftSelections) { giftSelections = data.giftSelections; updateGiftBadges(); }
+  if (data.ministrySelected) {
+    ministrySelected = data.ministrySelected;
+    document.querySelectorAll('.ministry-item').forEach(item => {
+      const radio = item.querySelector('input');
+      if (radio && radio.value === data.ministrySelected) { radio.checked = true; item.classList.add('selected'); }
+    });
+  }
+  if (data.participationData) {
+    participationData = data.participationData;
+    document.querySelectorAll('.pt-btn').forEach((btn, i) => {
+      if (participationData[i+1]) btn.classList.add('attended');
+    });
+    const count = Object.values(participationData).filter(Boolean).length;
+    document.getElementById('partCount').textContent = count + ' sessions attended · ' + count + ' beses dumalo';
+  }
+  if (data.ratings) {
+    ratings = data.ratings;
+    Object.entries(ratings).forEach(([key, val]) => {
+      const wrap = document.getElementById('rate-' + key);
+      if (wrap) wrap.querySelectorAll('.r-opt').forEach((b,j) => b.classList.toggle('sel', j < val));
+    });
+  }
+  if (data.formStatus) document.getElementById('formStatus').value = data.formStatus;
+}
+
+function clearForm() {
+  if (!confirm('Clear all data? This cannot be undone. · Burahin ang lahat ng datos? Hindi ito mababawi.')) return;
+  localStorage.removeItem(FORM_KEY);
+  giftSelections = {}; ministrySelected = ''; participationData = {}; ratings = {};
+  location.reload();
+}
+
+// ── AUTO-SAVE ON CHANGE ──────────────────────────────
+document.addEventListener('change', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') saveData();
+});
+
+// ── INIT ──────────────────────────────────────────────
+buildGifts();
+buildMinistries();
+buildRatings();
+buildParticipation();
+initFormMeta();
+loadData();
+</script>
+</body>
+</html>

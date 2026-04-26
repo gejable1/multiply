@@ -262,7 +262,10 @@ let _scores={},_sorted=[];
 function calculate(){
   const name=document.getElementById('pName').value.trim();
   if(!name){toast('Please enter your name first ⚠');document.getElementById('pName').focus();return;}
-  if(answered<50){toast('Please answer at least 50 questions ('+answered+'/63) ⚠');return;}
+  if(answered<50){
+    const goBack=confirm('⚠️ Survey is '+Math.round(answered/63*100)+'% complete — '+(63-answered)+' question(s) still unanswered.\n\nClick OK to view partial results anyway.\nClick Cancel to go back and complete the survey.');
+    if(!goBack){return;}
+  }
   _scores={};
   TYPES.forEach((t,ti)=>{
     let total=0;
@@ -323,10 +326,36 @@ function calculate(){
   });
   document.getElementById('resultsWrap').classList.add('visible');
   document.getElementById('saveBtn').style.display='block';
+  // Show/hide incomplete banner
+  const _totalQ={total};
+  const _doneQ=answered;
+  
+  const _isComplete = answered >= 63;
+  let _incompBanner = document.getElementById('incompleteBannerResult');
+  if (!_incompBanner) {
+    _incompBanner = document.createElement('div');
+    _incompBanner.id = 'incompleteBannerResult';
+    _incompBanner.style.cssText = 'background:#fff8e1;border:1.5px solid #f0c040;border-radius:9px;padding:.85rem 1rem;margin-bottom:1rem;';
+    document.getElementById('resultsWrap').prepend(_incompBanner);
+  }
+  if (!_isComplete) {
+    _incompBanner.style.display = 'block';
+    _incompBanner.innerHTML = '<div style="font-size:13px;font-weight:700;color:#7a5a00;margin-bottom:.35rem">⚠️ Partial Results — Survey Not Yet Complete</div>' +
+      '<div style="font-size:12.5px;color:#5a4000;margin-bottom:.65rem">' + (63 - answered) + ' of 63 questions still unanswered. Results may not be accurate.</div>' +
+      '<button onclick="document.getElementById(\'resultsWrap\').style.display=\'none\';window.scrollTo({top:0,behavior:\'smooth\'});" style="background:#b8882a;color:white;border:none;border-radius:7px;padding:9px 18px;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">← Go Back &amp; Complete the Survey</button>';
+  } else {
+    _incompBanner.style.display = 'none';
+  }
   setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),100);
 }
 async function saveToDashboard(){
   const btn=document.getElementById('saveBtn');const msg=document.getElementById('saveMsg');
+  // Completeness guard
+  if(answered<63){
+    msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';
+    msg.innerHTML='⛔ Cannot save — survey is only '+Math.round(answered/63*100)+'% complete. Please finish all questions before submitting.';
+    return;
+  }
   btn.textContent='⏳ Saving...';btn.disabled=true;
   const name=document.getElementById('pName').value.trim();
   const memberId=_memberId||document.getElementById('selectedMemberId').value||null;

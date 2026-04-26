@@ -1639,6 +1639,23 @@ body {
     <div class="score-grid" id="scoreGrid"></div>
     <div id="outcomeBox"></div>
     <p style="font-size:12px;color:#6b5e47;margin-top:1rem;font-style:italic">Note: This score is a starting point for conversation, not a verdict. The facilitator's pastoral judgment — informed by the debrief conversation — is the final determination.</p>
+
+    <!-- INCOMPLETE WARNING BANNER — shown when results are partial -->
+    <div id="incompleteBanner" style="display:none;background:#fff8e1;border:1.5px solid #f0c040;border-radius:9px;padding:.85rem 1rem;margin-top:1rem;">
+      <div style="font-size:13px;font-weight:700;color:#7a5a00;margin-bottom:.35rem">⚠️ Partial Results — Survey Not Yet Complete</div>
+      <div style="font-size:12.5px;color:#5a4000;margin-bottom:.65rem" id="incompleteDetail"></div>
+      <button onclick="goBackToComplete()" style="background:#b8882a;color:white;border:none;border-radius:7px;padding:9px 18px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">
+        ← Go Back &amp; Complete the Survey
+      </button>
+    </div>
+
+    <!-- SUBMIT TO DASHBOARD — only active when survey is complete -->
+    <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+      <button id="submitBtn" onclick="submitToDashboard()" style="display:none;width:100%;padding:13px;background:#2a5c40;color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;">
+        💾 Save Results to Dashboard
+      </button>
+      <div id="submitMsg" style="display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;"></div>
+    </div>
   </div>
 
   <div class="action-bar">
@@ -1758,15 +1775,41 @@ body {
 <script>
 // SCORING ENGINE
 function calcScore() {
+  // ── INCOMPLETE CHECK — warn but allow ──
+  const allRadioNames = new Set();
+  document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
+  const answeredRadios = new Set();
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
+  const totalQ = allRadioNames.size + document.querySelectorAll('textarea[data-scorable="open"]').length;
+  const doneQ  = answeredRadios.size + [...document.querySelectorAll('textarea[data-scorable="open"]')].filter(t=>t.value.trim().length>5).length;
+  const pctDone = Math.round(doneQ/totalQ*100);
+
+  if (pctDone < 80) {
+    const unanswered = totalQ - doneQ;
+    const goBack = confirm(
+      `⚠️ Survey is ${pctDone}% complete — ${unanswered} question(s) still unanswered.\n\n` +
+      `Results will be based on what is answered so far and may not be accurate.\n\n` +
+      `Click OK to view partial results anyway.\n` +
+      `Click Cancel to go back and complete the survey.`
+    );
+    if (!goBack) {
+      // Scroll to first unanswered radio group
+      for (const name of allRadioNames) {
+        if (!answeredRadios.has(name)) {
+          const el = document.querySelector('input[name="'+name+'"]');
+          if (el) { el.closest('.q-card')?.scrollIntoView({behavior:'smooth',block:'center'}); break; }
+        }
+      }
+      return;
+    }
+  }
+
+  // ── SHOW SUBMIT BUTTON ──
+  const sb = document.getElementById('submitBtn');
+  if (sb) sb.style.display = 'block';
+
   const sections = { A:0, B:0, C:0, D:0, E:0, F:0, G:0 };
   const maxes   = { A:10, B:10, C:45, D:30, E:40, F:15, G:20 };
-  // A: A6(5) + open bonus(5) = 10
-  // B: B1(5)+B3(5) = 10
-  // C: C1–C9 = 45
-  // D: D1–D6 = 30
-  // E: E1–E8 = 40
-  // F: F1+F2+F5 = 15
-  // G: G1–G4 = 20
 
   const radios = document.querySelectorAll('input[type="radio"][data-scorable="scale"]:checked');
   radios.forEach(r => {
@@ -1819,9 +1862,46 @@ function calcScore() {
   }
   document.getElementById('outcomeBox').innerHTML = ocHtml;
 
+  // Show/hide incomplete banner and submit button based on completion
+  const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
+  const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
+  const allTA = document.querySelectorAll('textarea[data-scorable="open"]');
+  const doneTA = [...allTA].filter(t=>t.value.trim().length>5);
+  const totalQ = allRN.size + allTA.length;
+  const doneQ  = doneRN.size + doneTA.length;
+  const isComplete = doneQ >= totalQ;
+
+  const banner = document.getElementById('incompleteBanner');
+  const detail = document.getElementById('incompleteDetail');
+  const sb = document.getElementById('submitBtn');
+
+  if (!isComplete) {
+    banner.style.display = 'block';
+    detail.textContent = (totalQ - doneQ) + ' of ' + totalQ + ' questions still unanswered. Scores above are based on ' + doneQ + ' answered items and may not be accurate.';
+    if (sb) sb.style.display = 'none';
+  } else {
+    banner.style.display = 'none';
+    if (sb) sb.style.display = 'block';
+  }
+
   const panel = document.getElementById('scorePanel');
   panel.classList.add('visible');
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function goBackToComplete() {
+  // Scroll to first unanswered radio group
+  const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
+  const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
+  for (const name of allRN) {
+    if (!doneRN.has(name)) {
+      const el = document.querySelector('input[name="'+name+'"]');
+      if (el) {
+        el.closest('.q-card')?.scrollIntoView({behavior:'smooth', block:'center'});
+        break;
+      }
+    }
+  }
 }
 
 // FACILITATOR LOCK / UNLOCK
@@ -1968,13 +2048,7 @@ document.addEventListener('click', e => {
   }
 });
 
-// ── SHOW SUBMIT BUTTON AFTER SCORING (submitBtn shown if it exists) ──
-const _origCalcScore = calcScore;
-function calcScore() {
-  _origCalcScore();
-  const sb = document.getElementById('submitBtn');
-  if (sb) sb.style.display = 'block';
-}
+// (calcScore is defined above — single definition)
 
 // ── COLLECT SCORES ──
 function collectScores() {
@@ -2002,6 +2076,23 @@ function collectScores() {
 async function submitToDashboard() {
   const btn = document.getElementById('submitBtn');
   const msg = document.getElementById('submitMsg');
+
+  // Final completeness guard before saving
+  const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
+  const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
+  const allTA = document.querySelectorAll('textarea[data-scorable="open"]');
+  const doneTA = [...allTA].filter(t=>t.value.trim().length>5);
+  const totalQ = allRN.size + allTA.length;
+  const doneQ  = doneRN.size + doneTA.length;
+  if (doneQ < totalQ) {
+    const pctDone = Math.round(doneQ/totalQ*100);
+    msg.style.display = 'block';
+    msg.style.background = '#fdecea';
+    msg.style.color = '#7a2020';
+    msg.innerHTML = '⛔ Cannot save — survey is only ' + pctDone + '% complete (' + (totalQ-doneQ) + ' questions unanswered). Please complete the survey before submitting.';
+    return;
+  }
+
   btn.textContent = '⏳ Saving...';
   btn.disabled = true;
 
