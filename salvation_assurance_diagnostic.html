@@ -1957,17 +1957,30 @@ async function autoLinkFromUrl() {
   const memberId = params.get('id');
   if (!memberId) return;
 
+  // Show loading state immediately so user knows something is happening
+  const lb = document.getElementById('linkBox');
+  if (lb) lb.innerHTML += '<div id="dbStatus" style="font-size:12px;color:#b8882a;margin-top:.5rem">⏳ Loading member data...</div>';
+
+  function setStatus(msg, color) {
+    const el = document.getElementById('dbStatus');
+    if (el) { el.textContent = msg; el.style.color = color || '#b8882a'; }
+  }
+
   try {
-    const { data, error } = await getDB()
+    const db = getDB();
+    if (!db) { setStatus('❌ Database connection failed — Supabase not loaded.', '#c0392b'); return; }
+
+    setStatus('⏳ Fetching member record...');
+    const { data, error } = await db
       .from('members')
-      .select('id,name,discipler_name,discipler,pipeline_level,lc_group,ministry,ministry_role,ministry2,ministry2_role,is_facilitator,facilitator_role')
+      .select('id,name,discipler_name,discipler,pipeline_level,lc_group,ministry,ministry_role,ministry2,ministry2_role')
       .eq('id', memberId)
       .single();
 
-    if (error || !data) {
-      console.warn('Member not found for ID:', memberId);
-      return;
-    }
+    if (error) { setStatus('❌ Error: ' + error.message, '#c0392b'); return; }
+    if (!data)  { setStatus('❌ Member ID not found in database.', '#c0392b'); return; }
+
+    setStatus('');
 
     // Pre-link
     _selectedMemberId = data.id;
@@ -2011,8 +2024,7 @@ async function autoLinkFromUrl() {
   }
 }
 
-// Run auto-link on page load
-autoLinkFromUrl();
+// autoLinkFromUrl() is called inside DOMContentLoaded below
 
 // ── MEMBER SEARCH (fallback for manual use) ──
 async function searchMember(q) {
@@ -2188,6 +2200,9 @@ async function submitToDashboard() {
 
 // ── ALL INIT RUNS AFTER DOM IS READY ──────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
+
+  // Run auto-link on load — inside DOMContentLoaded so DOM + Supabase CDN are both ready
+  autoLinkFromUrl();
 
   // Enter key in PIN field
   const pinField = document.getElementById('facilitatorPin');
