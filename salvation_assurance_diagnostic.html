@@ -1936,7 +1936,17 @@ function lockFacilitator() {
 // ═══════════════════════════════════════
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-const dbClient = supabase.createClient(SB_URL, SB_KEY);
+let dbClient = null;
+function getDB() {
+  if (!dbClient) {
+    try {
+      dbClient = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8',{
+        auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
+      });
+    } catch(e) { console.error('Supabase init failed:',e); }
+  }
+  return dbClient;
+}
 
 let _selectedMemberId = null;
 let _selectedMemberName = null;
@@ -2008,7 +2018,7 @@ autoLinkFromUrl();
 async function searchMember(q) {
   const dd = document.getElementById('memberDropdown');
   if (q.length < 2) { dd.style.display = 'none'; return; }
-  const { data } = await dbClient.from('members').select('id,name,discipler,pipeline_level')
+  const { data } = await getDB().from('members').select('id,name,discipler,pipeline_level')
     .ilike('name', '%' + q + '%').limit(8);
   if (!data || !data.length) {
     dd.innerHTML = '<div style="padding:.6rem 1rem;font-size:12px;color:#9a8f80">No members found — results will save by name only</div>';
@@ -2145,7 +2155,7 @@ async function submitToDashboard() {
 
     // Update member record if linked
     if (memberId) {
-      const { error: memErr } = await dbClient.from('members').update({
+      const { error: memErr } = await getDB().from('members').update({
         diagnostic_score: scores.pct,
         diagnostic_zone: scores.zone,
         diagnostic_date: new Date().toISOString().split('T')[0],

@@ -171,7 +171,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 <script>
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-const db=supabase.createClient(SB_URL,SB_KEY);
+let db = null;
+function getDB() {
+  if (!db) {
+    try {
+      db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8',{
+        auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
+      });
+    } catch(e) { console.error('Supabase init failed:',e); }
+  }
+  return db;
+}
 let _memberId=null;
 const LANGUAGES=[
   {id:'words',name:'Words of Affirmation',icon:'💬',tagline:'Nagsasalita ang puso mo sa pamamagitan ng mga salita',
@@ -340,9 +350,9 @@ async function saveToDashboard(){
   const name=document.getElementById('pName').value.trim();
   const memberId=_memberId||document.getElementById('selectedMemberId').value||null;
   try{
-    const {error}=await db.from('member_profiles').insert({member_id:memberId||null,member_name:name,lc_group:document.getElementById('pGroup').value||null,profile_type:'love_language',results:_scores,top_result:_sorted[0]?.name||null,second_result:_sorted[1]?.name||null,third_result:_sorted[2]?.name||null,summary:_sorted[0]?.name+' / '+_sorted[1]?.name,date_taken:new Date().toISOString().split('T')[0]});
+    const {error}=await getDB().from('member_profiles').insert({member_id:memberId||null,member_name:name,lc_group:document.getElementById('pGroup').value||null,profile_type:'love_language',results:_scores,top_result:_sorted[0]?.name||null,second_result:_sorted[1]?.name||null,third_result:_sorted[2]?.name||null,summary:_sorted[0]?.name+' / '+_sorted[1]?.name,date_taken:new Date().toISOString().split('T')[0]});
     if(error)throw error;
-    if(memberId)await db.from('members').update({love_language_primary:_sorted[0]?.name||null,love_language_secondary:_sorted[1]?.name||null,updated_at:new Date().toISOString()}).eq('id',memberId);
+    if(memberId)await getDB().from('members').update({love_language_primary:_sorted[0]?.name||null,love_language_secondary:_sorted[1]?.name||null,updated_at:new Date().toISOString()}).eq('id',memberId);
     btn.style.display='none';msg.style.display='block';
     msg.innerHTML=`✅ Saved! <strong>${name}</strong> · Primary: ${_sorted[0]?.name} · Secondary: ${_sorted[1]?.name}${memberId?' · Dashboard updated.':' · Not linked to member record.'}`;
   }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
@@ -350,7 +360,7 @@ async function saveToDashboard(){
 async function autoLinkFromUrl(){
   const id=new URLSearchParams(window.location.search).get('id');if(!id)return;
   try{
-    const {data}=await db.from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
+    const {data}=await getDB().from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
     _memberId=data.id;document.getElementById('selectedMemberId').value=data.id;
     document.getElementById('autoLinked').style.display='block';document.getElementById('manualSearch').style.display='none';
     document.getElementById('autoLinkedName').textContent=data.name;
@@ -361,7 +371,7 @@ async function autoLinkFromUrl(){
 }
 async function searchMember(q){
   const dd=document.getElementById('memberDropdown');if(q.length<2){dd.style.display='none';return;}
-  const {data}=await db.from('members').select('id,name').ilike('name','%'+q+'%').limit(8);
+  const {data}=await getDB().from('members').select('id,name').ilike('name','%'+q+'%').limit(8);
   if(!data?.length){dd.innerHTML='<div style="padding:.6rem 1rem;font-size:12px;color:var(--muted)">No members found</div>';dd.style.display='block';return;}
   dd.innerHTML=data.map(m=>`<div onclick="selectMember('${m.id}','${m.name.replace(/'/g,"\\'")}')" style="padding:.6rem 1rem;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''"><span style="font-weight:500">${m.name}</span></div>`).join('');
   dd.style.display='block';
