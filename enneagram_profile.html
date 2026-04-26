@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enneagram Profile — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f8f5f0;--paper:#fff;--ink:#1a1612;--muted:#6b5f50;--lighter:#a09080;--border:#e5ddd0;--surface2:#f3efe8;--green:#2a5c40;--green-bg:#eef6f1;--navy:#1b2a4a;--gold:#b8882a;--gold-bg:#fdf6e8;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.1);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+.cover{background:linear-gradient(135deg,#0a1a0a 0%,#1a2a1a 40%,#1b2a4a 100%);padding:3rem 1.5rem 2.5rem;text-align:center;border-bottom:3px solid var(--gold);}
+.cover-title{font-family:'Playfair Display',serif;font-size:clamp(1.75rem,6vw,3rem);font-weight:700;color:#f5edd8;margin-bottom:.25rem;font-style:italic;}
+.cover-sub{font-size:13px;color:rgba(255,255,255,.4);max-width:540px;margin:.5rem auto 1rem;}
+.cover-badge{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.25);display:block;margin-bottom:.75rem;}
+.type-grid{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-bottom:.75rem;}
+.tg{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);}
+.cover-tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.ct{font-size:10px;padding:3px 12px;border-radius:20px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);}
+.prog-bar{position:sticky;top:0;background:var(--paper);border-bottom:1px solid var(--border);padding:.6rem 1.25rem;z-index:100;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);}
+.prog-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--gold);border-radius:3px;transition:width .3s;}
+.prog-label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:500;}
+.link-box{max-width:700px;margin:1.25rem auto 0;padding:0 1.25rem;}
+.lb-in{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.page{max-width:700px;margin:0 auto;padding:1.25rem;}
+.pf{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;margin-bottom:.45rem;transition:border-color .15s;}
+.pf:focus{outline:none;border-color:var(--navy);}
+.type-block{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden;box-shadow:var(--shadow);}
+.tb-head{display:flex;align-items:center;gap:14px;padding:1rem 1.1rem;border-bottom:1px solid var(--border);}
+.tb-num{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:white;flex-shrink:0;}
+.tb-info{flex:1;}
+.tb-name{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;color:var(--ink);}
+.tb-tagline{font-size:11px;color:var(--lighter);}
+.tb-count{font-size:10px;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:12px;}
+.tb-body{padding:.65rem .85rem .85rem;}
+.q-card{border:1.5px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;transition:border-color .15s;}
+.q-card.answered{border-color:rgba(42,92,64,.3);background:var(--green-bg);}
+.q-top{padding:.75rem .85rem .4rem;display:flex;gap:8px;align-items:flex-start;}
+.q-num{font-size:10px;font-weight:700;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:8px;flex-shrink:0;margin-top:2px;}
+.q-en{font-size:11.5px;color:var(--muted);font-style:italic;margin-bottom:2px;line-height:1.5;}
+.q-tl{font-size:13px;color:var(--ink);font-weight:500;line-height:1.6;}
+.scale-row{display:flex;align-items:center;gap:6px;padding:.4rem .85rem .75rem;}
+.s-label{font-size:10px;color:var(--lighter);white-space:nowrap;flex-shrink:0;}
+.s-opts{display:flex;gap:4px;flex:1;justify-content:center;}
+.sopt{display:flex;flex-direction:column;align-items:center;cursor:pointer;}
+.sopt input{display:none;}
+.sopt .d{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--border);background:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s;}
+.sopt input:checked ~ .d{background:var(--navy);border-color:var(--navy);color:white;}
+.sopt:hover .d{border-color:var(--navy);color:var(--navy);}
+.calc-wrap{max-width:700px;margin:1.5rem auto;padding:0 1.25rem;}
+.calc-btn{width:100%;padding:14px;background:linear-gradient(135deg,#1a2a1a,#1b2a4a);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:filter .15s;letter-spacing:.02em;}
+.calc-btn:hover{filter:brightness(1.15);}
+.results-wrap{max-width:700px;margin:0 auto;padding:0 1.25rem 3rem;display:none;}
+.results-wrap.visible{display:block;}
+.res-hero{background:linear-gradient(135deg,#0a1a0a,#1a2a1a,#1b2a4a);border-radius:14px;padding:2rem;text-align:center;margin-bottom:1rem;}
+.res-type-num{font-size:5rem;font-weight:900;color:var(--gold);line-height:1;margin-bottom:.1rem;}
+.res-type-name{font-family:'Playfair Display',serif;font-size:1.5rem;font-style:italic;color:#f5edd8;margin-bottom:.2rem;}
+.res-name{font-size:1rem;color:rgba(255,255,255,.5);}
+.res-sub{font-size:12px;color:rgba(255,255,255,.3);margin-top:.3rem;}
+.scores-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem;}
+.sg-card{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:.65rem;text-align:center;box-shadow:var(--shadow);}
+.sg-num{font-size:1.1rem;font-weight:900;color:var(--navy);}
+.sg-name{font-size:10px;color:var(--lighter);margin-top:1px;}
+.sg-bar-wrap{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:.35rem;}
+.sg-bar{height:100%;border-radius:2px;transition:width .6s;}
+.type-result-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:.85rem;overflow:hidden;box-shadow:var(--shadow);}
+.trc-head{display:flex;align-items:center;gap:14px;padding:1rem 1.1rem;cursor:pointer;transition:background .12s;}
+.trc-head:hover{background:var(--surface2);}
+.trc-num{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:900;color:white;flex-shrink:0;}
+.trc-info{flex:1;}
+.trc-name{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);}
+.trc-tagline{font-size:11px;color:var(--lighter);}
+.trc-rank{font-size:10px;font-weight:700;padding:3px 10px;border-radius:12px;}
+.tr-r1{background:var(--gold-bg);color:var(--gold);}
+.tr-r2{background:var(--green-bg);color:var(--green);}
+.trc-chev{font-size:11px;color:var(--lighter);transition:transform .2s;}
+.type-result-card.open .trc-chev{transform:rotate(180deg);}
+.trc-body{display:none;padding:.85rem 1.1rem 1rem;border-top:1px solid var(--border);background:var(--surface2);}
+.type-result-card.open .trc-body{display:block;}
+.trc-section{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--lighter);margin:.85rem 0 .4rem;display:flex;align-items:center;gap:8px;}
+.trc-section::after{content:'';flex:1;height:1px;background:var(--border);}
+.desc-en{font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:.5rem;}
+.desc-tl{font-size:13px;color:var(--muted);line-height:1.7;font-style:italic;border-left:3px solid var(--gold);padding-left:.75rem;margin-bottom:.85rem;}
+.info-box{border-radius:7px;padding:.7rem .9rem;margin:.35rem 0;font-size:12.5px;line-height:1.65;}
+.ib-g{background:var(--green-bg);border-left:3px solid var(--green);color:#1a3028;}
+.ib-y{background:var(--gold-bg);border-left:3px solid var(--gold);color:#3a2e10;}
+.ib-r{background:#fdecea;border-left:3px solid #7a2020;color:#3a1010;}
+.ib-b{background:#e8f0f8;border-left:3px solid #1a4a6b;color:#0a2040;}
+.ib-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+.save-wrap{max-width:700px;margin:0 auto;padding:0 1.25rem 2rem;}
+.save-btn{width:100%;padding:13px;background:var(--green);color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:.6rem;transition:filter .15s;display:none;}
+.save-btn:hover{filter:brightness(1.1);}
+.save-btn:disabled{background:var(--lighter);cursor:not-allowed;}
+.save-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
+.toast.show{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+<div class="cover">
+  <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
+  <div class="cover-title">Enneagram Profile</div>
+  <div class="cover-sub">Discover the core motivations, fears, and spiritual growth edges that shape how you lead, relate, and serve — and how God is forming you toward Christlikeness.</div>
+  <div class="type-grid"><span class="tg">Type 1: The Reformer</span><span class="tg">Type 2: The Helper</span><span class="tg">Type 3: The Achiever</span><span class="tg">Type 4: The Individualist</span><span class="tg">Type 5: The Investigator</span><span class="tg">Type 6: The Loyalist</span><span class="tg">Type 7: The Enthusiast</span><span class="tg">Type 8: The Challenger</span><span class="tg">Type 9: The Peacemaker</span></div>
+  <div class="cover-tags"><span class="ct">63 Questions</span><span class="ct">1–5 Scale</span><span class="ct">~18 Minutes</span><span class="ct">Bilingual</span></div>
+</div>
+<div class="prog-bar">
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="prog-label" id="progLabel">0 of 63 answered</div>
+</div>
+<div class="link-box"><div class="lb-in">
+  <div id="autoLinked" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:14px">✓</div>
+      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--green);margin-bottom:2px">✅ Pre-Linked from Dashboard</div>
+      <div id="autoLinkedName" style="font-size:14px;font-weight:600;color:var(--ink)"></div>
+      <div id="autoLinkedMeta" style="font-size:11px;color:var(--muted)"></div></div>
+    </div>
+  </div>
+  <div id="manualSearch">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--navy);margin-bottom:.35rem">🔗 Link to Dashboard</div>
+    <div style="position:relative">
+      <input id="memberSearch" placeholder="Type your name to search..." autocomplete="off" oninput="searchMember(this.value)" class="pf" style="margin-bottom:0">
+      <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:var(--shadow2);z-index:100;max-height:160px;overflow-y:auto;"></div>
+    </div>
+    <div id="memberSelected" style="display:none;background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--green);font-weight:500;margin-top:.35rem;"></div>
+  </div>
+  <input type="hidden" id="selectedMemberId">
+</div></div>
+<div class="page">
+  <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.4rem">Your Information</div>
+    <input class="pf" id="pName" placeholder="Full Name *">
+    <input class="pf" id="pGroup" placeholder="LC Group (optional)">
+  </div>
+  <div style="background:var(--gold-bg);border:1px solid rgba(184,136,42,.15);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:.35rem">📋 Instructions · Panuto</div>
+    <div style="font-size:13px;color:#3a2e10;line-height:1.7">Rate each statement from <strong>1 (Hindi ito ako)</strong> to <strong>5 (Ito talaga ako)</strong> based on your deepest motivations — not just your behavior. Answer based on who you are at your core, not your best or worst moments.<br>
+    <span style="color:var(--gold);font-weight:500">I-rate batay sa iyong pinakamalalim na mga motibasyon</span> — hindi lamang sa iyong ugali. Sagutin batay sa kung sino ka sa iyong kaibuturan.</div>
+  </div>
+  <div id="questionsWrap"></div>
+</div>
+<div class="calc-wrap">
+  <button class="calc-btn" onclick="calculate()">🌀 Discover My Enneagram Type</button>
+</div>
+<div class="results-wrap" id="resultsWrap">
+  <div class="res-hero">
+    <div class="res-type-num" id="resTypeNum"></div>
+    <div class="res-type-name" id="resTypeName"></div>
+    <div class="res-name" id="resPersonName"></div>
+    <div class="res-sub" id="resSub"></div>
+  </div>
+  <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:.85rem 0 .5rem">All 9 Types — Score Overview</div>
+  <div class="scores-grid" id="scoresGrid"></div>
+  <div style="font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);margin:.85rem 0 .5rem">Your Type Profile — Full Detail</div>
+  <div id="typeCards"></div>
+</div>
+<div class="save-wrap">
+  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()">💾 Save to MULTIPLY Dashboard</button>
+  <div class="save-msg" id="saveMsg"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db=supabase.createClient(SB_URL,SB_KEY);
+let _memberId=null;
+const TYPES=[
+  {num:1,name:'The Reformer',tagline:'Ang Prinsipyo at Katayuan',color:'#7a4a10',bg:'#fef3e8',
+   desire:'To be good, right, and to have integrity',fear:'Being wrong, corrupt, or evil',
+   descEn:'You have a strong inner sense of right and wrong and a relentless drive to improve yourself and the world around you. You hold yourself and others to high standards, and you notice imperfection quickly. At your best, you are principled, purposeful, and ethical. You are the person who ensures the ministry does things the right way — not just the fast way.',descTl:'Mayroon kang malakas na panloob na kahulugan ng tama at mali at walang-tigil na pagnanasang mapabuti ang iyong sarili at ang mundo. Hawak mo ang iyong sarili at ang iba sa mataas na pamantayan. Sa iyong pinakamahusay, ikaw ay may prinsipyo, may layunin, at etikal.',
+   atBest:'Principled, purposeful, self-disciplined, ethical, and deeply responsible. Brings a prophetic voice and moral backbone to ministry.',underStress:'Critical, judgmental, perfectionistic, resentful, and self-righteous. Can damage team morale with relentless standards.',
+   formationEn:'Move from compulsive goodness to grace-based holiness. Learn that God accepts you before you are perfect. Romans 8:1 is your anchor: "There is now no condemnation for those in Christ Jesus."',ministryEn:'Preaching Ministry (prophetic voice), Publishing & Communications (standards-driven), Church Council (ethics and policy), Building Administration (excellence in maintenance), Campus Life Coach.',
+   discipleEn:'Help them distinguish between righteous standards and self-righteousness. Give them permission to rest. Show them that grace is not an excuse to stop growing — it is fuel to grow differently. They need to experience unconditional acceptance.',shadowEn:'Can become critical of ministry leaders and church practices. Their correction style — though often accurate — can damage team morale if not tempered with grace and humility.',
+   questions:[{en:'I have a strong sense of how things should be done correctly.',tl:'Mayroon akong malakas na pakiramdam kung paano dapat gawin nang tama ang mga bagay.'},{en:"I notice when things are not done properly — it bothers me even when others don't see it.",tl:'Napapansin ko kapag hindi tama ang paggawa ng mga bagay — nakakabother sa akin kahit hindi ito nakikita ng iba.'},{en:'I hold myself to high standards and feel guilty when I fall short.',tl:'Hawak ko ang aking sarili sa mataas na pamantayan at nakakaramdam ako ng pagkakasala kapag hindi ko naabot ito.'},{en:"I feel a strong responsibility to improve things around me — even when it's not my role.",tl:'Nakakaramdam ako ng malakas na responsibilidad na mapabuti ang mga bagay sa paligid ko — kahit hindi ito ang aking papel.'},{en:'I find it difficult to relax until the work is done correctly.',tl:'Nahirapan akong magpahinga hanggang sa tamang nagawa ang trabaho.'},{en:'I have a strong inner critic that is hard to silence.',tl:'Mayroon akong malakas na panloob na kritiko na mahirap patahimikin.'},{en:'I believe there is a right way and a wrong way to do things — and I know the difference.',tl:'Naniniwala ako na may tamang paraan at maling paraan ng paggawa ng mga bagay — at alam ko ang pagkakaiba.'}]},
+  {num:2,name:'The Helper',tagline:'Ang Puso ng Pagtulong',color:'#8a2040',bg:'#fdf0f4',
+   desire:'To be loved and to feel needed',fear:'Being unwanted or unworthy of love',
+   descEn:'You are naturally warm, generous, and attuned to the needs of others. You often know what people need before they ask. You give freely — of your time, energy, and care — and you derive deep satisfaction from being someone others can depend on. Your love is your superpower, and your relationships are your ministry.',descTl:'Natural kang mainit, mapagbigay, at sensitibo sa pangangailangan ng iba. Madalas mong alam kung ano ang kailangan ng mga tao bago pa sila humingi. Nagbibigay ka nang malaya — ng iyong oras, lakas, at pag-aalaga — at nakukuha mo ang malalim na kasiyahan sa pagiging isang taong maaasahan ng iba.',
+   atBest:'Caring, interpersonal, generous, warm, and deeply empathetic. The emotional heart of any ministry team.',underStress:'Possessive, manipulative through giving, martyr-like, and unable to express their own needs honestly.',
+   formationEn:'Receive love without earning it. Your own needs are as valid as everyone else\'s. God loves you when you have nothing to give. Matthew 3:17 — "This is my Son, whom I love" — spoken over someone who had not yet done anything.',ministryEn:"Couples Ministry, Children's Ministry, Kitchen Ministry, Pastoral Care, Community Outreach, Youth Ministry — any role where love is the primary ministry tool.",
+   discipleEn:'Help them name their own needs. Watch for giving fatigue and hidden resentment. Examine their ministry motive — are they serving to be needed, or serving from a full heart? Teach them to receive.',shadowEn:'May enable rather than disciple. May avoid confronting sin in people they deeply care for. Their love can become possessive, making people feel obligated rather than freed.',
+   questions:[{en:'I naturally focus on what others need and find ways to meet those needs.',tl:'Natural akong nagtutuon sa pangangailangan ng iba at naghahanap ng mga paraan para matugunan ang mga pangangailangang iyon.'},{en:'I feel most fulfilled when I know I have helped someone.',tl:'Pinaka-fulfilled ako kapag alam kong nakatulong ako sa isang tao.'},{en:"I struggle to say no — I don't want to let people down.",tl:'Nahihirapan akong sabihin ang hindi — ayaw kong mabigo ang mga tao.'},{en:"I am more aware of other people's emotions than my own.",tl:'Mas alam ko ang mga emosyon ng ibang tao kaysa sa sarili ko.'},{en:'I find it easier to give than to receive help or care.',tl:'Mas madali para sa akin ang magbigay kaysa tumanggap ng tulong o pag-aalaga.'},{en:'I adjust how I present myself based on what I sense others need from me.',tl:'Inaayos ko kung paano ko ipinipresenta ang aking sarili batay sa kung ano ang nararamdaman kong kailangan ng iba mula sa akin.'},{en:'I find deep meaning in being there for people during their most difficult times.',tl:'Nakakakita ako ng malalim na kahulugan sa pagiging naroon para sa mga tao sa kanilang pinakamahirap na mga oras.'}]},
+  {num:3,name:'The Achiever',tagline:'Ang Tagumpay at Pagkakakilanlan',color:'#1a4a6b',bg:'#e8f0f8',
+   desire:'To feel valuable, successful, and admired',fear:'Being worthless or seen as a failure',
+   descEn:'You are driven, adaptable, and goal-oriented. You know how to read a room, present yourself effectively, and produce results that others notice. You have a natural ability to inspire others through your own example of excellence. You move efficiently toward goals and have a gift for making things happen that seemed impossible.',descTl:'Ikaw ay masigasig, maaangkop, at nakatuon sa layunin. Alam mo kung paano basahin ang isang silid, ipresenta ang iyong sarili nang epektibo, at makagawa ng mga resulta na napapansin ng iba. Mayroon kang natural na kakayahan na mag-inspire ng iba sa pamamagitan ng iyong sariling halimbawa ng kahusayan.',
+   atBest:'Competent, driven, inspiring, and adaptable. Creates momentum and models excellence for the whole team.',underStress:'Deceptive about failures, image-conscious at the cost of authenticity, workaholic, and unable to be vulnerable.',
+   formationEn:'Identity is not in achievement. The Father\'s love is not earned by performance. Matthew 3:17 — "This is my Son, whom I love; with him I am well pleased" — spoken before Jesus had done any ministry. You are loved before you produce.',ministryEn:'Leadership roles — Church Council, Young Professionals Ministry, Core Group, Preaching Ministry, Campus Life Coach — roles that require inspiring others and achieving visible results.',
+   discipleEn:'Create a space where failure is safe. Challenge them to be transparent about struggles. Help them slow down. Watch for them performing discipleship rather than living it. They need someone who loves them for who they are, not what they produce.',shadowEn:'May project success in ministry even when struggling personally. Needs accountability for inner formation, not just ministry output. Can drift toward using ministry as a platform for self-validation.',
+   questions:[{en:'I am motivated by setting goals and achieving them efficiently.',tl:'Na-motivate ako sa pagtatakda ng mga layunin at epektibong pagkamit ng mga ito.'},{en:'I am very aware of how I am perceived by others and actively manage my image.',tl:'Lubos akong nauunawaan kung paano ako tinitingnan ng iba at aktibong pinamamahalaan ko ang aking imahe.'},{en:"I tend to adapt my style and approach depending on who I'm with.",tl:'May tendensya akong iangkop ang aking estilo at paraan depende sa kung sino ang kasama ko.'},{en:'Failure or being seen as incompetent is one of my deepest fears.',tl:'Ang kabiguan o pagtingin bilang walang kakayahan ay isa sa aking pinakamalalim na takot.'},{en:'I find it difficult to rest without feeling like I should be accomplishing something.',tl:'Nahirapan akong magpahinga nang hindi nararamdamang dapat akong magsagawa ng isang bagay.'},{en:'I feel most alive when I am working toward a meaningful goal.',tl:'Pinaka-buhay ako kapag nagtatrabaho ako patungo sa isang makabuluhang layunin.'},{en:'I believe in projecting confidence — even when I do not feel it internally.',tl:'Naniniwala ako sa pagpapakita ng kumpiyansa — kahit hindi ko ito nararamdaman sa loob.'}]},
+  {num:4,name:'The Individualist',tagline:'Ang Pagkakakilanlan at Kahulugan',color:'#4a2060',bg:'#f0eaf8',
+   desire:'To find themselves and their significance',fear:'Having no identity or personal significance',
+   descEn:'You have a rich inner world, a deep capacity for empathy, and a longing for authenticity. You feel things more deeply than most and are often drawn to beauty, meaning, and creative expression. You resist surface-level relationships and ordinary explanations. You are the person who names what others cannot articulate — and this is a profound gift to the church.',descTl:'Mayroon kang mayamang panloob na mundo, malalim na kakayahan para sa empatiya, at pagnanasa para sa pagiging tunay. Mas malalim kang nakakaramdam kaysa sa karamihan at madalas na naaakit sa kagandahan, kahulugan, at malikhaing pagpapahayag.',
+   atBest:'Creative, expressive, emotionally honest, and deeply compassionate with those who suffer.',underStress:'Melancholic, withdrawn, envious, and self-absorbed. Can romanticize suffering rather than moving through it.',
+   formationEn:'Significance is in Christ — not in uniqueness or emotional depth. Beauty and creativity are gifts to serve others, not markers of a special self. Psalm 139:14 — "I praise you because I am fearfully and wonderfully made."',ministryEn:'Interior Design, Music Ministry, Documentation & Media, Publishing & Communications, Pastoral Care (deep empathy for those suffering) — roles that allow creative expression in service of others.',
+   discipleEn:'Validate their emotional depth without enabling self-focus. Push them toward action and community. They often feel misunderstood — be the person who stays. Help them see that their feelings, while real, are not always accurate guides.',shadowEn:'May drift toward spiritual elitism — feeling their suffering or sensitivity makes them more spiritually deep than others. Can withdraw from community into private spiritual experience.',
+   questions:[{en:'I have a strong sense of my own unique identity and resist being ordinary.',tl:'Mayroon akong malakas na kahulugan ng aking natatanging pagkakakilanlan at lumalaban sa pagiging ordinaryo.'},{en:'I feel emotions more intensely than most people I know.',tl:'Mas matindi kong nararamdaman ang mga emosyon kaysa sa karamihan ng mga taong kilala ko.'},{en:'I am drawn to beauty, creativity, and deep meaning in everyday things.',tl:'Naaakit ako sa kagandahan, pagkamalikhain, at malalim na kahulugan sa pang-araw-araw na mga bagay.'},{en:'I feel a sense of longing — a feeling that something essential is always missing.',tl:'Nakakaramdam ako ng pagnanasa — isang pakiramdam na may mahalagang bagay na palaging nawawala.'},{en:'I prefer authentic, deep conversations over casual small talk.',tl:'Mas gusto ko ang tunay at malalim na mga usapan kaysa sa pabigla-biglang pakikipag-usap.'},{en:'I am drawn to people who are struggling — their pain resonates with something in me.',tl:'Naaakit ako sa mga taong nagpapakibaka — ang kanilang sakit ay tumutugma sa isang bagay sa akin.'},{en:'I often feel misunderstood — that others do not see or appreciate the depth of who I am.',tl:'Madalas akong makaramdam ng hindi pagkaunawa — na hindi nakikita o pinapahalagahan ng iba ang lalim ng kung sino ako.'}]},
+  {num:5,name:'The Investigator',tagline:'Ang Kaalaman at Pag-unawa',color:'#1a5a60',bg:'#e8f4f5',
+   desire:'To be competent and to understand everything',fear:'Being helpless, incompetent, or overwhelmed',
+   descEn:'You have an extraordinary capacity to observe, analyze, and understand complex systems, ideas, and situations. You gather knowledge carefully, conserve your energy wisely, and prefer to think before you speak. You bring depth, precision, and objectivity to every conversation. Your insights are often ahead of the room — and the church needs people like you.',descTl:'Mayroon kang pambihirang kakayahan na obserbahan, suriin, at maunawaan ang mga kumplikadong sistema, ideya, at sitwasyon. Maingat mong natitipon ang kaalaman, matalino mong pinamamahalaan ang iyong lakas, at mas gusto mong mag-isip bago magsalita.',
+   atBest:'Perceptive, insightful, objective, scholarly, and deeply focused. Provides analytical depth that protects the church from shallow thinking.',underStress:'Isolated, withholding, detached, contrarian, and hoarding knowledge rather than sharing it.',
+   formationEn:'Knowledge without love puffs up (1 Corinthians 8:1). The goal is not to know — it is to be known. Community is not optional. John 15:4 — "Abide in me." Abiding requires presence, not just study.',ministryEn:'Publishing & Communications, Documentation & Media, Preaching research support, Church Council (policy and analysis), Theology study — roles that value depth, precision, and careful thought.',
+   discipleEn:'Draw them out of isolation into community. Give them meaningful roles that require collaboration. Appreciate their depth without letting them hide behind it. Challenge them to share what they know, not just accumulate more.',shadowEn:'May critique more than contribute. May withhold their gifts from community because engagement feels costly. Can become an observer of ministry rather than a participant.',
+   questions:[{en:'I need a lot of time alone to recharge after social interaction.',tl:'Kailangan ko ng maraming oras nang mag-isa para mag-recharge pagkatapos ng pakikipag-ugnayan sa lipunan.'},{en:'I prefer to gather extensive information before forming an opinion or making a decision.',tl:'Mas gusto kong mangolekta ng malawak na impormasyon bago bumuo ng opinyon o gumawa ng desisyon.'},{en:'I am most comfortable in roles that allow me to think and work independently.',tl:'Pinaka-komportable ako sa mga papel na nagbibigay-daan sa akin na mag-isip at magtrabaho nang nakapag-iisa.'},{en:'I observe situations carefully before participating — I prefer to understand before I engage.',tl:'Maingat kong sinusuri ang mga sitwasyon bago lumahok — mas gusto kong maunawaan bago makisali.'},{en:'I tend to minimize my needs and limit my dependence on others.',tl:'May tendensya akong bawasan ang aking mga pangangailangan at limitahan ang aking pag-asa sa iba.'},{en:"I find most people's conversations too surface-level and prefer deep, substantive discussions.",tl:'Natuklasan ko na ang mga usapan ng karamihan ay masyadong mababaw at mas gusto ang malalim at masubstansiyang mga talakayan.'},{en:'Knowledge and understanding feel like essential needs, not just interests.',tl:'Ang kaalaman at pag-unawa ay parang mahahalagang pangangailangan, hindi lamang mga interes.'}]},
+  {num:6,name:'The Loyalist',tagline:'Ang Katapatan at Seguridad',color:'#2a5c40',bg:'#eef6f1',
+   desire:'Security, support, and reliable guidance',fear:'Being without support, abandoned, or in danger',
+   descEn:'You are the most committed, responsible, and trustworthy person in any team. Once you are all-in, you are completely all-in — you do not abandon the people or causes you have pledged yourself to. You are vigilant, perceptive about risk, and deeply loyal to those who have earned your trust. Your faithfulness is one of the most valuable gifts you bring to the church.',descTl:'Ikaw ang pinaka-committed, responsable, at mapagkakatiwalaang tao sa anumang koponan. Kapag nandoon ka na, ganap na nandoon ka — hindi mo iiwan ang mga tao o dahilan na iyong sinumpaang paglilingkuran. Maingat ka, matalino tungkol sa panganib, at malalim na tapat sa mga nagtamo ng iyong tiwala.',
+   atBest:'Committed, responsible, trustworthy, courageous against real threats, and deeply loyal to the people and mission they serve.',underStress:'Anxious, suspicious, reactive, self-doubting, and prone to worst-case thinking that can paralyze action.',
+   formationEn:'Perfect love casts out fear (1 John 4:18). Security is not found in systems, leaders, or preparation — it is found in a faithful God. Isaiah 41:10 — "Do not fear, for I am with you." This verse is your foundation.',ministryEn:"Building Administration, Kitchen Ministry, LC Group (steady, faithful presence), Community Outreach, Children's Ministry — roles that reward consistency, reliability, and long-term faithfulness.",
+   discipleEn:"Build trust slowly and consistently. Never make promises you cannot keep. Help them distinguish between prudent preparation and anxiety-driven control. Expose them regularly to God's faithfulness in Scripture and in personal testimony.",shadowEn:'Can undermine new leaders or ministry directions out of anxiety rather than wisdom. Their loyalty can become tribalism — "our group vs them." May catastrophize change even when change is healthy.',
+   questions:[{en:'I am very loyal — once I commit to a person or group, I stay committed.',tl:'Tapat na tapat ako — kapag nangako na ako sa isang tao o grupo, nananatiling committed.'},{en:'I tend to anticipate what could go wrong and prepare for it in advance.',tl:'May tendensya akong mahulaan kung ano ang maaaring magkamali at maghanda para dito nang maaga.'},{en:'I need to trust someone before I can fully open up or rely on them.',tl:'Kailangan kong magtiwala sa isang tao bago ko lubos na magbukas o umasa sa kanila.'},{en:'I experience anxiety or worry more than most people would consider normal.',tl:'Nakakaranas ako ng pagkabalisa o pag-aalala nang higit sa itinuturing ng karamihang normal.'},{en:'I am skeptical of people who seem too confident or too good to be true.',tl:'Nag-aalangan ako sa mga taong mukhang masyadong kumpiyansa o masyadong maganda para maging totoo.'},{en:'I feel most secure in stable environments with clear expectations and reliable leadership.',tl:'Pinaka-secure ako sa mga matatag na kapaligiran na may malinaw na mga inaasahan at maaasahang pamumuno.'},{en:'Loyalty and commitment are core values for me — I take promises very seriously.',tl:'Ang katapatan at pangako ay mga pangunahing halaga para sa akin — sineseryoso ko ang mga pangako.'}]},
+  {num:7,name:'The Enthusiast',tagline:'Ang Kagalakan at Kalayaan',color:'#b8882a',bg:'#fdf6e8',
+   desire:'To be happy, satisfied, and to have their needs met',fear:'Being trapped in pain or deprivation',
+   descEn:'You are spontaneous, adventurous, and endlessly enthusiastic. You see possibility everywhere and have the rare gift of making even difficult things feel exciting and worth doing. You are at your best when you are exploring new ideas, launching new things, and rallying people around a vision. Your joy is contagious and your energy is a gift to every room you enter.',descTl:'Ikaw ay impulsibo, pakikipagsapalaran, at walang-katapusang masigasig. Nakikita mo ang posibilidad sa lahat ng dako at mayroon kang bihirang kaloob na gawing kapana-panabik at karapat-dapat gawin ang kahit na mahirap na mga bagay. Sa iyong pinakamahusay ka kapag nag-eeksplora ka ng mga bagong ideya.',
+   atBest:'Spontaneous, versatile, enthusiastic, optimistic, and life-giving. Creates energy and momentum that launches ministry initiatives.',underStress:'Scattered, escapist, impulsive, and uncommitted. Avoids painful emotions by staying constantly busy or seeking the next exciting thing.',
+   formationEn:'Joy is not the absence of pain — it is the presence of God in pain. Philippians 4:11 — "I have learned to be content." The key word is LEARNED. Contentment is a spiritual discipline, not a personality trait.',ministryEn:'Youth in Motion, Evangelism, Youth Ministry, Music Ministry, EOLO campaign leadership, Campus Life Coach — roles that need enthusiasm, spontaneity, and the ability to rally people around a cause.',
+   discipleEn:'Help them finish what they start. Pair them with a structured, follow-through type. Celebrate their joy while gently confronting avoidance of difficulty. Teach them that staying in one place and going deep is also an adventure.',shadowEn:'Ministry hopping — excited about new things, struggles with unglamorous long-term faithfulness. May use busyness and enthusiasm to avoid pain, grief, or difficult personal formation work.',
+   questions:[{en:'I am naturally optimistic — I focus on possibilities rather than problems.',tl:'Natural akong optimistiko — nakatuon ako sa mga posibilidad kaysa sa mga problema.'},{en:'I love exploring new ideas, experiences, and adventures — routine bores me quickly.',tl:'Mahilig akong mag-explore ng mga bagong ideya, karanasan, at pakikipagsapalaran — ang paulit-ulit na gawain ay mabilis na nakakabagot sa akin.'},{en:'I am energized by starting new things — but I find it hard to stay with the same thing long-term.',tl:'Pinagsigla ako ng pagsisimula ng mga bagong bagay — ngunit nahirapan akong manatili sa parehong bagay nang pangmatagalan.'},{en:'I avoid painful or difficult emotions by staying busy or moving to the next positive thing.',tl:'Iniiwan ko ang masakit o mahirap na mga emosyon sa pamamagitan ng pananatiling abala o paglipat sa susunod na positibong bagay.'},{en:'I often have more exciting ideas and plans than I have time or energy to pursue.',tl:'Madalas akong may mas kapana-panabik na mga ideya at plano kaysa sa oras o lakas na maaari kong gamitin.'},{en:"I experience life intensely and want to make sure I don't miss out on what matters.",tl:'Nararamdaman ko ang buhay nang matindi at nais kong masiguro na hindi ako mawalan ng kahulugan.'},{en:'Being in a single role or routine for a long time feels like a kind of limitation or even imprisonment.',tl:'Ang pagiging nasa isang papel o gawain nang mahabang panahon ay parang isang uri ng limitasyon o kahit na pagkabilanggo.'}]},
+  {num:8,name:'The Challenger',tagline:'Ang Lakas at Proteksyon',color:'#7a2020',bg:'#fdecea',
+   desire:'To protect themselves and those they care for, to be in control',fear:'Being controlled, harmed, betrayed, or violated',
+   descEn:'You are powerful, decisive, and protective. You assert yourself naturally and move boldly toward what you believe is right. You have a gift for confronting injustice, leading people through hard situations, and protecting those who cannot protect themselves. People feel safe with you — or intimidated by you. At your best, you are a force for justice and genuine care.',descTl:'Ikaw ay makapangyarihan, mapagpasya, at mapangalaga. Natural kang nagpapairal ng iyong sarili at matapang na gumagalaw patungo sa kung ano ang pinaniniwalaan mong tama. Mayroon kang kaloob para harapin ang kawalang katarungan, pamunuan ang mga tao sa mahirap na mga sitwasyon.',
+   atBest:'Decisive, protective, confident, generous with those they love, and a powerful advocate for the vulnerable.',underStress:'Domineering, confrontational, intimidating, and unaware of the impact their forcefulness has on others.',
+   formationEn:'Strength is made perfect in weakness (2 Corinthians 12:9). True power is submitted power. The greatest leader washed feet (John 13). Surrendering control to God is not weakness — it is the ultimate act of strength.',ministryEn:'Church Council, Core Group, Community Outreach (calamity response), Preaching Ministry, Youth in Motion, Campus Life Coach — roles that require bold initiative and advocacy for others.',
+   discipleEn:'Earn their respect first — they respond to character and strength, not to title or position. Give them hard challenges and real responsibility. Help them see their impact on others, especially on quieter team members who are afraid to speak up.',shadowEn:'Can bulldoze team members, especially those with S or C profiles. Needs accountability for their tone and impact. Their protectiveness can cross into control. Watch for using anger as a tool rather than an honest response.',
+   questions:[{en:'I take charge naturally — I feel uncomfortable when no one is leading.',tl:'Natural akong nangunguna — hindi ako komportable kapag walang nangunguna.'},{en:'I confront problems and people directly — I do not beat around the bush.',tl:'Direkta kong hinaharap ang mga problema at tao — hindi ako nagpapaikot.'},{en:'I feel a strong drive to protect people who are being treated unjustly.',tl:'Nakakaramdam ako ng malakas na pagnanasang pangalagaan ang mga taong tinatrato nang hindi makatarungan.'},{en:"I prefer to be in control of my environment rather than be subject to others' control.",tl:'Mas gusto kong kontrolin ang aking kapaligiran kaysa mapailalim sa kontrol ng iba.'},{en:'I become combative when I feel that I — or someone I care for — is being threatened.',tl:'Nagiging mapagkumpitensya ako kapag nararamdaman kong — o ang isang taong mahal ko — ay nanganganib.'},{en:'I express my opinions forcefully and expect others to defend their views if they disagree.',tl:'Malakas kong ipinapahayag ang aking mga opinyon at inaasahan na ipagtatanggol ng iba ang kanilang mga pananaw kapag hindi sila sumasang-ayon.'},{en:'I have difficulty showing vulnerability — weakness is something I work hard to keep private.',tl:'Nahihirapan akong ipakita ang kahinaan — ang pagiging mahina ay isang bagay na pinagtatrabahuhan kong panatilihing pribado.'}]},
+  {num:9,name:'The Peacemaker',tagline:'Ang Kapayapaan at Pagkakaisa',color:'#3a6060',bg:'#e8f4f5',
+   desire:'Peace, harmony, and union with others',fear:'Loss, separation, conflict, and fragmentation',
+   descEn:'You are one of the most receptive, patient, and deeply empathetic people in any room. You naturally see all sides of a conflict, make everyone feel heard, and create an atmosphere where people feel safe to be themselves. You are not passive — you are deeply invested in the well-being of everyone around you, and you work tirelessly (and often invisibly) to maintain it.',descTl:'Isa ka sa pinaka-receptive, matiisin, at malalim na empatikong tao sa anumang silid. Natural mong nakikita ang lahat ng panig ng isang salungatan, pinaparamdam ang lahat na narinig sila, at lumilikha ng isang kapaligiran kung saan ligtas ang mga tao na maging sila mismo.',
+   atBest:'Receptive, reassuring, patient, creative, and a powerful peacemaker who brings unity to divided communities.',underStress:'Passive-aggressive, complacent, stubborn through inaction, and disengaged from what matters most.',
+   formationEn:'Peace is not the absence of conflict — it is the presence of justice and truth. Jesus said he did not come to bring peace but a sword (Matthew 10:34) — the sword of truth that divides what is real from what is false. True peace requires the courage to speak.',ministryEn:"Couples Ministry, Pastoral Care, Children's Ministry, Kitchen Ministry, Music Ministry, LC Group — any role built around patience, harmony, and faithful long-term presence in the lives of others.",
+   discipleEn:'Help them discover their own voice and opinions. Push them to name what they want and what they think. Watch for passive resistance and withdrawn compliance — they may agree in person and do nothing. Give them direct but gentle accountability.',shadowEn:'Can enable dysfunction by keeping peace at the cost of truth. Struggles to confront sin or poor behavior in people they love. Their avoidance of conflict may protect people from the very correction that would set them free.',
+   questions:[{en:"I naturally try to accommodate others' needs and avoid creating conflict.",tl:'Natural akong sinisikap na i-accommodate ang mga pangangailangan ng iba at iwasan ang paglikha ng salungatan.'},{en:'I can easily see multiple perspectives on any issue and struggle to take a strong personal position.',tl:'Madali kong makita ang maraming perspektibo sa anumang isyu at nahihirapan akong kumuha ng malakas na personal na posisyon.'},{en:"I tend to go along with others' plans even when I have my own preference.",tl:'May tendensya akong sumabay sa mga plano ng iba kahit may sarili akong kagustuhan.'},{en:'Conflict is very uncomfortable for me — I work hard to prevent or resolve it quickly.',tl:'Ang salungatan ay napakahirap para sa akin — nagtatrabaho ako nang husto para maiwasan o malutas ito nang mabilis.'},{en:"I find it easier to support others' visions than to articulate and pursue my own.",tl:'Mas madali para sa akin na suportahan ang mga bisyon ng iba kaysa ipaliwanag at ituloy ang sarili ko.'},{en:'I sometimes agree with people in person but then do things my own way quietly.',tl:'Minsan sumasang-ayon ako sa mga tao nang personal ngunit pagkatapos ay tahimik na ginagawa ang mga bagay sa sarili kong paraan.'},{en:'People describe me as easy-going, patient, and someone who helps others feel at ease.',tl:'Inilalarawan ako ng mga tao bilang madaling mapalapit, matiisin, at isang tumutulong sa iba na makaramdam ng kaginhawahan.'}]},
+];
+
+let answered=0;
+function buildQuestions(){
+  const wrap=document.getElementById('questionsWrap');
+  let qNum=0;
+  TYPES.forEach((t,ti)=>{
+    const block=document.createElement('div');block.className='type-block';
+    block.innerHTML=`<div class="tb-head"><div class="tb-num" style="background:${t.color}">${t.num}</div><div class="tb-info"><div class="tb-name">Type ${t.num} — ${t.name}</div><div class="tb-tagline">${t.tagline}</div></div><span class="tb-count">7 statements</span></div><div class="tb-body" id="tb-${ti}"></div>`;
+    wrap.appendChild(block);
+    const tbody=document.getElementById(`tb-${ti}`);
+    t.questions.forEach((q,qi)=>{
+      qNum++;
+      const card=document.createElement('div');card.className='q-card';card.id=`qcard-${ti}-${qi}`;
+      let scaleHtml='';
+      for(let v=1;v<=5;v++)scaleHtml+=`<label class="sopt"><input type="radio" name="q${ti}-${qi}" value="${v}" onchange="onAnswer(${ti},${qi})"><div class="d">${v}</div></label>`;
+      card.innerHTML=`<div class="q-top"><span class="q-num">Q${qNum}</span><div><div class="q-en">${q.en}</div><div class="q-tl">${q.tl}</div></div></div><div class="scale-row"><div class="s-label">Hindi ito ako</div><div class="s-opts">${scaleHtml}</div><div class="s-label">Ito talaga ako</div></div>`;
+      tbody.appendChild(card);
+    });
+  });
+}
+function onAnswer(ti,qi){
+  const card=document.getElementById(`qcard-${ti}-${qi}`);
+  if(!card.classList.contains('answered')){answered++;card.classList.add('answered');}
+  document.getElementById('progFill').style.width=(answered/63*100)+'%';
+  document.getElementById('progLabel').textContent=answered+' of 63 answered';
+}
+let _scores={},_sorted=[];
+function calculate(){
+  const name=document.getElementById('pName').value.trim();
+  if(!name){toast('Please enter your name first ⚠');document.getElementById('pName').focus();return;}
+  if(answered<50){toast('Please answer at least 50 questions ('+answered+'/63) ⚠');return;}
+  _scores={};
+  TYPES.forEach((t,ti)=>{
+    let total=0;
+    t.questions.forEach((_,qi)=>{
+      const el=document.querySelector(`input[name="q${ti}-${qi}"]:checked`);
+      if(el)total+=parseInt(el.value);
+    });
+    _scores[t.num]=total;
+  });
+  _sorted=[...TYPES].sort((a,b)=>_scores[b.num]-_scores[a.num]);
+  const primary=_sorted[0];const secondary=_sorted[1];
+  // Detect wing
+  const primaryIdx=TYPES.findIndex(t=>t.num===primary.num);
+  const wingA=TYPES[(primaryIdx-1+9)%9];
+  const wingB=TYPES[(primaryIdx+1)%9];
+  const wing=_scores[wingA.num]>_scores[wingB.num]?wingA.num:wingB.num;
+  document.getElementById('resTypeNum').textContent=primary.num;
+  document.getElementById('resTypeName').textContent=primary.name;
+  document.getElementById('resPersonName').textContent=name+"'s Enneagram Profile";
+  document.getElementById('resSub').textContent=`Type ${primary.num}w${wing} · Wing: ${TYPES.find(t=>t.num===wing)?.name||''} · Second highest: Type ${secondary.num}`;
+  // Score grid
+  const grid=document.getElementById('scoresGrid');grid.innerHTML='';
+  _sorted.forEach((t,i)=>{
+    const s=_scores[t.num];const pct=Math.round(s/35*100);
+    grid.innerHTML+=`<div class="sg-card"><div class="sg-num" style="color:${t.color}">${s}</div><div class="sg-name">Type ${t.num}: ${t.name}</div><div class="sg-bar-wrap"><div class="sg-bar" style="width:${pct}%;background:${t.color}"></div></div></div>`;
+  });
+  // Type cards
+  const cards=document.getElementById('typeCards');cards.innerHTML='';
+  _sorted.slice(0,3).forEach((t,i)=>{
+    const card=document.createElement('div');card.className='type-result-card'+(i<1?' open':'');
+    const rClass=i===0?'tr-r1':i===1?'tr-r2':'';const rLabel=i===0?'Primary Type':i===1?'Secondary':'Third';
+    card.innerHTML=`<div class="trc-head" onclick="this.closest('.type-result-card').classList.toggle('open')">
+      <div class="trc-num" style="background:${t.color}">${t.num}</div>
+      <div class="trc-info"><div class="trc-name">Type ${t.num}: ${t.name}${rLabel?` <span class="trc-rank ${rClass}">${rLabel}</span>`:''}</div><div class="trc-tagline">${t.tagline}</div></div>
+      <span class="trc-chev">▼</span></div>
+    <div class="trc-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.85rem">
+        <div style="background:var(--green-bg);border-radius:7px;padding:.6rem .75rem"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--green);margin-bottom:2px">Core Desire</div><div style="font-size:12px;color:var(--ink)">${t.desire}</div></div>
+        <div style="background:#fdecea;border-radius:7px;padding:.6rem .75rem"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#7a2020;margin-bottom:2px">Core Fear</div><div style="font-size:12px;color:var(--ink)">${t.fear}</div></div>
+      </div>
+      <div class="trc-section">Description</div>
+      <div class="desc-en">${t.descEn}</div>
+      <div class="desc-tl">${t.descTl}</div>
+      <div class="trc-section">At Your Best · Sa Pinakamahusay</div>
+      <div class="info-box ib-g"><div class="ib-label" style="color:var(--green)">✅ Strengths</div>${t.atBest}</div>
+      <div class="trc-section">Under Stress · Sa Ilalim ng Presyon</div>
+      <div class="info-box ib-r"><div class="ib-label" style="color:#7a2020">⚠ Watch For</div>${t.underStress}</div>
+      <div class="trc-section">Spiritual Formation Invitation</div>
+      <div class="info-box ib-y"><div class="ib-label" style="color:var(--gold)">✝ Formation Call</div>${t.formationEn}</div>
+      <div class="trc-section">Ministry Placement</div>
+      <div class="info-box ib-b"><div class="ib-label" style="color:#1a4a6b">⛪ Best Ministry Fit</div>${t.ministryEn}</div>
+      <div class="trc-section">Discipling This Person</div>
+      <div class="info-box ib-y"><div class="ib-label" style="color:var(--gold)">🤝 Discipleship Approach</div>${t.discipleEn}</div>
+      <div class="trc-section">Shadow · Anino</div>
+      <div class="info-box ib-r"><div class="ib-label" style="color:#7a2020">🌑 Shadow to Watch</div>${t.shadowEn}</div>
+    </div>`;
+    cards.appendChild(card);
+  });
+  document.getElementById('resultsWrap').classList.add('visible');
+  document.getElementById('saveBtn').style.display='block';
+  setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),100);
+}
+async function saveToDashboard(){
+  const btn=document.getElementById('saveBtn');const msg=document.getElementById('saveMsg');
+  btn.textContent='⏳ Saving...';btn.disabled=true;
+  const name=document.getElementById('pName').value.trim();
+  const memberId=_memberId||document.getElementById('selectedMemberId').value||null;
+  const primary=_sorted[0];
+  const primaryIdx=TYPES.findIndex(t=>t.num===primary.num);
+  const wingA=TYPES[(primaryIdx-1+9)%9];const wingB=TYPES[(primaryIdx+1)%9];
+  const wing=_scores[wingA.num]>_scores[wingB.num]?wingA.num:wingB.num;
+  try{
+    const {error}=await db.from('member_profiles').insert({member_id:memberId||null,member_name:name,lc_group:document.getElementById('pGroup').value||null,profile_type:'enneagram',results:_scores,top_result:String(primary.num),second_result:String(_sorted[1]?.num)||null,third_result:String(_sorted[2]?.num)||null,summary:'Type '+primary.num+'w'+wing+' — '+primary.name,date_taken:new Date().toISOString().split('T')[0]});
+    if(error)throw error;
+    if(memberId){
+      await db.from('members').update({enneagram_type:primary.num,enneagram_wing:wing,enneagram_description:'Type '+primary.num+'w'+wing+' — '+primary.name,updated_at:new Date().toISOString()}).eq('id',memberId);
+    }
+    btn.style.display='none';msg.style.display='block';
+    msg.innerHTML=`✅ Saved! <strong>${name}</strong> · Type ${primary.num}w${wing} — ${primary.name}${memberId?' · Dashboard updated.':' · Not linked to member record.'}`;
+  }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
+}
+async function autoLinkFromUrl(){
+  const id=new URLSearchParams(window.location.search).get('id');if(!id)return;
+  try{
+    const {data}=await db.from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
+    _memberId=data.id;document.getElementById('selectedMemberId').value=data.id;
+    document.getElementById('autoLinked').style.display='block';document.getElementById('manualSearch').style.display='none';
+    document.getElementById('autoLinkedName').textContent=data.name;
+    const LN=['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
+    document.getElementById('autoLinkedMeta').textContent=LN[data.pipeline_level||0]+(data.discipler_name||data.discipler?' · Discipler: '+(data.discipler_name||data.discipler):'');
+    document.getElementById('pName').value=data.name;document.title='Enneagram — '+data.name;
+  }catch(e){console.error(e);}
+}
+async function searchMember(q){
+  const dd=document.getElementById('memberDropdown');if(q.length<2){dd.style.display='none';return;}
+  const {data}=await db.from('members').select('id,name').ilike('name','%'+q+'%').limit(8);
+  if(!data?.length){dd.innerHTML='<div style="padding:.6rem 1rem;font-size:12px;color:var(--muted)">No members found</div>';dd.style.display='block';return;}
+  dd.innerHTML=data.map(m=>`<div onclick="selectMember('${m.id}','${m.name.replace(/'/g,"\'")}')" style="padding:.6rem 1rem;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''"><span style="font-weight:500">${m.name}</span></div>`).join('');
+  dd.style.display='block';
+}
+function selectMember(id,name){_memberId=id;document.getElementById('memberSearch').value=name;document.getElementById('selectedMemberId').value=id;document.getElementById('memberDropdown').style.display='none';document.getElementById('memberSelected').style.display='block';document.getElementById('memberSelected').textContent='✓ Linked: '+name;if(!document.getElementById('pName').value)document.getElementById('pName').value=name;}
+document.addEventListener('click',e=>{if(!e.target.closest('#memberSearch')&&!e.target.closest('#memberDropdown')){const dd=document.getElementById('memberDropdown');if(dd)dd.style.display='none';}});
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+buildQuestions();autoLinkFromUrl();
+</script>
+</body>
+</html>

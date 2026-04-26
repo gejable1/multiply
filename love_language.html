@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Love Language Profile — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#faf7f2;--paper:#fff;--ink:#1a1410;--muted:#6b5f50;--lighter:#a09080;--border:#e8ddd0;--surface2:#f5f0e8;--rose:#8a2040;--rose2:#b83060;--rose-bg:#fdf0f4;--rose-light:#fff5f8;--gold:#b8882a;--gold-bg:#fdf6e8;--green:#2a5c40;--green-bg:#eef6f1;--navy:#1b2a4a;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.1);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+.cover{background:linear-gradient(135deg,#2a0a1a 0%,#4a1030 50%,#1b2a4a 100%);padding:3rem 1.5rem 2.5rem;text-align:center;border-bottom:3px solid var(--rose2);}
+.cover-icon{font-size:3rem;margin-bottom:.5rem;}
+.cover-badge{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:.75rem;display:block;}
+.cover-title{font-family:'Cormorant Garamond',serif;font-size:clamp(1.75rem,6vw,3rem);font-weight:700;color:#f5e8d8;margin-bottom:.25rem;line-height:1.2;}
+.cover-sub{font-size:13px;color:rgba(255,255,255,.45);max-width:520px;margin:.5rem auto 1rem;}
+.cover-tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.ct{font-size:10px;padding:3px 12px;border-radius:20px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);}
+.prog-bar{position:sticky;top:0;background:var(--paper);border-bottom:1px solid var(--border);padding:.6rem 1.25rem;z-index:100;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);}
+.prog-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--rose2);border-radius:3px;transition:width .3s;}
+.prog-label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:500;}
+.link-box{max-width:680px;margin:1.25rem auto 0;padding:0 1.25rem;}
+.lb-in{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.page{max-width:680px;margin:0 auto;padding:1.25rem;}
+.profile-card{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);}
+.pc-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.4rem;}
+.pc-field{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;margin-bottom:.45rem;transition:border-color .15s;}
+.pc-field:focus{outline:none;border-color:var(--rose2);}
+.instr{background:var(--rose-bg);border:1px solid rgba(138,32,64,.15);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;}
+.instr-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--rose);margin-bottom:.35rem;}
+.instr-text{font-size:13px;color:#3a1020;line-height:1.7;}
+.round-head{display:flex;align-items:center;gap:12px;margin:1.75rem 0 .75rem;padding-bottom:.5rem;border-bottom:2px solid var(--border);}
+.rh-num{width:34px;height:34px;border-radius:50%;background:var(--rose2);color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.rh-title{font-family:'Cormorant Garamond',serif;font-size:.95rem;font-weight:600;color:var(--ink);}
+.rh-count{font-size:10px;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:12px;margin-left:auto;}
+.q-card{background:var(--paper);border:1.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;box-shadow:var(--shadow);transition:border-color .15s;}
+.q-card.answered{border-color:rgba(184,48,96,.35);}
+.q-num-bar{background:var(--rose2);color:white;font-size:10px;font-weight:700;padding:3px 12px;letter-spacing:.08em;}
+.choice-wrap{display:grid;grid-template-columns:1fr 1fr;}
+.choice{padding:.85rem 1rem;cursor:pointer;transition:background .15s;border-right:1px solid var(--border);position:relative;}
+.choice:last-child{border-right:none;}
+.choice:hover{background:var(--rose-light);}
+.choice.selected{background:var(--rose-bg);}
+.choice-letter{font-size:10px;font-weight:700;color:var(--rose2);letter-spacing:.08em;margin-bottom:.25rem;}
+.choice-en{font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.3rem;font-style:italic;}
+.choice-tl{font-size:13px;color:var(--ink);line-height:1.6;font-weight:500;}
+.choice-check{position:absolute;top:.65rem;right:.75rem;width:20px;height:20px;border-radius:50%;background:var(--rose2);color:white;display:none;align-items:center;justify-content:center;font-size:11px;}
+.choice.selected .choice-check{display:flex;}
+.calc-wrap{max-width:680px;margin:1.5rem auto;padding:0 1.25rem;}
+.calc-btn{width:100%;padding:14px;background:var(--rose2);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:filter .15s;}
+.calc-btn:hover{filter:brightness(1.1);}
+.results-wrap{max-width:680px;margin:0 auto;padding:0 1.25rem 3rem;display:none;}
+.results-wrap.visible{display:block;}
+.res-hero{background:linear-gradient(135deg,#2a0a1a,#4a1030);border-radius:12px;padding:1.75rem;text-align:center;margin-bottom:1rem;}
+.res-name{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:#f5e8d8;margin-bottom:.25rem;}
+.res-primary{font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:700;color:white;margin-bottom:.15rem;}
+.res-sub2{font-size:12px;color:rgba(255,255,255,.4);}
+.score-section{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1.1rem;margin-bottom:.85rem;box-shadow:var(--shadow);}
+.ss-title{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.65rem;}
+.score-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.sr-label{font-size:12.5px;color:var(--ink);min-width:170px;font-weight:500;}
+.sr-track{flex:1;height:18px;background:var(--border);border-radius:4px;overflow:hidden;}
+.sr-fill{height:100%;border-radius:4px;background:var(--rose2);transition:width .6s ease;display:flex;align-items:center;padding-left:6px;}
+.sr-fill span{font-size:10px;font-weight:700;color:white;}
+.sr-val{font-size:12px;font-weight:700;color:var(--muted);min-width:30px;text-align:right;}
+.lang-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:.85rem;overflow:hidden;box-shadow:var(--shadow);}
+.lc-head{display:flex;align-items:center;gap:14px;padding:1rem 1.1rem;cursor:pointer;transition:background .12s;}
+.lc-head:hover{background:var(--bg);}
+.lc-icon{font-size:1.75rem;flex-shrink:0;}
+.lc-info{flex:1;}
+.lc-name{font-family:'Cormorant Garamond',serif;font-size:1rem;font-weight:600;color:var(--ink);}
+.lc-tagline{font-size:11px;color:var(--lighter);margin-top:1px;}
+.lc-rank{font-size:10px;font-weight:700;padding:3px 10px;border-radius:12px;}
+.lc-r1{background:var(--rose-bg);color:var(--rose);}
+.lc-r2{background:var(--gold-bg);color:var(--gold);}
+.lc-chev{font-size:11px;color:var(--lighter);transition:transform .2s;}
+.lang-card.open .lc-chev{transform:rotate(180deg);}
+.lc-body{display:none;padding:.85rem 1.1rem 1rem;border-top:1px solid var(--border);background:var(--surface2);}
+.lang-card.open .lc-body{display:block;}
+.lc-section{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--lighter);margin:.85rem 0 .4rem;display:flex;align-items:center;gap:8px;}
+.lc-section::after{content:'';flex:1;height:1px;background:var(--border);}
+.lc-desc-en{font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:.5rem;}
+.lc-desc-tl{font-size:13px;color:var(--muted);line-height:1.7;font-style:italic;border-left:3px solid var(--rose2);padding-left:.75rem;margin-bottom:.85rem;}
+.info-box{border-radius:7px;padding:.7rem .9rem;margin:.35rem 0;font-size:12.5px;line-height:1.65;}
+.ib-ministry{background:var(--green-bg);border-left:3px solid var(--green);color:#1a3028;}
+.ib-team{background:var(--gold-bg);border-left:3px solid var(--gold);color:#3a2e10;}
+.ib-blind{background:#fff8f0;border-left:3px solid #d08030;color:#3a2010;}
+.ib-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+.ib-label-min{color:var(--green);}
+.ib-label-team{color:var(--gold);}
+.ib-label-blind{color:#b06020;}
+.save-wrap{max-width:680px;margin:0 auto;padding:0 1.25rem 2rem;}
+.save-btn{width:100%;padding:13px;background:var(--green);color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:.6rem;transition:filter .15s;display:none;}
+.save-btn:hover{filter:brightness(1.1);}
+.save-btn:disabled{background:var(--lighter);cursor:not-allowed;}
+.save-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
+.toast.show{opacity:1;transform:translateY(0);}
+@media(max-width:520px){.choice-wrap{grid-template-columns:1fr;}.choice{border-right:none;border-bottom:1px solid var(--border);}.choice:last-child{border-bottom:none;}}
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="cover-icon">❤️</div>
+  <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
+  <div class="cover-title">Love Language Profile</div>
+  <div class="cover-sub">Discover how you give and receive love — and how that shapes your ministry, relationships, and discipleship journey.</div>
+  <div class="cover-tags"><span class="ct">30 Questions</span><span class="ct">Choose A or B</span><span class="ct">~8 Minutes</span><span class="ct">Bilingual</span></div>
+</div>
+<div class="prog-bar">
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="prog-label" id="progLabel">0 of 30 answered</div>
+</div>
+<div class="link-box"><div class="lb-in">
+  <div id="autoLinked" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">✓</div>
+      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--green);margin-bottom:2px">✅ Pre-Linked from Dashboard</div>
+      <div id="autoLinkedName" style="font-size:14px;font-weight:600;color:var(--ink)"></div>
+      <div id="autoLinkedMeta" style="font-size:11px;color:var(--muted)"></div></div>
+    </div>
+  </div>
+  <div id="manualSearch">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--rose);margin-bottom:.35rem">🔗 Link to Dashboard</div>
+    <div style="position:relative">
+      <input id="memberSearch" placeholder="Type your name to search..." autocomplete="off" oninput="searchMember(this.value)"
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);">
+      <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:var(--shadow2);z-index:100;max-height:160px;overflow-y:auto;"></div>
+    </div>
+    <div id="memberSelected" style="display:none;background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--green);font-weight:500;margin-top:.35rem;"></div>
+  </div>
+  <input type="hidden" id="selectedMemberId">
+</div></div>
+<div class="page">
+  <div class="profile-card">
+    <div class="pc-label">Your Information</div>
+    <input class="pc-field" id="pName" placeholder="Full Name *">
+    <input class="pc-field" id="pGroup" placeholder="LC Group (optional)">
+  </div>
+  <div class="instr">
+    <div class="instr-label">📋 Instructions · Panuto</div>
+    <div class="instr-text">For each question, choose <strong>A or B</strong> — the one that feels more like you in real life.<br>
+    <span style="color:var(--rose);font-weight:500">Sa bawat tanong, piliin ang A o B</span> — ang mas katulad mo sa tunay na buhay, hindi ang "tamang" sagot.</div>
+  </div>
+  <div id="questionsWrap"></div>
+</div>
+<div class="calc-wrap">
+  <button class="calc-btn" onclick="calculate()">❤️ Calculate My Love Language</button>
+</div>
+<div class="results-wrap" id="resultsWrap">
+  <div class="res-hero">
+    <div class="res-name" id="resName"></div>
+    <div style="font-size:11px;color:rgba(255,255,255,.3);margin-bottom:.5rem">Primary Love Language</div>
+    <div class="res-primary" id="resPrimary"></div>
+    <div class="res-sub2" id="resSub"></div>
+  </div>
+  <div class="score-section">
+    <div class="ss-title">All 5 Love Languages — Your Scores</div>
+    <div id="scoreChart"></div>
+  </div>
+  <div style="font-family:'Cormorant Garamond',serif;font-size:1rem;font-weight:600;color:var(--ink);margin:.85rem 0 .5rem">Your Love Language Profiles</div>
+  <div id="langCards"></div>
+</div>
+<div class="save-wrap">
+  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()">💾 Save to MULTIPLY Dashboard</button>
+  <div class="save-msg" id="saveMsg"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db=supabase.createClient(SB_URL,SB_KEY);
+let _memberId=null;
+const LANGUAGES=[
+  {id:'words',name:'Words of Affirmation',icon:'💬',tagline:'Nagsasalita ang puso mo sa pamamagitan ng mga salita',
+   descEn:'You feel most loved when you receive sincere verbal encouragement, specific praise, and genuine affirmation. Criticism hits harder for you than for most. A well-timed, heartfelt word can carry you for weeks.',
+   descTl:'Ikaw ay pinaka-nagmamahal kapag nakakatanggap ka ng tapat na verbal na pagpapalakas-loob at tunay na pagpapahalaga. Ang kritisismo ay mas matindi sa iyo. Ang isang napapanahon at tapat na salita ay maaaring magdala sa iyo sa loob ng ilang linggo.',
+   ministryEn:'Preaching Ministry, Publishing & Communications, Youth Ministry, Campus Life Coach, Young Professionals Ministry — any role where your words build people up and your affirmation fuels others.',
+   teamEn:'Needs regular verbal recognition from their leader. Thrives when contributions are named out loud. Withers under silent leadership. Give specific, genuine praise — not generic compliments.',
+   blindEn:'May soften feedback to protect feelings. May seek validation before acting. Can misread a quiet leader as disapproval. Learn to act on truth, not just on affirmation.'},
+  {id:'service',name:'Acts of Service',icon:'🛠',tagline:'Ang pagmamahal mo ay nakikita sa iyong mga kamay',
+   descEn:'You show and feel love through doing — practical help, tangible action, showing up and getting things done. You notice when others help without being asked, and it means everything. Laziness and broken promises feel like expressions of unlove.',
+   descTl:'Ipinapakita at nararamdaman mo ang pagmamahal sa pamamagitan ng paggawa — praktikal na tulong, kongkretong aksyon. Napapansin mo kapag tumutulong ang iba nang hindi tinanong, at napakahalaga nito para sa iyo.',
+   ministryEn:'Kitchen Ministry, Building Administration, Community Outreach, Interior Design, Lights & Tech, Documentation & Media — any ministry where behind-the-scenes faithfulness makes the front-stage possible.',
+   teamEn:'The invisible backbone of every ministry. Notices what needs doing without being told. Needs their unseen work to be seen and named by their leader. Do not take their service for granted.',
+   blindEn:'May become resentful if service is taken for granted. Struggles to ask for help. Can conflate busyness with love. Learn to receive, not just give.'},
+  {id:'gifts',name:'Receiving Gifts',icon:'🎁',tagline:'Ang mga regalo ay simbolo ng pagmamahal para sa iyo',
+   descEn:'For you, it is not about materialism — it is about being thought of when you are not present. A thoughtful gift says "I saw this and thought of you." The price is irrelevant; the thought is everything. Forgetting special occasions is deeply painful.',
+   descTl:'Para sa iyo, hindi ito tungkol sa materialism — ito ay tungkol sa pagiging iniisip kahit wala ka. Ang isang maalalahanin na regalo ay nagsasabi: "Nakita ko ito at naisip kita." Ang presyo ay hindi mahalaga; ang pag-iisip ay lahat.',
+   ministryEn:'Pastoral Care, Community Outreach (gift drives, relief goods), Kitchen Ministry (food as a gift of love), Stewardship education — you naturally bring a celebratory, gift-giving culture to your team.',
+   teamEn:'Brings a culture of recognition — remembers birthdays, milestones, and transitions. Thrives when leaders mark occasions. Appreciates tangible tokens of appreciation even when small.',
+   blindEn:'May interpret thoughtlessness as personal rejection. Can misread a practical team culture as cold or uncaring. Learn to communicate needs rather than waiting to be remembered.'},
+  {id:'time',name:'Quality Time',icon:'⏱',tagline:'Ang presensya mo ay ang pinakamahalagang regalong maaari mong ibigay',
+   descEn:'You feel most loved when given undivided, focused attention. Being with you — not just near you — is what communicates love. Distracted presence, postponed plans, and half-attention are deeply painful. It is not quantity; it is quality.',
+   descTl:'Nakakaramdam ka ng pinakamaraming pagmamahal kapag binibigyan ka ng walang hating, nakatuong atensyon. Ang pagiging kasama mo — hindi lamang malapit sa iyo — ang nagpapahayag ng pagmamahal. Hindi dami; kalidad.',
+   ministryEn:'Discipleship (one-on-one), Couples Ministry, Youth Ministry, Shepherding roles, Pastoral Care, Core Group — any role built around sustained, deep personal presence and genuine investment in people.',
+   teamEn:'Natural discipler — invests deeply in a few. Needs regular face-to-face connection with their leader, not just task updates. Feels disconnected in purely transactional team cultures.',
+   blindEn:'May feel neglected in busy ministry seasons. Can over-invest in deep relationships and underperform in task-heavy roles. Learn to hold people with an open hand and trust God for results.'},
+  {id:'touch',name:'Physical Touch',icon:'🤝',tagline:'Ang pagmamahal ay naramdaman sa pamamagitan ng pisikal na presensya',
+   descEn:'In the Filipino church context — a sincere handshake, a pat on the back, a warm embrace in greeting, a comforting hand on the shoulder in grief. Not romantic — it is about physical presence as solidarity, comfort, and belonging. Absence of warmth feels like rejection.',
+   descTl:'Sa konteksto ng simbahan — tapat na pakikipagkamay, tapik sa likod, mainit na yakap sa pagbati, mapagpaliwanag na kamay sa balikat sa kalungkutan. Hindi romantiko — ito ay tungkol sa pisikal na presensya bilang pagkakaisa at pag-aaliw.',
+   ministryEn:'Pastoral Care (hospital/prison visits), Children\'s Ministry (nurturing presence), Welcome/Greeting Ministry, Community Outreach (calamity response — physical presence communicates solidarity powerfully).',
+   teamEn:'Creates warmth and belonging in team culture. Natural at making people feel welcomed and safe. Helps humanize the church environment, especially for first-time visitors and those in pain.',
+   blindEn:'Must learn to read context carefully — ensure all expressions are consensual, age-appropriate, and culturally sensitive. In a culture that may misread warmth, channel this love language through appropriate expressions.'}
+];
+const QUESTIONS=[
+  {a:{lang:'words',en:'Someone praises me sincerely in front of others.',tl:'May taong nagpupuri sa akin nang tapat sa harap ng iba.'},b:{lang:'service',en:'Someone helps me with a task I\'ve been struggling with.',tl:'May taong tumutulong sa akin sa gawaing nahihirapan ako.'}},
+  {a:{lang:'time',en:'A close friend gives me their full, undivided attention for an hour.',tl:'Ang isang malapit na kaibigan ay nagbibigay ng buong atensyon sa akin nang isang oras.'},b:{lang:'touch',en:'A friend greets me with a warm, genuine embrace.',tl:'Isang kaibigan ang bumati sa akin ng mainit at tapat na yakap.'}},
+  {a:{lang:'gifts',en:'Someone remembers my birthday with a thoughtful surprise.',tl:'Isang tao ang naaalala ang aking kaarawan na may maalalahanin na sorpresa.'},b:{lang:'service',en:'Someone takes care of a responsibility for me so I can rest.',tl:'Isang tao ang nag-aasikaso ng isang responsibilidad para sa akin para makapagpahinga ako.'}},
+  {a:{lang:'words',en:'My leader tells me specifically what I did well after a ministry event.',tl:'Sinasabi ng aking lider nang tiyak kung ano ang mabuting nagawa ko pagkatapos ng ministeryo.'},b:{lang:'time',en:'My leader sets aside time just to talk and catch up with me.',tl:'Ang aking lider ay naglalaan ng oras para makipag-usap lamang sa akin.'}},
+  {a:{lang:'touch',en:'A teammate puts a hand on my shoulder when I\'m going through something hard.',tl:'Ang isang kasama ay naglagay ng kamay sa aking balikat habang dumadaan ako sa mahirap na bagay.'},b:{lang:'gifts',en:'A teammate gives me a small gift just to say they were thinking of me.',tl:'Ang isang kasama ay nagbibigay ng maliit na regalo para lamang sabihing iniisip nila ako.'}},
+  {a:{lang:'service',en:'Someone cooks a meal for me when I am exhausted.',tl:'May nagluluto para sa akin kapag ako ay pagod na pagod.'},b:{lang:'touch',en:'Someone sits close to me in silence during a hard moment.',tl:'May umuupo malapit sa akin nang walang salita sa isang mahirap na sandali.'}},
+  {a:{lang:'words',en:'I receive a heartfelt message telling me how much I mean to someone.',tl:'Nakakatanggap ako ng tapat na mensahe na nagsasabi kung gaano ako kahalaga sa isang tao.'},b:{lang:'gifts',en:'I receive a small meaningful gift from someone who thought of me.',tl:'Nakakatanggap ako ng maliit ngunit makabuluhang regalo mula sa taong nag-isip sa akin.'}},
+  {a:{lang:'time',en:'Someone cancels their plans to spend the evening with me.',tl:'May nagkakansela ng kanilang plano para gastusin ang gabi kasama ko.'},b:{lang:'service',en:'Someone does the chores I dread so I can focus on what matters.',tl:'May gumagawa ng mga gawaing kinasusuklaman ko para makapag-focus ako sa mahalaga.'}},
+  {a:{lang:'touch',en:'My discipler gives me an affirming pat on the back after I share something.',tl:'Ang aking discipler ay nagbibigay ng mainit na tapik sa likod pagkatapos kong magbahagi.'},b:{lang:'words',en:'My discipler says "I\'m proud of your growth" at the right moment.',tl:'Ang aking discipler ay nagsasabing "Ipinagmamalaki ko ang iyong paglago" sa tamang sandali.'}},
+  {a:{lang:'gifts',en:'A leader presents me with something symbolic to mark a milestone.',tl:'Isang lider ang nagpapakita ng isang simbolo para markahan ang isang milestone.'},b:{lang:'time',en:'A leader invites me to a personal one-on-one meal or coffee.',tl:'Isang lider ang nag-imbita sa akin para sa personal na isang-sa-isang kainan o kape.'}},
+  {a:{lang:'words',en:'Someone writes me a note listing the things they appreciate about me.',tl:'May nagsusulat ng tala na naglilista ng mga bagay na pinahahalagahan nila sa akin.'},b:{lang:'service',en:'Someone steps in to help without being asked when they see I\'m overwhelmed.',tl:'May pumasok at tumulong nang hindi tinanong nang makitang prubado ako.'}},
+  {a:{lang:'touch',en:'A church member greets me warmly every Sunday with a genuine handshake.',tl:'Ang isang miyembro ng simbahan ay mainit na bumabati sa akin tuwing Linggo ng tapat na pakikipagkamay.'},b:{lang:'time',en:'A church member always makes time for me after service just to talk.',tl:'Ang isang miyembro ay laging nagbibigay ng oras para sa akin pagkatapos ng serbisyo para kausapin.'}},
+  {a:{lang:'gifts',en:'A friend keeps track of things I mention wanting and surprises me later.',tl:'Ang isang kaibigan ay nagtatago ng listahan ng mga bagay na binabanggit kong gusto ko at nagugulat sa akin mamaya.'},b:{lang:'service',en:'A friend drives me to an appointment without me even asking.',tl:'Isang kaibigan ang nagdadala sa akin sa isang appointment nang hindi ko tinanong.'}},
+  {a:{lang:'time',en:'My LC leader consistently shows up for our one-on-one times without cancelling.',tl:'Ang aking LC leader ay patuloy na nagpapakita para sa aming isang-sa-isang mga oras nang hindi nagkakansela.'},b:{lang:'words',en:'My LC leader always has something specific and encouraging to say to me.',tl:'Ang aking LC leader ay laging may tiyak at nakakapagpasiglang sasabihin sa akin.'}},
+  {a:{lang:'touch',en:'Someone holds my hand when I receive difficult news.',tl:'May humahawak ng aking kamay kapag nakatanggap ako ng mahirap na balita.'},b:{lang:'gifts',en:'Someone brings me my favorite food knowing I\'m having a rough day.',tl:'May nagdadala ng aking paboritong pagkain kapag alam nilang may mahirap na araw ako.'}},
+  {a:{lang:'service',en:'Someone shows up early to help me set up for an event I\'m leading.',tl:'May dumadating nang maaga para tulungan akong i-set up ang event na pinangungunahan ko.'},b:{lang:'words',en:'Someone publicly recognizes my leadership contribution in front of the team.',tl:'May pampublikong kinikilala ang aking kontribusyon sa pamumuno sa harap ng koponan.'}},
+  {a:{lang:'time',en:'A mentor sets aside one evening per month for my personal growth.',tl:'Ang isang mentor ay naglalaan ng isang gabi bawat buwan para sa aking personal na paglago.'},b:{lang:'touch',en:'A mentor gives me a warm embrace at the start of every meeting.',tl:'Ang isang mentor ay nagbibigay ng mainit na yakap sa simula ng bawat pulong.'}},
+  {a:{lang:'gifts',en:'My team gives me a group gift to celebrate a personal win.',tl:'Ang aking koponan ay nagbibigay ng pangkatang regalo para ipagdiwang ang isang personal na tagumpay.'},b:{lang:'time',en:'My team throws a simple gathering just to celebrate with me.',tl:'Ang aking koponan ay nag-oorganisa ng simpleng pagtitipon para lamang ipagdiwang ang tagumpay kasama ako.'}},
+  {a:{lang:'words',en:'During a hard week someone texts me daily just to say they\'re praying for me.',tl:'Sa isang mahirap na linggo may nagtetext sa akin araw-araw para lamang sabihing nagdarasal sila para sa akin.'},b:{lang:'service',en:'During a hard week someone handles all my ministry responsibilities so I can rest.',tl:'Sa isang mahirap na linggo may nag-aalaga ng lahat ng aking responsibilidad sa ministeryo para makapagpahinga ako.'}},
+  {a:{lang:'touch',en:'Being hugged by a church family member after sharing something vulnerable.',tl:'Ang mayakap ng isang miyembro ng pamilyang simbahan pagkatapos ibahagi ang isang bagay na mahina.'},b:{lang:'gifts',en:'Receiving a handwritten card from a church member that I\'ll treasure for years.',tl:'Ang pagtanggap ng sulat-kamay na card mula sa isang miyembro ng simbahan na itatago ko matagal.'}},
+  {a:{lang:'service',en:'My discipler helps me prepare for something important I\'m nervous about.',tl:'Ang aking discipler ay tumutulong sa akin na maghanda para sa isang mahalagang bagay na kinakabahan ako.'},b:{lang:'time',en:'My discipler spends two hours just listening to my struggles without rushing.',tl:'Ang aking discipler ay gumugugol ng dalawang oras na lamang pakikinig sa aking mga pakikibaka nang walang pagmamadali.'}},
+  {a:{lang:'words',en:'A leader says "I believe in you" at exactly the right moment.',tl:'Ang isang lider ay nagsasabing "Naniniwala ako sa iyo" sa tamang sandali.'},b:{lang:'touch',en:'A leader places a hand on my shoulder and prays over me.',tl:'Ang isang lider ay naglagay ng kamay sa aking balikat at nanalangin para sa akin.'}},
+  {a:{lang:'gifts',en:'A friend surprises me with a care package during a difficult season.',tl:'Isang kaibigan ang nagulat sa akin ng isang care package sa isang mahirap na panahon.'},b:{lang:'words',en:'A friend sends a long, deeply personal message when I\'m struggling.',tl:'Isang kaibigan ang nagpadala ng mahabang, malalim na personal na mensahe habang nagpapakibaka ako.'}},
+  {a:{lang:'time',en:'Someone rearranges their entire schedule to be with me during a crisis.',tl:'May nagsasaayos ng kanilang buong iskedyul para makasama ako sa panahon ng krisis.'},b:{lang:'service',en:'Someone takes over every responsibility I have during a crisis.',tl:'May nagkukuha ng lahat ng aking responsibilidad sa panahon ng krisis.'}},
+  {a:{lang:'touch',en:'Being welcomed back after an absence with a genuine warm embrace.',tl:'Ang matanggap pabalik pagkatapos ng kawalan na may tunay at mainit na yakap.'},b:{lang:'service',en:'Having someone prepare everything in advance so I just show up and participate.',tl:'Ang pagkakaroon ng taong naghahanda ng lahat nang maaga para makapunta lamang ako at makalahok.'}},
+  {a:{lang:'words',en:'My leader notices my effort and says something specific and true about it.',tl:'Napapansin ng aking lider ang aking pagsisikap at nagsasabi ng isang tiyak at totoo tungkol dito.'},b:{lang:'time',en:'My leader makes time for me outside of structured ministry meetings.',tl:'Ang aking lider ay nagbibigay ng oras para sa akin sa labas ng mga nakabalangkas na pulong ng ministeryo.'}},
+  {a:{lang:'gifts',en:'Receiving something small that shows someone was thinking of me during the week.',tl:'Pagtanggap ng isang maliit na bagay na nagpapakita na may nag-iisip sa akin sa buong linggo.'},b:{lang:'touch',en:'Being greeted every week with warmth that makes me feel completely at home.',tl:'Ang matanggap tuwing linggo ng init na nagpaparamdam sa akin na nasa bahay talaga ako.'}},
+  {a:{lang:'service',en:'A church member quietly fixes a problem I\'ve been dealing with alone.',tl:'Ang isang miyembro ng simbahan ay tahimik na nag-aayos ng isang problema na pinakikibaka ko nang mag-isa.'},b:{lang:'gifts',en:'A church member gives me a book that changed their life because they thought it would help mine.',tl:'Ang isang miyembro ay nagbibigay ng isang libro na nagbago ng kanilang buhay dahil naisipan nilang makakatulong ito sa akin.'}},
+  {a:{lang:'time',en:'A pastor visits me at home just to check in — no agenda, just presence.',tl:'Ang isang pastor ay bumibisita sa akin sa bahay para lamang mag-check in — walang agenda, presensya lamang.'},b:{lang:'words',en:'A pastor sends a voice message of encouragement after a hard Sunday.',tl:'Ang isang pastor ay nagpapadala ng voice message ng pagpapalakas pagkatapos ng mahirap na Linggo.'}},
+  {a:{lang:'touch',en:'A team member squeezes my hand before I step up to lead something scary.',tl:'Isang miyembro ng koponan ang nagpiga ng aking kamay bago ako humakbang para pamunuan ang isang nakakatakot na bagay.'},b:{lang:'service',en:'A team member stays late to help me finish what I started.',tl:'Isang miyembro ng koponan ang nanatiling huli para tulungan akong tapusin ang aking sinimulan.'}}
+];
+let answers={};
+function buildQuestions(){
+  const wrap=document.getElementById('questionsWrap');
+  const rounds=[{num:1,title:'Round 1 — Mga Sitwasyon 1–5',start:0},{num:2,title:'Round 2 — Mga Sitwasyon 6–10',start:5},{num:3,title:'Round 3 — Mga Sitwasyon 11–15',start:10},{num:4,title:'Round 4 — Mga Sitwasyon 16–20',start:15},{num:5,title:'Round 5 — Mga Sitwasyon 21–25',start:20},{num:6,title:'Round 6 — Mga Sitwasyon 26–30',start:25}];
+  rounds.forEach(r=>{
+    const rh=document.createElement('div');rh.className='round-head';
+    rh.innerHTML=`<div class="rh-num">${r.num}</div><div class="rh-title">${r.title}</div><span class="rh-count">5 questions</span>`;
+    wrap.appendChild(rh);
+    for(let i=r.start;i<r.start+5;i++){
+      const q=QUESTIONS[i];const card=document.createElement('div');card.className='q-card';card.id=`qcard-${i}`;
+      card.innerHTML=`<div class="q-num-bar">Q${i+1} of 30</div><div class="choice-wrap">
+        <label class="choice" id="ca-${i}" onclick="answer(${i},'${q.a.lang}','a')"><input type="radio" name="q${i}"><div class="choice-letter">A</div><div class="choice-en">${q.a.en}</div><div class="choice-tl">${q.a.tl}</div><div class="choice-check">✓</div></label>
+        <label class="choice" id="cb-${i}" onclick="answer(${i},'${q.b.lang}','b')"><input type="radio" name="q${i}"><div class="choice-letter">B</div><div class="choice-en">${q.b.en}</div><div class="choice-tl">${q.b.tl}</div><div class="choice-check">✓</div></label>
+      </div>`;wrap.appendChild(card);
+    }
+  });
+}
+function answer(idx,lang,side){
+  answers[idx]=lang;
+  document.getElementById(`qcard-${idx}`).classList.add('answered');
+  document.getElementById(`ca-${idx}`).classList.toggle('selected',side==='a');
+  document.getElementById(`cb-${idx}`).classList.toggle('selected',side==='b');
+  const done=Object.keys(answers).length;
+  document.getElementById('progFill').style.width=(done/30*100)+'%';
+  document.getElementById('progLabel').textContent=done+' of 30 answered';
+}
+let _scores={},_sorted=[];
+function calculate(){
+  const name=document.getElementById('pName').value.trim();
+  if(!name){toast('Please enter your name first ⚠');document.getElementById('pName').focus();return;}
+  const done=Object.keys(answers).length;
+  if(done<25){toast('Please answer at least 25 questions ('+done+'/30 done) ⚠');return;}
+  _scores={words:0,service:0,gifts:0,time:0,touch:0};
+  Object.values(answers).forEach(l=>_scores[l]++);
+  _sorted=[...LANGUAGES].sort((a,b)=>_scores[b.id]-_scores[a.id]);
+  document.getElementById('resName').textContent=name+"'s Love Language Profile";
+  document.getElementById('resPrimary').textContent=_sorted[0].icon+' '+_sorted[0].name;
+  document.getElementById('resSub').textContent='Secondary: '+_sorted[1].name+' · Based on '+done+' of 30 questions';
+  const chart=document.getElementById('scoreChart');chart.innerHTML='';
+  _sorted.forEach(l=>{
+    const s=_scores[l.id];const pct=Math.round(s/done*100);
+    chart.innerHTML+=`<div class="score-row"><div class="sr-label">${l.icon} ${l.name}</div><div class="sr-track"><div class="sr-fill" style="width:${Math.max(pct,3)}%">${s>2?`<span>${s}</span>`:''}</div></div><div class="sr-val">${s}</div></div>`;
+  });
+  const cards=document.getElementById('langCards');cards.innerHTML='';
+  _sorted.forEach((l,i)=>{
+    const card=document.createElement('div');card.className='lang-card'+(i<2?' open':'');
+    const rClass=i===0?'lc-r1':i===1?'lc-r2':'';const rLabel=i===0?'Primary':i===1?'Secondary':'';
+    card.innerHTML=`<div class="lc-head" onclick="this.closest('.lang-card').classList.toggle('open')">
+      <div class="lc-icon">${l.icon}</div>
+      <div class="lc-info"><div class="lc-name">${l.name}${rLabel?' <span class="lc-rank '+rClass+'">'+rLabel+'</span>':''}</div><div class="lc-tagline">${l.tagline}</div></div>
+      <span class="lc-chev">▼</span></div>
+    <div class="lc-body">
+      <div class="lc-section">Description</div>
+      <div class="lc-desc-en">${l.descEn}</div>
+      <div class="lc-desc-tl">${l.descTl}</div>
+      <div class="lc-section">Ministry Placement</div>
+      <div class="info-box ib-ministry"><div class="ib-label ib-label-min">⛪ Best Ministry Fit</div>${l.ministryEn}</div>
+      <div class="lc-section">In a Team</div>
+      <div class="info-box ib-team"><div class="ib-label ib-label-team">👥 Team Dynamics</div>${l.teamEn}</div>
+      <div class="lc-section">Blindspot</div>
+      <div class="info-box ib-blind"><div class="ib-label ib-label-blind">⚠ Growth Edge</div>${l.blindEn}</div>
+    </div>`;
+    cards.appendChild(card);
+  });
+  document.getElementById('resultsWrap').classList.add('visible');
+  document.getElementById('saveBtn').style.display='block';
+  setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),100);
+}
+async function saveToDashboard(){
+  const btn=document.getElementById('saveBtn');const msg=document.getElementById('saveMsg');
+  btn.textContent='⏳ Saving...';btn.disabled=true;
+  const name=document.getElementById('pName').value.trim();
+  const memberId=_memberId||document.getElementById('selectedMemberId').value||null;
+  try{
+    const {error}=await db.from('member_profiles').insert({member_id:memberId||null,member_name:name,lc_group:document.getElementById('pGroup').value||null,profile_type:'love_language',results:_scores,top_result:_sorted[0]?.name||null,second_result:_sorted[1]?.name||null,third_result:_sorted[2]?.name||null,summary:_sorted[0]?.name+' / '+_sorted[1]?.name,date_taken:new Date().toISOString().split('T')[0]});
+    if(error)throw error;
+    if(memberId)await db.from('members').update({love_language_primary:_sorted[0]?.name||null,love_language_secondary:_sorted[1]?.name||null,updated_at:new Date().toISOString()}).eq('id',memberId);
+    btn.style.display='none';msg.style.display='block';
+    msg.innerHTML=`✅ Saved! <strong>${name}</strong> · Primary: ${_sorted[0]?.name} · Secondary: ${_sorted[1]?.name}${memberId?' · Dashboard updated.':' · Not linked to member record.'}`;
+  }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
+}
+async function autoLinkFromUrl(){
+  const id=new URLSearchParams(window.location.search).get('id');if(!id)return;
+  try{
+    const {data}=await db.from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
+    _memberId=data.id;document.getElementById('selectedMemberId').value=data.id;
+    document.getElementById('autoLinked').style.display='block';document.getElementById('manualSearch').style.display='none';
+    document.getElementById('autoLinkedName').textContent=data.name;
+    const LN=['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
+    document.getElementById('autoLinkedMeta').textContent=LN[data.pipeline_level||0]+(data.discipler_name||data.discipler?' · Discipler: '+(data.discipler_name||data.discipler):'');
+    document.getElementById('pName').value=data.name;document.title='Love Language — '+data.name;
+  }catch(e){console.error(e);}
+}
+async function searchMember(q){
+  const dd=document.getElementById('memberDropdown');if(q.length<2){dd.style.display='none';return;}
+  const {data}=await db.from('members').select('id,name').ilike('name','%'+q+'%').limit(8);
+  if(!data?.length){dd.innerHTML='<div style="padding:.6rem 1rem;font-size:12px;color:var(--muted)">No members found</div>';dd.style.display='block';return;}
+  dd.innerHTML=data.map(m=>`<div onclick="selectMember('${m.id}','${m.name.replace(/'/g,"\\'")}')" style="padding:.6rem 1rem;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''"><span style="font-weight:500">${m.name}</span></div>`).join('');
+  dd.style.display='block';
+}
+function selectMember(id,name){_memberId=id;document.getElementById('memberSearch').value=name;document.getElementById('selectedMemberId').value=id;document.getElementById('memberDropdown').style.display='none';document.getElementById('memberSelected').style.display='block';document.getElementById('memberSelected').textContent='✓ Linked: '+name;if(!document.getElementById('pName').value)document.getElementById('pName').value=name;}
+document.addEventListener('click',e=>{if(!e.target.closest('#memberSearch')&&!e.target.closest('#memberDropdown')){const dd=document.getElementById('memberDropdown');if(dd)dd.style.display='none';}});
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+buildQuestions();autoLinkFromUrl();
+</script>
+</body>
+</html>

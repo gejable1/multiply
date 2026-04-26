@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DISC Profile — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f8f5f0;--paper:#fff;--ink:#1a1612;--muted:#6b5f50;--lighter:#a09080;--border:#e5ddd0;--surface2:#f3efe8;
+--d:#7a2020;--d-bg:#fdecea;--d-light:#fff8f8;
+--i:#b8882a;--i-bg:#fdf6e8;--i-light:#fffaf0;
+--s:#2a5c40;--s-bg:#eef6f1;--s-light:#f5fbf7;
+--c:#1a4a6b;--c-bg:#e8f0f8;--c-light:#f0f6ff;
+--navy:#1b2a4a;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.1);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+.cover{background:linear-gradient(135deg,#0a1a2a 0%,#1b2a4a 60%,#0a2a1a 100%);padding:3rem 1.5rem 2.5rem;text-align:center;border-bottom:3px solid var(--i);}
+.cover-title{font-family:'Playfair Display',serif;font-size:clamp(2rem,7vw,3.5rem);font-weight:700;color:#f5edd8;margin-bottom:.25rem;letter-spacing:-.02em;}
+.cover-sub{font-size:13px;color:rgba(255,255,255,.4);max-width:500px;margin:.5rem auto 1rem;}
+.cover-badge{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);display:block;margin-bottom:.75rem;}
+.disc-grid{display:flex;gap:8px;justify-content:center;margin-bottom:.75rem;}
+.disc-pill{font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;}
+.dp-d{background:rgba(122,32,32,.3);color:#f09090;}
+.dp-i{background:rgba(184,136,42,.3);color:#f0c060;}
+.dp-s{background:rgba(42,92,64,.3);color:#80d0a0;}
+.dp-c{background:rgba(26,74,107,.3);color:#80b0e0;}
+.cover-tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.ct{font-size:10px;padding:3px 12px;border-radius:20px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.45);}
+.prog-bar{position:sticky;top:0;background:var(--paper);border-bottom:1px solid var(--border);padding:.6rem 1.25rem;z-index:100;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);}
+.prog-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--navy);border-radius:3px;transition:width .3s;}
+.prog-label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:500;}
+.link-box{max-width:680px;margin:1.25rem auto 0;padding:0 1.25rem;}
+.lb-in{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.page{max-width:680px;margin:0 auto;padding:1.25rem;}
+.pf{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;margin-bottom:.45rem;transition:border-color .15s;}
+.pf:focus{outline:none;border-color:var(--navy);}
+.sec-head{display:flex;align-items:center;gap:12px;margin:1.75rem 0 .75rem;padding-bottom:.5rem;border-bottom:2px solid var(--border);}
+.sh-num{width:34px;height:34px;border-radius:50%;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.sh-title{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;color:var(--ink);flex:1;}
+.sh-count{font-size:10px;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:12px;}
+.q-card{background:var(--paper);border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;overflow:hidden;box-shadow:var(--shadow);}
+.q-card.answered{border-color:rgba(26,74,107,.3);background:var(--c-light);}
+.q-top{display:flex;gap:10px;padding:.85rem 1rem .5rem;align-items:flex-start;}
+.q-num{font-size:10px;font-weight:700;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:10px;flex-shrink:0;margin-top:2px;}
+.q-en{font-size:11.5px;color:var(--muted);font-style:italic;line-height:1.5;margin-bottom:2px;}
+.q-tl{font-size:13.5px;color:var(--ink);line-height:1.6;font-weight:500;}
+.scale-row{display:flex;align-items:center;gap:6px;padding:.5rem 1rem .85rem;}
+.s-label{font-size:10px;color:var(--lighter);white-space:nowrap;flex-shrink:0;}
+.s-opts{display:flex;gap:5px;flex:1;justify-content:center;}
+.sopt{display:flex;flex-direction:column;align-items:center;cursor:pointer;}
+.sopt input{display:none;}
+.sopt .d{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--muted);transition:all .15s;}
+.sopt input:checked ~ .d{background:var(--navy);border-color:var(--navy);color:white;}
+.sopt:hover .d{border-color:var(--navy);color:var(--navy);}
+.calc-wrap{max-width:680px;margin:1.5rem auto;padding:0 1.25rem;}
+.calc-btn{width:100%;padding:14px;background:var(--navy);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:filter .15s;}
+.calc-btn:hover{filter:brightness(1.1);}
+.results-wrap{max-width:680px;margin:0 auto;padding:0 1.25rem 3rem;display:none;}
+.results-wrap.visible{display:block;}
+.res-hero{background:linear-gradient(135deg,#0a1a2a,#1b2a4a);border-radius:12px;padding:1.75rem;text-align:center;margin-bottom:1rem;}
+.res-combo{font-size:4rem;font-weight:900;color:white;line-height:1;margin-bottom:.25rem;letter-spacing:-.02em;}
+.res-name{font-family:'Playfair Display',serif;font-size:1.4rem;color:#f5edd8;margin-bottom:.2rem;}
+.res-tagline{font-size:12px;color:rgba(255,255,255,.4);}
+.score-bars{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1.1rem;margin-bottom:.85rem;box-shadow:var(--shadow);}
+.sb-title{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.65rem;}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.br-label{font-size:13px;font-weight:700;min-width:24px;text-align:center;}
+.br-name{font-size:12px;color:var(--muted);min-width:120px;}
+.br-track{flex:1;height:22px;background:var(--border);border-radius:5px;overflow:hidden;}
+.br-fill{height:100%;border-radius:5px;display:flex;align-items:center;padding-left:8px;transition:width .7s ease;}
+.br-fill span{font-size:11px;font-weight:700;color:white;}
+.br-val{font-size:12px;font-weight:700;color:var(--muted);min-width:32px;text-align:right;}
+.disc-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:.85rem;overflow:hidden;box-shadow:var(--shadow);}
+.dc-head{display:flex;align-items:center;gap:14px;padding:1rem 1.1rem;cursor:pointer;transition:background .12s;}
+.dc-head:hover{background:var(--surface2);}
+.dc-letter{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:900;color:white;flex-shrink:0;}
+.dl-d{background:var(--d);}
+.dl-i{background:var(--i);}
+.dl-s{background:var(--s);}
+.dl-c{background:var(--c);}
+.dc-info{flex:1;}
+.dc-name{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);}
+.dc-tagline{font-size:11px;color:var(--lighter);}
+.dc-rank{font-size:10px;font-weight:700;padding:3px 10px;border-radius:12px;margin-left:6px;}
+.dc-r1{background:var(--i-bg);color:var(--i);}
+.dc-r2{background:var(--s-bg);color:var(--s);}
+.dc-chev{font-size:11px;color:var(--lighter);transition:transform .2s;}
+.disc-card.open .dc-chev{transform:rotate(180deg);}
+.dc-body{display:none;padding:.85rem 1.1rem 1rem;border-top:1px solid var(--border);background:var(--surface2);}
+.disc-card.open .dc-body{display:block;}
+.dc-section{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--lighter);margin:.85rem 0 .4rem;display:flex;align-items:center;gap:8px;}
+.dc-section::after{content:'';flex:1;height:1px;background:var(--border);}
+.info-box{border-radius:7px;padding:.7rem .9rem;margin:.35rem 0;font-size:12.5px;line-height:1.65;}
+.ib-g{background:var(--s-bg);border-left:3px solid var(--s);color:#1a3028;}
+.ib-y{background:var(--i-bg);border-left:3px solid var(--i);color:#3a2e10;}
+.ib-r{background:var(--d-bg);border-left:3px solid var(--d);color:#3a1010;}
+.ib-b{background:var(--c-bg);border-left:3px solid var(--c);color:#0a2040;}
+.ib-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+.combo-section{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1.1rem;margin-bottom:.85rem;box-shadow:var(--shadow);}
+.save-wrap{max-width:680px;margin:0 auto;padding:0 1.25rem 2rem;}
+.save-btn{width:100%;padding:13px;background:var(--s);color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:.6rem;transition:filter .15s;display:none;}
+.save-btn:hover{filter:brightness(1.1);}
+.save-btn:disabled{background:var(--lighter);cursor:not-allowed;}
+.save-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
+.toast.show{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+<div class="cover">
+  <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
+  <div class="cover-title">DISC Profile</div>
+  <div class="cover-sub">Discover how you communicate, lead, and relate — and how your behavioral style shapes your ministry placement and discipleship journey.</div>
+  <div class="disc-grid">
+    <span class="disc-pill dp-d">D — Dominance</span>
+    <span class="disc-pill dp-i">I — Influence</span>
+    <span class="disc-pill dp-s">S — Steadiness</span>
+    <span class="disc-pill dp-c">C — Conscientiousness</span>
+  </div>
+  <div class="cover-tags"><span class="ct">40 Questions</span><span class="ct">1–5 Scale</span><span class="ct">~12 Minutes</span><span class="ct">Bilingual</span></div>
+</div>
+<div class="prog-bar">
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="prog-label" id="progLabel">0 of 40 answered</div>
+</div>
+<div class="link-box"><div class="lb-in">
+  <div id="autoLinked" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:#2a5c40;color:white;display:flex;align-items:center;justify-content:center;font-size:14px">✓</div>
+      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:#2a5c40;margin-bottom:2px">✅ Pre-Linked from Dashboard</div>
+      <div id="autoLinkedName" style="font-size:14px;font-weight:600;color:var(--ink)"></div>
+      <div id="autoLinkedMeta" style="font-size:11px;color:var(--muted)"></div></div>
+    </div>
+  </div>
+  <div id="manualSearch">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--navy);margin-bottom:.35rem">🔗 Link to Dashboard</div>
+    <div style="position:relative">
+      <input id="memberSearch" placeholder="Type your name to search..." autocomplete="off" oninput="searchMember(this.value)" class="pf" style="margin-bottom:0">
+      <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:var(--shadow2);z-index:100;max-height:160px;overflow-y:auto;"></div>
+    </div>
+    <div id="memberSelected" style="display:none;background:#eef6f1;border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:5px 10px;font-size:12px;color:#2a5c40;font-weight:500;margin-top:.35rem;"></div>
+  </div>
+  <input type="hidden" id="selectedMemberId">
+</div></div>
+<div class="page">
+  <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.4rem">Your Information</div>
+    <input class="pf" id="pName" placeholder="Full Name *">
+    <input class="pf" id="pGroup" placeholder="LC Group (optional)">
+  </div>
+  <div style="background:#e8f0f8;border:1px solid rgba(26,74,107,.15);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--c);margin-bottom:.35rem">📋 Instructions · Panuto</div>
+    <div style="font-size:13px;color:#0a2040;line-height:1.7">Rate each statement from <strong>1 (Hindi talaga ako)</strong> to <strong>5 (Ako talaga ito)</strong> based on how you naturally are — not how you think a good leader should be.<br>
+    <span style="color:var(--c);font-weight:500">I-rate ang bawat pahayag mula 1 hanggang 5</span> batay sa kung paano ka natural — hindi kung paano dapat maging isang mabuting lider.</div>
+  </div>
+  <div id="questionsWrap"></div>
+</div>
+<div class="calc-wrap">
+  <button class="calc-btn" onclick="calculate()">🧭 Calculate My DISC Profile</button>
+</div>
+<div class="results-wrap" id="resultsWrap">
+  <div class="res-hero">
+    <div class="res-combo" id="resCombo"></div>
+    <div class="res-name" id="resName"></div>
+    <div class="res-tagline" id="resTagline"></div>
+  </div>
+  <div class="score-bars">
+    <div class="sb-title">DISC Dimension Scores</div>
+    <div id="discBars"></div>
+  </div>
+  <div style="font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);margin:.85rem 0 .5rem">Your DISC Dimensions — Detailed Profile</div>
+  <div id="discCards"></div>
+  <div class="combo-section" id="comboSection"></div>
+</div>
+<div class="save-wrap">
+  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()">💾 Save to MULTIPLY Dashboard</button>
+  <div class="save-msg" id="saveMsg"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db=supabase.createClient(SB_URL,SB_KEY);
+let _memberId=null;
+const DISC=[
+  {id:'D',name:'Dominance',color:'var(--d)',bg:'var(--d-bg)',cls:'dl-d',
+   tagline:'Results-oriented, direct, decisive',
+   descEn:'You are driven by results, challenges, and overcoming opposition. You are direct, decisive, and bold. You see obstacles as opportunities and thrive in fast-moving, high-stakes environments. People know where they stand with you. You move quickly and expect others to keep up.',
+   atBest:'Gets things moving fast. Tackles problems head-on. Drives ministry forward when others hesitate. Creates momentum and accountability.',
+   underStress:'Can become controlling, impatient, and dismissive of others\'s feelings. May steamroll team members or make decisions without adequate input.',
+   ministryEn:'Church Council, Core Group, Community Outreach leadership, Campus Life Coach, Preaching Ministry — roles that demand bold initiative and decisive action.',
+   discipleEn:'Give them responsibility, not just tasks. Challenge them with hard goals. They grow through being led by someone they respect. Help them slow down enough to hear the people they lead.',
+   needsEn:'Teammates who slow them down when needed, add warmth and people-consideration, follow through on details they overlook, and give honest pushback.'},
+  {id:'I',name:'Influence',color:'var(--i)',bg:'var(--i-bg)',cls:'dl-i',
+   tagline:'Enthusiastic, optimistic, people-oriented',
+   descEn:'You are energized by people, enthusiasm, and recognition. You are optimistic, talkative, and naturally persuasive. You rally people to a cause, create excitement and momentum, and connect naturally with newcomers and outsiders. Relationships are your strength and your joy.',
+   atBest:'Creates excitement around ministry vision. Connects easily with first-timers. Brings energy and warmth to every team. Makes people feel included and valued.',
+   underStress:'Can over-promise and under-deliver. Avoids difficult conversations. Loses focus on follow-through. May rely on charm instead of substance.',
+   ministryEn:'Youth in Motion, Evangelism, Youth Ministry, Young Professionals Ministry, Music Ministry, EOLO champion — anywhere that needs someone to rally people and build relational momentum.',
+   discipleEn:'Celebrate their wins publicly. Give them platforms and audiences. Help them develop follow-through — pair them with a C or S type. Address avoidance of difficult conversations directly but warmly.',
+   needsEn:'Teammates who handle the follow-through, keep them on task, add structure to their spontaneity, and give them honest feedback without crushing their spirit.'},
+  {id:'S',name:'Steadiness',color:'var(--s)',bg:'var(--s-bg)',cls:'dl-s',
+   tagline:'Patient, reliable, loyal, team-oriented',
+   descEn:'You are the backbone of every ministry — consistent, patient, empathetic, and deeply loyal. You show up when it matters, build genuine relationships over time, and create stability in turbulent seasons. You process change slowly but implement it faithfully once you accept it.',
+   atBest:'Shows up faithfully in the long run. Builds deep, genuine relationships. Creates stability and trust. Remembers people, follows through on commitments, and rarely abandons a team.',
+   underStress:'Resists change. Avoids conflict at the cost of honesty. May absorb too much without speaking up. Can become passive-aggressive when pushed too hard.',
+   ministryEn:'Couples Ministry, Children\'s Ministry, Kitchen Ministry, Pastoral Care, LC Group leadership — anywhere that needs faithful, long-term, relational presence and deep pastoral care.',
+   discipleEn:'Give advance notice of changes. Create safe space for them to voice concerns. Recognize their faithfulness explicitly — they rarely ask for it. Push them toward necessary confrontation gently.',
+   needsEn:'Teammates who push them toward necessary difficult conversations, introduce them to healthy change, help them speak up for themselves, and appreciate their unseen faithfulness.'},
+  {id:'C',name:'Conscientiousness',color:'var(--c)',bg:'var(--c-bg)',cls:'dl-c',
+   tagline:'Accurate, systematic, quality-focused',
+   descEn:'You are driven by accuracy, quality, and competence. You build systems that last, catch errors before they become problems, and uphold standards that protect ministry integrity. You process carefully, prepare thoroughly, and deliver with excellence. You do not rush — and that is often exactly what a ministry needs.',
+   atBest:'Ensures ministry standards are met. Catches errors before they escalate. Builds systems and processes that sustain long-term ministry. Provides the quality control every team needs.',
+   underStress:'Analysis paralysis. Perfectionism that delays action. Emotional withdrawal when criticized. May be seen as cold or overly critical by more relational team members.',
+   ministryEn:'Publishing & Communications, Documentation & Media, Building Administration, Lights & Tech, Church Council (financial/policy) — roles that require precision, systems thinking, and sustained quality.',
+   discipleEn:'Give them time to process. Do not rush their decisions. Appreciate their precision explicitly. Challenge them to act before perfect. Help them learn that done is sometimes better than perfect.',
+   needsEn:'Teammates who move decisively, bring relational warmth, push them out of over-analysis, and translate their precision into language the team can act on.'}
+];
+const COMBOS={
+  DC:{name:'The Strategic Driver',desc:'Results and precision combined. You want to win — and you want to win the right way. Excellent for leadership roles that require both bold decisions and careful execution. Watch for being too task-focused at the cost of people.',ministry:'Church Council, Core Group, Preaching, Community Outreach leadership'},
+  DI:{name:'The Bold Inspirer',desc:'Driven and enthusiastic. You set the vision and rally the people. Exceptional at launching new initiatives, driving EOLO campaigns, and energizing teams. Watch for over-promising and burning out your team.',ministry:'Youth in Motion, Evangelism, Campus Life Coach, Young Professionals'},
+  DS:{name:'The Determined Protector',desc:'Results-focused but deeply loyal. You drive hard for the mission while caring for the people on your team. Watch for tension between your urgency and others\' need for process and stability.',ministry:'Outreach leadership, Core Group, Youth Ministry'},
+  IS:{name:'The Warm Enthusiast',desc:'People-centered and relational. You create belonging, warmth, and team spirit naturally. Excellent for pastoral and discipleship roles. Watch for avoiding difficult conversations that the team needs.',ministry:'Youth Ministry, Music Ministry, Couples Ministry, Young Professionals'},
+  IC:{name:'The Communicating Analyst',desc:'Enthusiastic with high standards. You rally people around quality ideas. Excellent for media, publishing, and communications roles. Watch for perfectionism slowing your natural momentum.',ministry:'Publishing & Communications, Documentation & Media, Preaching research'},
+  SC:{name:'The Careful Servant',desc:'Patient and precise. You serve faithfully and never cut corners. The quiet backbone of any ministry operation. Watch for avoiding confrontation even when the team needs honesty.',ministry:'Children\'s Ministry, Kitchen Ministry, Building Administration, Documentation'},
+  CD:{name:'The Precise Strategist',desc:'Analytical and results-oriented. You build systems that deliver. Excellent for council and administrative leadership. Watch for being perceived as cold or dismissive in relational contexts.',ministry:'Church Council, Publishing & Communications, Core Group'},
+  SI:{name:'The Empathetic Connector',desc:'Warm and enthusiastic. You make everyone feel seen and valued. Excellent for pastoral care, discipleship, and first-timer follow-up. Watch for over-committing relationally.',ministry:'Couples Ministry, Pastoral Care, Discipleship, Young Professionals'}
+};
+const QUESTIONS=[
+  // D items (10)
+  {dim:'D',q:10,en:'I prefer to take charge of a situation rather than wait for someone else to lead.',tl:'Mas gusto kong manguna sa isang sitwasyon kaysa maghintay ng ibang manguuna.'},
+  {dim:'D',q:2,en:'I address problems directly and decisively — I do not avoid difficult situations.',tl:'Direkta at mapagpasyang tinutugunan ko ang mga problema — hindi ko iniiwasan ang mahihirap na sitwasyon.'},
+  {dim:'D',q:3,en:'I am comfortable making decisions quickly, even with incomplete information.',tl:'Komportable akong gumawa ng mabilis na desisyon, kahit kulang ang impormasyon.'},
+  {dim:'D',q:4,en:'I would rather push through resistance than slow down and build consensus.',tl:'Mas gugustuhin kong itulak ang resistensya kaysa pabagalin at bumuo ng konsensus.'},
+  {dim:'D',q:5,en:'I get impatient when things move slowly or when people over-analyze before acting.',tl:'Naiinis ako kapag mabagal ang mga bagay o kapag nag-oover-analyze ang mga tao bago kumilos.'},
+  {dim:'D',q:6,en:'I enjoy competition — it brings out my best performance.',tl:'Nag-eenjoy ako sa kompetisyon — inilalabas nito ang aking pinakamahusay na pagganap.'},
+  {dim:'D',q:7,en:'I am willing to take risks that others might find uncomfortable.',tl:'Handa akong kumuha ng mga panganib na maaaring hindi komportable sa iba.'},
+  {dim:'D',q:8,en:'I speak my mind directly, even if it creates tension.',tl:'Diretso kong sinasabi ang aking isip, kahit na lumikha ito ng tensyon.'},
+  {dim:'D',q:9,en:'I focus more on the goal than on how people feel during the process.',tl:'Mas nakatuon ako sa layunin kaysa sa kung paano nararamdaman ng mga tao sa proseso.'},
+  {dim:'D',q:1,en:'I lose patience quickly with people who are indecisive or overly cautious.',tl:'Mabilis akong nawalan ng pasensya sa mga taong walang desisyon o labis na maingat.'},
+  // I items (10)
+  {dim:'I',q:11,en:'I am naturally enthusiastic and optimistic — I energize the people around me.',tl:'Natural akong masigasig at optimistiko — pinagagana ko ang mga tao sa paligid ko.'},
+  {dim:'I',q:12,en:'I enjoy being in social settings and meeting new people.',tl:'Nag-eenjoy ako sa mga panlipunang kalagayan at pagkilala sa mga bagong tao.'},
+  {dim:'I',q:13,en:'I express my emotions openly — I do not hide how I feel from my team.',tl:'Bukas kong ipinapahayag ang aking mga emosyon — hindi ko itinatago kung paano ako nakakaramdam sa aking koponan.'},
+  {dim:'I',q:14,en:'I can persuade and motivate others to embrace a new idea or direction.',tl:'Kaya kong kumbinsihin at ma-motivate ang iba na yakapin ang isang bagong ideya o direksyon.'},
+  {dim:'I',q:15,en:'I prefer talking through problems verbally rather than analyzing them alone.',tl:'Mas gusto kong pag-usapan ang mga problema nang verbal kaysa suriin ang mga ito nang mag-isa.'},
+  {dim:'I',q:16,en:'I tend to see the positive side of situations even when others are discouraged.',tl:'May tendensya akong makita ang positibong panig ng mga sitwasyon kahit nasisiraan ng loob ang iba.'},
+  {dim:'I',q:17,en:'I enjoy being the center of a conversation or group activity.',tl:'Nag-eenjoy ako sa pagiging sentro ng isang usapan o pangkatang aktibidad.'},
+  {dim:'I',q:18,en:'I build rapport with new people quickly and naturally.',tl:'Mabilis at natural akong nagtatayo ng ugnayan sa mga bagong tao.'},
+  {dim:'I',q:19,en:'I am known for being enthusiastic, fun, and encouraging in a group setting.',tl:'Kilala ako sa pagiging masigasig, masaya, at nakakapagpasigl sa isang pangkatang kalagayan.'},
+  {dim:'I',q:20,en:'I sometimes commit to more than I can realistically deliver because I want to help.',tl:'Minsan nangako ako ng higit sa aking makakatuparin nang realista dahil gusto kong tumulong.'},
+  // S items (10)
+  {dim:'S',q:21,en:'I prefer a stable, predictable environment over constant change and unpredictability.',tl:'Mas gusto ko ang matatag at predictable na kapaligiran kaysa sa patuloy na pagbabago at kawalan ng katiyakan.'},
+  {dim:'S',q:22,en:'I am patient and consistent — I can maintain the same pace for a long time without burning out.',tl:'Mapagtiis at konsistente ako — maaari akong mapanatili ang parehong bilis nang mahabang panahon nang hindi nasusunog.'},
+  {dim:'S',q:23,en:'I am deeply loyal — I do not abandon people or commitments easily.',tl:'Malalim akong tapat — hindi ko madaling iniwan ang mga tao o pangako.'},
+  {dim:'S',q:24,en:'I prefer to listen more than I speak in group discussions.',tl:'Mas gusto kong makinig kaysa magsalita sa mga pangkatang talakayan.'},
+  {dim:'S',q:25,en:'I feel most productive when working as part of a stable, harmonious team.',tl:'Pinaka-produktibo ako kapag nagtatrabaho bilang bahagi ng isang matatag at maayos na koponan.'},
+  {dim:'S',q:26,en:'I need time to process change before I can fully embrace it.',tl:'Kailangan ko ng oras para iproseso ang pagbabago bago ko ito lubos na matanggap.'},
+  {dim:'S',q:27,en:'I am sensitive to conflict and tension — I work to restore harmony when it breaks down.',tl:'Sensitibo ako sa salungatan at tensyon — nagtatrabaho ako para ibalik ang pagkakatugma kapag ito ay nasira.'},
+  {dim:'S',q:28,en:'I keep my word — reliability and follow-through are things I take very seriously.',tl:'Tinutupad ko ang aking salita — ang pagiging maaasahan at pagtatapos ay mga bagay na sineseryoso ko.'},
+  {dim:'S',q:29,en:'I tend to put others\'s needs before my own without being asked.',tl:'May tendensya akong unahin ang pangangailangan ng iba bago ang sarili ko nang hindi tinanong.'},
+  {dim:'S',q:30,en:'I prefer gradual, planned change over sudden, sweeping changes.',tl:'Mas gusto ko ang paunti-unti at naplanong pagbabago kaysa sa bigla at malawak na mga pagbabago.'},
+  // C items (10)
+  {dim:'C',q:31,en:'I prefer to have all the facts before making a decision.',tl:'Mas gusto kong magkaroon ng lahat ng katotohanan bago gumawa ng desisyon.'},
+  {dim:'C',q:32,en:'I set high standards for myself and notice when quality falls below those standards.',tl:'Nagtatakda ako ng mataas na pamantayan para sa aking sarili at napapansin kapag ang kalidad ay bumaba sa ibaba ng mga pamantayang iyon.'},
+  {dim:'C',q:33,en:'I prefer written rules, clear processes, and defined expectations.',tl:'Mas gusto ko ang mga nakasulat na patakaran, malinaw na proseso, at tinukoy na mga inaasahan.'},
+  {dim:'C',q:34,en:'I double-check my work to make sure it meets quality standards before submitting it.',tl:'Dina-double-check ko ang aking trabaho para masiguro na natutugunan nito ang mga pamantayan ng kalidad bago isumite.'},
+  {dim:'C',q:35,en:'I am uncomfortable with ambiguity — I need clarity before I can move forward.',tl:'Hindi ako komportable sa kawalan ng katiyakan — kailangan ko ng kalinawan bago ako makasulong.'},
+  {dim:'C',q:36,en:'I analyze situations carefully before I act — I do not trust gut instincts alone.',tl:'Maingat kong sinusuri ang mga sitwasyon bago kumilos — hindi ako nagtitiwala sa gut instinct lamang.'},
+  {dim:'C',q:37,en:'I organize my work systematically — I use lists, timelines, and structured plans.',tl:'Sistematiko kong inaayos ang aking trabaho — gumagamit ako ng mga listahan, timeline, at nakabalangkas na mga plano.'},
+  {dim:'C',q:38,en:'I notice errors and inconsistencies that others tend to miss.',tl:'Napapansin ko ang mga pagkakamali at inconsistency na may tendensyang makaligtaan ng iba.'},
+  {dim:'C',q:39,en:'I prefer working alone or in small focused groups rather than large team settings.',tl:'Mas gusto kong magtrabaho nang mag-isa o sa maliliit na nakatuong grupo kaysa sa malalaking pangkatang kalagayan.'},
+  {dim:'C',q:40,en:'I can be critical when I see work that does not meet the standard I expect.',tl:'Maaari akong maging mapanuri kapag nakakita ako ng trabaho na hindi natutugunan ang pamantayang inaasahan ko.'}
+];
+const TAGALOG_LABELS=['Hindi talaga ako','Bihira','Minsan','Madalas','Ako talaga ito'];
+let answered=0;
+function buildQuestions(){
+  const wrap=document.getElementById('questionsWrap');
+  const sections=[
+    {letter:'D',color:'var(--d)',title:'Section D — Dominance · Pamumuno at Desisyon',items:QUESTIONS.filter(q=>q.dim==='D')},
+    {letter:'I',color:'var(--i)',title:'Section I — Influence · Impluwensya at Relasyon',items:QUESTIONS.filter(q=>q.dim==='I')},
+    {letter:'S',color:'var(--s)',title:'Section S — Steadiness · Katatagan at Katapatan',items:QUESTIONS.filter(q=>q.dim==='S')},
+    {letter:'C',color:'var(--c)',title:'Section C — Conscientiousness · Katumpakan at Kalidad',items:QUESTIONS.filter(q=>q.dim==='C')}
+  ];
+  let qNum=0;
+  sections.forEach((sec,si)=>{
+    const sh=document.createElement('div');sh.className='sec-head';
+    sh.innerHTML=`<div class="sh-num" style="background:${sec.color}">${sec.letter}</div><div class="sh-title">${sec.title}</div><span class="sh-count">10 statements</span>`;
+    wrap.appendChild(sh);
+    sec.items.forEach((q,qi)=>{
+      qNum++;
+      const card=document.createElement('div');card.className='q-card';card.id=`qcard-${si}-${qi}`;
+      let scaleHtml='';
+      for(let v=1;v<=5;v++)scaleHtml+=`<label class="sopt"><input type="radio" name="q${si}-${qi}" value="${v}" onchange="onAnswer(${si},${qi},${v})"><div class="d">${v}</div></label>`;
+      card.innerHTML=`<div class="q-top"><span class="q-num">Q${qNum}</span><div><div class="q-en">${q.en}</div><div class="q-tl">${q.tl}</div></div></div>
+        <div class="scale-row"><div class="s-label">Hindi talaga</div><div class="s-opts">${scaleHtml}</div><div class="s-label">Ako talaga ito</div></div>`;
+      wrap.appendChild(card);
+    });
+  });
+}
+function onAnswer(si,qi,v){
+  const card=document.getElementById(`qcard-${si}-${qi}`);
+  if(!card.classList.contains('answered')){answered++;card.classList.add('answered');}
+  document.getElementById('progFill').style.width=(answered/40*100)+'%';
+  document.getElementById('progLabel').textContent=answered+' of 40 answered';
+}
+let _scores={},_sorted=[];
+function calculate(){
+  const name=document.getElementById('pName').value.trim();
+  if(!name){toast('Please enter your name first ⚠');document.getElementById('pName').focus();return;}
+  if(answered<32){toast('Please answer at least 32 questions ('+answered+'/40) ⚠');return;}
+  _scores={D:0,I:0,S:0,C:0};
+  const dims=['D','I','S','C'];
+  dims.forEach((dim,si)=>{
+    for(let qi=0;qi<10;qi++){
+      const el=document.querySelector(`input[name="q${si}-${qi}"]:checked`);
+      if(el)_scores[dim]+=parseInt(el.value);
+    }
+  });
+  _sorted=[...DISC].sort((a,b)=>_scores[b.id]-_scores[a.id]);
+  const primary=_sorted[0];const secondary=_sorted[1];
+  const combo=primary.id+secondary.id;
+  const comboAlt=secondary.id+primary.id;
+  const comboData=COMBOS[combo]||COMBOS[comboAlt]||null;
+  // Hero
+  document.getElementById('resCombo').textContent=primary.id+secondary.id;
+  document.getElementById('resName').textContent=name+'\'s DISC Profile';
+  document.getElementById('resTagline').textContent=comboData?comboData.name:primary.name+' · '+secondary.name;
+  // Bars
+  const bars=document.getElementById('discBars');bars.innerHTML='';
+  _sorted.forEach(d=>{
+    const s=_scores[d.id];const pct=Math.round(s/50*100);
+    bars.innerHTML+=`<div class="bar-row">
+      <div class="br-label" style="color:${d.color}">${d.id}</div>
+      <div class="br-name">${d.name}</div>
+      <div class="br-track"><div class="br-fill" style="width:${pct}%;background:${d.color}"><span>${s}</span></div></div>
+      <div class="br-val">${s}/50</div>
+    </div>`;
+  });
+  // Cards
+  const cards=document.getElementById('discCards');cards.innerHTML='';
+  _sorted.forEach((d,i)=>{
+    const card=document.createElement('div');card.className='disc-card'+(i<2?' open':'');
+    const rClass=i===0?'dc-r1':i===1?'dc-r2':'';const rLabel=i===0?'Primary':i===1?'Secondary':'';
+    card.innerHTML=`<div class="dc-head" onclick="this.closest('.disc-card').classList.toggle('open')">
+      <div class="dc-letter ${d.cls}">${d.id}</div>
+      <div class="dc-info"><div class="dc-name">${d.name}${rLabel?` <span class="dc-rank ${rClass}">${rLabel}</span>`:''}</div><div class="dc-tagline">${d.tagline}</div></div>
+      <span class="dc-chev">▼</span></div>
+    <div class="dc-body">
+      <div class="dc-section">Description</div>
+      <div style="font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:.85rem">${d.descEn}</div>
+      <div class="dc-section">At Their Best · Sa Pinakamahusay</div>
+      <div class="info-box ib-g"><div class="ib-label" style="color:var(--s)">✅ Strengths in Ministry</div>${d.atBest}</div>
+      <div class="dc-section">Under Pressure · Sa Ilalim ng Presyon</div>
+      <div class="info-box ib-r"><div class="ib-label" style="color:var(--d)">⚠ Watch For</div>${d.underStress}</div>
+      <div class="dc-section">Ministry Placement · Ministeryo</div>
+      <div class="info-box ib-b"><div class="ib-label" style="color:var(--c)">⛪ Best Ministry Fit</div>${d.ministryEn}</div>
+      <div class="dc-section">Discipling This Person</div>
+      <div class="info-box ib-y"><div class="ib-label" style="color:var(--i)">🤝 Discipleship Approach</div>${d.discipleEn}</div>
+      <div class="dc-section">Needs in a Team</div>
+      <div class="info-box ib-g"><div class="ib-label" style="color:var(--s)">👥 Ideal Teammates</div>${d.needsEn}</div>
+    </div>`;
+    cards.appendChild(card);
+  });
+  // Combo
+  const cs=document.getElementById('comboSection');
+  if(comboData){
+    cs.innerHTML=`<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.65rem">Your DISC Combination Profile</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:var(--ink);margin-bottom:.4rem">${comboData.name}</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:.65rem">${comboData.desc}</div>
+      <div style="font-size:12px;font-weight:600;color:var(--green)">⛪ Best ministry fit: ${comboData.ministry}</div>`;
+  }else cs.style.display='none';
+  document.getElementById('resultsWrap').classList.add('visible');
+  document.getElementById('saveBtn').style.display='block';
+  setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),100);
+}
+async function saveToDashboard(){
+  const btn=document.getElementById('saveBtn');const msg=document.getElementById('saveMsg');
+  btn.textContent='⏳ Saving...';btn.disabled=true;
+  const name=document.getElementById('pName').value.trim();
+  const memberId=_memberId||document.getElementById('selectedMemberId').value||null;
+  try{
+    const {error}=await db.from('member_profiles').insert({member_id:memberId||null,member_name:name,lc_group:document.getElementById('pGroup').value||null,profile_type:'disc',results:_scores,top_result:_sorted[0]?.id||null,second_result:_sorted[1]?.id||null,third_result:_sorted[2]?.id||null,summary:_sorted[0]?.id+_sorted[1]?.id,date_taken:new Date().toISOString().split('T')[0]});
+    if(error)throw error;
+    if(memberId)await db.from('members').update({disc_primary:_sorted[0]?.id||null,disc_secondary:_sorted[1]?.id||null,updated_at:new Date().toISOString()}).eq('id',memberId);
+    btn.style.display='none';msg.style.display='block';
+    msg.innerHTML=`✅ Saved! <strong>${name}</strong> · Profile: ${_sorted[0]?.id}${_sorted[1]?.id}${memberId?' · Dashboard updated.':' · Not linked to member record.'}`;
+  }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
+}
+async function autoLinkFromUrl(){
+  const id=new URLSearchParams(window.location.search).get('id');if(!id)return;
+  try{
+    const {data}=await db.from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
+    _memberId=data.id;document.getElementById('selectedMemberId').value=data.id;
+    document.getElementById('autoLinked').style.display='block';document.getElementById('manualSearch').style.display='none';
+    document.getElementById('autoLinkedName').textContent=data.name;
+    const LN=['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
+    document.getElementById('autoLinkedMeta').textContent=LN[data.pipeline_level||0]+(data.discipler_name||data.discipler?' · Discipler: '+(data.discipler_name||data.discipler):'');
+    document.getElementById('pName').value=data.name;document.title='DISC Profile — '+data.name;
+  }catch(e){console.error(e);}
+}
+async function searchMember(q){
+  const dd=document.getElementById('memberDropdown');if(q.length<2){dd.style.display='none';return;}
+  const {data}=await db.from('members').select('id,name').ilike('name','%'+q+'%').limit(8);
+  if(!data?.length){dd.innerHTML='<div style="padding:.6rem 1rem;font-size:12px;color:var(--muted)">No members found</div>';dd.style.display='block';return;}
+  dd.innerHTML=data.map(m=>`<div onclick="selectMember('${m.id}','${m.name.replace(/'/g,"\'")}')" style="padding:.6rem 1rem;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--s-bg)'" onmouseout="this.style.background=''"><span style="font-weight:500">${m.name}</span></div>`).join('');
+  dd.style.display='block';
+}
+function selectMember(id,name){_memberId=id;document.getElementById('memberSearch').value=name;document.getElementById('selectedMemberId').value=id;document.getElementById('memberDropdown').style.display='none';document.getElementById('memberSelected').style.display='block';document.getElementById('memberSelected').textContent='✓ Linked: '+name;if(!document.getElementById('pName').value)document.getElementById('pName').value=name;}
+document.addEventListener('click',e=>{if(!e.target.closest('#memberSearch')&&!e.target.closest('#memberDropdown')){const dd=document.getElementById('memberDropdown');if(dd)dd.style.display='none';}});
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+buildQuestions();autoLinkFromUrl();
+</script>
+</body>
+</html>
