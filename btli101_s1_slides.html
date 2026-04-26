@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTLI 101 S1 — Slides</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f1520;--surface:#1b2640;--border:#2a3a5a;
+  --gold:#c9943a;--gold2:#e8b86d;--cream:#f0e8d4;
+  --navy:#1b2a4a;--green:#2a5c40;--red:#7a2020;--purple:#3a1a6a;
+}
+body{font-family:'DM Sans',sans-serif;background:#0a0d14;color:white;min-height:100vh;}
+
+/* CONTROLS */
+.ctrl{position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,.85);padding:.5rem 1rem;display:flex;align-items:center;gap:10px;z-index:100;border-bottom:1px solid #2a3a5a;}
+.ctrl-btn{font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:5px 14px;border-radius:5px;border:1px solid #3a4a6a;background:none;color:rgba(255,255,255,.5);cursor:pointer;transition:all .15s;}
+.ctrl-btn:hover{border-color:#5a6a8a;color:rgba(255,255,255,.85);}
+.ctrl-btn.active{background:var(--gold);border-color:var(--gold);color:#0a0d14;}
+.slide-num-lbl{font-size:12px;color:rgba(255,255,255,.3);margin-left:auto;}
+.fullbtn{font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.5);border-radius:5px;cursor:pointer;}
+.fullbtn:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);}
+.prog-bar{position:fixed;top:36px;left:0;right:0;height:2px;background:#2a3a5a;z-index:100;}
+.prog-fill{height:100%;background:var(--gold);transition:width .3s;}
+
+/* SLIDE AREA */
+.slide-area{padding:58px 0 20px;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.slide{display:none;width:100%;max-width:1100px;margin:0 auto;padding:0 1.5rem;}
+.slide.active{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 78px);}
+
+/* SLIDE TYPES */
+
+/* Title slide */
+.s-title{text-align:center;width:100%;max-width:700px;}
+.st-badge{display:inline-block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);border:1px solid rgba(255,255,255,.1);padding:4px 14px;border-radius:20px;margin-bottom:1.25rem;}
+.st-big{font-family:'Playfair Display',serif;font-size:clamp(2rem,6vw,4.5rem);font-weight:700;color:var(--gold2);letter-spacing:.05em;line-height:1;margin-bottom:.5rem;}
+.st-tl{font-family:'Playfair Display',serif;font-size:clamp(1.2rem,3vw,2rem);color:var(--cream);font-style:italic;margin-bottom:.75rem;}
+.st-sub{font-size:13px;color:rgba(255,255,255,.3);letter-spacing:.08em;}
+.st-divider{width:60px;height:2px;background:var(--gold);margin:1.25rem auto;}
+
+/* Activity slide */
+.s-activity{width:100%;max-width:860px;}
+.sa-eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.6rem;}
+.sa-heading{font-family:'Playfair Display',serif;font-size:clamp(1.6rem,4vw,2.8rem);font-weight:700;color:var(--cream);line-height:1.15;margin-bottom:1rem;}
+.sa-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:.75rem;}
+.sa-card-lbl{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.45rem;}
+.sa-card-txt{font-size:clamp(14px,2vw,17px);color:rgba(255,255,255,.8);line-height:1.65;}
+.sa-card-txt strong{color:var(--gold2);}
+.col-box{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:.75rem;}
+.col-item{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:1rem;text-align:center;}
+.ci-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.35rem;}
+.ci-text{font-size:14px;color:rgba(255,255,255,.65);font-style:italic;}
+
+/* Scripture slide */
+.s-scripture{width:100%;max-width:800px;text-align:center;}
+.ss-ref{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.75rem;}
+.ss-tl{font-family:'Playfair Display',serif;font-size:clamp(1.2rem,3vw,1.8rem);color:var(--cream);line-height:1.75;font-style:italic;margin-bottom:.75rem;}
+.ss-en{font-size:clamp(11px,1.5vw,14px);color:rgba(255,255,255,.35);line-height:1.65;font-style:italic;}
+.ss-divider{width:40px;height:1px;background:var(--gold);margin:.75rem auto;}
+
+/* Truth slide */
+.s-truth{width:100%;max-width:800px;text-align:center;}
+.stt-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem;}
+.stt-main{font-family:'Playfair Display',serif;font-size:clamp(1.3rem,3.5vw,2.2rem);color:var(--cream);line-height:1.5;font-style:italic;margin-bottom:.65rem;}
+.stt-en{font-size:clamp(12px,1.8vw,16px);color:rgba(255,255,255,.35);font-style:italic;line-height:1.6;}
+
+/* Questions slide */
+.s-questions{width:100%;max-width:860px;}
+.sq-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.6rem;}
+.sq-heading{font-family:'Playfair Display',serif;font-size:clamp(1.3rem,3vw,2rem);color:var(--cream);margin-bottom:1rem;}
+.sq-list{list-style:none;}
+.sq-list li{display:flex;align-items:flex-start;gap:14px;padding:.85rem 1rem;margin-bottom:8px;border-radius:8px;font-size:clamp(14px,2vw,17px);line-height:1.6;}
+.sq-list li .q-ico{font-size:20px;flex-shrink:0;margin-top:2px;}
+.sq-list li .q-txt{flex:1;}
+.sq-list li .q-txt strong{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;}
+.q-obs-bg{background:rgba(26,74,107,.3);border:1px solid rgba(26,74,107,.4);}
+.q-obs-bg strong{color:#70a0d0;}
+.q-int-bg{background:rgba(184,136,42,.15);border:1px solid rgba(184,136,42,.25);}
+.q-int-bg strong{color:var(--gold2);}
+.q-app-bg{background:rgba(42,92,64,.3);border:1px solid rgba(42,92,64,.4);}
+.q-app-bg strong{color:#60c080;}
+
+/* Reflection slide */
+.s-reflect{width:100%;max-width:800px;}
+.sr-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.6rem;}
+.sr-heading{font-family:'Playfair Display',serif;font-size:clamp(1.1rem,2.5vw,1.6rem);color:var(--cream);margin-bottom:1rem;}
+.sr-items{list-style:none;}
+.sr-items li{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:.85rem 1.1rem;margin-bottom:8px;font-size:clamp(14px,2vw,16px);color:rgba(255,255,255,.7);line-height:1.6;position:relative;padding-left:2.2rem;}
+.sr-items li::before{content:'→';position:absolute;left:.85rem;color:var(--gold);font-weight:700;}
+
+/* EOLO slide */
+.s-eolo{width:100%;max-width:800px;text-align:center;}
+.se-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem;}
+.se-heading{font-family:'Playfair Display',serif;font-size:clamp(1.5rem,4vw,2.8rem);color:var(--cream);margin-bottom:.75rem;}
+.se-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:1rem 0;}
+.se-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.85rem;font-size:13px;color:rgba(255,255,255,.65);line-height:1.5;}
+.se-card strong{display:block;color:var(--gold2);margin-bottom:3px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;}
+.se-big{font-size:clamp(15px,2vw,18px);color:rgba(255,255,255,.75);line-height:1.6;margin:.5rem 0;}
+
+/* Memory verse slide */
+.s-memory{width:100%;max-width:700px;text-align:center;}
+.sm-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem;}
+.sm-verse{font-family:'Playfair Display',serif;font-size:clamp(1.4rem,4vw,2.5rem);color:var(--cream);line-height:1.6;font-style:italic;margin:1rem 0;}
+.sm-ref{font-size:14px;color:var(--gold2);letter-spacing:.04em;}
+.sm-instruction{font-size:13px;color:rgba(255,255,255,.3);margin-top:1rem;}
+
+/* Pangako Ko slide */
+.s-pangako{width:100%;max-width:800px;}
+.sp-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem;}
+.sp-heading{font-family:'Playfair Display',serif;font-size:clamp(1.1rem,2.5vw,1.6rem);color:var(--cream);margin-bottom:1rem;}
+.sp-sentence{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:1.5rem;font-family:'Playfair Display',serif;font-size:clamp(1rem,2.5vw,1.5rem);color:var(--cream);line-height:1.65;font-style:italic;text-align:center;}
+.sp-blank{display:inline-block;min-width:200px;border-bottom:2px solid var(--gold);color:var(--gold2);font-style:normal;}
+
+/* Assignment slide */
+.s-assign{width:100%;max-width:800px;}
+.sas-eye{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem;}
+.sas-heading{font-family:'Playfair Display',serif;font-size:clamp(1.2rem,3vw,2rem);color:var(--cream);margin-bottom:1rem;}
+.sas-items{list-style:none;}
+.sas-items li{display:flex;align-items:center;gap:12px;padding:.7rem .9rem;margin-bottom:7px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:7px;font-size:clamp(13px,1.8vw,16px);color:rgba(255,255,255,.7);}
+.sas-items li .li-ico{font-size:18px;flex-shrink:0;}
+
+/* Closing slide */
+.s-close{text-align:center;width:100%;max-width:700px;}
+.sc-sub{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:.75rem;}
+.sc-main{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,5vw,3.5rem);font-weight:700;color:var(--cream);margin-bottom:.5rem;font-style:italic;}
+.sc-verse{font-family:'Playfair Display',serif;font-size:clamp(.95rem,2vw,1.3rem);color:rgba(255,255,255,.4);line-height:1.7;margin-top:1rem;font-style:italic;}
+.sc-ref{font-size:12px;color:rgba(255,255,255,.25);margin-top:.25rem;letter-spacing:.06em;}
+
+/* FOOTER NOTE */
+.slide-note{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);padding:.4rem 1rem;font-size:11px;color:rgba(255,255,255,.3);text-align:center;border-top:1px solid rgba(255,255,255,.05);}
+</style>
+</head>
+<body>
+
+<!-- CONTROLS -->
+<div class="ctrl">
+  <button class="ctrl-btn" onclick="prev()">← Prev</button>
+  <button class="ctrl-btn active" id="playBtn" onclick="toggleAuto()">▶ Auto</button>
+  <button class="ctrl-btn" onclick="next()">Next →</button>
+  <div class="slide-num-lbl" id="slideNum">1 / 12</div>
+  <button class="fullbtn" onclick="document.documentElement.requestFullscreen()">⛶ Fullscreen</button>
+</div>
+<div class="prog-bar"><div class="prog-fill" id="progFill" style="width:8.3%"></div></div>
+
+<!-- SLIDE 1 — TITLE -->
+<div class="slide-area">
+
+<div class="slide active" id="s1">
+  <div style="display:flex;align-items:center;justify-content:center;gap:3rem;width:100%;max-width:1000px;flex-wrap:wrap;">
+    <div class="s-title" style="text-align:left;flex:1;min-width:280px;">
+      <div class="st-badge">BTLI 101 · Session 1 · Rosehill Christian Church</div>
+      <div class="st-big">BTLI 101</div>
+      <div class="st-tl">Sino ang Diyos?</div>
+      <div class="st-divider" style="margin:1.25rem 0;"></div>
+      <div class="st-sub" style="text-align:left;">Who Is God? · The Foundation of Everything<br>MULTIPLY Leadership Pipeline</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:.75rem;flex-shrink:0;">
+      <div style="background:white;padding:12px;border-radius:12px;box-shadow:0 0 0 3px rgba(201,148,42,.4);">
+        <img src="data:image/png;base64,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" style="width:180px;height:180px;display:block;" alt="QR Code">
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:3px;">📱 I-scan para sa Participant Page</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.35);">Buksan sa inyong telepono ngayon</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 2 — PUKAW SETUP -->
+<div class="slide" id="s2">
+  <div class="s-activity">
+    <div class="sa-eyebrow">⚡ Pukaw · 15 Minuto</div>
+    <div class="sa-heading">Kilala Mo Ba Siya?</div>
+    <div class="col-box">
+      <div class="col-item">
+        <div class="ci-label">Column 1</div>
+        <div class="ci-text">"Alam ko <strong>TUNGKOL</strong> sa kanya..."</div>
+      </div>
+      <div class="col-item">
+        <div class="ci-label">Column 2</div>
+        <div class="ci-text">"<strong>Kilala</strong> ko siya nang personal..."</div>
+      </div>
+    </div>
+    <div class="sa-card" style="margin-top:.85rem">
+      <div class="sa-card-lbl">Gawin sa manila paper — 3 minuto</div>
+      <div class="sa-card-txt">Mag-isip ng isang <strong>sikat na tao</strong> — artista, atleta, politiko. Punan ang dalawang kolum.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 3 — PUKAW PIVOT -->
+<div class="slide" id="s3">
+  <div class="s-activity">
+    <div class="sa-eyebrow">⚡ Pukaw · Ang Pivot</div>
+    <div class="sa-heading">"Gawin nating muli — ngayon para sa Diyos."</div>
+    <div class="col-box">
+      <div class="col-item">
+        <div class="ci-label">Column 1</div>
+        <div class="ci-text">Alam ko <strong>tungkol</strong> sa Diyos...</div>
+      </div>
+      <div class="col-item">
+        <div class="ci-label">Column 2</div>
+        <div class="ci-text"><strong>Kilala</strong> ko Siya nang personal...</div>
+      </div>
+    </div>
+    <div class="sa-card" style="margin-top:.85rem;text-align:center">
+      <div class="sa-card-lbl">Mag-isip. Sumulat. Para sa iyong sarili lamang.</div>
+      <div class="sa-card-txt" style="color:var(--gold2)">90 segundo · Hindi kailangang ibahagi</div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 4 — SCRIPTURE -->
+<div class="slide" id="s4">
+  <div class="s-scripture">
+    <div class="ss-ref">📖 Tuklas · Basahin Natin · Jeremias 29:11–13</div>
+    <div class="ss-divider"></div>
+    <div class="ss-tl">"Sapagkat kilala Ko ang mga plano Ko para sa inyo — sabi ng Panginoon — mga planong magbibigay sa inyo ng pag-asa at kinabukasan, hindi kapahamakan. Pagkatapos, tatawag kayo sa Akin at magsusumamo sa Akin, at pakikinggan Ko kayo. Hahanapin ninyo Ako at mahahanap Ako, kapag hinahanap ninyo Ako nang buong puso."</div>
+    <div class="ss-divider"></div>
+    <div class="ss-en">"For I know the plans I have for you... You will seek me and find me when you seek me with all your heart."</div>
+  </div>
+</div>
+
+<!-- SLIDE 5 — DISCOVERY QUESTIONS -->
+<div class="slide" id="s5">
+  <div class="s-questions">
+    <div class="sq-eye">📖 Tuklas · Table Discussion · 12 Minuto</div>
+    <div class="sq-heading">Mga Tanong para Pag-usapan</div>
+    <ul class="sq-list">
+      <li class="q-obs-bg">
+        <span class="q-ico">👁</span>
+        <span class="q-txt"><strong>Observation</strong>Ano ang tatlong bagay na ginagawa ng Diyos sa Jeremias 29:11–13? Ilista sa manila paper.</span>
+      </li>
+      <li class="q-int-bg">
+        <span class="q-ico">💡</span>
+        <span class="q-txt"><strong>Interpretation</strong>Sa Awit 139 — anong uri ng pagkakilala mayroon ang Diyos sa atin? Ano ang pagkakaiba ng "alam" at "kilala"?</span>
+      </li>
+      <li class="q-app-bg">
+        <span class="q-ico">🙌</span>
+        <span class="q-txt"><strong>Application</strong>Paano nito binabago ang iyong pagtingin sa panalangin? Sa pagbabasa ng Biblia?</span>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<!-- SLIDE 6 — MAIN TRUTH -->
+<div class="slide" id="s6">
+  <div class="s-truth">
+    <div class="stt-eye">💡 Talakay · Ang Katotohanan</div>
+    <div class="ss-divider"></div>
+    <div class="stt-main">"Ang Diyos ay hindi isang ideya na dapat paniwalaan — Siya ay isang Persona na gustong makilala ka."</div>
+    <div class="ss-divider"></div>
+    <div class="stt-en">"Faith is not religion — it is relationship."</div>
+  </div>
+</div>
+
+<!-- SLIDE 7 — REFLECTION -->
+<div class="slide" id="s7">
+  <div class="s-reflect">
+    <div class="sr-eye">💡 Talakay · Sariling Pagmumuni-muni · 4 Minuto</div>
+    <div class="sr-heading">Sagutin nang tapat — para sa iyong sarili lamang.<br><span style="font-size:.85em;color:rgba(255,255,255,.4)">Buksan ang participant page sa inyong telepono.</span></div>
+    <ul class="sr-items">
+      <li>Bago ang session na ito — paano ko inilarawan ang Diyos sa aking buhay?</li>
+      <li>Ano ang gusto kong maging iba sa aming relasyon sa Diyos?</li>
+      <li>Isang bagay na nais kong sabihin sa Diyos ngayon — na hindi ko pa nasasabi...</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SLIDE 8 — EOLO -->
+<div class="slide" id="s8">
+  <div class="s-eolo">
+    <div class="se-eye">🌏 EOLO · Each One Love One</div>
+    <div class="se-heading">Sino ang Iyong Isang Tao?</div>
+    <div class="se-big">Isang tao sa iyong buhay<br>na hindi pa nakakakilala kay Jesus.</div>
+    <div class="se-cards">
+      <div class="se-card"><strong>Hindi kategorya</strong>Pangalan ng isang tiyak na tao</div>
+      <div class="se-card"><strong>Hindi grupo</strong>Isang mukha · Isang relasyon</div>
+      <div class="se-card"><strong>Gawin ngayon</strong>Sabihin sa mesa · Ipagdasal ng grupo</div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 9 — MEMORY VERSE -->
+<div class="slide" id="s9">
+  <div class="s-memory">
+    <div class="sm-eye">📝 Talata ng Memorya · Session 1</div>
+    <div class="sm-verse">"Hahanapin ninyo Ako at mahahanap Ako, kapag hinahanap ninyo Ako nang buong puso."</div>
+    <div class="sm-ref">Jeremias 29:13</div>
+    <div class="sm-instruction">Basahin nang dalawang beses · Patayin ang screen · Sabihin mula sa memorya</div>
+  </div>
+</div>
+
+<!-- SLIDE 10 — PANGAKO KO -->
+<div class="slide" id="s10">
+  <div class="s-pangako">
+    <div class="sp-eye">🏠 Pangako Ko · My Commitment</div>
+    <div class="sp-heading">Kumpletuhin ang pangungusap na ito — isang bagay, specific, magagawa mo:</div>
+    <div class="sp-sentence">"Sa susunod na dalawang linggo, isasabuhay ko ang katotohanang <em>kilala ako ng Diyos</em> sa pamamagitan ng <span class="sp-blank">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>."</div>
+  </div>
+</div>
+
+<!-- SLIDE 11 — ASSIGNMENT -->
+<div class="slide" id="s11">
+  <div class="s-assign">
+    <div class="sas-eye">🏠 Takdang-Aralin · Sampung Araw</div>
+    <div class="sas-heading">Mag-usap sa Diyos —<br>Isang Pangungusap Bawat Gabi</div>
+    <ul class="sas-items">
+      <li><span class="li-ico">💬</span>"Diyos, ngayong araw naramdaman ko ___."</li>
+      <li><span class="li-ico">🤔</span>"Diyos, hindi ko maintindihan ang ___."</li>
+      <li><span class="li-ico">🙏</span>"Diyos, salamat sa ___."</li>
+      <li><span class="li-ico">📱</span>I-track sa participant page o sa journal</li>
+      <li><span class="li-ico">📅</span>Sa susunod na session: "Ilang araw kang nakapagsulat?"</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SLIDE 12 — CLOSING -->
+<div class="slide" id="s12">
+  <div class="s-close">
+    <div class="sc-sub">MULTIPLY · Rosehill Christian Church</div>
+    <div class="sc-main">Disciples who make disciples.</div>
+    <div style="width:60px;height:2px;background:var(--gold);margin:.75rem auto;"></div>
+    <div class="sc-verse">"Hahanapin ninyo Ako at mahahanap Ako,<br>kapag hinahanap ninyo Ako nang buong puso."</div>
+    <div class="sc-ref">Jeremias 29:13</div>
+  </div>
+</div>
+
+</div><!-- /slide-area -->
+
+<!-- FOOTER NOTE -->
+<div class="slide-note" id="slideNote">Slide 1 of 12 · Display while participants are arriving · Background music playing</div>
+
+<script>
+const NOTES = [
+  'Display while participants are arriving · Participants SCAN QR CODE now · Background music playing',
+  'Keep on screen for full 15-minute PUKAW · Interns facilitate table discussion',
+  '90 seconds individual writing · No sharing yet · Personal only',
+  'Read aloud 3× : Facilitator → One participant → Together in Tagalog',
+  'Table discussion · 12 minutes · Interns facilitate at each table',
+  'Leave on screen for full TALAKAY teaching block',
+  '4 minutes of silence · Participants open phone to participant page · DO NOT BREAK THE SILENCE',
+  'EOLO check-in · Standing · Every session · No exceptions',
+  'Read together × 2 · Blank screen · Say from memory together · Distribute or screenshot',
+  '1 minute individual writing · Share with table partner',
+  'Review assignment · Encourage · This is the formation work between sessions',
+  'Closing ritual · Memory verse · Facilitator prayer by name · "Disciples who make disciples" together'
+];
+
+let cur = 0;
+const total = 12;
+let autoTimer = null;
+
+function go(n) {
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  document.getElementById('s' + (n + 1)).classList.add('active');
+  document.getElementById('slideNum').textContent = (n + 1) + ' / ' + total;
+  document.getElementById('progFill').style.width = ((n + 1) / total * 100) + '%';
+  document.getElementById('slideNote').textContent = NOTES[n];
+  cur = n;
+}
+function next() { if (cur < total - 1) go(cur + 1); }
+function prev() { if (cur > 0) go(cur - 1); }
+function toggleAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('playBtn').textContent = '▶ Auto'; }
+  else { autoTimer = setInterval(() => { if (cur < total - 1) go(cur + 1); else { clearInterval(autoTimer); autoTimer = null; } }, 30000); document.getElementById('playBtn').textContent = '⏸ Auto'; }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next();
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
+  if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen();
+});
+</script>
+</body>
+</html>
