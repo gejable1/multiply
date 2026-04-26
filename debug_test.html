@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Debug Test</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:sans-serif;padding:20px;background:#f5f5f5;}
+.box{background:white;border-radius:8px;padding:16px;margin-bottom:12px;border:1px solid #ddd;}
+.ok{color:green;font-weight:bold;}
+.err{color:red;font-weight:bold;}
+.info{color:#666;}
+input[type=radio]{margin:4px;}
+.q{margin:8px 0;padding:8px;background:#f9f9f9;border-radius:4px;}
+</style>
+</head>
+<body>
+<h2>🔧 MULTIPLY Debug Test Page</h2>
+<div class="box">
+  <b>Step 1 — URL Parameter</b><br>
+  <span id="urlTest" class="info">Checking...</span>
+</div>
+<div class="box">
+  <b>Step 2 — Supabase CDN Load</b><br>
+  <span id="cdnTest" class="info">Checking...</span>
+</div>
+<div class="box">
+  <b>Step 3 — Supabase Connection</b><br>
+  <span id="connTest" class="info">Checking...</span>
+</div>
+<div class="box">
+  <b>Step 4 — Member Fetch</b><br>
+  <span id="fetchTest" class="info">Checking...</span>
+</div>
+<div class="box">
+  <b>Step 5 — Progress Tracker</b><br>
+  <span id="trackerLabel" class="info">0 of 3 answered</span>
+  <div style="height:8px;background:#ddd;border-radius:4px;margin:8px 0">
+    <div id="trackerBar" style="height:100%;width:0%;background:green;border-radius:4px;transition:width .3s"></div>
+  </div>
+  <div class="q">Q1: <label><input type="radio" name="q1" value="1"> Yes</label> <label><input type="radio" name="q1" value="0"> No</label></div>
+  <div class="q">Q2: <label><input type="radio" name="q2" value="1"> Yes</label> <label><input type="radio" name="q2" value="0"> No</label></div>
+  <div class="q">Q3: <label><input type="radio" name="q3" value="1"> Yes</label> <label><input type="radio" name="q3" value="0"> No</label></div>
+</div>
+<div class="box">
+  <b>Step 6 — Calculate Button</b><br>
+  <button onclick="testCalc()" style="padding:10px 20px;background:#2a5c40;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;">
+    Click to Calculate
+  </button>
+  <div id="calcResult" style="margin-top:8px"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+  // Step 1: URL param
+  var id = new URLSearchParams(window.location.search).get('id');
+  var urlEl = document.getElementById('urlTest');
+  if (id) {
+    urlEl.className = 'ok';
+    urlEl.textContent = '✅ id = ' + id;
+  } else {
+    urlEl.className = 'err';
+    urlEl.textContent = '❌ No ?id= parameter in URL';
+  }
+
+  // Step 2: CDN
+  var cdnEl = document.getElementById('cdnTest');
+  if (typeof supabase !== 'undefined') {
+    cdnEl.className = 'ok';
+    cdnEl.textContent = '✅ Supabase CDN loaded';
+  } else {
+    cdnEl.className = 'err';
+    cdnEl.textContent = '❌ Supabase not defined — CDN failed to load';
+    return;
+  }
+
+  // Step 3: Connect
+  var connEl = document.getElementById('connTest');
+  var db;
+  try {
+    db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
+      auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
+    });
+    connEl.className = 'ok';
+    connEl.textContent = '✅ Supabase client created';
+  } catch(e) {
+    connEl.className = 'err';
+    connEl.textContent = '❌ createClient failed: ' + e.message;
+    return;
+  }
+
+  // Step 4: Fetch member
+  var fetchEl = document.getElementById('fetchTest');
+  if (id) {
+    fetchEl.textContent = '⏳ Fetching member ' + id + '...';
+    db.from('members').select('id,name,pipeline_level').eq('id', id).single()
+      .then(function(res) {
+        if (res.error) {
+          fetchEl.className = 'err';
+          fetchEl.textContent = '❌ Supabase error: ' + res.error.message + ' (code: ' + res.error.code + ')';
+        } else if (!res.data) {
+          fetchEl.className = 'err';
+          fetchEl.textContent = '❌ No member found for id = ' + id;
+        } else {
+          fetchEl.className = 'ok';
+          fetchEl.textContent = '✅ Member found: ' + res.data.name + ' (Level ' + (res.data.pipeline_level||0) + ')';
+        }
+      })
+      .catch(function(e) {
+        fetchEl.className = 'err';
+        fetchEl.textContent = '❌ Fetch exception: ' + e.message;
+      });
+  } else {
+    fetchEl.className = 'info';
+    fetchEl.textContent = '⚠️ Skipped — no ?id= in URL. Add ?id=fccd3998-ba0b-4141-8c2e-d7013d686297 to test';
+  }
+
+  // Step 5: Progress tracker
+  function updateTracker() {
+    var names = new Set();
+    document.querySelectorAll('input[type=radio]').forEach(function(r){ if(r.name) names.add(r.name); });
+    var done = new Set();
+    document.querySelectorAll('input[type=radio]:checked').forEach(function(r){ if(r.name) done.add(r.name); });
+    var total = names.size;
+    var d = done.size;
+    document.getElementById('trackerLabel').textContent = d + ' of ' + total + ' answered';
+    document.getElementById('trackerBar').style.width = (total>0 ? Math.round(d/total*100) : 0) + '%';
+  }
+  document.querySelectorAll('input[type=radio]').forEach(function(el){
+    el.addEventListener('change', updateTracker);
+  });
+  updateTracker();
+
+});
+
+function testCalc() {
+  var names = new Set();
+  document.querySelectorAll('input[type=radio]').forEach(function(r){ if(r.name) names.add(r.name); });
+  var done = new Set();
+  document.querySelectorAll('input[type=radio]:checked').forEach(function(r){ if(r.name) done.add(r.name); });
+  document.getElementById('calcResult').innerHTML = 
+    '<span class="ok">✅ Calculate works! ' + done.size + ' of ' + names.size + ' answered.</span>';
+}
+</script>
+</body>
+</html>
