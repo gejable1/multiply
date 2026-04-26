@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strengths Profile — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f8f5ef;--paper:#fff;--ink:#1a1612;--muted:#6b5f50;--lighter:#a09080;--border:#e5ddd0;--surface2:#f3efe8;
+--ex:#7a2020;--ex-bg:#fdecea;--in:#1a4a6b;--in-bg:#e8f0f8;--rb:#2a5c40;--rb-bg:#eef6f1;--st:#b8882a;--st-bg:#fdf6e8;
+--green:#2a5c40;--green-bg:#eef6f1;--navy:#1b2a4a;--gold:#b8882a;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.1);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+.cover{background:linear-gradient(135deg,#1a0a0a 0%,#2a1a0a 50%,#0a1a2a 100%);padding:3rem 1.5rem 2.5rem;text-align:center;border-bottom:3px solid var(--gold);}
+.cover-title{font-family:'Playfair Display',serif;font-size:clamp(1.75rem,6vw,3rem);font-weight:700;color:#f5edd8;margin-bottom:.25rem;}
+.cover-sub{font-size:13px;color:rgba(255,255,255,.4);max-width:540px;margin:.5rem auto 1rem;}
+.cover-badge{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.25);display:block;margin-bottom:.75rem;}
+.domain-pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:.75rem;}
+.dp{font-size:10px;font-weight:700;padding:3px 12px;border-radius:20px;}
+.dp-ex{background:rgba(122,32,32,.3);color:#f09090;}
+.dp-in{background:rgba(26,74,107,.3);color:#80b0e0;}
+.dp-rb{background:rgba(42,92,64,.3);color:#80d0a0;}
+.dp-st{background:rgba(184,136,42,.3);color:#f0c060;}
+.cover-tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.ct{font-size:10px;padding:3px 12px;border-radius:20px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);}
+/* MODE TOGGLE */
+.mode-wrap{max-width:680px;margin:1.25rem auto 0;padding:0 1.25rem;}
+.mode-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);}
+.mode-tabs{display:flex;border-bottom:1px solid var(--border);}
+.mode-tab{flex:1;padding:.75rem;text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);transition:all .15s;border-bottom:2px solid transparent;}
+.mode-tab.active{color:var(--gold);border-bottom-color:var(--gold);background:var(--st-bg);}
+.mode-body{padding:1rem 1.25rem;}
+/* MANUAL MODE */
+.manual-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.mg-item{background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:.6rem .75rem;cursor:pointer;transition:all .15s;}
+.mg-item.selected{border-color:var(--gold);background:var(--st-bg);}
+.mg-rank{font-size:9px;font-weight:700;color:var(--gold);margin-bottom:1px;}
+.mg-theme{font-size:13px;font-weight:600;color:var(--ink);}
+.mg-domain{font-size:10px;color:var(--lighter);}
+/* PROG */
+.prog-bar{position:sticky;top:0;background:var(--paper);border-bottom:1px solid var(--border);padding:.6rem 1.25rem;z-index:100;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);}
+.prog-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--gold);border-radius:3px;transition:width .3s;}
+.prog-label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:500;}
+/* LINK BOX */
+.link-box{max-width:680px;margin:.75rem auto 0;padding:0 1.25rem;}
+.lb-in{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;box-shadow:var(--shadow);}
+.pf{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;margin-bottom:.45rem;transition:border-color .15s;}
+.pf:focus{outline:none;border-color:var(--gold);}
+/* ASSESSMENT */
+.page{max-width:680px;margin:0 auto;padding:1.25rem;}
+.sec-head{display:flex;align-items:center;gap:12px;margin:1.75rem 0 .75rem;padding-bottom:.5rem;border-bottom:2px solid var(--border);}
+.sh-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.sh-title{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;color:var(--ink);flex:1;}
+.sh-count{font-size:10px;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:12px;}
+.q-card{background:var(--paper);border:1.5px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;box-shadow:var(--shadow);}
+.q-card.answered{border-color:rgba(184,136,42,.35);background:#fffdf5;}
+.q-top{padding:.75rem .85rem .4rem;display:flex;gap:8px;}
+.q-num{font-size:10px;font-weight:700;color:var(--lighter);background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:8px;flex-shrink:0;margin-top:2px;}
+.q-text{font-size:13.5px;color:var(--ink);font-weight:500;line-height:1.6;}
+.scale-row{display:flex;align-items:center;gap:6px;padding:.4rem .85rem .75rem;}
+.s-label{font-size:10px;color:var(--lighter);white-space:nowrap;flex-shrink:0;}
+.s-opts{display:flex;gap:4px;flex:1;justify-content:center;}
+.sopt{cursor:pointer;}
+.sopt input{display:none;}
+.sopt .d{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--border);background:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s;}
+.sopt input:checked ~ .d{background:var(--gold);border-color:var(--gold);color:white;}
+.sopt:hover .d{border-color:var(--gold);color:var(--gold);}
+/* CALC */
+.calc-wrap{max-width:680px;margin:1.5rem auto;padding:0 1.25rem;}
+.calc-btn{width:100%;padding:14px;background:linear-gradient(135deg,#3a2a0a,#1b2a4a);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:filter .15s;}
+.calc-btn:hover{filter:brightness(1.15);}
+/* RESULTS */
+.results-wrap{max-width:680px;margin:0 auto;padding:0 1.25rem 3rem;display:none;}
+.results-wrap.visible{display:block;}
+.res-hero{background:linear-gradient(135deg,#1a0a0a,#2a1a0a,#0a1a2a);border-radius:14px;padding:1.75rem;text-align:center;margin-bottom:1rem;}
+.res-person{font-family:'Playfair Display',serif;font-size:1.2rem;color:#f5edd8;margin-bottom:.85rem;}
+.top5-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:.5rem;}
+.t5-card{background:rgba(255,255,255,.08);border-radius:8px;padding:.6rem .4rem;text-align:center;}
+.t5-rank{font-size:10px;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:3px;}
+.t5-name{font-size:11px;font-weight:700;color:white;line-height:1.2;}
+.t5-domain{font-size:9px;margin-top:3px;font-weight:600;}
+.t5-ex{color:#f09090;} .t5-in{color:#80b0e0;} .t5-rb{color:#80d0a0;} .t5-st{color:#f0c060;}
+.domain-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:1rem;}
+.ds-card{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:.65rem;text-align:center;box-shadow:var(--shadow);}
+.ds-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;}
+.ds-score{font-size:1.4rem;font-weight:900;}
+.theme-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:.75rem;overflow:hidden;box-shadow:var(--shadow);}
+.tc-head{display:flex;align-items:center;gap:14px;padding:.85rem 1rem;cursor:pointer;transition:background .12s;}
+.tc-head:hover{background:var(--surface2);}
+.tc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.tc-info{flex:1;}
+.tc-name{font-size:.9rem;font-weight:700;color:var(--ink);}
+.tc-domain{font-size:10px;color:var(--lighter);}
+.tc-rank{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--st-bg);color:var(--gold);}
+.tc-chev{font-size:11px;color:var(--lighter);transition:transform .2s;}
+.theme-card.open .tc-chev{transform:rotate(180deg);}
+.tc-body{display:none;padding:.75rem 1rem 1rem;border-top:1px solid var(--border);background:var(--surface2);}
+.theme-card.open .tc-body{display:block;}
+.info-box{border-radius:7px;padding:.65rem .85rem;margin:.3rem 0;font-size:12.5px;line-height:1.65;}
+.ib-g{background:var(--green-bg);border-left:3px solid var(--green);color:#1a3028;}
+.ib-y{background:var(--st-bg);border-left:3px solid var(--gold);color:#3a2e10;}
+.ib-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+/* SAVE */
+.save-wrap{max-width:680px;margin:0 auto;padding:0 1.25rem 2rem;}
+.save-btn{width:100%;padding:13px;background:var(--green);color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:.6rem;transition:filter .15s;display:none;}
+.save-btn:hover{filter:brightness(1.1);}
+.save-btn:disabled{background:var(--lighter);cursor:not-allowed;}
+.save-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
+.toast.show{opacity:1;transform:translateY(0);}
+@media(max-width:480px){.top5-grid{grid-template-columns:repeat(3,1fr);}.domain-sum{grid-template-columns:repeat(2,1fr);}.manual-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="cover">
+  <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
+  <div class="cover-title">Strengths Profile</div>
+  <div class="cover-sub">Discover your dominant talent themes and how they shape your ministry contribution — inspired by the CliftonStrengths framework. This assessment helps you find where you naturally flourish.</div>
+  <div class="domain-pills">
+    <span class="dp dp-ex">⚙ Executing</span>
+    <span class="dp dp-in">📣 Influencing</span>
+    <span class="dp dp-rb">🤝 Relationship Building</span>
+    <span class="dp dp-st">💡 Strategic Thinking</span>
+  </div>
+  <div class="cover-tags"><span class="ct">68 Questions</span><span class="ct">1–5 Scale</span><span class="ct">~15 Minutes</span><span class="ct">Or Manual Entry</span></div>
+</div>
+<div class="prog-bar" id="progBarWrap">
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="prog-label" id="progLabel">0 of 68 answered</div>
+</div>
+<!-- MODE SELECT -->
+<div class="mode-wrap">
+  <div style="background:#e8f0f8;border:1px solid rgba(26,74,107,.15);border-radius:10px;padding:.75rem 1.1rem;margin-bottom:.75rem;font-size:12.5px;color:#0a2040;line-height:1.6;">
+    <strong>Note:</strong> This Strengths Profile is inspired by the CliftonStrengths framework developed by Gallup. It uses original questions to help identify your natural talent themes. For the official Gallup assessment, visit <em>gallup.com/cliftonstrengths</em>.
+    <br>Leaders at Coach level and above are encouraged to take the official Gallup assessment and enter their Top 5 below using <strong>Manual Entry</strong>.
+  </div>
+  <div class="mode-card">
+    <div class="mode-tabs">
+      <div class="mode-tab active" id="tabAssess" onclick="setMode('assess')">📝 Take the Assessment</div>
+      <div class="mode-tab" id="tabManual" onclick="setMode('manual')">✋ Manual Entry (Gallup Top 5)</div>
+    </div>
+    <div class="mode-body" id="modeBody">
+      <div id="assessInstr" style="font-size:13px;color:var(--muted);line-height:1.7">Rate each statement 1 (Not at all like me) to 5 (Exactly like me) based on your natural tendencies — not your learned behavior or what you think is ideal. Answer based on who you are, not who you want to be.</div>
+      <div id="manualInstr" style="display:none">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:.85rem">Enter your official Gallup CliftonStrengths Top 5 below. Select each theme in order (1 = highest).</div>
+        <div id="manualSelects"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="link-box"><div class="lb-in">
+  <div id="autoLinked" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:14px">✓</div>
+      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--green);margin-bottom:2px">✅ Pre-Linked from Dashboard</div>
+      <div id="autoLinkedName" style="font-size:14px;font-weight:600;color:var(--ink)"></div>
+      <div id="autoLinkedMeta" style="font-size:11px;color:var(--muted)"></div></div>
+    </div>
+  </div>
+  <div id="manualSearch">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--navy);margin-bottom:.35rem">🔗 Link to Dashboard</div>
+    <div style="position:relative">
+      <input id="memberSearch" placeholder="Type your name to search..." autocomplete="off" oninput="searchMember(this.value)" class="pf" style="margin-bottom:0">
+      <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:var(--shadow2);z-index:100;max-height:160px;overflow-y:auto;"></div>
+    </div>
+    <div id="memberSelected" style="display:none;background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--green);font-weight:500;margin-top:.35rem;"></div>
+  </div>
+  <input type="hidden" id="selectedMemberId">
+</div></div>
+<div class="page">
+  <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.4rem">Your Information</div>
+    <input class="pf" id="pName" placeholder="Full Name *">
+    <input class="pf" id="pGroup" placeholder="LC Group (optional)">
+  </div>
+  <div id="questionsWrap"></div>
+</div>
+<div class="calc-wrap">
+  <button class="calc-btn" id="calcBtn" onclick="calculate()">💪 Discover My Top Strengths</button>
+</div>
+<div class="results-wrap" id="resultsWrap">
+  <div class="res-hero">
+    <div class="res-person" id="resName"></div>
+    <div class="top5-grid" id="top5Grid"></div>
+    <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:.5rem" id="resSub"></div>
+  </div>
+  <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:.85rem 0 .5rem">Domain Breakdown</div>
+  <div class="domain-sum" id="domainSum"></div>
+  <div style="font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);margin:.85rem 0 .5rem">Your Top 5 Themes — Full Detail</div>
+  <div id="themeCards"></div>
+</div>
+<div class="save-wrap">
+  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()">💾 Save to MULTIPLY Dashboard</button>
+  <div class="save-msg" id="saveMsg"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db=supabase.createClient(SB_URL,SB_KEY);
+let _memberId=null, _mode='assess', _manualTop5=[];
+const THEMES=[{"id": "achiever", "name": "Achiever", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You have a great deal of stamina and work hard. You take great satisfaction from being busy and productive. Every day starts at zero — and you are driven to accomplish something tangible before the day ends.", "ministry": "Kitchen Ministry, Building Administration, Documentation — roles requiring sustained output and follow-through.", "q": ["I feel a strong need to accomplish something concrete every single day.", "I have significantly more energy and drive for hard work than most people I know."]}, {"id": "arranger", "name": "Arranger", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You can organize, but you also have a flexibility that complements this ability. You like to figure out how all the pieces and resources can be arranged for maximum productivity.", "ministry": "Events coordination, Core Group logistics, Building Administration — roles that require juggling many moving parts.", "q": ["I enjoy figuring out how to arrange people and resources for maximum efficiency.", "When plans change, I quickly reorganize and find a better configuration rather than feeling frustrated."]}, {"id": "belief", "name": "Belief", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You have certain core values that are unchanging. These values give your life meaning and satisfaction. Your Belief theme causes you to be family-oriented, altruistic, and spiritual — and to value responsibility and high ethics.", "ministry": "Preaching Ministry, Core Group, Church Council — roles that require moral anchoring and principled leadership.", "q": ["My core values are non-negotiable — they drive every major decision I make.", "I feel most fulfilled when my work aligns with what I believe is truly important and meaningful."]}, {"id": "consistency", "name": "Consistency", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You are keenly aware of the need to treat people the same. You crave clear rules and standards applied equally to everyone. You believe that the best environment is one in which everyone knows what is expected.", "ministry": "Church Council (policy), Building Administration, Kitchen Ministry — roles requiring fair standards and equal treatment.", "q": ["I believe strongly in treating everyone by the same rules and standards — no exceptions.", "I am uncomfortable when I see people given special treatment that others do not receive."]}, {"id": "deliberative", "name": "Deliberative", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You are careful. You are vigilant. You identify the risks before they become problems. You are not easily swayed by enthusiasm — you want to think things through before committing.", "ministry": "Church Council (risk assessment), Publishing & Communications (editorial quality), Documentation — roles requiring careful judgment.", "q": ["I carefully identify risks and obstacles before committing to a plan or decision.", "I prefer to think through decisions slowly and thoroughly rather than act quickly."]}, {"id": "discipline", "name": "Discipline", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "Your world needs to be ordered and planned. You instinctively impose structure on your life and the world around you. Without this structure, the world feels chaotic and hard to navigate.", "ministry": "Lights & Tech, Documentation & Media, Building Administration — roles that require routine, structure, and systematic execution.", "q": ["I function best with clear routines and structured plans — chaos makes me unproductive.", "I naturally create order and systems in my environment to ensure things run smoothly."]}, {"id": "focus", "name": "Focus", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You can take a direction, follow through, and make the corrections necessary to stay on track. You prioritize, then act. You are not easily distracted from the goal.", "ministry": "Preaching Ministry, Campus Life Coach, Core Group — roles requiring sustained goal-orientation and the ability to keep others on track.", "q": ["Once I set a goal, I pursue it with single-minded determination until it is achieved.", "I naturally help teams and groups stay focused on what matters most rather than getting distracted."]}, {"id": "responsibility", "name": "Responsibility", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You take psychological ownership of what you commit to. Whether large or small, you feel emotionally bound to follow through. Your good name depends on it.", "ministry": "Any ministry role — Responsibility is foundational to faithful service across all of Rosehill"s ministry teams.", "q": ["When I commit to something, I feel personally responsible for its success — regardless of obstacles.", "I feel deeply uncomfortable leaving a task undone or handing off a commitment I have made."]}, {"id": "restorative", "name": "Restorative", "domain": "Executing", "color": "#7a2020", "domColor": "#7a2020", "desc": "You love to solve problems. You are energized by studying a situation, identifying what is wrong, and finding the solution. You enjoy bringing things back to their former glory.", "ministry": "Building Administration, Community Outreach, Pastoral Care (broken lives) — roles that require problem-solving and restoration.", "q": ["I am energized by diagnosing what is wrong and finding the solution to fix it.", "Problems that others find discouraging actually motivate and energize me."]}, {"id": "activator", "name": "Activator", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "You can make things happen by turning thoughts into action. You know that only action is real. Only action can make things happen. You are impatient with analysis and deliberation.", "ministry": "Youth in Motion, EOLO campaign, Community Outreach — roles that launch initiatives and drive ministry into motion.", "q": ["I become frustrated with too much planning and discussion — I want to start now.", "I naturally move groups from talk to action, even when others are still deliberating."]}, {"id": "command", "name": "Command", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "You have presence. You can take control of a situation and make decisions. You are not frightened by confrontation — rather, you know that confrontation is the first step toward resolution.", "ministry": "Church Council, Core Group, Community Outreach leadership — roles that require bold, decisive presence in difficult situations.", "q": ["I naturally take charge in difficult or ambiguous situations — I am not afraid to lead.", "I am willing to confront people directly when necessary — I see it as part of caring for them."]}, {"id": "communication", "name": "Communication", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "You like to explain, describe, host, speak in public, and write. You feel a need to bring ideas to life through language. You want to capture people"s attention and hold it.", "ministry": "Preaching Ministry, Publishing & Communications, Youth Ministry, Young Professionals — any role that communicates vision and story.", "q": ["I love finding the right words to explain ideas clearly and compellingly.", "I naturally gravitate toward speaking, writing, or presenting — language is how I process and share."]}, {"id": "competition", "name": "Competition", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "Competition rooted in comparing your performance with others. You have a need to win. You compare your performance to others" and push yourself to come out on top. You are energized by external measurement.", "ministry": "Youth in Motion, EOLO campaign (evangelism goals), Campus Life Coach — roles with clear measurable outcomes.", "q": ["I am driven by measuring my performance against clear benchmarks and coming out on top.", "I am motivated by knowing how I compare to others — it pushes me to perform at a higher level."]}, {"id": "maximizer", "name": "Maximizer", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "Excellence, not average, is your measure. You focus on strengths as a way to stimulate growth. You see strengths everywhere — in people and in ministry — and you want to develop them to the highest level.", "ministry": "Leadership development, Core Group, Preaching Ministry — roles that develop people and ministry to their highest potential.", "q": ["I am more motivated by taking something good and making it great than fixing something broken.", "I instinctively focus on people"s strengths rather than trying to fix their weaknesses."]}, {"id": "self-assurance", "name": "Self-Assurance", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "You have confidence in your strengths and your ability to manage your own life. You are sure of your assessment of yourself. Your self-assurance is your anchor in difficult and uncertain times.", "ministry": "Preaching Ministry, Church Council, Core Group — roles that require confident conviction and the ability to hold course under pressure.", "q": ["I trust my own instincts and judgment, even when others disagree with me.", "I am not easily shaken by criticism or disapproval — I know who I am and what I believe."]}, {"id": "significance", "name": "Significance", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "You want to be very significant in the eyes of other people. You want to be known. You want to be heard. You want to stand out. You want your work to be recognized as exceptional.", "ministry": "Preaching Ministry, Young Professionals Ministry, Music Ministry — roles with visible impact and recognition of contribution.", "q": ["I want my work and contribution to matter — I need to know it is making a real difference.", "I am motivated by doing work that is recognized as exceptional, not just adequate."]}, {"id": "woo", "name": "Woo", "domain": "Influencing", "color": "#1a4a6b", "domColor": "#1a4a6b", "desc": "Woo stands for winning others over. You enjoy the challenge of meeting new people and getting them to like you. You take pleasure in breaking the ice and making a connection with someone new.", "ministry": "EOLO campaign, Welcome Ministry, Youth in Motion, Young Professionals — anywhere that requires connecting with strangers and drawing them in.", "q": ["I love meeting new people and naturally find ways to connect with strangers quickly.", "I enjoy the challenge of winning over someone who is initially reluctant or unresponsive."]}, {"id": "adaptability", "name": "Adaptability", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You live in the moment. You don"t resent sudden requests or unforeseen detours — you expect them and you like the flexibility of adjusting on the fly. You are a willing follower in the moment.", "ministry": "Community Outreach, Kitchen Ministry, Youth Ministry — roles that require flexibility and calm in changing circumstances.", "q": ["I thrive in environments that change constantly — I adapt naturally without stress.", "I prefer responding to what the moment requires rather than following a rigid plan."]}, {"id": "connectedness", "name": "Connectedness", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You have faith that we are all connected. You believe there are few coincidences and that almost every event has meaning. This perspective imbues you with certainty, compassion, and care.", "ministry": "Preaching Ministry (seeing God"s hand), Pastoral Care, Couples Ministry, Community Outreach — roles anchored in seeing God"s purpose in all things.", "q": ["I believe deeply that everything is connected — that events and people are linked by God"s purpose.", "I help people see meaning and connection in circumstances that others see as random or coincidental."]}, {"id": "developer", "name": "Developer", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You see the potential in others. Very often, you see it before they see it in themselves. You are drawn to people at early stages of development and find satisfaction in helping them grow.", "ministry": "Discipleship (all levels), Youth Ministry, Campus Life Coach, Children"s Ministry — roles built around growing people.", "q": ["I am energized by seeing potential in people who have not yet seen it in themselves.", "I find great satisfaction in watching someone grow and develop — even more than in my own achievements."]}, {"id": "empathy", "name": "Empathy", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You can sense the emotions of those around you. You can feel what they are feeling as though their feelings are your own. You intuitively see the world through their eyes.", "ministry": "Pastoral Care, Couples Ministry, Community Outreach (calamity response), Children"s Ministry — any role requiring deep emotional attunement.", "q": ["I can feel what other people are feeling almost as if it were happening to me.", "I am naturally aware of the emotional state of everyone in a room, often before they express it."]}, {"id": "harmony", "name": "Harmony", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You look for consensus. You don"t enjoy conflict. You know that the world will go better if there is more agreement in it. You find areas of agreement and build on them.", "ministry": "Couples Ministry, Pastoral Care, Music Ministry, Kitchen Ministry — roles requiring peace-building and collaborative teamwork.", "q": ["I naturally look for points of agreement rather than areas of disagreement.", "I am uncomfortable with unnecessary conflict and work actively to find common ground."]}, {"id": "includer", "name": "Includer", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You are accepting of others. You show awareness of those who feel left out and make an effort to include them. You want to expand the group — the more the merrier.", "ministry": "Welcome Ministry, Youth Ministry, Community Outreach, Children"s Ministry — roles focused on drawing people in and ensuring no one is left out.", "q": ["I am drawn to people on the margins of a group and feel compelled to include them.", "I feel uncomfortable when I see someone being excluded and naturally work to bring them in."]}, {"id": "individualization", "name": "Individualization", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You are intrigued by the unique qualities of each person. You have a gift for figuring out how people who are different can work together productively.", "ministry": "LC Group leadership, Discipleship (personalized), Youth Ministry — roles requiring tailored, person-specific investment.", "q": ["I naturally see what makes each person unique and adjust my approach accordingly.", "I am fascinated by individual differences and have a gift for matching people to roles that fit them."]}, {"id": "positivity", "name": "Positivity", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You have an enthusiasm that is contagious. You are upbeat and can get others excited about what they are going to do. You are generous with praise and always willing to celebrate.", "ministry": "Youth Ministry, Music Ministry, EOLO, Welcome Ministry — roles that need someone who makes the environment feel alive and joyful.", "q": ["I naturally uplift the energy of a group — people around me feel more motivated and enthusiastic.", "I celebrate others" wins genuinely and frequently — I love creating moments of recognition and joy."]}, {"id": "relator", "name": "Relator", "domain": "Relationship Building", "color": "#2a5c40", "domColor": "#2a5c40", "desc": "You are drawn toward people you already know. While you are not emotionally reserved, you prefer to deepen friendships rather than constantly make new ones. Closeness brings you satisfaction.", "ministry": "Core Group, Couples Ministry, LC Group (long-term discipleship), Pastoral Care — roles built on deep, sustained relationships.", "q": ["I prefer deepening a few close relationships over building many new ones.", "I find the most satisfaction in relationships where there is genuine mutual trust and depth."]}, {"id": "analytical", "name": "Analytical", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You search for reasons and causes. You have the ability to think about all the factors that might affect a situation. You want to prove — or disprove — hypotheses before committing.", "ministry": "Church Council, Publishing & Communications, Documentation — roles requiring careful analysis before action.", "q": ["I naturally look for the data, evidence, and logical reasoning behind any claim or decision.", "I am skeptical of conclusions that lack sufficient evidence and want to examine the facts myself."]}, {"id": "context", "name": "Context", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You look back to understand the present. You research history to find patterns that explain today. You see the value of knowing where you came from in order to know where you are going.", "ministry": "Preaching Ministry (historical-redemptive), Church Council, Publishing — roles benefiting from historical perspective and pattern recognition.", "q": ["I believe we must understand the past to make good decisions in the present.", "I naturally look for historical patterns and precedents before making significant changes."]}, {"id": "futuristic", "name": "Futuristic", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You are inspired by the future and what might be. You love to peer over the horizon. You paint vivid pictures of the future and inspire others with those possibilities.", "ministry": "Core Group, Young Professionals Ministry, Campus Life Coach, EOLO vision-casting — roles requiring vision and the ability to inspire toward future possibility.", "q": ["I am energized by imagining what could be possible in the future and sharing that vision.", "I naturally think further ahead than most people and am drawn to long-range planning."]}, {"id": "ideation", "name": "Ideation", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You are fascinated by ideas. You have the ability to find connections between seemingly disparate phenomena. Ideas are like oxygen for you — they energize you.", "ministry": "Preaching Ministry (creative sermons), Publishing & Communications, Interior Design — roles that thrive on fresh ideas and creative connections.", "q": ["I love generating new ideas — my mind naturally finds surprising connections between unrelated things.", "I am energized by brainstorming sessions and find conventional thinking limiting."]}, {"id": "input", "name": "Input", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You have a craving to know more. You collect and archive all kinds of information. Whatever you collect, you do it because it makes you feel informed and prepared.", "ministry": "Publishing & Communications, Documentation & Media, Preaching research, Church Council — roles that benefit from a well-stocked mind and broad knowledge base.", "q": ["I love gathering and collecting information, resources, and ideas — I am rarely without something to read or learn.", "I feel uncomfortable throwing things away because they might be useful someday."]}, {"id": "intellection", "name": "Intellection", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You like to think. You like mental activity. You like exercising the "muscles" of your brain, stretching them in multiple directions. This need for mental activity may take the form of philosophical reflection.", "ministry": "Preaching Ministry, Publishing & Communications, Theological education support — roles that reward deep, sustained thinking and reflection.", "q": ["I need significant time alone to think — reflection and mental exploration energize me.", "I enjoy philosophical, theological, and abstract ideas even when they have no immediate practical application."]}, {"id": "learner", "name": "Learner", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You love to learn. The subject matter is less important than the process of learning itself. You are energized by the journey from ignorance to competence — by the thrill of continuous growth.", "ministry": "BTLI, Preaching Ministry, Publishing — roles that reward continuous learning and can expose others to a culture of growth.", "q": ["I am energized by the process of learning something new — the subject matters less than the growth.", "I regularly pursue new knowledge, courses, books, or skills even when they are not required of me."]}, {"id": "strategic", "name": "Strategic", "domain": "Strategic Thinking", "color": "#b8882a", "domColor": "#b8882a", "desc": "You have the ability to create alternative ways to proceed. When faced with any given scenario, you see the full set of options, quickly spot the most relevant patterns and issues, and select the best route.", "ministry": "Church Council, Core Group, MULTIPLY Pipeline development — roles requiring systems thinking and the ability to navigate complex situations.", "q": ["I quickly see patterns, options, and pathways that others miss in complex situations.", "I naturally think several steps ahead and anticipate obstacles before they arise."]}];
+
+const DOMAIN_META={
+  Executing:{color:'var(--ex)',bg:'var(--ex-bg)',pill:'dp-ex',t5:'t5-ex',label:'Executing'},
+  Influencing:{color:'var(--in)',bg:'var(--in-bg)',pill:'dp-in',t5:'t5-in',label:'Influencing'},
+  'Relationship Building':{color:'var(--rb)',bg:'var(--rb-bg)',pill:'dp-rb',t5:'t5-rb',label:'Rel. Building'},
+  'Strategic Thinking':{color:'var(--st)',bg:'var(--st-bg)',pill:'dp-st',t5:'t5-st',label:'Strategic'}
+};
+function setMode(mode){
+  _mode=mode;
+  document.getElementById('tabAssess').classList.toggle('active',mode==='assess');
+  document.getElementById('tabManual').classList.toggle('active',mode==='manual');
+  document.getElementById('assessInstr').style.display=mode==='assess'?'block':'none';
+  document.getElementById('manualInstr').style.display=mode==='manual'?'block':'none';
+  document.getElementById('questionsWrap').style.display=mode==='assess'?'block':'none';
+  document.getElementById('progBarWrap').style.display=mode==='assess'?'flex':'none';
+  document.getElementById('calcBtn').textContent=mode==='assess'?'💪 Discover My Top Strengths':'✅ Confirm My Top 5 Strengths';
+  if(mode==='manual')buildManualSelects();
+}
+function buildManualSelects(){
+  const wrap=document.getElementById('manualSelects');wrap.innerHTML='';
+  for(let r=1;r<=5;r++){
+    const div=document.createElement('div');div.style.marginBottom='8px';
+    div.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:3px">Rank #${r}</div>
+      <select id="manual-${r}" onchange="updateManual()" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);">
+        <option value="">— Select Theme —</option>
+        ${THEMES.map(t=>`<option value="${t.id}">${t.name} (${t.domain})</option>`).join('')}
+      </select>`;
+    wrap.appendChild(div);
+  }
+}
+function updateManual(){
+  _manualTop5=[];
+  for(let r=1;r<=5;r++){const v=document.getElementById(`manual-${r}`)?.value;if(v)_manualTop5.push(v);}
+}
+let answered=0;
+function buildQuestions(){
+  const wrap=document.getElementById('questionsWrap');wrap.innerHTML='';
+  const domains=['Executing','Influencing','Relationship Building','Strategic Thinking'];
+  const dColors={'Executing':'var(--ex)','Influencing':'var(--in)','Relationship Building':'var(--rb)','Strategic Thinking':'var(--st)'};
+  let qNum=0;
+  domains.forEach(dom=>{
+    const dThemes=THEMES.filter(t=>t.domain===dom);
+    const sh=document.createElement('div');sh.className='sec-head';
+    sh.innerHTML=`<div class="sh-dot" style="background:${dColors[dom]}"></div><div class="sh-title">${dom}</div><span class="sh-count">${dThemes.length*2} questions</span>`;
+    wrap.appendChild(sh);
+    dThemes.forEach((t,ti)=>{
+      t.q.forEach((q,qi)=>{
+        qNum++;
+        const card=document.createElement('div');card.className='q-card';card.id=`qcard-${t.id}-${qi}`;
+        let scaleHtml='';
+        for(let v=1;v<=5;v++)scaleHtml+=`<label class="sopt"><input type="radio" name="q-${t.id}-${qi}" value="${v}" onchange="onAnswer('${t.id}',${qi})"><div class="d">${v}</div></label>`;
+        card.innerHTML=`<div class="q-top"><span class="q-num">Q${qNum}</span><div class="q-text">${q}</div></div>
+          <div class="scale-row"><div class="s-label">Not me</div><div class="s-opts">${scaleHtml}</div><div class="s-label">Exactly me</div></div>`;
+        wrap.appendChild(card);
+      });
+    });
+  });
+}
+function onAnswer(tid,qi){
+  const card=document.getElementById(`qcard-${tid}-${qi}`);
+  if(!card.classList.contains('answered')){answered++;card.classList.add('answered');}
+  document.getElementById('progFill').style.width=(answered/68*100)+'%';
+  document.getElementById('progLabel').textContent=answered+' of 68 answered';
+}
+let _scores={},_sortedThemes=[];
+function calculate(){
+  const name=document.getElementById('pName').value.trim();
+  if(!name){toast('Please enter your name first ⚠');document.getElementById('pName').focus();return;}
+  if(_mode==='manual'){
+    updateManual();
+    if(_manualTop5.length<3){toast('Please select at least 3 themes ⚠');return;}
+    _sortedThemes=_manualTop5.map(id=>THEMES.find(t=>t.id===id)).filter(Boolean);
+    showResults(name,'Manual Entry — Official Gallup Top 5');
+  } else {
+    if(answered<54){toast('Please answer at least 54 questions ('+answered+'/68) ⚠');return;}
+    _scores={};
+    THEMES.forEach(t=>{
+      let total=0;
+      t.q.forEach((_,qi)=>{const el=document.querySelector(`input[name="q-${t.id}-${qi}"]:checked`);if(el)total+=parseInt(el.value);});
+      _scores[t.id]=total;
+    });
+    _sortedThemes=[...THEMES].sort((a,b)=>(_scores[b.id]||0)-(_scores[a.id]||0));
+    showResults(name,'Assessment Results — Top 5 of 34 Themes');
+  }
+}
+function showResults(name,subtitle){
+  document.getElementById('resName').textContent=name+"'s Strengths Profile";
+  document.getElementById('resSub').textContent=subtitle;
+  const top5=_sortedThemes.slice(0,5);
+  // Top 5 grid
+  const grid=document.getElementById('top5Grid');grid.innerHTML='';
+  top5.forEach((t,i)=>{
+    const dm=DOMAIN_META[t.domain];
+    grid.innerHTML+=`<div class="t5-card"><div class="t5-rank">#${i+1}</div><div class="t5-name">${t.name}</div><div class="t5-domain ${dm?.t5||''}">${t.domain.replace('Relationship Building','Rel. Bldg')}</div></div>`;
+  });
+  // Domain summary
+  const domSum=document.getElementById('domainSum');domSum.innerHTML='';
+  ['Executing','Influencing','Relationship Building','Strategic Thinking'].forEach(dom=>{
+    const dm=DOMAIN_META[dom];
+    const count=top5.filter(t=>t.domain===dom).length;
+    domSum.innerHTML+=`<div class="ds-card"><div class="ds-label" style="color:${dm?.color}">${dm?.label}</div><div class="ds-score" style="color:${dm?.color}">${count}</div><div style="font-size:10px;color:var(--lighter)">of 5 themes</div></div>`;
+  });
+  // Theme cards
+  const cards=document.getElementById('themeCards');cards.innerHTML='';
+  top5.forEach((t,i)=>{
+    const dm=DOMAIN_META[t.domain];
+    const card=document.createElement('div');card.className='theme-card'+(i<2?' open':'');
+    card.innerHTML=`<div class="tc-head" onclick="this.closest('.theme-card').classList.toggle('open')">
+      <div class="tc-dot" style="background:${dm?.color||'var(--gold)'}"></div>
+      <div class="tc-info"><div class="tc-name">${t.name} <span class="tc-rank">#${i+1}</span></div><div class="tc-domain">${t.domain}</div></div>
+      <span class="tc-chev">▼</span></div>
+    <div class="tc-body">
+      <div style="font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:.75rem">${t.desc}</div>
+      <div class="info-box ib-g"><div class="ib-label" style="color:var(--green)">⛪ Ministry Fit</div>${t.ministry}</div>
+    </div>`;
+    cards.appendChild(card);
+  });
+  document.getElementById('resultsWrap').classList.add('visible');
+  document.getElementById('saveBtn').style.display='block';
+  setTimeout(()=>document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'start'}),100);
+}
+async function saveToDashboard(){
+  const btn=document.getElementById('saveBtn');const msg=document.getElementById('saveMsg');
+  btn.textContent='⏳ Saving...';btn.disabled=true;
+  const name=document.getElementById('pName').value.trim();
+  const memberId=_memberId||document.getElementById('selectedMemberId').value||null;
+  const top5=_sortedThemes.slice(0,5);
+  const scoresData=_mode==='assess'?_scores:Object.fromEntries(top5.map((t,i)=>([t.id,5-i])));
+  const top5Names=top5.map(t=>t.name);
+  const domains=[...new Set(top5.map(t=>t.domain))];
+  try{
+    const {error}=await db.from('member_profiles').insert({member_id:memberId||null,member_name:name,lc_group:document.getElementById('pGroup').value||null,profile_type:'strengths',results:scoresData,top_result:top5[0]?.name||null,second_result:top5[1]?.name||null,third_result:top5[2]?.name||null,summary:top5Names.slice(0,3).join(', '),date_taken:new Date().toISOString().split('T')[0]});
+    if(error)throw error;
+    if(memberId){
+      await db.from('members').update({strengths_top5:top5Names,strengths_domain:domains[0]||null,updated_at:new Date().toISOString()}).eq('id',memberId);
+    }
+    btn.style.display='none';msg.style.display='block';
+    msg.innerHTML=`✅ Saved! <strong>${name}</strong> · Top 3: ${top5Names.slice(0,3).join(', ')}${memberId?' · Dashboard updated.':' · Not linked to member record.'}`;
+  }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
+}
+async function autoLinkFromUrl(){
+  const id=new URLSearchParams(window.location.search).get('id');if(!id)return;
+  try{
+    const {data}=await db.from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
+    _memberId=data.id;document.getElementById('selectedMemberId').value=data.id;
+    document.getElementById('autoLinked').style.display='block';document.getElementById('manualSearch').style.display='none';
+    document.getElementById('autoLinkedName').textContent=data.name;
+    const LN=['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
+    document.getElementById('autoLinkedMeta').textContent=LN[data.pipeline_level||0]+(data.discipler_name||data.discipler?' · Discipler: '+(data.discipler_name||data.discipler):'');
+    document.getElementById('pName').value=data.name;document.title='Strengths — '+data.name;
+  }catch(e){console.error(e);}
+}
+async function searchMember(q){
+  const dd=document.getElementById('memberDropdown');if(q.length<2){dd.style.display='none';return;}
+  const {data}=await db.from('members').select('id,name').ilike('name','%'+q+'%').limit(8);
+  if(!data?.length){dd.innerHTML='<div style="padding:.6rem 1rem;font-size:12px;color:var(--muted)">No members found</div>';dd.style.display='block';return;}
+  dd.innerHTML=data.map(m=>`<div onclick="selectMember('${m.id}','${m.name.replace(/'/g,"\'")}')" style="padding:.6rem 1rem;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''"><span style="font-weight:500">${m.name}</span></div>`).join('');
+  dd.style.display='block';
+}
+function selectMember(id,name){_memberId=id;document.getElementById('memberSearch').value=name;document.getElementById('selectedMemberId').value=id;document.getElementById('memberDropdown').style.display='none';document.getElementById('memberSelected').style.display='block';document.getElementById('memberSelected').textContent='✓ Linked: '+name;if(!document.getElementById('pName').value)document.getElementById('pName').value=name;}
+document.addEventListener('click',e=>{if(!e.target.closest('#memberSearch')&&!e.target.closest('#memberDropdown')){const dd=document.getElementById('memberDropdown');if(dd)dd.style.display='none';}});
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+buildQuestions();autoLinkFromUrl();
+</script>
+</body>
+</html>
