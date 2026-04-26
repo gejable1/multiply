@@ -1774,134 +1774,95 @@ body {
 
 <script>
 // SCORING ENGINE
-function calcScore() {
-  // ── INCOMPLETE CHECK — warn but allow ──
-  const allRadioNames = new Set();
-  document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
-  const answeredRadios = new Set();
-  document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
-  const totalQ = allRadioNames.size + document.querySelectorAll('textarea[data-scorable="open"]').length;
-  const doneQ  = answeredRadios.size + [...document.querySelectorAll('textarea[data-scorable="open"]')].filter(t=>t.value.trim().length>5).length;
-  const pctDone = Math.round(doneQ/totalQ*100);
-
-  if (pctDone < 80) {
-    const unanswered = totalQ - doneQ;
-    const goBack = confirm(
-      `⚠️ Survey is ${pctDone}% complete — ${unanswered} question(s) still unanswered.\n\n` +
-      `Results will be based on what is answered so far and may not be accurate.\n\n` +
-      `Click OK to view partial results anyway.\n` +
-      `Click Cancel to go back and complete the survey.`
-    );
-    if (!goBack) {
-      // Scroll to first unanswered radio group
-      for (const name of allRadioNames) {
-        if (!answeredRadios.has(name)) {
-          const el = document.querySelector('input[name="'+name+'"]');
-          if (el) { el.closest('.q-card')?.scrollIntoView({behavior:'smooth',block:'center'}); break; }
-        }
-      }
-      return;
-    }
-  }
-
-  // ── SHOW SUBMIT BUTTON ──
-  const sb = document.getElementById('submitBtn');
-  if (sb) sb.style.display = 'block';
-
-  const sections = { A:0, B:0, C:0, D:0, E:0, F:0, G:0 };
-  const maxes   = { A:10, B:10, C:45, D:30, E:40, F:15, G:20 };
-
-  const radios = document.querySelectorAll('input[type="radio"][data-scorable="scale"]:checked');
-  radios.forEach(r => {
-    const sec = r.dataset.section;
-    if (sections[sec] !== undefined) sections[sec] += parseInt(r.value);
-  });
-
-  // Open text bonus (filled = 5 pts for section A)
-  const openA = document.querySelectorAll('textarea[data-section="A"][data-scorable="open"]');
-  let openAFilled = 0;
-  openA.forEach(t => { if (t.value.trim().length > 20) openAFilled++; });
-  sections.A += Math.min(openAFilled * 2, 5);
-
-  const total = Object.values(sections).reduce((a,b)=>a+b,0);
-  const maxTotal = Object.values(maxes).reduce((a,b)=>a+b,0);
-  const pct = Math.round(total/maxTotal*100);
-
-  // Render grid
-  const labels = {
-    A:'Gospel Knowledge', B:'Assurance Basis',
-    C:'Fruit of Spirit', D:'1 John Tests',
-    E:'Spiritual Habits', F:'Evangelism', G:'Community'
-  };
-  let gridHtml = '';
-  for (const [k,v] of Object.entries(sections)) {
-    const m = maxes[k];
-    const p = Math.round(v/m*100);
-    const bar = p>=75?'#2d6b3e':p>=50?'#b8952a':'#7c3d1e';
-    gridHtml += `<div class="score-item">
-      <div class="s-label">${labels[k]}</div>
-      <div class="s-val">${v}<span style="font-size:13px;color:#6b5e47">/${m}</span></div>
-      <div class="s-pct">${p}% — <span style="color:${bar}">${p>=75?'Strong':p>=50?'Developing':'Needs attention'}</span></div>
-    </div>`;
-  }
-  gridHtml += `<div class="score-item" style="border:1px solid #b8952a">
-    <div class="s-label">Overall Score</div>
-    <div class="s-val">${total}<span style="font-size:13px;color:#6b5e47">/${maxTotal}</span></div>
-    <div class="s-pct">${pct}%</div>
-  </div>`;
-  document.getElementById('scoreGrid').innerHTML = gridHtml;
-
-  // Outcome
-  let ocHtml = '';
-  if (pct >= 75) {
-    ocHtml = `<div class="outcome-box green"><div class="o-title">✅ Strong Profile — Proceed with Confidence</div><p>This person demonstrates consistent evidence of genuine saving faith, spiritual fruit, and discipleship habits. Recommend proceeding to BTLI 101 / Level 1 immediately. Celebrate what God has done — and set growth goals for lower-scoring areas.</p></div>`;
-  } else if (pct >= 55) {
-    ocHtml = `<div class="outcome-box amber"><div class="o-title">🟡 Developing Profile — Proceed with Intentional Coaching</div><p>There is genuine evidence of faith and growth, but significant formation gaps are present. Proceed to Level 1 with a specific personal coaching plan addressing the lowest-scoring areas. Schedule monthly check-ins beyond the regular discipler meetings for the first quarter.</p></div>`;
-  } else {
-    ocHtml = `<div class="outcome-box red"><div class="o-title">🔴 Foundational Gaps — Deeper Pastoral Care Required</div><p>Multiple critical areas scored below 50%. This does not necessarily indicate the absence of salvation, but it does indicate that significant foundational work is needed before formal pipeline progression. Schedule at least 3 additional pastoral conversations. Do not place this person in any ministry role until assurance is clear and habits are established. This is a discipleship priority, not a disqualification.</p></div>`;
-  }
-  document.getElementById('outcomeBox').innerHTML = ocHtml;
-
-  // Show/hide incomplete banner and submit button based on completion
-  const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
-  const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
-  const allTA = document.querySelectorAll('textarea[data-scorable="open"]');
-  const doneTA = [...allTA].filter(t=>t.value.trim().length>5);
-  const totalQ = allRN.size + allTA.length;
-  const doneQ  = doneRN.size + doneTA.length;
-  const isComplete = doneQ >= totalQ;
-
-  const banner = document.getElementById('incompleteBanner');
-  const detail = document.getElementById('incompleteDetail');
-  const sb = document.getElementById('submitBtn');
-
-  if (!isComplete) {
-    banner.style.display = 'block';
-    detail.textContent = (totalQ - doneQ) + ' of ' + totalQ + ' questions still unanswered. Scores above are based on ' + doneQ + ' answered items and may not be accurate.';
-    if (sb) sb.style.display = 'none';
-  } else {
-    banner.style.display = 'none';
-    if (sb) sb.style.display = 'block';
-  }
-
-  const panel = document.getElementById('scorePanel');
-  panel.classList.add('visible');
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// ── SHARED COMPLETION HELPER ─────────────────────────────────
+function getCompletionStatus() {
+  var radioNames = new Set();
+  document.querySelectorAll('input[type="radio"]').forEach(function(r){ if(r.name) radioNames.add(r.name); });
+  var answered = new Set();
+  document.querySelectorAll('input[type="radio"]:checked').forEach(function(r){ if(r.name) answered.add(r.name); });
+  var textareas = document.querySelectorAll('textarea[data-scorable="open"]');
+  var filledTA  = [].filter.call(textareas, function(t){ return t.value.trim().length > 5; });
+  var total = radioNames.size + textareas.length;
+  var done  = answered.size + filledTA.length;
+  return { radioNames:radioNames, answered:answered, total:total, done:done, isComplete: done >= total };
 }
 
 function goBackToComplete() {
-  // Scroll to first unanswered radio group
-  const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
-  const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
-  for (const name of allRN) {
-    if (!doneRN.has(name)) {
-      const el = document.querySelector('input[name="'+name+'"]');
-      if (el) {
-        el.closest('.q-card')?.scrollIntoView({behavior:'smooth', block:'center'});
-        break;
-      }
+  var cs = getCompletionStatus();
+  for (var name of cs.radioNames) {
+    if (!cs.answered.has(name)) {
+      var el = document.querySelector('input[name="'+name+'"]');
+      if (el) { el.closest('.q-card').scrollIntoView({behavior:'smooth',block:'center'}); break; }
     }
   }
+}
+
+// ── CALCULATE & SHOW RESULTS ──────────────────────────────────
+function calcScore() {
+  // Score sections
+  var sections = { A:0, B:0, C:0, D:0, E:0, F:0, G:0 };
+  var maxes    = { A:10, B:10, C:45, D:30, E:40, F:15, G:20 };
+
+  document.querySelectorAll('input[type="radio"][data-scorable="scale"]:checked').forEach(function(r){
+    var sec = r.dataset.section;
+    if (sections[sec] !== undefined) sections[sec] += parseInt(r.value);
+  });
+
+  // Open text bonus for section A
+  var openAFilled = 0;
+  document.querySelectorAll('textarea[data-section="A"][data-scorable="open"]').forEach(function(t){
+    if (t.value.trim().length > 20) openAFilled++;
+  });
+  sections.A += Math.min(openAFilled * 2, 5);
+
+  var total    = Object.values(sections).reduce(function(a,b){return a+b;},0);
+  var maxTotal = Object.values(maxes).reduce(function(a,b){return a+b;},0);
+  var pct      = Math.round(total/maxTotal*100);
+
+  // Render score grid
+  var labels = { A:'Gospel Knowledge', B:'Assurance Basis', C:'Fruit of Spirit',
+                 D:'1 John Tests', E:'Spiritual Habits', F:'Evangelism', G:'Community' };
+  var gridHtml = '';
+  for (var k in sections) {
+    var v = sections[k]; var m = maxes[k]; var p = Math.round(v/m*100);
+    var bar = p>=75?'#2d6b3e':p>=50?'#b8952a':'#7c3d1e';
+    gridHtml += '<div class="score-item"><div class="s-label">'+labels[k]+'</div>' +
+      '<div class="s-val">'+v+'<span style="font-size:13px;color:#6b5e47">/'+m+'</span></div>' +
+      '<div class="s-pct">'+p+'% — <span style="color:'+bar+'">'+(p>=75?'Strong':p>=50?'Developing':'Needs attention')+'</span></div></div>';
+  }
+  gridHtml += '<div class="score-item" style="border:1px solid #b8952a"><div class="s-label">Overall Score</div>' +
+    '<div class="s-val">'+total+'<span style="font-size:13px;color:#6b5e47">/'+maxTotal+'</span></div>' +
+    '<div class="s-pct">'+pct+'%</div></div>';
+  document.getElementById('scoreGrid').innerHTML = gridHtml;
+
+  // Outcome box
+  var ocHtml = '';
+  if (pct >= 75) {
+    ocHtml = '<div class="outcome-box green"><div class="o-title">✅ Strong Profile — Proceed with Confidence</div><p>This person demonstrates consistent evidence of genuine saving faith, spiritual fruit, and discipleship habits. Recommend proceeding to BTLI 101 / Level 1 immediately. Celebrate what God has done — and set growth goals for lower-scoring areas.</p></div>';
+  } else if (pct >= 55) {
+    ocHtml = '<div class="outcome-box amber"><div class="o-title">🟡 Developing Profile — Proceed with Intentional Coaching</div><p>There is genuine evidence of faith and growth, but significant formation gaps are present. Proceed to Level 1 with a specific personal coaching plan addressing the lowest-scoring areas. Schedule monthly check-ins beyond the regular discipler meetings for the first quarter.</p></div>';
+  } else {
+    ocHtml = '<div class="outcome-box red"><div class="o-title">🔴 Foundational Gaps — Deeper Pastoral Care Required</div><p>Multiple critical areas scored below 50%. This does not necessarily indicate the absence of salvation, but it does indicate that significant foundational work is needed before formal pipeline progression. Schedule at least 3 additional pastoral conversations. Do not place this person in any ministry role until assurance is clear and habits are established. This is a discipleship priority, not a disqualification.</p></div>';
+  }
+  document.getElementById('outcomeBox').innerHTML = ocHtml;
+
+  // Incomplete banner + submit button
+  var cs = getCompletionStatus();
+  var banner = document.getElementById('incompleteBanner');
+  var detail = document.getElementById('incompleteDetail');
+  var sb     = document.getElementById('submitBtn');
+  if (!cs.isComplete) {
+    if (banner) { banner.style.display = 'block'; }
+    if (detail) { detail.textContent = (cs.total - cs.done) + ' of ' + cs.total + ' questions still unanswered. Scores are based on ' + cs.done + ' answered items and may not be accurate.'; }
+    if (sb) sb.style.display = 'none';
+  } else {
+    if (banner) banner.style.display = 'none';
+    if (sb) sb.style.display = 'block';
+  }
+
+  var panel = document.getElementById('scorePanel');
+  panel.classList.add('visible');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // FACILITATOR LOCK / UNLOCK
