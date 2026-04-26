@@ -774,6 +774,11 @@ body {
     <div style="font-size:11px;color:#9a8f80;margin-top:.5rem;padding-top:.5rem;border-top:1px solid #e2d8cc;">
       This diagnostic is pre-linked to the member above. Results will save directly to their dashboard record.
     </div>
+    <div style="margin-top:.5rem;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:11px;color:#6b5e47;font-weight:600">Administered by:</span>
+      <input type="text" id="administeredBy" placeholder="LC Leader / Facilitator name"
+        style="flex:1;background:white;border:1px solid #e2d8cc;border-radius:6px;padding:5px 9px;font-family:'DM Sans',sans-serif;font-size:12px;color:#1a1612;">
+    </div>
   </div>
 
   <!-- MANUAL SEARCH STATE (shown when no ?id= in URL) -->
@@ -787,6 +792,11 @@ body {
       <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid #e2d8cc;border-radius:7px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:100;max-height:180px;overflow-y:auto;"></div>
     </div>
     <div id="memberSelected" style="display:none;background:#eef6f1;border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:6px 10px;font-size:13px;color:#2a5c40;font-weight:500;margin-top:4px"></div>
+    <div style="margin-top:.5rem;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:11px;color:#6b5e47;font-weight:600">Administered by:</span>
+      <input type="text" id="administeredByManual" placeholder="LC Leader / Facilitator name"
+        style="flex:1;background:white;border:1px solid #e2d8cc;border-radius:6px;padding:5px 9px;font-family:'DM Sans',sans-serif;font-size:12px;color:#1a1612;">
+    </div>
     <div style="font-size:11px;color:#9a8f80;margin-top:.35rem">💡 Tip: Ask your LC Leader to send you a personalized link — it pre-fills your name automatically.</div>
   </div>
 
@@ -1855,12 +1865,12 @@ let _selectedMemberName = null;
 async function autoLinkFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const memberId = params.get('id');
-  if (!memberId) return; // No ID in URL — show manual search
+  if (!memberId) return;
 
   try {
     const { data, error } = await dbClient
       .from('members')
-      .select('id,name,discipler_name,discipler,pipeline_level,lc_group')
+      .select('id,name,discipler_name,discipler,pipeline_level,lc_group,ministry,ministry_role,ministry2,ministry2_role,is_facilitator,facilitator_role')
       .eq('id', memberId)
       .single();
 
@@ -1869,29 +1879,41 @@ async function autoLinkFromUrl() {
       return;
     }
 
-    // Pre-link the member
+    // Pre-link
     _selectedMemberId = data.id;
     _selectedMemberName = data.name;
     document.getElementById('selectedMemberId').value = data.id;
     document.getElementById('selectedMemberName').value = data.name;
 
-    // Show auto-linked state, hide manual search
+    // Show auto-linked state
     document.getElementById('autoLinked').style.display = 'block';
     document.getElementById('manualSearch').style.display = 'none';
     document.getElementById('autoLinkedName').textContent = data.name;
 
+    // Build meta line — name, ministry, LC leader
     const LN = ['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
-    const discipler = data.discipler_name || data.discipler || '';
-    document.getElementById('autoLinkedMeta').textContent =
-      LN[data.pipeline_level||0] +
-      (discipler ? ' · Discipler: ' + discipler : '') +
-      (data.lc_group ? ' · ' + data.lc_group : '');
+    const level = LN[data.pipeline_level||0];
+    const lcLeader = data.discipler_name || data.discipler || '';
+    const ministry1 = [data.ministry, data.ministry_role].filter(Boolean).join(' — ');
+    const ministry2 = [data.ministry2, data.ministry2_role].filter(Boolean).join(' — ');
+    const ministries = [ministry1, ministry2].filter(Boolean).join(' · ');
 
-    // Pre-fill participant name fields if present
+    // Build rich info display
+    const metaEl = document.getElementById('autoLinkedMeta');
+    let metaHtml = `<span style="color:#5a8060;font-weight:600">${level}</span>`;
+    if (lcLeader) metaHtml += ` &nbsp;·&nbsp; <span>LC Leader / Discipler: <strong>${lcLeader}</strong></span>`;
+    if (ministries) metaHtml += ` &nbsp;·&nbsp; <span>Ministry: <strong>${ministries}</strong></span>`;
+    if (data.lc_group) metaHtml += ` &nbsp;·&nbsp; <span>Group: ${data.lc_group}</span>`;
+    metaEl.innerHTML = metaHtml;
+
+    // Also populate the facilitator/administers field if it exists
+    const adminField = document.getElementById('administeredBy');
+    if (adminField && lcLeader && !adminField.value) adminField.value = lcLeader;
+
+    // Pre-fill name fields
     const nameFields = document.querySelectorAll('input[data-field="name"], #participantName, input[placeholder*="name"], input[placeholder*="pangalan"]');
     nameFields.forEach(f => { if (!f.value) f.value = data.name; });
 
-    // Update page title
     document.title = 'Salvation Assurance Diagnostic — ' + data.name;
 
   } catch(e) {
@@ -1946,11 +1968,12 @@ document.addEventListener('click', e => {
   }
 });
 
-// ── SHOW SUBMIT BUTTON AFTER SCORING ──
-const origCalcScore = calcScore;
+// ── SHOW SUBMIT BUTTON AFTER SCORING (submitBtn shown if it exists) ──
+const _origCalcScore = calcScore;
 function calcScore() {
-  origCalcScore();
-  document.getElementById('submitBtn').style.display = 'block';
+  _origCalcScore();
+  const sb = document.getElementById('submitBtn');
+  if (sb) sb.style.display = 'block';
 }
 
 // ── COLLECT SCORES ──
@@ -1989,7 +2012,9 @@ async function submitToDashboard() {
 
   // Get LC group from profile field if available
   const lcGroup = document.querySelector('input[data-field="group"], select[data-field="group"]')?.value || null;
-  const facilitatorName = document.querySelector('input[data-field="facilitator"]')?.value || null;
+  const facilitatorName = document.getElementById('administeredBy')?.value ||
+    document.getElementById('administeredByManual')?.value ||
+    document.querySelector('input[data-field="facilitator"]')?.value || null;
 
   const diagRecord = {
     member_id: memberId || null,
@@ -2070,17 +2095,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// PROGRESS TRACKER
+// PROGRESS TRACKER — dynamically counts all radio groups + open textareas
 function updateProgress() {
-  const allScoreable = document.querySelectorAll('input[type="radio"][data-scorable="scale"], textarea[data-scorable="open"]');
-  const radioNames = new Set();
-  const textFilled = [];
-  document.querySelectorAll('input[type="radio"][data-scorable="scale"]:checked').forEach(r => radioNames.add(r.name));
-  document.querySelectorAll('textarea[data-scorable="open"]').forEach(t => { if(t.value.trim().length > 5) textFilled.push(t); });
+  // Count unique radio group names (each unique name = one question)
+  const allRadioNames = new Set();
+  document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
 
-  const total = 30 + document.querySelectorAll('textarea[data-scorable="open"]').length;
-  const done = radioNames.size + textFilled.length;
-  const pct = Math.round(done/total*100);
+  // Count answered radio groups
+  const answeredRadios = new Set();
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
+
+  // Scorable open-text textareas
+  const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]');
+  const filledTextareas = [...allTextareas].filter(t => t.value.trim().length > 5);
+
+  const total = allRadioNames.size + allTextareas.length;
+  const done = answeredRadios.size + filledTextareas.length;
+  const pct = total > 0 ? Math.round(done/total*100) : 0;
 
   document.getElementById('progressText').textContent = `${done} of ${total} answered`;
   document.getElementById('progressFill').style.width = pct + '%';
