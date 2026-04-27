@@ -367,7 +367,7 @@ tbody tr:hover{background:var(--green-light);}
 <!-- MEMBERS -->
 <div id="panel-members" class="panel"><div class="pw">
   <div class="fbar">
-    <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()" autocomplete="off">
+    <input type="search" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="dashboard_filter_no_save" data-form-type="other" data-lpignore="true" data-1p-ignore="true">
     <button class="fc on" onclick="setF('all',this)">All</button>
     <button class="fc" onclick="setF('L0',this)">Pre-Pipeline</button>
     <button class="fc" onclick="setF('L1',this)">Level 1</button>
@@ -580,11 +580,50 @@ tbody tr:hover{background:var(--green-light);}
     }
   } catch(e) { /* ignore */ }
 
-  // Make sure the search box always starts empty (browsers sometimes restore old values from history)
-  document.addEventListener('DOMContentLoaded', () => {
+  // Aggressively clear the search box — extensions/autofill can inject values
+  // even after DOMContentLoaded, so we use multiple layered defenses
+  let userTypedAt = 0;
+
+  function clearSearchIfInjected() {
     const sq = document.getElementById('sq');
-    if (sq && sq.value) sq.value = '';
-  });
+    if (!sq) return;
+    // If there's a value but the user hasn't typed in the last 5 seconds,
+    // it was injected by something (extension, autofill) — clear it
+    const sinceTyped = Date.now() - userTypedAt;
+    if (sq.value && sinceTyped > 5000) {
+      sq.value = '';
+      sq.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  function installSearchGuard() {
+    const sq = document.getElementById('sq');
+    if (!sq) { setTimeout(installSearchGuard, 100); return; }
+
+    // Mark every keystroke from the user — any input near a keystroke is legit
+    ['keydown', 'beforeinput'].forEach(evt => {
+      sq.addEventListener(evt, () => { userTypedAt = Date.now(); });
+    });
+
+    // Initial cleanup blast in case value is already set
+    setTimeout(clearSearchIfInjected, 0);
+    setTimeout(clearSearchIfInjected, 100);
+    setTimeout(clearSearchIfInjected, 500);
+    setTimeout(clearSearchIfInjected, 1500);
+    setTimeout(clearSearchIfInjected, 3000);
+
+    // Continuous guardian: every 500ms, check if something injected. After
+    // 30 seconds we stop polling (assume any extension has given up by then).
+    let ticks = 0;
+    const guard = setInterval(() => {
+      clearSearchIfInjected();
+      if (++ticks > 60) clearInterval(guard);
+    }, 500);
+  }
+
+  document.addEventListener('DOMContentLoaded', installSearchGuard);
+  // In case DOM is already ready
+  if (document.readyState !== 'loading') installSearchGuard();
 })();
 
 // ═══════════════════════════════════════
