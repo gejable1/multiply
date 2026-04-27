@@ -663,45 +663,78 @@ function renderStrengths(d, member) {
 // MAIN LOAD
 // ═══════════════════════════════════════════════════════════════
 
+function setLoadingMsg(msg) {
+  const el = document.querySelector('.loading div:last-child');
+  if(el) el.textContent = msg;
+}
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_,reject) => setTimeout(()=>reject(new Error(label+' timed out after '+ms/1000+'s. Check your connection.')), ms))
+  ]);
+}
+
 async function loadResults() {
   const params = new URLSearchParams(window.location.search);
   const memberId = params.get('id');
   const type = params.get('type');
 
   if(!memberId || !type) {
-    showError('Missing Parameters', 'This page requires ?id= and ?type= parameters in the URL.');
+    showError('Missing Parameters', 'This page requires ?id= and ?type= in the URL. Open this page from the MULTIPLY Dashboard Profile tab.');
     return;
   }
 
   try {
+    setLoadingMsg('Connecting to database...');
     const db = getDB();
-    if(!db) { showError('Connection Failed', 'Could not connect to the database.'); return; }
+    if(!db) { showError('Connection Failed', 'Could not initialize Supabase. Check your internet connection.'); return; }
 
-    // Fetch member
-    const {data:member} = await db.from('members').select('id,name,pipeline_level,discipler_name').eq('id',memberId).single().catch(()=>({data:null}));
+    // Fetch profile results first (most important)
+    setLoadingMsg('Loading profile results...');
+    const profilePromise = db.from('member_profiles')
+      .select('*')
+      .eq('member_id', memberId)
+      .eq('profile_type', type)
+      .order('date_taken', {ascending:false})
+      .limit(1);
 
-    // Fetch most recent result for this type
-    const {data:rows, error} = await db.from('member_profiles')
-      .select('*').eq('member_id',memberId).eq('profile_type',type)
-      .order('date_taken',{ascending:false}).limit(1);
+    const {data:rows, error} = await withTimeout(profilePromise, 10000, 'Profile fetch');
 
-    if(error || !rows || rows.length===0) {
-      showError('No Results Found', `No saved ${type.replace(/_/g,' ')} results found for this member. Please take the assessment first.`);
+    if(error) {
+      showError('Database Error', 'Could not load results: ' + error.message + ' (code: ' + (error.code||'unknown') + ')');
+      return;
+    }
+    if(!rows || rows.length === 0) {
+      showError('No Results Found', 'No saved ' + type.replace(/_/g,' ') + ' results found for this member. Please complete the assessment first.');
       return;
     }
 
+    // Fetch member name (best effort — don't fail if this times out)
+    setLoadingMsg('Loading member info...');
+    let member = null;
+    try {
+      const memberPromise = db.from('members').select('id,name,pipeline_level,discipler_name').eq('id', memberId).limit(1);
+      const {data:mRows} = await withTimeout(memberPromise, 5000, 'Member fetch');
+      member = mRows && mRows.length > 0 ? mRows[0] : null;
+    } catch(e) {
+      console.warn('Member fetch failed (non-critical):', e.message);
+    }
+
+    setLoadingMsg('Rendering results...');
     const d = rows[0];
-    document.getElementById('loadingView').style.display='none';
-    document.getElementById('mainView').style.display='block';
+
+    document.getElementById('loadingView').style.display = 'none';
+    document.getElementById('mainView').style.display = 'block';
 
     if(type==='love_language') renderLL(d, member);
     else if(type==='disc') renderDISC(d, member);
     else if(type==='enneagram') renderEnneagram(d, member);
     else if(type==='strengths') renderStrengths(d, member);
-    else showError('Unknown Type', 'Profile type "'+type+'" is not supported.');
+    else showError('Unknown Type', 'Profile type "'+type+'" is not supported. Supported types: love_language, disc, enneagram, strengths.');
 
   } catch(e) {
-    showError('Error Loading Results', e.message);
+    showError('Error Loading Results', e.message + '\n\nCheck your internet connection and try reloading the page.');
   }
 }
 
