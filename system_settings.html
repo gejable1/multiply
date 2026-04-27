@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Settings · MULTIPLY Pipeline</title>
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --gold: #B8882A;
+    --green: #2A5C40;
+    --red: #7A2020;
+    --bg: #FAF7F0;
+    --card: #FFFFFF;
+    --border: #E5E0D5;
+    --text: #2A2A2A;
+    --muted: #777;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  .header {
+    background: linear-gradient(135deg, var(--navy), #2C4470);
+    color: white;
+    padding: 30px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .header h1 { font-size: 28px; margin-bottom: 6px; }
+  .header p { opacity: 0.9; font-size: 15px; }
+
+  .pin-gate {
+    background: var(--card);
+    padding: 50px 30px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    max-width: 420px;
+    margin: 60px auto;
+  }
+  .pin-gate h2 { color: var(--navy); margin-bottom: 8px; }
+  .pin-gate p { color: var(--muted); margin-bottom: 24px; }
+  .pin-input {
+    width: 200px;
+    padding: 14px;
+    font-size: 24px;
+    text-align: center;
+    letter-spacing: 8px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-family: monospace;
+  }
+  .pin-input:focus { outline: none; border-color: var(--gold); }
+  .pin-error { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 8px; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--card);
+    padding: 6px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 18px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: var(--bg); }
+  .tab.active { background: var(--navy); color: white; }
+
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    color: var(--navy);
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+  .card .desc {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card h3 {
+    color: var(--navy);
+    margin-top: 8px;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+
+  .slider-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 60px;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .slider-row:last-child { border-bottom: none; }
+  .slider-row label { font-weight: 500; color: var(--text); }
+  .slider-row label .sub {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: normal;
+    margin-top: 2px;
+  }
+  .slider-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--gold);
+  }
+  .slider-row .value {
+    text-align: center;
+    font-weight: 600;
+    color: var(--navy);
+    background: var(--bg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: monospace;
+  }
+
+  .input-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .input-row:last-child { border-bottom: none; }
+  .input-row label { font-weight: 500; }
+  .input-row label .sub {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: normal;
+    margin-top: 2px;
+  }
+  .input-row input {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    width: 100%;
+  }
+  .input-row input:focus { outline: none; border-color: var(--gold); }
+
+  .pipeline-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 80px;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .pipeline-row:last-child { border-bottom: none; }
+  .pipeline-row .level-id {
+    font-weight: 600;
+    text-align: center;
+    background: var(--bg);
+    padding: 6px;
+    border-radius: 6px;
+    font-family: monospace;
+  }
+  .pipeline-row input[type="text"] {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .pipeline-row input[type="color"] {
+    width: 80px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    cursor: pointer;
+  }
+
+  .actions {
+    position: sticky;
+    bottom: 20px;
+    background: var(--card);
+    padding: 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 24px;
+    border: 2px solid var(--border);
+  }
+  .btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--gold); color: white; }
+  .btn-primary:hover { background: #A37820; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--bg); color: var(--text); }
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+  }
+  .btn-danger:hover { background: var(--red); color: white; }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--green);
+    color: white;
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    transition: transform 0.3s;
+    z-index: 1000;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--red); }
+
+  .loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .status-banner {
+    background: #FFF8E5;
+    border-left: 4px solid var(--gold);
+    padding: 12px 18px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #5C4615;
+  }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 600px) {
+    .slider-row, .input-row, .pipeline-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .actions { flex-direction: column; }
+    .actions .btn { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div id="pinGate" class="pin-gate">
+  <h2>🔐 Settings Access</h2>
+  <p>Enter the Settings PIN to continue</p>
+  <input type="password" id="pinInput" class="pin-input" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="••••">
+  <div id="pinError" class="pin-error"></div>
+  <button class="btn btn-primary" onclick="checkPin()">Unlock</button>
+</div>
+
+<div id="app" class="container hidden">
+
+  <div class="header">
+    <h1>⚙️ System Settings</h1>
+    <p>Tune the MULTIPLY Pipeline · Changes sync across all devices</p>
+  </div>
+
+  <div id="loadStatus" class="loading">Loading settings…</div>
+
+  <div id="settingsContent" class="hidden">
+
+    <div class="status-banner" id="statusBanner">
+      Last edited: <span id="lastEdited">never</span> · Version <span id="version">1</span>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="weights">⚖️ Weights</button>
+      <button class="tab" data-tab="thresholds">🎯 Thresholds</button>
+      <button class="tab" data-tab="zones">🗺️ Zones</button>
+      <button class="tab" data-tab="interventions">💬 Interventions</button>
+      <button class="tab" data-tab="pipeline">📈 Pipeline</button>
+      <button class="tab" data-tab="fats">⭐ FATS</button>
+      <button class="tab" data-tab="security">🔒 Security</button>
+    </div>
+
+    <div class="tab-pane" data-pane="weights">
+      <div class="card">
+        <h2>Profile Weights</h2>
+        <p class="desc">How much each assessment contributes to the Ministry Recommender's overall fit score. Set to 0 to exclude an assessment entirely.</p>
+
+        <div class="slider-row">
+          <label>Spiritual Gifts <span class="sub">Top-3 gifts vs ROSEHILL primary/secondary</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.gifts" value="3.0">
+          <div class="value" data-display="weights.gifts">3.0</div>
+        </div>
+        <div class="slider-row">
+          <label>Natural Talents <span class="sub">7 talent clusters from gifts diagnostic</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.talents" value="3.0">
+          <div class="value" data-display="weights.talents">3.0</div>
+        </div>
+        <div class="slider-row">
+          <label>DISC <span class="sub">Behavioral style under pressure</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.disc" value="2.0">
+          <div class="value" data-display="weights.disc">2.0</div>
+        </div>
+        <div class="slider-row">
+          <label>Enneagram <span class="sub">Core motivations and type</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.enneagram" value="2.0">
+          <div class="value" data-display="weights.enneagram">2.0</div>
+        </div>
+        <div class="slider-row">
+          <label>Strengths <span class="sub">CliftonStrengths top 5</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.strengths" value="2.0">
+          <div class="value" data-display="weights.strengths">2.0</div>
+        </div>
+        <div class="slider-row">
+          <label>Love Language <span class="sub">How care is given/received</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.love_language" value="1.0">
+          <div class="value" data-display="weights.love_language">1.0</div>
+        </div>
+        <div class="slider-row">
+          <label>FATS Character <span class="sub">Faithful, Available, Teachable, Selfless</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.fats" value="3.0">
+          <div class="value" data-display="weights.fats">3.0</div>
+        </div>
+        <div class="slider-row">
+          <label>Pipeline Level <span class="sub">Current MULTIPLY level (for leadership ministries)</span></label>
+          <input type="range" min="0" max="5" step="0.5" data-key="weights.pipeline" value="3.0">
+          <div class="value" data-display="weights.pipeline">3.0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane hidden" data-pane="thresholds">
+      <div class="card">
+        <h2>Score Thresholds</h2>
+        <p class="desc">Cutoffs that determine when a gift or talent score counts as "strong" or "weak" in the recommender.</p>
+
+        <h3>Spiritual Gifts (range 5–25)</h3>
+        <div class="input-row">
+          <label>Strong threshold <span class="sub">Score at or above = primary gift</span></label>
+          <input type="number" min="5" max="25" data-key="thresholds.gift_strong" value="18">
+        </div>
+        <div class="input-row">
+          <label>Moderate threshold <span class="sub">Score at or above = present, supportive</span></label>
+          <input type="number" min="5" max="25" data-key="thresholds.gift_moderate" value="13">
+        </div>
+        <div class="input-row">
+          <label>Weak threshold <span class="sub">Score at or below = bottom-tier; risk for ministries needing this gift</span></label>
+          <input type="number" min="5" max="25" data-key="thresholds.gift_weak" value="8">
+        </div>
+
+        <h3 style="margin-top: 24px;">Natural Talents (range 2–10)</h3>
+        <div class="input-row">
+          <label>Strong threshold <span class="sub">Score at or above = strong talent cluster</span></label>
+          <input type="number" min="2" max="10" data-key="thresholds.talent_strong" value="8">
+        </div>
+        <div class="input-row">
+          <label>Moderate threshold <span class="sub">Score at or above = moderate</span></label>
+          <input type="number" min="2" max="10" data-key="thresholds.talent_moderate" value="5">
+        </div>
+        <div class="input-row">
+          <label>Weak threshold <span class="sub">Score at or below = weak; risk if essential</span></label>
+          <input type="number" min="2" max="10" data-key="thresholds.talent_weak" value="4">
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane hidden" data-pane="zones">
+      <div class="card">
+        <h2>Discipleship Zones</h2>
+        <p class="desc">Percentage cutoffs for the four discipleship maturity zones.</p>
+
+        <div class="input-row">
+          <label>Zone 1 minimum % <span class="sub">Healthy, multiplying</span></label>
+          <input type="number" min="0" max="100" data-key="zones.z1_min" value="75">
+        </div>
+        <div class="input-row">
+          <label>Zone 2 minimum % <span class="sub">Stable, growing</span></label>
+          <input type="number" min="0" max="100" data-key="zones.z2_min" value="65">
+        </div>
+        <div class="input-row">
+          <label>Zone 3 minimum % <span class="sub">Struggling, needs support</span></label>
+          <input type="number" min="0" max="100" data-key="zones.z3_min" value="50">
+        </div>
+        <div class="input-row">
+          <label>Zone 4 maximum % <span class="sub">At-risk; intensive intervention</span></label>
+          <input type="number" min="0" max="100" data-key="zones.z4_max" value="49">
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane hidden" data-pane="interventions">
+      <div class="card">
+        <h2>Intervention Sessions</h2>
+        <p class="desc">Number of one-on-one sessions assigned per intervention zone.</p>
+
+        <div class="input-row">
+          <label>Zone 2 sessions <span class="sub">Light-touch encouragement</span></label>
+          <input type="number" min="1" max="20" data-key="interventions.z2_sessions" value="3">
+        </div>
+        <div class="input-row">
+          <label>Zone 3 sessions <span class="sub">Structured restoration</span></label>
+          <input type="number" min="1" max="20" data-key="interventions.z3_sessions" value="8">
+        </div>
+        <div class="input-row">
+          <label>Zone 4 sessions <span class="sub">Intensive pastoral care</span></label>
+          <input type="number" min="1" max="20" data-key="interventions.z4_sessions" value="5">
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane hidden" data-pane="pipeline">
+      <div class="card">
+        <h2>Pipeline Levels</h2>
+        <p class="desc">The five MULTIPLY pipeline levels plus pre-believer. Click a color to change it.</p>
+        <div id="pipelineLevels"></div>
+      </div>
+    </div>
+
+    <div class="tab-pane hidden" data-pane="fats">
+      <div class="card">
+        <h2>FATS Character Thresholds</h2>
+        <p class="desc">Minimum score (out of <span id="fatsScaleMaxText">5</span>) on each FATS marker for a member to be considered ready for leadership ministries.</p>
+
+        <div class="input-row">
+          <label>Scale maximum <span class="sub">Highest possible score per marker</span></label>
+          <input type="number" min="3" max="10" data-key="fats.scale_max" value="5">
+        </div>
+        <div class="input-row">
+          <label>Faithful minimum <span class="sub">Reliable in commitments</span></label>
+          <input type="number" min="1" max="10" data-key="fats.faithful_min" value="4">
+        </div>
+        <div class="input-row">
+          <label>Available minimum <span class="sub">Open to be used</span></label>
+          <input type="number" min="1" max="10" data-key="fats.available_min" value="4">
+        </div>
+        <div class="input-row">
+          <label>Teachable minimum <span class="sub">Receptive to learning, correction</span></label>
+          <input type="number" min="1" max="10" data-key="fats.teachable_min" value="4">
+        </div>
+        <div class="input-row">
+          <label>Selfless minimum <span class="sub">Others-oriented; not self-promoting</span></label>
+          <input type="number" min="1" max="10" data-key="fats.selfless_min" value="4">
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane hidden" data-pane="security">
+      <div class="card">
+        <h2>Settings PIN</h2>
+        <p class="desc">The 4-digit PIN required to access this settings page and to tweak weights on-the-fly in the Ministry Recommender. Change this if it has been compromised.</p>
+
+        <div class="input-row">
+          <label>Settings PIN <span class="sub">4 digits, numeric</span></label>
+          <input type="text" maxlength="4" pattern="[0-9]{4}" data-key="meta.settings_pin" value="6858" style="font-family: monospace; letter-spacing: 4px; font-size: 18px;">
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-danger" onclick="resetDefaults()">↺ Reset to Defaults</button>
+      <div style="display: flex; gap: 12px;">
+        <button class="btn btn-secondary" onclick="reloadFromDB()">Reload</button>
+        <button class="btn btn-primary" id="saveBtn" onclick="saveSettings()">💾 Save Changes</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast" class="toast">Saved successfully</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ─────────────────────────────────────────────────────────────────
+// CONFIG  (replace with your actual Supabase project credentials)
+// ─────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.supabase = supabase;
+
+// ─────────────────────────────────────────────────────────────────
+// DEFAULTS
+// ─────────────────────────────────────────────────────────────────
+const DEFAULTS = {
+  weights: { gifts: 3.0, talents: 3.0, disc: 2.0, enneagram: 2.0, strengths: 2.0, love_language: 1.0, fats: 3.0, pipeline: 3.0 },
+  thresholds: { gift_strong: 18, gift_moderate: 13, gift_weak: 8, talent_strong: 8, talent_moderate: 5, talent_weak: 4 },
+  zones: { z1_min: 75, z2_min: 65, z3_min: 50, z4_max: 49 },
+  interventions: { z2_sessions: 3, z3_sessions: 8, z4_sessions: 5 },
+  pipeline: {
+    levels: [
+      { id: 0, name: "Pre-Believer", color: "#6b7280" },
+      { id: 1, name: "Team Member", color: "#3b82f6" },
+      { id: 2, name: "Leader",      color: "#8b5cf6" },
+      { id: 3, name: "Coach",       color: "#10b981" },
+      { id: 4, name: "Director",    color: "#f59e0b" },
+      { id: 5, name: "Executive",   color: "#ef4444" }
+    ]
+  },
+  fats: { faithful_min: 4, available_min: 4, teachable_min: 4, selfless_min: 4, scale_max: 5 },
+  meta: { version: 1, last_edited_by: null, last_edited_at: null, settings_pin: "6858" }
+};
+
+let currentSettings = JSON.parse(JSON.stringify(DEFAULTS));
+let isDirty = false;
+
+// ─────────────────────────────────────────────────────────────────
+// PIN GATE
+// ─────────────────────────────────────────────────────────────────
+const pinInput = document.getElementById('pinInput');
+pinInput.focus();
+pinInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') checkPin();
+});
+
+window.checkPin = async function() {
+  const entered = pinInput.value.trim();
+  const errorEl = document.getElementById('pinError');
+
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('meta')
+      .eq('id', 1)
+      .maybeSingle();
+
+    const storedPin = data?.meta?.settings_pin || '6858';
+
+    if (entered === storedPin) {
+      document.getElementById('pinGate').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      loadSettings();
+    } else {
+      errorEl.textContent = 'Wrong PIN. Try again.';
+      pinInput.value = '';
+      pinInput.focus();
+    }
+  } catch (e) {
+    if (entered === '6858') {
+      document.getElementById('pinGate').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      loadSettings();
+    } else {
+      errorEl.textContent = 'Could not verify PIN. Default is 6858 if first run.';
+    }
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// LOAD / SAVE
+// ─────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const loadStatus = document.getElementById('loadStatus');
+  const settingsContent = document.getElementById('settingsContent');
+
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data) {
+      currentSettings = {
+        weights:       { ...DEFAULTS.weights,       ...(data.weights || {}) },
+        thresholds:    { ...DEFAULTS.thresholds,    ...(data.thresholds || {}) },
+        zones:         { ...DEFAULTS.zones,         ...(data.zones || {}) },
+        interventions: { ...DEFAULTS.interventions, ...(data.interventions || {}) },
+        pipeline:      data.pipeline || DEFAULTS.pipeline,
+        fats:          { ...DEFAULTS.fats,          ...(data.fats || {}) },
+        meta:          { ...DEFAULTS.meta,          ...(data.meta || {}) }
+      };
+    }
+
+    loadStatus.classList.add('hidden');
+    settingsContent.classList.remove('hidden');
+    renderAll();
+  } catch (e) {
+    loadStatus.innerHTML = `<div style="color: var(--red);">Could not load settings.<br><br>${e.message || e}<br><br>If this is the first run, please run the system_settings.sql migration in Supabase first.</div>`;
+  }
+}
+
+window.reloadFromDB = function() {
+  if (isDirty && !confirm('You have unsaved changes. Reload anyway?')) return;
+  document.getElementById('settingsContent').classList.add('hidden');
+  document.getElementById('loadStatus').classList.remove('hidden');
+  document.getElementById('loadStatus').textContent = 'Reloading…';
+  isDirty = false;
+  loadSettings();
+};
+
+window.saveSettings = async function() {
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  currentSettings.meta.last_edited_at = new Date().toISOString();
+  currentSettings.meta.version = (currentSettings.meta.version || 0) + 1;
+
+  try {
+    const { error } = await supabase
+      .from('system_settings')
+      .update({
+        weights:       currentSettings.weights,
+        thresholds:    currentSettings.thresholds,
+        zones:         currentSettings.zones,
+        interventions: currentSettings.interventions,
+        pipeline:      currentSettings.pipeline,
+        fats:          currentSettings.fats,
+        meta:          currentSettings.meta
+      })
+      .eq('id', 1);
+
+    if (error) throw error;
+
+    isDirty = false;
+    showToast('Settings saved successfully', false);
+    updateStatusBanner();
+  } catch (e) {
+    showToast('Save failed: ' + (e.message || e), true);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = '💾 Save Changes';
+  }
+};
+
+window.resetDefaults = function() {
+  if (!confirm('Reset all settings to defaults? You still need to click Save to persist.')) return;
+  const currentPin = currentSettings.meta?.settings_pin;
+  currentSettings = JSON.parse(JSON.stringify(DEFAULTS));
+  if (currentPin) currentSettings.meta.settings_pin = currentPin;
+  renderAll();
+  isDirty = true;
+};
+
+// ─────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────
+function renderAll() {
+  document.querySelectorAll('[data-key]').forEach(el => {
+    const path = el.dataset.key.split('.');
+    let val = currentSettings;
+    for (const k of path) val = val?.[k];
+    if (val !== undefined && val !== null) el.value = val;
+    if (el.type === 'range') {
+      const display = document.querySelector(`[data-display="${el.dataset.key}"]`);
+      if (display) display.textContent = Number(val).toFixed(1);
+    }
+  });
+  renderPipeline();
+  updateFatsScaleText();
+  updateStatusBanner();
+}
+
+function renderPipeline() {
+  const container = document.getElementById('pipelineLevels');
+  container.innerHTML = '';
+  (currentSettings.pipeline.levels || []).forEach((lvl, idx) => {
+    const row = document.createElement('div');
+    row.className = 'pipeline-row';
+    row.innerHTML = `
+      <div class="level-id">L${lvl.id}</div>
+      <input type="text" value="${escapeHtml(lvl.name)}" data-pipeline-idx="${idx}" data-pipeline-field="name">
+      <input type="color" value="${lvl.color}" data-pipeline-idx="${idx}" data-pipeline-field="color">
+    `;
+    container.appendChild(row);
+  });
+
+  container.querySelectorAll('[data-pipeline-idx]').forEach(el => {
+    el.addEventListener('input', e => {
+      const idx = +e.target.dataset.pipelineIdx;
+      const field = e.target.dataset.pipelineField;
+      currentSettings.pipeline.levels[idx][field] = e.target.value;
+      isDirty = true;
+    });
+  });
+}
+
+function updateFatsScaleText() {
+  const el = document.getElementById('fatsScaleMaxText');
+  if (el) el.textContent = currentSettings.fats?.scale_max || 5;
+}
+
+function updateStatusBanner() {
+  document.getElementById('lastEdited').textContent =
+    currentSettings.meta.last_edited_at
+      ? new Date(currentSettings.meta.last_edited_at).toLocaleString()
+      : 'never';
+  document.getElementById('version').textContent = currentSettings.meta.version || 1;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INPUT BINDINGS
+// ─────────────────────────────────────────────────────────────────
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (!el.dataset.key) return;
+  const path = el.dataset.key.split('.');
+  let target = currentSettings;
+  for (let i = 0; i < path.length - 1; i++) {
+    if (!target[path[i]]) target[path[i]] = {};
+    target = target[path[i]];
+  }
+  let val = el.value;
+  if (el.type === 'range' || el.type === 'number') {
+    val = parseFloat(val);
+    if (isNaN(val)) val = 0;
+  }
+  target[path[path.length - 1]] = val;
+
+  if (el.type === 'range') {
+    const display = document.querySelector(`[data-display="${el.dataset.key}"]`);
+    if (display) display.textContent = val.toFixed(1);
+  }
+
+  if (el.dataset.key === 'fats.scale_max') updateFatsScaleText();
+  isDirty = true;
+});
+
+// ─────────────────────────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+    document.querySelector(`[data-pane="${tab.dataset.tab}"]`).classList.remove('hidden');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────────────────
+function showToast(msg, isError) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.toggle('error', !!isError);
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+window.addEventListener('beforeunload', e => {
+  if (isDirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+</script>
+
+</body>
+</html>
