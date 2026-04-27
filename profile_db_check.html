@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profile DB Check</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:sans-serif;padding:20px;background:#f5f5f5;font-size:13px;}
+.box{background:white;border-radius:8px;padding:16px;margin-bottom:12px;border:1px solid #ddd;}
+.ok{color:green;font-weight:bold;} .err{color:red;font-weight:bold;} .warn{color:#b8882a;font-weight:bold;}
+pre{background:#f0f0f0;padding:10px;border-radius:4px;overflow-x:auto;font-size:11px;white-space:pre-wrap;}
+</style>
+</head>
+<body>
+<h2>🔧 Profile Results — DB Checker</h2>
+<div class="box" id="status">Initializing...</div>
+<div id="results"></div>
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+  const log = (html) => { document.getElementById('results').innerHTML += html; };
+  const setStatus = (html) => { document.getElementById('status').innerHTML = html; };
+  
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const type = params.get('type') || 'love_language';
+  
+  setStatus('⏳ Connecting...');
+  
+  try {
+    const db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
+      auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
+    });
+    
+    setStatus('✅ Connected. Running queries...');
+    
+    // Test 1: Check member_profiles table at all
+    log('<div class="box"><b>Step 1 — Total rows in member_profiles</b><br>');
+    const t1 = await db.from('member_profiles').select('id', {count:'exact',head:true});
+    if(t1.error) log('<span class="err">Error: ' + t1.error.message + '</span>');
+    else log('<span class="ok">Total rows: ' + t1.count + '</span>');
+    log('</div>');
+    
+    // Test 2: All rows for this member_id (any type)
+    log('<div class="box"><b>Step 2 — All member_profiles rows for id=' + id + '</b><br>');
+    const t2 = await db.from('member_profiles').select('id,member_id,profile_type,top_result,date_taken,member_name').eq('member_id', id);
+    if(t2.error) log('<span class="err">Error: ' + t2.error.message + '</span>');
+    else if(!t2.data || t2.data.length===0) log('<span class="warn">⚠ No rows found for this member_id</span><br><small>Either the data was saved without a member_id link, or this member ID has no assessments.</small>');
+    else log('<span class="ok">Found ' + t2.data.length + ' rows:</span><pre>' + JSON.stringify(t2.data,null,2) + '</pre>');
+    log('</div>');
+    
+    // Test 3: Check if data was saved without member_id (by name)
+    log('<div class="box"><b>Step 3 — member_profiles with NULL member_id (walk-in saves)</b><br>');
+    const t3 = await db.from('member_profiles').select('id,member_id,profile_type,top_result,member_name,date_taken').is('member_id',null).order('date_taken',{ascending:false}).limit(10);
+    if(t3.error) log('<span class="err">Error: ' + t3.error.message + '</span>');
+    else if(!t3.data || t3.data.length===0) log('No unlinked rows found.');
+    else log('<span class="warn">Found ' + t3.data.length + ' unlinked rows (saved without member_id):</span><pre>' + JSON.stringify(t3.data,null,2) + '</pre>');
+    log('</div>');
+    
+    // Test 4: Try the exact query the viewer uses
+    log('<div class="box"><b>Step 4 — Exact viewer query (member_id + type=' + type + ')</b><br>');
+    const t4 = await db.from('member_profiles').select('*').eq('member_id',id).eq('profile_type',type).order('date_taken',{ascending:false}).limit(1);
+    if(t4.error) log('<span class="err">Error: ' + t4.error.message + ' (code: ' + t4.error.code + ')</span>');
+    else if(!t4.data || t4.data.length===0) log('<span class="warn">⚠ No results — this is why the viewer hangs.</span>');
+    else log('<span class="ok">Found result:</span><pre>' + JSON.stringify(t4.data[0],null,2) + '</pre>');
+    log('</div>');
+    
+    setStatus('<span class="ok">✅ All checks complete — see results below</span>');
+    
+  } catch(e) {
+    setStatus('<span class="err">❌ Exception: ' + e.message + '</span>');
+  }
+});
+</script>
+</body>
+</html>
