@@ -1,0 +1,2095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MULTIPLY Dashboard — Rosehill Christian Church</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f5f0e8;--surface:#ffffff;--surface2:#faf6ef;--surface3:#f0ebe0;
+  --border:#e2d8cc;--border2:#ccc0b0;
+  --ink:#1a1612;--ink2:#2a2218;--muted:#6b5f4f;--lighter:#9a8f80;--text:#3a3028;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;--gold-light:#fef9f0;
+  --navy:#1b2a4a;--navy2:#243560;
+  --green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;--green-light:#f5fbf7;--green-dim:#1a3a28;
+  --blue:#1a4a6b;--blue-bg:#e8f0f8;
+  --purple:#4a2a6b;--purple-bg:#f0eaf8;
+  --teal:#1a5a60;--teal-bg:#e8f5f5;
+  --red:#7a2020;--red-bg:#fdecea;--red-light:#fff5f5;
+  --orange:#7a4a10;--orange-bg:#fef3e8;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --shadow2:0 4px 12px rgba(0,0,0,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:13px;}
+
+/* ── PIN LOCK ── */
+.pin-overlay{position:fixed;inset:0;background:var(--navy);z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1.5rem;}
+.pin-card{background:white;border-radius:16px;padding:2.5rem 2rem;width:320px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.pin-logo{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--navy);margin-bottom:.25rem;}
+.pin-sub{font-size:12px;color:var(--muted);margin-bottom:1.5rem;}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin-bottom:1.25rem;}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);background:white;transition:all .15s;}
+.pin-dot.filled{background:var(--green);border-color:var(--green);}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:.75rem;}
+.pin-key{font-family:'DM Sans',sans-serif;font-size:18px;font-weight:600;padding:14px;border:1.5px solid var(--border);border-radius:10px;background:white;color:var(--ink);cursor:pointer;transition:all .15s;}
+.pin-key:hover{background:var(--green-bg);border-color:var(--green);}
+.pin-key:active{background:var(--green);color:white;}
+.pin-key.del{font-size:14px;color:var(--muted);}
+.pin-error{font-size:12px;color:var(--red);min-height:18px;}
+.pin-church{font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.1em;text-transform:uppercase;}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--surface);border-bottom:2px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;gap:1rem;height:54px;position:sticky;top:0;z-index:200;box-shadow:var(--shadow);}
+.brand{display:flex;align-items:center;gap:8px;}
+.brand-logo{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--green);white-space:nowrap;}
+.brand-church{font-size:11px;color:var(--muted);border-left:1px solid var(--border);padding-left:8px;white-space:nowrap;}
+.tnav{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none;}
+.tnav::-webkit-scrollbar{display:none;}
+.nb{font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:6px 12px;background:none;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.nb:hover{color:var(--ink);background:var(--surface2);}
+.nb.active{color:var(--green);background:var(--green-bg);font-weight:600;}
+.tact{display:flex;gap:8px;margin-left:auto;flex-shrink:0;align-items:center;}
+.sync{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
+.sdot.ok{background:var(--green2);}
+.sdot.ing{background:var(--gold);animation:pulse 1s infinite;}
+.sdot.err{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+.badd{font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green);color:white;border:none;border-radius:6px;cursor:pointer;transition:filter .15s;}
+.badd:hover{filter:brightness(1.1);}
+.bico{width:30px;height:30px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.bico:hover{border-color:var(--border2);color:var(--ink);}
+
+/* ── PANELS ── */
+.panel{display:none;}.panel.active{display:block;}
+.pw{padding:1.5rem;max-width:1400px;margin:0 auto;}
+
+/* ── KPI STRIP ── */
+.ks{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:1.5rem;}
+.kc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.kc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.kc.a::before{background:var(--gold);}
+.kc.b::before{background:var(--green2);}
+.kc.c::before{background:var(--blue);}
+.kc.d::before{background:var(--purple);}
+.kc.e::before{background:var(--teal);}
+.kc.f::before{background:var(--muted);}
+.kc.g::before{background:#e87040;}
+.kc.h::before{background:var(--red);}
+.kn{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;color:var(--ink);line-height:1;margin-bottom:3px;}
+.kl{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+
+/* ── PIPELINE VISUAL ── */
+.pvis{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;margin-bottom:1.5rem;box-shadow:var(--shadow);}
+.pvt{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:1rem;}
+.pvl{display:flex;gap:6px;align-items:flex-end;}
+.pvb{flex:1;border-radius:6px 6px 0 0;position:relative;cursor:pointer;transition:filter .15s;min-height:20px;}
+.pvb:hover{filter:brightness(.9);}
+.pvbl{font-size:9px;font-weight:600;text-align:center;padding:4px 2px;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pvbc{position:absolute;bottom:-20px;width:100%;text-align:center;font-size:11px;font-weight:700;color:var(--ink);}
+.pvax{display:flex;gap:6px;margin-top:24px;padding-top:6px;border-top:1px solid var(--border);}
+.pval{flex:1;text-align:center;font-size:9px;color:var(--muted);}
+
+/* ── FILTER BAR ── */
+.fbar{display:flex;gap:8px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;}
+.sbox{flex:1;min-width:200px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;transition:border-color .15s;box-shadow:var(--shadow);}
+.sbox:focus{outline:none;border-color:var(--green);}
+.sbox::placeholder{color:var(--lighter);}
+.fc{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:5px 12px;border-radius:20px;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);transition:all .15s;white-space:nowrap;box-shadow:var(--shadow);}
+.fc:hover{border-color:var(--green);color:var(--green);}
+.fc.on{background:var(--green-bg);border-color:var(--green);color:var(--green);font-weight:700;}
+
+/* ── TABLE ── */
+.tw{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--surface2);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--text);}
+tr:last-child td{border-bottom:none;}
+tbody tr{cursor:pointer;transition:background .1s;}
+tbody tr:hover{background:var(--green-light);}
+
+/* Member name cell */
+.nc{display:flex;align-items:center;gap:10px;}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:white;}
+.mn{font-weight:600;color:var(--ink);font-size:13px;}
+.mi{font-size:10px;color:var(--muted);}
+
+/* Badges */
+.lb{display:inline-flex;align-items:center;font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;white-space:nowrap;}
+.lb0{background:#f0ece6;color:var(--muted);border:1px solid var(--border);}
+.lb1{background:var(--green-bg);color:var(--green);border:1px solid rgba(42,92,64,.2);}
+.lb2{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(26,74,107,.2);}
+.lb3{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(74,42,107,.2);}
+.lb4{background:var(--teal-bg);color:var(--teal);border:1px solid rgba(26,90,96,.2);}
+.lb5{background:#fdecea;color:var(--red);border:1px solid rgba(122,32,32,.2);}
+.zb{font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid transparent;}
+.zb1{background:var(--green-bg);color:var(--green);border-color:rgba(42,92,64,.2);}
+.zb2{background:#fff8e8;color:#8a6010;border-color:rgba(200,150,30,.2);}
+.zb3{background:var(--orange-bg);color:var(--orange);border-color:rgba(122,74,16,.2);}
+.zb4{background:var(--red-bg);color:var(--red);border-color:rgba(122,32,32,.2);}
+.zbn{background:var(--surface2);color:var(--lighter);border-color:var(--border);}
+
+/* Progress */
+.pt{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-bottom:2px;border:1px solid var(--border);}
+.pf{height:100%;border-radius:3px;transition:width .4s;}
+.pp{font-size:10px;color:var(--muted);}
+
+/* Intervention flag */
+.int-flag{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;}
+.if-z4{background:var(--red-bg);color:var(--red);}
+.if-z3{background:var(--orange-bg);color:var(--orange);}
+.if-z2{background:#fff8e8;color:#8a6010;}
+
+/* EOLO */
+.ed{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;}
+.ea{background:var(--green2);}
+.en{background:var(--lighter);}
+
+/* Action btn */
+.ab2{width:26px;height:26px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;}
+.ab2:hover{border-color:var(--green);color:var(--green);}
+
+/* ── REPORT CARDS ── */
+.rc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;box-shadow:var(--shadow);}
+.rct{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.85rem;}
+.fr{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+.fl{font-size:12px;color:var(--text);min-width:90px;}
+.fb{flex:1;height:18px;background:var(--surface2);border-radius:4px;overflow:hidden;border:1px solid var(--border);}
+.ff{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;transition:width .5s;}
+.ff span{font-size:10px;font-weight:700;color:white;}
+.fv{font-size:11px;color:var(--muted);min-width:20px;text-align:right;font-weight:600;}
+
+/* ── ALERTS ── */
+.ai{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.85rem 1rem;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px;box-shadow:var(--shadow);}
+.aico{font-size:18px;flex-shrink:0;margin-top:1px;}
+.act2{flex:1;}
+.ati{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px;}
+.asu{font-size:12px;color:var(--muted);line-height:1.5;}
+.abg{font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;flex-shrink:0;}
+.abu{background:var(--red-bg);color:var(--red);border:1px solid rgba(122,32,32,.2);}
+.abs{background:#fff8e8;color:#8a6010;border:1px solid rgba(200,150,30,.2);}
+.abi{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(26,74,107,.2);}
+.alert-actions{display:flex;gap:6px;margin-top:.5rem;flex-wrap:wrap;}
+.alert-link{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;cursor:pointer;border:1px solid;background:none;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.al-debrief{color:var(--blue);border-color:rgba(26,74,107,.3);background:var(--blue-bg);}
+.al-debrief:hover{background:var(--blue);color:white;}
+.al-track{color:var(--red);border-color:rgba(122,32,32,.3);background:var(--red-bg);}
+.al-track:hover{background:var(--red);color:white;}
+.al-assign{color:var(--green);border-color:rgba(42,92,64,.3);background:var(--green-bg);}
+.al-assign:hover{background:var(--green);color:white;}
+
+/* ── INTERVENTIONS PANEL ── */
+.int-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:flex-start;gap:14px;}
+.ic-track{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.ic-z4{background:var(--red-bg);}
+.ic-z2{background:#fff8e8;}
+.ic-z3{background:var(--orange-bg);}
+.ic-info{flex:1;}
+.ic-name{font-size:14px;font-weight:600;color:var(--ink);}
+.ic-track-name{font-size:11px;color:var(--muted);margin-bottom:.4rem;}
+.ic-progress{display:flex;align-items:center;gap:8px;margin-bottom:.35rem;}
+.ic-prog-bar{flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border);}
+.ic-prog-fill{height:100%;border-radius:3px;}
+.ic-meta{font-size:11px;color:var(--lighter);}
+.ic-actions{display:flex;flex-direction:column;gap:5px;flex-shrink:0;}
+.ic-btn{font-size:10px;font-weight:600;padding:4px 10px;border-radius:5px;cursor:pointer;border:1px solid;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .15s;background:none;}
+.ic-btn-open{color:var(--blue);border-color:rgba(26,74,107,.3);background:var(--blue-bg);}
+.ic-btn-open:hover{background:var(--blue);color:white;}
+.ic-btn-done{color:var(--green);border-color:rgba(42,92,64,.3);background:var(--green-bg);}
+.ic-btn-done:hover{background:var(--green);color:white;}
+
+/* ── MODAL ── */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:none;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(2px);}
+.mo.open{display:flex;}
+.md{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:720px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow2);}
+.mh{padding:1.5rem 1.5rem 0;display:flex;align-items:flex-start;gap:14px;margin-bottom:1.25rem;}
+.mav{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0;}
+.mt2{font-family:'Playfair Display',serif;font-size:1.25rem;color:var(--ink);}
+.mm{font-size:12px;color:var(--muted);margin-top:2px;}
+.mc{margin-left:auto;width:30px;height:30px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;}
+.mc:hover{border-color:var(--border2);color:var(--ink);}
+.mts{display:flex;border-bottom:1px solid var(--border);padding:0 1.5rem;overflow-x:auto;scrollbar-width:none;}
+.mts::-webkit-scrollbar{display:none;}
+.mtb{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:10px 14px;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.mtb:hover{color:var(--ink);}
+.mtb.active{color:var(--green);border-bottom-color:var(--green);}
+.mb{padding:1.25rem 1.5rem 1.5rem;}
+
+/* Form fields */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;}
+.fi{display:flex;flex-direction:column;gap:4px;}
+.fi.full{grid-column:1/-1;}
+.fi label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500;}
+.fi input,.fi select,.fi textarea{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);transition:border-color .15s;}
+.fi input:focus,.fi select:focus,.fi textarea:focus{outline:none;border-color:var(--green);}
+.fi select option{background:white;}
+.fi textarea{resize:vertical;min-height:70px;}
+
+/* Checklist in modal */
+.cst{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.4rem;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.ci{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;color:var(--text);border-bottom:1px solid var(--surface2);cursor:pointer;}
+.ci:last-child{border-bottom:none;}
+.ci:hover{color:var(--ink);}
+.ci input[type=checkbox]{accent-color:var(--green);width:14px;height:14px;flex-shrink:0;cursor:pointer;border:none;padding:0;}
+.ci.done{color:var(--lighter);text-decoration:line-through;}
+.cd{margin-left:auto;font-size:10px;color:var(--lighter);flex-shrink:0;}
+
+/* Diagnostic tab */
+.diag-score-big{font-family:'Playfair Display',serif;font-size:3rem;font-weight:700;color:var(--ink);line-height:1;}
+.diag-zone-badge{display:inline-block;font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px;margin-top:.25rem;}
+.section-bar{margin-bottom:.5rem;}
+.sb-label{font-size:11px;color:var(--text);margin-bottom:2px;display:flex;justify-content:space-between;}
+.sb-track{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;border:1px solid var(--border);}
+.sb-fill{height:100%;border-radius:4px;}
+
+/* EOLO tab */
+.ep{background:var(--gold-bg);border:1px solid rgba(184,136,42,.2);border-radius:8px;padding:.85rem;margin-bottom:8px;}
+.es{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:.5rem;}
+.est{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;}
+.est input{accent-color:var(--green2);flex-shrink:0;}
+.est.done{color:var(--green);}
+
+/* Notes */
+.ni{border-left:3px solid var(--border);padding:4px 0 4px 12px;margin-bottom:8px;position:relative;}
+.ni::before{content:'';position:absolute;left:-5px;top:8px;width:8px;height:8px;border-radius:50%;background:var(--gold);}
+.nd{font-size:10px;color:var(--muted);margin-bottom:2px;}
+.nt{font-size:12.5px;color:var(--text);line-height:1.6;}
+
+/* ── MODAL FOOTER ── */
+.mf{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface2);}
+.bsv{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:8px 20px;background:var(--green);color:white;border:none;border-radius:6px;cursor:pointer;transition:filter .15s;}
+.bsv:hover{filter:brightness(1.1);}
+.bcn{font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 16px;background:var(--surface);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;transition:all .15s;}
+.bcn:hover{border-color:var(--border2);color:var(--ink);}
+.bdl{font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 16px;background:var(--red-bg);border:1.5px solid rgba(122,32,32,.2);color:var(--red);border-radius:6px;cursor:pointer;margin-right:auto;transition:all .15s;}
+.bdl:hover{background:var(--red);color:white;}
+
+/* ── SETTINGS ── */
+.ss{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem;margin-bottom:12px;box-shadow:var(--shadow);}
+.st{font-family:'Playfair Display',serif;font-size:1rem;color:var(--ink);margin-bottom:.65rem;font-weight:600;}
+.sr{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text);}
+.sr:last-child{border-bottom:none;}
+.sr .sl{flex:1;}
+.sbtn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:7px 18px;background:var(--green);color:white;border:none;border-radius:6px;cursor:pointer;margin-top:.65rem;transition:filter .15s;}
+.sbtn:hover{filter:brightness(1.1);}
+.sfield{font-family:'DM Sans',sans-serif;font-size:13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--ink);}
+.sfield:focus{outline:none;border-color:var(--green);}
+
+/* ── FACILITATOR FLAG ── */
+.fac-toggle{display:flex;align-items:center;gap:8px;}
+.toggle-sw{position:relative;width:36px;height:20px;cursor:pointer;}
+.toggle-sw input{opacity:0;width:0;height:0;}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:20px;transition:.2s;}
+.toggle-sw input:checked + .toggle-track{background:var(--green);}
+.toggle-track::before{content:'';position:absolute;width:14px;height:14px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s;}
+.toggle-sw input:checked + .toggle-track::before{transform:translateX(16px);}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:3rem 2rem;}
+.ei{font-size:2.5rem;margin-bottom:.75rem;opacity:.3;}
+.et{font-size:14px;color:var(--muted);}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.7rem 1.1rem;font-size:13px;color:white;z-index:1000;opacity:0;transform:translateY(10px);transition:all .25s;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow2);}
+.toast.show{opacity:1;transform:translateY(0);}
+
+@media(max-width:768px){.fg{grid-template-columns:1fr;}.pw{padding:1rem;}.ks{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<!-- ── PIN LOCK ── -->
+<div class="pin-overlay" id="pinOverlay">
+  <div class="pin-card">
+    <div class="pin-logo">MULTIPLY</div>
+    <div class="pin-sub">Dashboard · LC Leaders & Staff Only</div>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+      <div class="pin-dot" id="pd4"></div>
+    </div>
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinClear()">C</button>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+  </div>
+  <div class="pin-church">Rosehill Christian Church · MULTIPLY Pipeline</div>
+</div>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">MULTIPLY</div>
+    <div class="brand-church">Rosehill Christian Church</div>
+  </div>
+  <div class="tnav">
+    <button class="nb active" onclick="showPanel('overview',this)">Overview</button>
+    <button class="nb" onclick="showPanel('members',this);resetFilter()">Members</button>
+    <button class="nb" onclick="showPanel('pipeline',this)">Pipeline</button>
+    <button class="nb" onclick="showPanel('interventions',this)">Interventions</button>
+    <button class="nb" onclick="showPanel('eolo',this)">EOLO</button>
+    <button class="nb" onclick="showPanel('alerts',this)">Alerts</button>
+    <button class="nb" onclick="showPanel('reports',this)">Reports</button>
+    <button class="nb" onclick="showPanel('settings',this)">Settings</button>
+  </div>
+  <div class="tact">
+    <div class="sync"><div class="sdot" id="sdot"></div><span id="slbl">Loading...</span></div>
+    <button class="bico" onclick="exportCSV()" title="Export CSV">⬇</button>
+    <button class="badd" onclick="openAdd()">+ Add Member</button>
+  </div>
+</div>
+
+<!-- OVERVIEW -->
+<div id="panel-overview" class="panel active"><div class="pw">
+  <div class="ks" id="ks"></div>
+  <div class="pvis"><div class="pvt">Pipeline Distribution — Members per Level</div><div class="pvl" id="pvl"></div><div class="pvax" id="pvax"></div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="rc"><div class="rct">Zone Distribution</div><div id="zf"></div></div>
+    <div class="rc"><div class="rct">Recent Updates</div><div id="ru"></div></div>
+  </div>
+</div></div>
+
+<!-- MEMBERS -->
+<div id="panel-members" class="panel"><div class="pw">
+  <div class="fbar">
+    <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()">
+    <button class="fc on" onclick="setF('all',this)">All</button>
+    <button class="fc" onclick="setF('L0',this)">Pre-Pipeline</button>
+    <button class="fc" onclick="setF('L1',this)">Level 1</button>
+    <button class="fc" onclick="setF('L2',this)">Level 2</button>
+    <button class="fc" onclick="setF('L3',this)">Level 3+</button>
+    <button class="fc" onclick="setF('Z4',this)">🔴 Zone 4</button>
+    <button class="fc" onclick="setF('Z3',this)">🟠 Zone 3</button>
+    <button class="fc" onclick="setF('Z2',this)">🟡 Zone 2</button>
+    <button class="fc" onclick="setF('fac',this)">Facilitators</button>
+    <button class="fc" onclick="setF('eolo',this)">EOLO Active</button>
+  </div>
+  <div class="tw"><table><thead><tr>
+    <th>Member</th><th>Level</th><th>Zone</th><th>Intervention</th><th>Progress</th>
+    <th>Discipler</th><th>Ministries</th><th>EOLO</th><th>Updated</th><th></th>
+  </tr></thead><tbody id="tb"></tbody></table></div>
+</div></div>
+
+<!-- PIPELINE -->
+<div id="panel-pipeline" class="panel"><div class="pw"><div id="pv"></div></div></div>
+
+<!-- INTERVENTIONS -->
+<div id="panel-interventions" class="panel"><div class="pw">
+  <div class="ks" id="int-kpis"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
+    <div class="rc" style="border-top:3px solid var(--red)">
+      <div class="rct" style="color:var(--red)">🔴 Zone 4 — Gospel Conversations</div>
+      <div id="int-z4"></div>
+    </div>
+    <div class="rc" style="border-top:3px solid #d4a010">
+      <div class="rct" style="color:#8a6010">🟡 Zone 2 — Assurance Formation</div>
+      <div id="int-z2"></div>
+    </div>
+    <div class="rc" style="border-top:3px solid var(--orange)">
+      <div class="rct" style="color:var(--orange)">🟠 Zone 3 — First Steps</div>
+      <div id="int-z3"></div>
+    </div>
+  </div>
+</div></div>
+
+<!-- EOLO -->
+<div id="panel-eolo" class="panel"><div class="pw">
+  <div class="ks" id="eks"></div><div id="el"></div>
+</div></div>
+
+<!-- ALERTS -->
+<div id="panel-alerts" class="panel"><div class="pw"><div id="al"></div></div></div>
+
+<!-- REPORTS -->
+<div id="panel-reports" class="panel"><div class="pw">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" id="rg"></div>
+</div></div>
+
+<!-- SETTINGS -->
+<div id="panel-settings" class="panel"><div class="pw">
+  <div class="ss"><div class="st">Database — Supabase</div>
+    <div class="sr"><span class="sl">Connection status</span><span id="dbs" style="font-size:12px;color:var(--green)">Connecting...</span></div>
+    <div class="sr"><span class="sl">Records in database</span><span id="dbc" style="font-size:12px;color:var(--gold)">—</span></div>
+  </div>
+  <div class="ss"><div class="st">Access Control</div>
+    <div class="sr"><span class="sl">Dashboard PIN</span>
+      <input class="sfield" type="password" id="newPin" placeholder="New 4-digit PIN" maxlength="4" style="width:120px">
+      <button class="sbtn" style="margin-top:0;margin-left:8px" onclick="changePin()">Update PIN</button>
+    </div>
+    <div class="sr"><span class="sl">Lock dashboard now</span>
+      <button class="sbtn" style="margin-top:0;background:var(--red)" onclick="lockDashboard()">Lock</button>
+    </div>
+  </div>
+  <div class="ss"><div class="st">Rosehill Ministries</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:.5rem">
+      ${ROSEHILL_MINISTRIES_PLACEHOLDER}
+    </div>
+  </div>
+  <div class="ss"><div class="st">Tools & Modules</div>
+    <div class="sr"><span class="sl">🎯 Ministry Recommender — best-fit ministry per member</span>
+      <button class="sbtn" style="margin-top:0" onclick="window.open('ministry_recommender.html','_blank')">Open</button>
+    </div>
+    <div class="sr"><span class="sl">⚙️ System Settings — weights, thresholds, zones (Pastor PIN required)</span>
+      <button class="sbtn" style="margin-top:0" onclick="window.open('system_settings.html','_blank')">Open</button>
+    </div>
+  </div>
+  <div class="ss"><div class="st">Data Management</div>
+    <div class="sr"><span class="sl">Export all members to CSV</span><button class="sbtn" style="margin-top:0" onclick="exportCSV()">Export CSV</button></div>
+    <div class="sr"><span class="sl">Load 12 demo members</span><button class="sbtn" style="margin-top:0" onclick="loadSample()">Load Sample</button></div>
+    <div class="sr"><span class="sl">Delete ALL members (permanent)</span><button class="sbtn" style="margin-top:0;background:var(--red)" onclick="clearAll()">Clear All</button></div>
+  </div>
+</div></div>
+
+<!-- ── MEMBER MODAL ── -->
+<div class="mo" id="mo" onclick="closeMO(event)"><div class="md" id="md">
+  <div class="mh">
+    <div class="mav" id="mav">?</div>
+    <div><div class="mt2" id="mti">Add Member</div><div class="mm" id="mme"></div></div>
+    <button class="mc" onclick="closeMD()">✕</button>
+  </div>
+  <div class="mts">
+    <button class="mtb active" onclick="showMT('info',this)">Info</button>
+    <button class="mtb" onclick="showMT('diag',this)">Diagnostics</button>
+    <button class="mtb" onclick="showMT('profile',this)">Profile</button>
+    <button class="mtb" onclick="showMT('pipe',this)">Pipeline</button>
+    <button class="mtb" onclick="showMT('eolo',this)">EOLO</button>
+    <button class="mtb" onclick="showMT('notes',this)">Notes</button>
+  </div>
+  <div class="mb">
+    <!-- INFO TAB -->
+    <div id="mt-info"><div class="fg">
+      <div class="fi full"><label>Full Name *</label><input id="fn" placeholder="Full name"></div>
+      <div class="fi"><label>Birthday</label><input id="fb" type="date"></div>
+      <div class="fi"><label>Civil Status</label><select id="fcs"><option value="">Select...</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option></select></div>
+      <div class="fi"><label>Date of Baptism</label><input id="fbp" type="date"></div>
+      <div class="fi"><label>Date Enrolled</label><input id="fen" type="date"></div>
+      <div class="fi"><label>Pipeline Level</label>
+        <select id="fl"><option value="0">Pre-Pipeline</option><option value="1">Level 1 — Team Member</option><option value="2">Level 2 — Leader</option><option value="3">Level 3 — Coach</option><option value="4">Level 4 — Director</option><option value="5">Level 5 — Exec. Leader</option></select>
+      </div>
+      <div class="fi full">
+        <label>Assigned Discipler / LC Leader <span style="color:var(--green);font-size:10px">(from flagged members)</span></label>
+        <select id="fd" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;font-family:'DM Sans',sans-serif;font-size:13px;">
+          <option value="">— Select Discipler / LC Leader —</option>
+        </select>
+        <input type="hidden" id="fd_id">
+      </div>
+      <div class="fi full"><label>Spiritual Gifts (top 2)</label><input id="fgi" placeholder="e.g. Teaching, Shepherding"></div>
+      <div class="fi"><label>Contact</label><input id="fco" placeholder="+63..."></div>
+
+      <!-- MINISTRY SLOTS -->
+      <div class="fi full" style="grid-column:1/-1">
+        <label>Ministry Placements (up to 3)</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px">
+          <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">
+            <select id="fmi" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;"></select>
+            <input id="fmr" placeholder="Role (e.g. Teacher)" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:140px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">
+            <select id="fmi2" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;"></select>
+            <input id="fmr2" placeholder="Role (optional)" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:140px">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">
+            <select id="fmi3" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;"></select>
+            <input id="fmr3" placeholder="Role (optional)" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:140px">
+          </div>
+        </div>
+      </div>
+
+      <!-- FAMILY MEMBERS -->
+      <div class="fi full" style="grid-column:1/-1">
+        <label>Family Members in Church (up to 5)</label>
+        <div id="familySlots" style="display:flex;flex-direction:column;gap:6px;margin-top:2px"></div>
+      </div>
+
+      <!-- FACILITATOR STATUS -->
+      <div class="fi full" style="padding:.65rem;background:var(--gold-light);border:1px solid rgba(184,136,42,.2);border-radius:7px;">
+        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.35rem">Facilitator Status</div>
+        <div class="fac-toggle">
+          <label class="toggle-sw"><input type="checkbox" id="fIsFac" onchange="toggleFacRole()"><div class="toggle-track"></div></label>
+          <span style="font-size:13px;color:var(--ink)">Qualified as Facilitator / LC Leader</span>
+        </div>
+        <div class="fi" style="margin-top:.5rem;display:none" id="facRoleRow">
+          <label>Facilitator Role</label>
+          <select id="fFacRole"><option value="">Select...</option><option>LC Leader</option><option>Pastoral Staff</option><option>Intern Facilitator</option></select>
+        </div>
+      </div>
+    </div></div>
+    <!-- DIAGNOSTICS TAB -->
+    <div id="mt-diag" style="display:none"><div id="diagTab"></div></div>
+    <!-- PROFILE TAB -->
+    <div id="mt-profile" style="display:none"><div id="profileTab"></div></div>
+    <!-- PIPELINE TAB -->
+    <div id="mt-pipe" style="display:none"><div id="pcl"></div></div>
+    <!-- EOLO TAB -->
+    <div id="mt-eolo" style="display:none"><div id="etab"></div></div>
+    <!-- NOTES TAB -->
+    <div id="mt-notes" style="display:none">
+      <div id="ntl" style="margin-bottom:1rem"></div>
+      <div class="fi full"><label>Add Note</label><textarea id="nn" placeholder="Pastoral observation, prayer item..." rows="3"></textarea></div>
+      <button class="bsv" style="margin-top:6px;font-size:12px;padding:7px 16px" onclick="addNote()">Add Note</button>
+    </div>
+  </div>
+  <div class="mf">
+    <button class="bdl" id="delbtn" onclick="doDelete()" style="display:none">Delete</button>
+    <button class="bcn" onclick="openRecommenderForMember()" id="recbtn" style="display:none;background:var(--gold);color:#fff;border-color:var(--gold)" title="Open Ministry Recommender for this member">🎯 Find Best Ministry</button>
+    <button class="bcn" onclick="closeMD()">Cancel</button>
+    <button class="bsv" onclick="saveMember()">Save Member</button>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"><span id="tico">✓</span><span id="tmsg">Saved</span></div>
+
+<script>
+// ═══════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db=supabase.createClient(SB_URL,SB_KEY);
+const DEFAULT_PIN='6858';
+
+// ═══════════════════════════════════════
+// ROSEHILL MINISTRIES
+// ═══════════════════════════════════════
+const MINISTRIES={
+  'Teaching & Formation':['Children\'s Ministry','Campus Life Coach','Preaching Ministry'],
+  'Music & Arts':['Music Ministry','Interior Design'],
+  'Technical':['Lights & Tech','Documentation & Media'],
+  'Communication':['Publishing & Communications'],
+  'Support & Administration':['Kitchen Ministry','Building Administration'],
+  'Outreach & Sports':['Community Outreach','Youth in Motion'],
+  'Pastoral & Formation':['Youth Ministry','Couples Ministry','Young Professionals Ministry'],
+  'Leadership Track':['Church Council','Core Group']
+};
+const ALL_MINISTRIES=Object.values(MINISTRIES).flat();
+const MINISTRY_ROLES={
+  'Children\'s Ministry':['Teacher','Assistant Teacher'],
+  'Church Council':['Council Member'],
+  'Core Group':['Core Member'],
+};
+
+// ═══════════════════════════════════════
+// PIPELINE CHECKS
+// ═══════════════════════════════════════
+const PC={
+  1:['Salvation Assurance Diagnostic','New Believers Orientation','EGR Retreat attended','BTLI 101 — S1: Who Is God?','BTLI 101 — S2: Who Am I?','BTLI 101 — 2B: Spiritual Gifts','BTLI 101 — S3: Sin & Salvation','BTLI 101 — S4: Faith & Repentance','BTLI 101 — S5: Assurance','BTLI 101 — S6: New Life & Baptism','BTLI 101 — S7: Prayer & Bible','BTLI 101 — S8: Surrender & Trials','BTLI 101 — S9: Fellowship & Worship','BTLI 101 — S10: Stewardship','BTLI 101 — S11: Evangelism & EOLO','BTLI 101 — S12: Ministry & Purpose','Ministry team joined','EOLO person identified','Devotional journal 3 months','Level 1 Eval — Form A','Level 1 Eval — Form B','Level 1 Eval — Form C','Level 1 Eval — Form D','Level 1 Commissioning'],
+  2:['BTLI 102 Sessions 1-8','BTLI 103 Sessions 1-8','IDC Basic Training','EGR as facilitator','Gifts Workshop full','First LC group led','First person to Level 1','Level 2 Eval','Level 2 Commissioning'],
+  3:['BTLI 104','APIIS Preachers','IDC Coaching','CliftonStrengths','First sermon','Coaching 3+ leaders','Group multiplied','Level 3 Commissioning'],
+  4:['BTLI 105','IDC Coaching Cert','CCF Glorious Hope','Ministry dept led','Level 4 Commissioning'],
+  5:['BTLI 106','APIIS Masters','Church Planting Training','Church plant/leader sent','Level 5 Commissioning']
+};
+const EOLO_STEPS=['Identified','Prayer started','Conversation','Gospel shared','Church invited','EGR attended','Responded'];
+const LN=['Pre-Pipeline','Team Member','Leader','Coach','Director','Exec. Leader'];
+const LC_COLORS=['#e8e0d0','#2a5c40','#1a4a6b','#4a2a6b','#1a5a60','#7a2020'];
+const LC_TEXT=['#6b5f4f','#ffffff','#ffffff','#ffffff','#ffffff','#ffffff'];
+const ZL=['','✅ Zone 1','🟡 Zone 2','🟠 Zone 3','🔴 Zone 4'];
+const ZONE_COLORS_CSS=['','var(--green)','#d4a010','var(--orange)','var(--red)'];
+
+// ═══════════════════════════════════════
+// PIN SYSTEM
+// ═══════════════════════════════════════
+let pinEntry='';
+let pinCorrect=DEFAULT_PIN; // Always reset to default — change DEFAULT_PIN above to update
+
+function pinKey(k){
+  if(pinEntry.length>=4)return;
+  pinEntry+=k;
+  updatePinDots();
+  if(pinEntry.length===4)setTimeout(checkPin,150);
+}
+function pinDel(){pinEntry=pinEntry.slice(0,-1);updatePinDots();}
+function pinClear(){pinEntry='';updatePinDots();}
+function updatePinDots(){
+  for(let i=1;i<=4;i++){
+    document.getElementById('pd'+i).classList.toggle('filled',i<=pinEntry.length);
+  }
+}
+function checkPin(){
+  if(pinEntry===pinCorrect){
+    document.getElementById('pinOverlay').style.display='none';
+    loadMembers();
+  } else {
+    document.getElementById('pinError').textContent='Incorrect PIN. Try again.';
+    pinEntry='';updatePinDots();
+    setTimeout(()=>document.getElementById('pinError').textContent='',2000);
+  }
+}
+function changePin(){
+  const np=document.getElementById('newPin').value;
+  if(np.length<4){toast('PIN must be at least 4 digits','⚠');return;}
+  pinCorrect=np; // Note: resets to DEFAULT_PIN on next page load — edit DEFAULT_PIN in code to make permanent
+  document.getElementById('newPin').value='';
+  toast('PIN updated successfully');
+}
+function lockDashboard(){
+  document.getElementById('pinOverlay').style.display='flex';
+  pinEntry='';updatePinDots();
+}
+
+// ═══════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════
+let members=[],filt='all',eid=null;
+
+function sync(s){
+  const d=document.getElementById('sdot'),l=document.getElementById('slbl');
+  d.className='sdot '+(s==='ok'?'ok':s==='ing'?'ing':'err');
+  l.textContent={ok:'Synced',ing:'Syncing...',err:'Error'}[s]||'...';
+}
+
+async function loadMembers(){
+  sync('ing');
+  const{data,error}=await db.from('members').select('*').order('updated_at',{ascending:false});
+  if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
+  members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  sync('ok');
+  document.getElementById('dbs').textContent='✅ Connected to Supabase';
+  document.getElementById('dbc').textContent=members.length+' members';
+  buildSettingsMinistries();
+  renderAll();
+}
+
+function l2r(m){
+  return{
+    id:m.id||undefined,name:m.name,birthday:m.bday||null,civil_status:m.civil||null,
+    baptism_date:m.baptism||null,enrolled_date:m.enrolled||null,
+    discipler_id:m.discipler_id||null,discipler:m.discipler_name||m.discipler||null,
+    discipler_name:m.discipler_name||null,
+    diag_zone:m.zone?parseInt(m.zone):null,
+    pipeline_level:m.level||0,spiritual_gifts:m.gifts||null,
+    ministry:m.ministry||null,ministry_role:m.ministry_role||null,
+    ministry2:m.ministry2||null,ministry2_role:m.ministry2_role||null,
+    ministry3:m.ministry3||null,ministry3_role:m.ministry3_role||null,
+    contact:m.contact||null,family_members:m.family_members||[],
+    checks:m.checks||{},eolo:m.eolo||[],notes:m.notes||[],
+    is_facilitator:m.is_facilitator||false,facilitator_role:m.facilitator_role||null,
+    diagnostic_score:m.diagnostic_score||null,diagnostic_zone:m.diagnostic_zone||null,
+    diagnostic_date:m.diagnostic_date||null,intervention_track:m.intervention_track||null,
+    intervention_status:m.intervention_status||null,facilitator_name:m.facilitator_name||null,
+    updated_at:new Date().toISOString()
+  };
+}
+function r2l(r){
+  return{
+    id:r.id,name:r.name,bday:r.birthday||'',civil:r.civil_status||'',
+    baptism:r.baptism_date||'',enrolled:r.enrolled_date||'',
+    discipler_id:r.discipler_id||'',discipler:r.discipler||'',discipler_name:r.discipler_name||'',
+    zone:r.diag_zone||'',level:r.pipeline_level||0,
+    gifts:r.spiritual_gifts||'',
+    ministry:r.ministry||'',ministry_role:r.ministry_role||'',
+    ministry2:r.ministry2||'',ministry2_role:r.ministry2_role||'',
+    ministry3:r.ministry3||'',ministry3_role:r.ministry3_role||'',
+    contact:r.contact||'',
+    family_members:r.family_members||[],
+    checks:r.checks||{},
+    eolo:r.eolo||[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}],
+    notes:r.notes||[],is_facilitator:r.is_facilitator||false,
+    facilitator_role:r.facilitator_role||'',diagnostic_score:r.diagnostic_score||null,
+    diagnostic_zone:r.diagnostic_zone||null,diagnostic_date:r.diagnostic_date||'',
+    intervention_track:r.intervention_track||'',intervention_status:r.intervention_status||'',
+    facilitator_name:r.facilitator_name||'',updated:r.updated_at||r.created_at
+  };
+}
+
+async function upsert(m){
+  sync('ing');
+  const{data,error}=await db.from('members').upsert(l2r(m),{onConflict:'id'}).select().single();
+  if(error){sync('err');throw error;}
+  sync('ok');return r2l(data);
+}
+async function del(id){sync('ing');const{error}=await db.from('members').delete().eq('id',id);if(error){sync('err');throw error;}sync('ok');}
+
+// ═══════════════════════════════════════
+// BUILD MINISTRY SELECTS
+// ═══════════════════════════════════════
+// buildMinistrySelect defined below (full version handles all 3 slots)
+
+function buildSettingsMinistries(){
+  const wrap=document.querySelector('#panel-settings .ss:nth-child(3) div:last-child');
+  if(!wrap)return;
+  wrap.innerHTML='';
+  Object.entries(MINISTRIES).forEach(([cat,mins])=>{
+    const catDiv=document.createElement('div');
+    catDiv.style.cssText='grid-column:1/-1;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--border);';
+    catDiv.textContent=cat;
+    wrap.appendChild(catDiv);
+    mins.forEach(m=>{
+      const item=document.createElement('div');
+      item.style.cssText='font-size:12.5px;color:var(--text);padding:3px 0;display:flex;align-items:center;gap:5px;';
+      item.innerHTML=`<span style="color:var(--green);font-size:14px;">•</span> ${m}`;
+      wrap.appendChild(item);
+    });
+  });
+}
+
+// ═══════════════════════════════════════
+// RENDER ALL
+// ═══════════════════════════════════════
+function renderAll(){
+  rKPI();rPV();renderTable();rPipe();rInterventions();rEolo();rAlerts();rReports();rOvExtras();
+  document.getElementById('dbc').textContent=members.length+' members';
+  // Show facilitator role row if checked
+  document.getElementById('fIsFac')?.addEventListener('change',e=>{
+    document.getElementById('facRoleRow').style.display=e.target.checked?'flex':'none';
+  });
+}
+
+// ═══════════════════════════════════════
+// KPIs
+// ═══════════════════════════════════════
+function rKPI(){
+  const bl=[0,0,0,0,0,0];let ea=0,dd=0,needInt=0;
+  members.forEach(m=>{
+    bl[m.level||0]++;
+    if(m.eolo&&m.eolo.some(e=>e.name))ea++;
+    if(m.diagnostic_zone)dd++;
+    if(m.diagnostic_zone>=2)needInt++;
+  });
+  document.getElementById('ks').innerHTML=[
+    {l:'Total Members',v:members.length,c:'a'},
+    {l:'Level 1',v:bl[1],c:'b'},{l:'Level 2',v:bl[2],c:'c'},
+    {l:'Level 3',v:bl[3],c:'d'},{l:'L4–5',v:bl[4]+bl[5],c:'e'},
+    {l:'Pre-Pipeline',v:bl[0],c:'f'},
+    {l:'EOLO Active',v:ea,c:'g'},
+    {l:'Need Intervention',v:needInt,c:'h'}
+  ].map(k=>`<div class="kc ${k.c}"><div class="kn">${k.v}</div><div class="kl">${k.l}</div></div>`).join('');
+}
+
+function rPV(){
+  const bl=[0,0,0,0,0,0];members.forEach(m=>bl[m.level||0]++);
+  const max=Math.max(...bl,1);const labs=['Pre','L1','L2','L3','L4','L5'];
+  const filterMap=['L0','L1','L2','L3','L3','L3'];
+  document.getElementById('pvl').innerHTML=bl.map((n,i)=>
+    `<div class="pvb" style="background:${LC_COLORS[i]};height:${Math.max(20,n/max*120)}px"
+      onclick="drillDown('${filterMap[i]}')"
+      title="Click to see ${n} member${n!==1?'s':''} — ${i===0?'Pre-Pipeline':'Level '+i}">
+      <div class="pvbl" style="color:${LC_TEXT[i]}">${labs[i]}</div>
+      <div class="pvbc">${n}</div>
+    </div>`).join('');
+  document.getElementById('pvax').innerHTML=labs.map(l=>`<div class="pval">${l}</div>`).join('');
+}
+
+// ═══════════════════════════════════════
+// MEMBERS TABLE
+// ═══════════════════════════════════════
+function setF(f,el){
+  filt=f;
+  document.querySelectorAll('.fc').forEach(c=>c.classList.remove('on'));
+  if(el)el.classList.add('on');
+  renderTable();
+}
+
+function renderTable(){
+  const q=(document.getElementById('sq')?.value||'').toLowerCase();
+  let fl=members.filter(m=>{
+    const ok=!q||(m.name||'').toLowerCase().includes(q)||(m.group||'').toLowerCase().includes(q)||(m.gifts||'').toLowerCase().includes(q)||(m.ministry||'').toLowerCase().includes(q)||(m.discipler||'').toLowerCase().includes(q);
+    if(!ok)return false;
+    if(filt==='all')return true;
+    if(filt==='L0')return!m.level||m.level===0;
+    if(filt==='L1')return m.level===1;if(filt==='L2')return m.level===2;
+    if(filt==='L3')return m.level>=3;
+    if(filt==='Z4')return m.diagnostic_zone==4;
+    if(filt==='Z3')return m.diagnostic_zone==3;
+    if(filt==='Z2')return m.diagnostic_zone==2;
+    if(filt==='fac')return m.is_facilitator;
+    if(filt==='eolo')return m.eolo&&m.eolo.some(e=>e.name);
+    return true;
+  });
+  const tb=document.getElementById('tb');
+  if(!fl.length){
+    tb.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="ei">👥</div><div class="et">${members.length===0?'No members yet. Click + Add Member to start.':'No members match this filter.'}</div></div></td></tr>`;
+    return;
+  }
+  tb.innerHTML=fl.map(m=>{
+    const l=m.level||0,lc=PC[l]||[],done=lc.filter(c=>m.checks&&m.checks[c]).length,pct=lc.length?Math.round(done/lc.length*100):0;
+    const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const ea=m.eolo&&m.eolo.some(e=>e.name);const en=m.eolo&&m.eolo[0]&&m.eolo[0].name?m.eolo[0].name:'';
+    const upd=m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—';
+    const dz=m.diagnostic_zone;
+    const intFlag=dz>=2?`<span class="int-flag ${dz==4?'if-z4':dz==3?'if-z3':'if-z2'}">${dz==4?'🔴 Z4 Gospel':dz==3?'🟠 Z3 First Steps':'🟡 Z2 Assurance'}</span>`:'<span style="font-size:11px;color:var(--lighter)">—</span>';
+    return`<tr onclick="openEdit('${m.id}')">
+      <td><div class="nc">
+        <div class="av" style="background:${LC_COLORS[l]};color:${LC_TEXT[l]}">${ini}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
+        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}</div>
+        <div class="mi">${m.discipler_name||m.discipler||'No discipler'}</div></div>
+      </div></td>
+      <td><span class="lb lb${l}">${LN[l]}</span></td>
+      <td>${dz?`<span class="zb zb${dz}">${ZL[dz]}</span>${m.diagnostic_score!=null?`<span style="font-size:10px;color:var(--muted);margin-left:4px">${m.diagnostic_score}%</span>`:''}`:
+        '<span class="zb zbn">Not assessed</span>'}</td>
+      <td>${intFlag}</td>
+      <td><div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div><div class="pp">${pct}% · ${done}/${lc.length}</div></td>
+      <td style="font-size:12px">${m.discipler||'—'}</td>
+      <td style="font-size:12px">${(()=>{
+  const mins=[{m:m.ministry,r:m.ministry_role},{m:m.ministry2,r:m.ministry2_role},{m:m.ministry3,r:m.ministry3_role}].filter(x=>x.m);
+  if(!mins.length)return'<span style="color:var(--lighter)">Unplaced</span>';
+  return mins.map(x=>`<span style="color:var(--green);font-weight:500">${x.m}</span>${x.r?`<span style="color:var(--muted);font-size:10px"> (${x.r})</span>`:''}`).join('<br>');
+})()}</td>
+      <td><span class="ed ${ea?'ea':'en'}"></span><span style="font-size:11px">${en||(ea?'Active':'None')}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${upd}</td>
+      <td><button class="ab2" onclick="event.stopPropagation();openEdit('${m.id}')">✎</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+// PIPELINE PANEL
+// ═══════════════════════════════════════
+function rPipe(){
+  const bl={};members.forEach(m=>{const l=m.level||0;if(!bl[l])bl[l]=[];bl[l].push(m);});
+  document.getElementById('pv').innerHTML=[0,1,2,3,4,5].map(l=>{
+    const g=bl[l]||[];if(!g.length)return'';
+    const tiles=g.map(m=>{
+      const lc=PC[l]||[],done=lc.filter(c=>m.checks&&m.checks[c]).length,pct=lc.length?Math.round(done/lc.length*100):0;
+      const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer;min-width:150px;box-shadow:var(--shadow)" onclick="openEdit('${m.id}')">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="av" style="background:${LC_COLORS[l]};color:${LC_TEXT[l]};width:28px;height:28px;font-size:10px">${ini}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--ink)">${m.name}</div>
+        </div>
+        <div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${pct}% · ${m.ministry||'Unplaced'}</div>
+      </div>`;
+    }).join('');
+    return`<div style="margin-bottom:1.5rem">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:.75rem">
+        <div style="width:12px;height:12px;border-radius:3px;background:${LC_COLORS[l]}"></div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">${l===0?'Pre-Pipeline':'Level '+l+' — '+LN[l]}</div>
+        <div style="font-size:11px;color:var(--lighter)">${g.length} members</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${tiles}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+// INTERVENTIONS PANEL
+// ═══════════════════════════════════════
+function rInterventions(){
+  const z4=members.filter(m=>m.diagnostic_zone==4);
+  const z2=members.filter(m=>m.diagnostic_zone==2);
+  const z3=members.filter(m=>m.diagnostic_zone==3);
+  const total=z4.length+z2.length+z3.length;
+
+  document.getElementById('int-kpis').innerHTML=[
+    {l:'Total Needing Intervention',v:total,c:'h'},
+    {l:'Zone 4 — Gospel Conversations',v:z4.length,c:'h'},
+    {l:'Zone 2 — Assurance Formation',v:z2.length,c:'c'},
+    {l:'Zone 3 — First Steps',v:z3.length,c:'g'},
+  ].map(k=>`<div class="kc ${k.c}"><div class="kn">${k.v}</div><div class="kl">${k.l}</div></div>`).join('');
+
+  function intCards(list,trackColor,trackIcon,trackName,trackUrl){
+    if(!list.length)return`<div class="empty" style="padding:1.5rem"><div class="ei" style="font-size:1.5rem">✅</div><div class="et" style="font-size:12px">No members in this track</div></div>`;
+    return list.map(m=>`<div class="int-card">
+      <div class="ic-track" style="background:${trackColor}20">${trackIcon}</div>
+      <div class="ic-info">
+        <div class="ic-name">${m.name}</div>
+        <div class="ic-track-name">${trackName} · ${m.group||'No group'} · Facilitator: ${m.facilitator_name||m.discipler||'Unassigned'}</div>
+        <div class="ic-meta">Score: ${m.diagnostic_score!=null?m.diagnostic_score+'%':'Not recorded'} · Taken: ${m.diagnostic_date||'—'} · Status: ${m.intervention_status||'Not started'}</div>
+      </div>
+      <div class="ic-actions">
+        <button class="ic-btn ic-btn-open" onclick="openDebrief('${m.id}')">📋 Debrief Guide</button>
+        <button class="ic-btn ic-btn-open" onclick="openTrack('${m.id}')">📖 Intervention Tracker</button>
+        <button class="ic-btn ic-btn-done" onclick="markIntComplete('${m.id}')">✓ Mark Complete</button>
+      </div>
+    </div>`).join('');
+  }
+
+  document.getElementById('int-z4').innerHTML=intCards(z4,'#7a2020','🔴','Pre-BTLI Gospel Conversations','intervention_tracks.html#z4');
+  document.getElementById('int-z2').innerHTML=intCards(z2,'#8a6010','🟡','BTLI 101-A Assurance Formation','intervention_tracks.html#z2');
+  document.getElementById('int-z3').innerHTML=intCards(z3,'#7a4a10','🟠','BTLI 101-B First Steps Track','intervention_tracks.html#z3');
+}
+
+const GH_BASE = 'https://gejable1.github.io/multiply/';
+function openDebrief(id){
+  const m=members.find(x=>x.id===id);
+  if(!m)return;
+  toast(`Opening debrief for ${m.name}`,'📋');
+  window.open(GH_BASE+'facilitator_debrief_guide.html?id='+id,'_blank');
+}
+function openTrack(id){
+  window.open(GH_BASE+'intervention_tracker.html?id='+id,'_blank');
+  toast('Opening intervention tracker','📖');
+}
+async function markIntComplete(id){
+  const m=members.find(x=>x.id===id);
+  if(!m||!confirm(`Mark intervention complete for ${m.name}?`))return;
+  m.intervention_status='completed';m.diagnostic_zone=1;m.zone=1;
+  try{await upsert(m);const i=members.findIndex(x=>x.id===id);if(i>=0)members[i]=m;renderAll();toast('Intervention marked complete ✓');}
+  catch(e){toast('Error: '+e.message,'❌');}
+}
+
+// ═══════════════════════════════════════
+// EOLO PANEL
+// ═══════════════════════════════════════
+function rEolo(){
+  let t=0,a=0,inv=0,res=0;const rows=[];
+  members.forEach(m=>(m.eolo||[]).forEach(e=>{
+    if(!e.name)return;t++;
+    if(e.steps&&e.steps[0])a++;if(e.steps&&e.steps[4])inv++;if(e.steps&&e.steps[6])res++;
+    rows.push({mn:m.name,p:e.name,s:e.steps||{}});
+  }));
+  document.getElementById('eks').innerHTML=[
+    {l:'EOLO Persons',v:t,c:'g'},{l:'Praying',v:a,c:'b'},
+    {l:'Invited',v:inv,c:'c'},{l:'Responded',v:res,c:'b'}
+  ].map(k=>`<div class="kc ${k.c}"><div class="kn">${k.v}</div><div class="kl">${k.l}</div></div>`).join('');
+  document.getElementById('el').innerHTML=!rows.length?
+    '<div class="empty"><div class="ei">🌏</div><div class="et">No EOLO persons yet.</div></div>':
+    `<div class="tw"><table><thead><tr><th>Member</th><th>Person</th>${['Identified','Praying','Conversation','Gospel','Invited','EGR','Responded'].map(s=>`<th style="font-size:9px">${s}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr><td style="font-weight:600;color:var(--ink)">${r.mn}</td><td style="color:var(--text)">${r.p}</td>
+      ${[0,1,2,3,4,5,6].map(i=>`<td style="text-align:center">${r.s[i]?'<span style="color:var(--green)">✓</span>':'·'}</td>`).join('')}
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+// ═══════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════
+function rAlerts(){
+  const al=[];
+  members.forEach(m=>{
+    if(m.diagnostic_zone==4)al.push({i:'🔴',t:`${m.name} — Zone 4: Gospel Conversations needed`,s:`Score: ${m.diagnostic_score||'?'}% · Facilitator: ${m.facilitator_name||m.discipler||'Unassigned'} · Needs Pre-BTLI Gospel Conversations track (3–5 sessions).`,b:'abu',bt:'Priority',id:m.id,zone:4});
+    if(m.diagnostic_zone==2)al.push({i:'🟡',t:`${m.name} — Zone 2: Assurance Formation needed`,s:`Genuine believer with performance-based doubt. Enroll in BTLI 101-A (3 sessions).`,b:'abs',bt:'Enroll',id:m.id,zone:2});
+    if(m.diagnostic_zone==3)al.push({i:'🟠',t:`${m.name} — Zone 3: First Steps Track needed`,s:`Faith credible but habits absent. Assign discipler and begin 8-week First Steps.`,b:'abs',bt:'Enroll',id:m.id,zone:3});
+    if(!m.diagnostic_zone&&m.level>=1)al.push({i:'📋',t:`${m.name} — Salvation Assurance Diagnostic not taken`,s:`Every Level 1+ member should complete the diagnostic.`,b:'abi',bt:'Follow up',id:m.id,zone:0});
+    if(!m.discipler&&m.level>=1)al.push({i:'👤',t:`${m.name} — No discipler assigned`,s:'Every pipeline member needs an assigned discipler.',b:'abu',bt:'Action',id:m.id,zone:0});
+    if(m.level>=1&&(!m.eolo||!m.eolo[0]?.name))al.push({i:'🌏',t:`${m.name} — No EOLO person identified`,s:'Every Level 1+ member should have an EOLO person.',b:'abs',bt:'Follow up',id:m.id,zone:0});
+    if(m.level>=1&&!m.ministry)al.push({i:'⛪',t:`${m.name} — No ministry placement`,s:'Complete Spiritual Gifts Diagnostic and use Ministry Intake Form.',b:'abi',bt:'Assign',id:m.id,zone:0});
+  });
+  // Also check for unmatched diagnostics
+  checkUnmatchedDiagnostics(al);
+
+  const el=document.getElementById('al');
+  if(!al.length){el.innerHTML='<div class="empty"><div class="ei">✅</div><div class="et">No alerts — the pipeline looks healthy!</div></div>';return;}
+  el.innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:1rem;font-weight:600">${al.length} alerts requiring attention</div>`+
+    al.map(a=>`<div class="ai">
+      <div class="aico">${a.i}</div>
+      <div class="act2">
+        <div class="ati">${a.t}</div>
+        <div class="asu">${a.s}</div>
+        ${a.zone>=2?`<div class="alert-actions">
+          <button class="alert-link al-debrief" onclick="openDebrief('${a.id}')">📋 Open Debrief Guide</button>
+          <button class="alert-link al-track" onclick="openTrack('${a.id}')">📖 Open Intervention Tracker</button>
+          <button class="alert-link al-assign" onclick="openEdit('${a.id}')">✎ Edit Member</button>
+        </div>`:''}
+      </div>
+      <span class="abg ${a.b}">${a.bt}</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════
+// REPORTS
+// ═══════════════════════════════════════
+async function checkUnmatchedDiagnostics(alArr) {
+  try {
+    // Find diagnostic results with no member_id linked
+    const { data } = await db.from('diagnostic_results')
+      .select('id,member_name,total_score,diag_zone,date_taken')
+      .is('member_id', null)
+      .order('created_at', {ascending: false})
+      .limit(10);
+
+    if (!data || !data.length) return;
+
+    const el = document.getElementById('al');
+    const zoneLabels = {1:'Zone 1',2:'Zone 2',3:'Zone 3',4:'Zone 4'};
+
+    // Append unmatched section to alerts panel
+    const unmatchedHtml = `
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-top:1.25rem;margin-bottom:.5rem;padding-top:1rem;border-top:1px solid var(--border);">
+        ⚠️ ${data.length} Unmatched Diagnostic Result${data.length>1?'s':''} — No Member ID Linked
+      </div>
+      ${data.map(d=>`<div class="ai">
+        <div class="aico">📋</div>
+        <div class="act2">
+          <div class="ati">${d.member_name||'Unknown'} — diagnostic not linked to any member record</div>
+          <div class="asu">Score: ${d.total_score||'?'}% · ${zoneLabels[d.diag_zone]||'?'} · Taken: ${d.date_taken||'?'}<br>
+            <em>This result was submitted without a personalized link. Match it to the correct member below.</em>
+          </div>
+          <div class="alert-actions" style="margin-top:.35rem">
+            <select id="match-${d.id}"
+              style="font-family:'DM Sans',sans-serif;font-size:12px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--ink)">
+              <option value="">— Match to member —</option>
+              ${members.filter(m=>(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0]))
+                .concat(members.filter(m=>!(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0])))
+                .slice(0,30)
+                .map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}
+            </select>
+            <button class="alert-link al-assign" onclick="matchDiagnostic('${d.id}')">✓ Link & Update</button>
+          </div>
+        </div>
+        <span class="abg abs">Unmatched</span>
+      </div>`).join('')}`;
+
+    if (el) el.innerHTML += unmatchedHtml;
+  } catch(e) {
+    console.warn('Unmatched check error:', e.message);
+  }
+}
+
+async function matchDiagnostic(diagId) {
+  const sel = document.getElementById('match-' + diagId);
+  const memberId = sel?.value;
+  if (!memberId) { toast('Please select a member first','⚠'); return; }
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+
+  try {
+    // Update diagnostic record with member ID
+    await db.from('diagnostic_results').update({
+      member_id: memberId,
+      member_name: member.name,
+      updated_at: new Date().toISOString()
+    }).eq('id', diagId);
+
+    // Get the diagnostic data to update member record
+    const { data: diag } = await db.from('diagnostic_results').select('*').eq('id', diagId).single();
+    if (diag) {
+      await db.from('members').update({
+        diagnostic_score: diag.total_score,
+        diagnostic_zone: diag.diag_zone,
+        diag_zone: diag.diag_zone,
+        diagnostic_date: diag.date_taken,
+        intervention_status: diag.diag_zone >= 2 ? 'pending' : null,
+        updated_at: new Date().toISOString()
+      }).eq('id', memberId);
+
+      // Reload member in local array
+      const idx = members.findIndex(m => m.id === memberId);
+      if (idx >= 0) {
+        members[idx].diagnostic_score = diag.total_score;
+        members[idx].diagnostic_zone = diag.diag_zone;
+        members[idx].zone = diag.diag_zone;
+      }
+    }
+
+    toast(`Matched to ${member.name} ✓`);
+    renderAll(); // Refresh alerts
+  } catch(e) {
+    toast('Error matching: ' + e.message, '❌');
+  }
+}
+
+function rReports(){
+  const bl=[0,0,0,0,0,0],bz={1:0,2:0,3:0,4:0,none:0};
+  const byMin={};ALL_MINISTRIES.forEach(m=>byMin[m]=0);
+  members.forEach(m=>{
+    bl[m.level||0]++;
+    if(m.diagnostic_zone)bz[m.diagnostic_zone]++;else bz.none++;
+    if(m.ministry&&byMin[m.ministry]!==undefined)byMin[m.ministry]++;
+  });
+  const t=members.length||1;
+  const lc2=['#e8e0d0','#2a5c40','#1a4a6b','#4a2a6b','#1a5a60','#7a2020'];
+  document.getElementById('rg').innerHTML=`
+    <div class="rc"><div class="rct">Pipeline Level Distribution</div>
+      ${[0,1,2,3,4,5].map(i=>`<div class="fr">
+        <div class="fl">${i===0?'Pre-Pipeline':LN[i]}</div>
+        <div class="fb"><div class="ff" style="width:${bl[i]/t*100}%;background:${lc2[i]}">${bl[i]>1?`<span>${bl[i]}</span>`:''}</div></div>
+        <div class="fv">${bl[i]}</div></div>`).join('')}
+    </div>
+    <div class="rc"><div class="rct">Diagnostic Zone Distribution</div>
+      ${[1,2,3,4].map(z=>`<div class="fr">
+        <div class="fl">${ZL[z]}</div>
+        <div class="fb"><div class="ff" style="width:${bz[z]/t*100}%;background:${ZONE_COLORS_CSS[z]}">${bz[z]>0?`<span>${bz[z]}</span>`:''}</div></div>
+        <div class="fv">${bz[z]}</div></div>`).join('')}
+      <div class="fr"><div class="fl" style="color:var(--lighter)">Not assessed</div>
+        <div class="fb"><div class="ff" style="width:${bz.none/t*100}%;background:var(--lighter)"></div></div>
+        <div class="fv">${bz.none}</div></div>
+    </div>
+    <div class="rc" style="grid-column:1/-1"><div class="rct">Ministry Placement by Team</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+        ${ALL_MINISTRIES.filter(m=>byMin[m]>0).sort((a,b)=>byMin[b]-byMin[a]).map(m=>`<div class="fr">
+          <div class="fl">${m}</div>
+          <div class="fb"><div class="ff" style="width:${byMin[m]/t*100}%;background:var(--green)">${byMin[m]>1?`<span>${byMin[m]}</span>`:''}</div></div>
+          <div class="fv">${byMin[m]}</div></div>`).join('')}
+        ${ALL_MINISTRIES.every(m=>byMin[m]===0)?'<div style="color:var(--muted);font-size:12px;padding:.5rem">No placements recorded yet.</div>':''}
+      </div>
+    </div>`;
+}
+
+function rOvExtras(){
+  const s=[...members].sort((a,b)=>new Date(b.updated||0)-new Date(a.updated||0)).slice(0,6);
+  document.getElementById('ru').innerHTML=!s.length?
+    '<div style="color:var(--muted);font-size:12px">No members yet.</div>':
+    s.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div class="av" style="background:${LC_COLORS[m.level||0]};color:${LC_TEXT[m.level||0]};width:26px;height:26px;font-size:10px">${(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
+      <div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--ink)">${m.name}</div><div style="font-size:10px;color:var(--muted)">${LN[m.level||0]} · ${m.ministry||'Unplaced'}</div></div>
+      <div style="font-size:10px;color:var(--muted)">${m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—'}</div>
+    </div>`).join('');
+  const bz={1:0,2:0,3:0,4:0};members.forEach(m=>{if(m.diagnostic_zone)bz[m.diagnostic_zone]++;});
+  const t2=members.length||1;
+  document.getElementById('zf').innerHTML=[1,2,3,4].map(z=>`<div class="fr" style="cursor:${bz[z]>0?'pointer':'default'}"
+    onclick="${bz[z]>0?`drillDown('Z${z}')`:''}"
+    title="${bz[z]>0?`Click to see ${bz[z]} Zone ${z} member${bz[z]!==1?'s':''}`:''}"
+    onmouseover="this.style.background='${bz[z]>0?'var(--surface2)':''}'"
+    onmouseout="this.style.background=''"
+    style="border-radius:6px;padding:2px 4px;transition:background .15s;">
+    <div class="fl">${ZL[z]}</div>
+    <div class="fb"><div class="ff" style="width:${bz[z]/t2*100}%;background:${ZONE_COLORS_CSS[z]}">${bz[z]>0?`<span>${bz[z]}</span>`:''}</div></div>
+    <div class="fv">${bz[z]}</div></div>`).join('');
+}
+
+// ═══════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════
+function openAdd(){
+  eid=null;clearF();
+  document.getElementById('mav').textContent='?';document.getElementById('mav').style.background='var(--muted)';
+  document.getElementById('mti').textContent='Add New Member';document.getElementById('mme').textContent='';
+  document.getElementById('delbtn').style.display='none';
+  document.getElementById('recbtn').style.display='none';
+  showMT('info',document.querySelector('.mtb'));
+  rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
+  document.getElementById('mo').classList.add('open');
+}
+function openEdit(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  eid=id;fillF(m);
+  const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('mav').textContent=ini;
+  document.getElementById('mav').style.background=LC_COLORS[m.level||0];
+  document.getElementById('mav').style.color=LC_TEXT[m.level||0];
+  document.getElementById('mti').textContent=m.name;
+  document.getElementById('mme').textContent=`${LN[m.level||0]} · ${m.group||'No group'}${m.is_facilitator?' · ⭐ Facilitator':''}`;
+  document.getElementById('delbtn').style.display='block';
+  document.getElementById('recbtn').style.display='block';
+  showMT('info',document.querySelector('.mtb'));
+  buildMinistrySelect();populateDisciplerSelect(m.discipler_name||m.discipler||'');
+  rPCL(m);rET(m);rNT(m);rDiagTab(m);
+  // Gifts tab loads on demand when clicked (async Supabase call)
+  document.getElementById('mo').classList.add('open');
+}
+function closeMO(e){if(e.target===document.getElementById('mo'))closeMD();}
+function closeMD(){document.getElementById('mo').classList.remove('open');}
+function openRecommenderForMember(){
+  if(!eid){alert('Please save the member first.');return;}
+  window.open('ministry_recommender.html?member_id='+encodeURIComponent(eid),'_blank');
+}
+function showMT(t,btn){
+  ['info','diag','profile','pipe','eolo','notes'].forEach(x=>{
+    const el=document.getElementById('mt-'+x);if(el)el.style.display=x===t?'block':'none';
+  });
+  document.querySelectorAll('.mtb').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  if(t==='profile'&&eid){const m=members.find(x=>x.id===eid);if(m)rProfileTab(m);}
+}
+
+function clearF(){
+  ['fn','fb','fbp','fen','fd','fd_id','fgi','fco','fmr','fmr2','fmr3'].forEach(i=>{
+    const e=document.getElementById(i);if(e)e.value='';
+  });
+  ['fcs','fmi','fmi2','fmi3','fl'].forEach(i=>{
+    const e=document.getElementById(i);if(e)e.value=i==='fl'?'0':'';
+  });
+  const fIsFac=document.getElementById('fIsFac');
+  if(fIsFac)fIsFac.checked=false;
+  const facRoleRow=document.getElementById('facRoleRow');
+  if(facRoleRow)facRoleRow.style.display='none';
+  buildFamilySlots([]);
+}
+
+function fillF(m){
+  document.getElementById('fn').value=m.name||'';
+  document.getElementById('fb').value=m.bday||'';
+  document.getElementById('fcs').value=m.civil||'';
+  document.getElementById('fbp').value=m.baptism||'';
+  document.getElementById('fen').value=m.enrolled||'';
+  // Discipler select - value set by populateDisciplerSelect called in openEdit
+  document.getElementById('fd_id').value=m.discipler_id||'';
+  document.getElementById('fl').value=m.level||0;
+  // 3 ministry slots
+  document.getElementById('fmi').value=m.ministry||'';
+  document.getElementById('fmr').value=m.ministry_role||'';
+  document.getElementById('fmi2').value=m.ministry2||'';
+  document.getElementById('fmr2').value=m.ministry2_role||'';
+  document.getElementById('fmi3').value=m.ministry3||'';
+  document.getElementById('fmr3').value=m.ministry3_role||'';
+  document.getElementById('fgi').value=m.gifts||'';
+  document.getElementById('fco').value=m.contact||'';
+  // Family members
+  buildFamilySlots(m.family_members||[]);
+  document.getElementById('fIsFac').checked=m.is_facilitator||false;
+  document.getElementById('fFacRole').value=m.facilitator_role||'';
+  document.getElementById('facRoleRow').style.display=m.is_facilitator?'flex':'none';
+}
+
+// ── DIAGNOSTICS TAB ──
+function rDiagTab(m){
+  const wrap=document.getElementById('diagTab');
+  if(!m||!m.diagnostic_zone){
+    // No member yet (Add New) or no diagnostic taken
+    if(!m||!m.id){
+      wrap.innerHTML=`<div style="text-align:center;padding:1.5rem">
+        <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.35rem">Save the member first</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.6">Save this member's record, then return to this tab to generate a personalized diagnostic link.</div>
+      </div>`;
+      return;
+    }
+    const diagUrl = getDiagUrl(m.id);
+    wrap.innerHTML=`<div style="text-align:center;padding:1.5rem">
+      <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
+      <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.35rem">No diagnostic taken yet</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:1rem;line-height:1.6">Generate a personalized link and send to the member via Viber.<br>The diagnostic will be pre-linked to their dashboard record automatically.</div>
+      <div style="background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:8px;padding:.85rem 1rem;margin-bottom:.75rem;font-size:12px;color:var(--green);word-break:break-all;text-align:left;">${diagUrl}</div>
+      <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 22px;background:var(--green);color:white;border:none;border-radius:7px;cursor:pointer;width:100%;margin-bottom:.5rem">📋 Copy Personalized Link</button>
+      <button onclick="openDiagDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 18px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;width:100%">🔗 Open Diagnostic for This Member</button>
+    </div>`;
+    return;
+  }
+  const zColors={1:var_green_css,2:'#8a6010',3:'var(--orange)',4:'var(--red)'};
+  const zBg={1:'var(--green-bg)',2:'#fff8e8',3:'var(--orange-bg)',4:'var(--red-bg)'};
+  const zLabel={1:'Zone 1 — Clear Assurance ✅',2:'Zone 2 — Uncertain 🟡',3:'Zone 3 — Formation Gap 🟠',4:'Zone 4 — Unresolved 🔴'};
+  const zDesc={1:'Ready for BTLI 101.',2:'Needs Assurance Formation (3 sessions).',3:'Needs First Steps Track (8 weeks).',4:'Needs Gospel Conversations (3–5 sessions).'};
+  wrap.innerHTML=`
+    <div style="display:flex;align-items:center;gap:1.5rem;margin-bottom:1rem;padding:1rem;background:${zBg[m.diagnostic_zone]||'var(--surface2)'};border-radius:8px;">
+      <div><div class="diag-score-big">${m.diagnostic_score!=null?m.diagnostic_score+'%':'?'}</div>
+        <div style="font-size:11px;color:var(--muted)">Total Score</div>
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--ink)">${zLabel[m.diagnostic_zone]||'—'}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${zDesc[m.diagnostic_zone]||''}</div>
+        <div style="font-size:11px;color:var(--lighter);margin-top:4px">Date taken: ${m.diagnostic_date||'Not recorded'} · Facilitator: ${m.facilitator_name||m.discipler||'Not recorded'}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:1rem">
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">Intervention Status</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${['not_started','in_progress','completed','extended'].map(s=>`
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--text)">
+            <input type="radio" name="intStatus" value="${s}" ${(m.intervention_status||'not_started')===s?'checked':''} onchange="updateIntStatus('${m.id}','${s}')">
+            ${s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}
+          </label>`).join('')}
+      </div>
+    </div>
+    ${m&&m.diagnostic_zone>=2?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="alert-link al-debrief" onclick="openDebrief('${m.id}')">📋 Open Debrief Guide</button>
+      <button class="alert-link al-track" onclick="openTrack('${m.id}')">📖 Open Intervention Tracker</button>
+    </div>`:'<div style="color:var(--green);font-size:13px;font-weight:500">✅ No intervention needed — ready for BTLI 101.</div>'}
+    ${m&&m.id?`<div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📋 Copy New Diagnostic Link</button>
+      <button onclick="openDiagDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;">🔗 Retake Diagnostic</button>
+    </div>`:''}`;
+}
+const var_green_css='#2a5c40';
+
+async function updateIntStatus(id,status){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  m.intervention_status=status;
+  try{await upsert(m);const i=members.findIndex(x=>x.id===id);if(i>=0)members[i]=m;toast('Status updated');}
+  catch(e){toast('Error: '+e.message,'❌');}
+}
+
+// ── PIPELINE CHECKLIST ──
+function rPCL(m){
+  const w=document.getElementById('pcl'),ch=m?.checks||{},l=m?.level||1,lc=PC[l]||PC[1];
+  const done=lc.filter(c=>ch[c]).length,pct=Math.round(done/lc.length*100);
+  w.innerHTML=`<div style="margin-bottom:1rem">
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+      <div style="font-size:11px;color:var(--muted)">Level ${l} Progress</div>
+      <div style="font-size:12px;font-weight:700;color:var(--green)">${pct}% · ${done}/${lc.length}</div>
+    </div>
+    <div class="pt" style="height:8px"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div>
+  </div>
+  <div><div class="cst">Level ${l} Checklist</div>
+    ${lc.map(item=>`<label class="ci ${ch[item]?'done':''}">
+      <input type="checkbox" ${ch[item]?'checked':''} onchange="tCheck('${item.replace(/'/g,"\\'")}',this.checked)">
+      ${item}${ch[item]?`<span class="cd">${new Date(ch[item]).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}</span>`:''}
+    </label>`).join('')}
+  </div>`;
+}
+function tCheck(item,checked){
+  if(!eid)return;const m=members.find(x=>x.id===eid);if(!m)return;
+  if(!m.checks)m.checks={};
+  if(checked)m.checks[item]=new Date().toISOString();else delete m.checks[item];
+  rPCL(m);
+}
+
+// ── EOLO TAB ──
+function rET(m){
+  const w=document.getElementById('etab');const e=m?.eolo||[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}];
+  while(e.length<3)e.push({name:'',steps:{}});
+  w.innerHTML=e.map((x,i)=>`<div class="ep">
+    <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:5px">EOLO Person ${i+1}</div>
+    <input style="background:white;border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:100%;margin-bottom:7px" placeholder="Name or initials" value="${x.name||''}" onchange="uEolo(${i},'name',this.value)">
+    <div class="es">${EOLO_STEPS.map((s,si)=>`<label class="est ${(x.steps||{})[si]?'done':''}"><input type="checkbox" ${(x.steps||{})[si]?'checked':''} onchange="uEolo(${i},${si},this.checked)">${s}</label>`).join('')}</div>
+  </div>`).join('');
+}
+function uEolo(pi,key,val){
+  if(!eid)return;const m=members.find(x=>x.id===eid);if(!m)return;
+  if(!m.eolo)m.eolo=[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}];
+  while(m.eolo.length<3)m.eolo.push({name:'',steps:{}});
+  if(key==='name')m.eolo[pi].name=val;
+  else{if(!m.eolo[pi].steps)m.eolo[pi].steps={};m.eolo[pi].steps[key]=val?new Date().toISOString():null;}
+}
+
+// ── NOTES TAB ──
+function rNT(m){
+  const n=m?.notes||[];
+  document.getElementById('ntl').innerHTML=!n.length?
+    '<div style="color:var(--muted);font-size:12px;margin-bottom:1rem">No notes yet.</div>':
+    [...n].reverse().map(x=>`<div class="ni"><div class="nd">${new Date(x.date).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})}</div><div class="nt">${x.text}</div></div>`).join('');
+}
+async function addNote(){
+  const text=document.getElementById('nn').value.trim();if(!text||!eid)return;
+  const m=members.find(x=>x.id===eid);if(!m)return;
+  if(!m.notes)m.notes=[];m.notes.push({date:new Date().toISOString(),text});
+  document.getElementById('nn').value='';rNT(m);
+  try{await upsert(m);toast('Note saved');}catch(e){toast('Note saved locally only','⚠');}
+}
+
+// ── SAVE MEMBER ──
+async function saveMember(){
+  const name=document.getElementById('fn').value.trim();if(!name){toast('Enter a name','⚠');return;}
+  const isFac=document.getElementById('fIsFac').checked;
+  const fdSel=document.getElementById('fd');
+  const discName=fdSel.value||'';
+  const discId=document.getElementById('fd_id').value||
+    (fdSel.options[fdSel.selectedIndex]?.dataset?.id)||'';
+  const famData=collectFamilyData();
+  const data={
+    id:eid||undefined,name,
+    bday:document.getElementById('fb').value,
+    civil:document.getElementById('fcs').value,
+    baptism:document.getElementById('fbp').value,
+    enrolled:document.getElementById('fen').value,
+    discipler_id:discId||null,
+    discipler:discName||null,
+    discipler_name:discName||null,
+    zone: eid ? (members.find(x=>x.id===eid)?.zone||null) : null,
+    level:parseInt(document.getElementById('fl').value)||0,
+    gifts:document.getElementById('fgi').value,
+    ministry:document.getElementById('fmi').value,
+    ministry_role:document.getElementById('fmr').value,
+    ministry2:document.getElementById('fmi2').value||null,
+    ministry2_role:document.getElementById('fmr2').value||null,
+    ministry3:document.getElementById('fmi3').value||null,
+    ministry3_role:document.getElementById('fmr3').value||null,
+    contact:document.getElementById('fco').value,
+    family_members:famData,
+    is_facilitator:isFac,
+    facilitator_role:isFac?document.getElementById('fFacRole').value:null,
+  };
+  if(eid){const ex=members.find(x=>x.id===eid);if(ex){data.checks=ex.checks||{};data.eolo=ex.eolo||[];data.notes=ex.notes||[];data.diagnostic_score=ex.diagnostic_score;data.diagnostic_zone=ex.diagnostic_zone;data.diagnostic_date=ex.diagnostic_date;data.intervention_track=ex.intervention_track;data.intervention_status=ex.intervention_status;data.facilitator_name=ex.facilitator_name;}}
+  else{
+    data.checks={};
+    data.eolo=[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}];
+    data.notes=[];
+    data.diagnostic_score=null;
+    data.diagnostic_zone=null;
+    data.diagnostic_date=null;
+    data.intervention_track=null;
+    data.intervention_status=null;
+    data.facilitator_name=null;
+    data.facilitator_id=null;
+  }
+  try{
+    const saved=await upsert(data);
+    if(eid){const i=members.findIndex(x=>x.id===eid);if(i>=0)members[i]=saved;}
+    else members.unshift(saved);
+    closeMD();renderAll();toast(eid?'Member updated ✓':'Member added ✓');
+  }catch(e){toast('Error: '+e.message,'❌');}
+}
+
+async function doDelete(){
+  if(!eid)return;const m=members.find(x=>x.id===eid);
+  if(!confirm(`Delete ${m?.name}? Permanent.`))return;
+  try{await del(eid);members=members.filter(x=>x.id!==eid);closeMD();renderAll();toast('Deleted');}
+  catch(e){toast('Error: '+e.message,'❌');}
+}
+
+// ═══════════════════════════════════════
+// PANELS
+// ═══════════════════════════════════════
+function showPanel(id,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  btn.classList.add('active');renderAll();
+}
+
+function resetFilter(){
+  filt='all';
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  const allBtn=document.querySelector('.filter-btn[data-f="all"]');
+  if(allBtn)allBtn.classList.add('active');
+  renderMembers();
+}
+function drillDown(filter){
+  // Switch to Members panel and apply the filter
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-members').classList.add('active');
+  document.querySelector('.nb:nth-child(2)').classList.add('active');
+
+  // Apply the filter chip
+  filt = filter;
+  document.querySelectorAll('.fc').forEach(c=>c.classList.remove('on'));
+
+  // Find and activate the matching chip
+  const chipMap = {
+    'all':0,'L0':1,'L1':2,'L2':3,'L3':4,'Z4':5,'Z3':6,'Z2':7,'fac':8,'eolo':9
+  };
+  const chips = document.querySelectorAll('.fc');
+  const filterChipMap = {
+    'L0':1,'L1':2,'L2':3,'L3':4,'Z4':5,'Z3':6,'Z2':7
+  };
+  const chipIdx = filterChipMap[filter];
+  if(chipIdx!==undefined && chips[chipIdx]) chips[chipIdx].classList.add('on');
+
+  // Clear search box
+  const sq = document.getElementById('sq');
+  if(sq) sq.value = '';
+
+  renderAll();
+
+  // Scroll to top
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ═══════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════
+function exportCSV(){
+  const h=['Name','Birthday','Civil','Baptism','Enrolled','Group','Discipler','Zone','Score','Level','Gifts','Ministry','Role','Contact','Family','Facilitator','Intervention','Updated'];
+  const rows=members.map(m=>[m.name,m.bday,m.civil,m.baptism,m.enrolled,m.group,m.discipler,
+    ZL[m.diagnostic_zone]||'',m.diagnostic_score||'',LN[m.level||0],m.gifts,m.ministry,
+    m.ministry_role,m.contact,m.family,m.is_facilitator?'Yes':'No',m.intervention_status||'',
+    m.updated?new Date(m.updated).toLocaleDateString():''
+  ].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
+  const csv=[h.join(','),...rows.map(r=>r.join(','))].join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='rosehill_multiply.csv';a.click();toast('CSV exported');
+}
+
+// ═══════════════════════════════════════
+// SAMPLE DATA
+// ═══════════════════════════════════════
+async function loadSample(){
+  if(!confirm('Add 12 sample members to Supabase?'))return;
+  const names=[['Maria Santos',1,1,75],['Jose Reyes',1,1,80],['Ana Cruz',1,2,62],
+    ['Pedro Garcia',0,4,35],['Rosa Dela Cruz',2,1,88],['Juan Mendoza',1,1,76],
+    ['Liza Bautista',0,3,55],['Carlo Villanueva',1,1,70],['Maricel Lim',1,2,60],
+    ['Antonio Ramos',2,1,85],['Cynthia Torres',3,1,92],['Roberto Flores',1,1,72]];
+  const mins=ALL_MINISTRIES;let added=0;
+  for(const[n,l,z,sc]of names){
+    try{
+      const m={name:n,level:l,zone:z,diagnostic_zone:z,diagnostic_score:sc,
+        diagnostic_date:new Date().toISOString().split('T')[0],
+        group:['Harvest LC','Cornerstone LC','Grace LC'][Math.floor(Math.random()*3)],
+        discipler:['Ptr. Rico','Ptr. Grace','Dcp. Ben'][Math.floor(Math.random()*3)],
+        gifts:[['Teaching','Shepherding'],['Evangelism','Service'],['Leadership','Faith']][Math.floor(Math.random()*3)].join(', '),
+        ministry:mins[Math.floor(Math.random()*mins.length)],
+        intervention_status:z>=2?'not_started':'',
+        eolo:[{name:z===4?'':['Juan dela Cruz','Maria Reyes','Pedro Santos'][Math.floor(Math.random()*3)],steps:{0:z!==4?new Date().toISOString():null}},{name:'',steps:{}},{name:'',steps:{}}],
+        notes:[{date:new Date().toISOString(),text:'Sample member loaded for demo.'}],
+        checks:{},enrolled:new Date().toISOString().split('T')[0],
+        is_facilitator:l>=2,facilitator_role:l>=2?'LC Leader':null
+      };
+      const saved=await upsert(m);members.unshift(saved);added++;
+    }catch(e){console.error(e);}
+  }
+  members.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  renderAll();toast(`${added} members added ✓`);
+}
+
+async function clearAll(){
+  if(!confirm('Delete ALL members? PERMANENT.'))return;sync('ing');
+  try{await db.from('members').delete().neq('id','00000000-0000-0000-0000-000000000000');members=[];sync('ok');renderAll();toast('All data cleared');}
+  catch(e){sync('err');toast('Error: '+e.message,'❌');}
+}
+
+// ═══════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════
+// ── DIAGNOSTIC LINK FUNCTIONS ──
+function getDiagUrl(memberId) {
+  const DIAG_BASE = 'https://gejable1.github.io/multiply/salvation_assurance_diagnostic.html';
+  return DIAG_BASE + '?id=' + memberId;
+}
+
+function getGiftsUrl(memberId) {
+  const GIFTS_BASE = 'https://gejable1.github.io/multiply/spiritual_gifts_diagnostic.html';
+  return GIFTS_BASE + '?id=' + memberId;
+}
+
+function getProfileUrl(type, memberId) {
+  const BASE = 'https://gejable1.github.io/multiply/';
+  const map = {love_language:'love_language.html',disc:'disc_profile.html',enneagram:'enneagram_profile.html',strengths:'strengths_profile.html',gifts:'spiritual_gifts_diagnostic.html'};
+  return BASE + (map[type]||'') + '?id=' + memberId;
+}
+function getResultsUrl(type, memberId) {
+  return 'https://gejable1.github.io/multiply/profile_results_viewer.html?id=' + memberId + '&type=' + type;
+}
+
+function copyProfileLink(type, memberId) {
+  const url = getProfileUrl(type, memberId);
+  navigator.clipboard.writeText(url).then(() => toast('Link copied — paste into Viber 📋'));
+}
+
+async function rProfileTab(m) {
+  const wrap = document.getElementById('profileTab');
+  if(!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px">⏳ Loading profile data...</div>';
+
+  // Load from member_profiles table — get most recent per type
+  let profileRows = [];
+  let giftsData = null;
+  try {
+    const {data:pr} = await db.from('member_profiles').select('*').eq('member_id', m.id).order('date_taken', {ascending:false});
+    profileRows = pr || [];
+    const {data:gd} = await db.from('gifts_diagnostic').select('*').eq('member_id', m.id).order('created_at', {ascending:false}).limit(1).then(r=>({data:r.data?.[0]||null}));
+    giftsData = gd;
+  } catch(e) {}
+
+  // Get latest per type
+  const latest = {};
+  profileRows.forEach(r => { if(!latest[r.profile_type]) latest[r.profile_type] = r; });
+
+  // ── PROFILE KNOWLEDGE BASE (inline) ───────────────────────────
+  const LL_KB = {
+    'Words of Affirmation':{ministry:'Preaching Ministry · Publishing & Communications · Youth Ministry · Campus Life Coach',team:'Needs regular verbal recognition from leader. Thrives when contributions are named aloud. Withers under silent leadership.',discipler:'Affirm specifically and often. Open every session with something genuine you noticed. Ground identity in Christ, not in others\' words.'},
+    'Acts of Service':{ministry:'Kitchen Ministry · Building Administration · Community Outreach · Lights & Tech · Documentation & Media',team:'The invisible backbone of every ministry. Must not be taken for granted. Needs unseen work noticed and named.',discipler:'Show up for them practically. Model healthy receiving. Help them learn to ask for help.'},
+    'Receiving Gifts':{ministry:'Pastoral Care · Community Outreach · Kitchen Ministry · Celebration programs',team:'Brings a culture of recognition — remembers birthdays and milestones. Thrives when leaders mark occasions.',discipler:'Remember special dates. Bring something small occasionally. Teach them to express needs rather than waiting to be remembered.'},
+    'Quality Time':{ministry:'Discipleship (1-on-1) · Couples Ministry · Youth Ministry · Core Group · Pastoral Care',team:'Natural discipler — invests deeply in a few. Needs face-to-face connection, not just task updates.',discipler:'Be fully present in your meetings — no phone. Never cancel without rescheduling immediately.'},
+    'Physical Touch':{ministry:'Pastoral Care · Children\'s Ministry · Welcome Ministry · Community Outreach',team:'Creates warmth and belonging. Natural at making people feel welcomed and safe — especially first-timers.',discipler:'Greet warmly. A hand on the shoulder in prayer communicates deeply. Ensure all expressions are age-appropriate and consensual.'}
+  };
+  const DISC_KB = {
+    'D':{name:'Dominance',ministry:'Church Council · Core Group · Community Outreach Leadership · Preaching Ministry',team:'Gets things moving. Needs teammates who slow them down and add warmth.',discipler:'Give real responsibility, not just tasks. Earn respect through character. Help them see their impact on quieter team members.',stress:'Can become controlling and dismissive. May steamroll others.'},
+    'I':{name:'Influence',ministry:'Youth in Motion · Evangelism · Youth Ministry · Young Professionals · Music Ministry',team:'Creates excitement and relational momentum. Needs follow-through support.',discipler:'Celebrate wins publicly. Help them develop follow-through. Address avoidance of difficult conversations directly but warmly.',stress:'Over-promises, avoids hard conversations, loses focus.'},
+    'S':{name:'Steadiness',ministry:'Couples Ministry · Children\'s Ministry · Kitchen Ministry · Pastoral Care · LC Group',team:'Faithful, loyal backbone. Must not be taken for granted. Needs advance notice of change.',discipler:'Give advance notice. Create safe space for concerns. Push gently toward necessary confrontation.',stress:'Resists change, avoids conflict, can become passive-aggressive.'},
+    'C':{name:'Conscientiousness',ministry:'Publishing & Communications · Documentation & Media · Building Administration · Church Council',team:'Ensures standards are met. Catches errors early. Needs permission to act before perfect.',discipler:'Give time to process. Appreciate precision explicitly. Challenge analysis paralysis.',stress:'Perfectionistic, withdrawn, overly critical.'}
+  };
+  const ENNEA_KB = {
+    '1':{name:'The Reformer',formation:'Move from compulsive goodness to grace-based holiness. Romans 8:1 is your anchor.',ministry:'Preaching Ministry · Publishing & Communications · Church Council',discipler:'Give permission to rest. Help distinguish righteous standards from self-righteousness.'},
+    '2':{name:'The Helper',formation:'Receive love without earning it. Your needs are as valid as everyone else\'s.',ministry:'Couples Ministry · Children\'s Ministry · Kitchen Ministry · Pastoral Care',discipler:'Help them name their own needs. Watch for giving fatigue and hidden resentment.'},
+    '3':{name:'The Achiever',formation:'Identity is not in achievement. You are loved before you produce. (Matthew 3:17)',ministry:'Leadership roles · Young Professionals · Core Group · Preaching Ministry',discipler:'Create space where failure is safe. Challenge them to be transparent about struggles.'},
+    '4':{name:'The Individualist',formation:'Significance is in Christ, not in uniqueness. Psalm 139:14.',ministry:'Interior Design · Music Ministry · Documentation & Media · Pastoral Care',discipler:'Validate emotional depth without enabling self-focus. Push toward action and community.'},
+    '5':{name:'The Investigator',formation:'Knowledge without love puffs up. (1 Cor 8:1). Abiding requires presence, not just study.',ministry:'Publishing & Communications · Documentation · Preaching research support',discipler:'Draw them out of isolation. Give roles requiring collaboration. Appreciate depth without letting them hide behind it.'},
+    '6':{name:'The Loyalist',formation:'Perfect love casts out fear. (1 John 4:18). Security is found in a faithful God.',ministry:'Building Administration · Kitchen Ministry · LC Group · Children\'s Ministry',discipler:'Build trust slowly and consistently. Never make promises you cannot keep. Expose them to God\'s faithfulness in Scripture.'},
+    '7':{name:'The Enthusiast',formation:'Contentment is a spiritual discipline. (Philippians 4:11). Learn to finish what you start.',ministry:'Youth in Motion · Evangelism · Youth Ministry · Music Ministry · EOLO',discipler:'Help them finish what they start. Pair with a structured type. Teach that staying and going deep is also an adventure.'},
+    '8':{name:'The Challenger',formation:'Strength is perfected in weakness. (2 Cor 12:9). Submitted power is true power.',ministry:'Church Council · Core Group · Community Outreach · Preaching Ministry',discipler:'Earn respect through character, not title. Help them see their impact on quieter members.'},
+    '9':{name:'The Peacemaker',formation:'True peace requires the courage to speak. Jesus came to bring a sword of truth. (Matthew 10:34)',ministry:'Couples Ministry · Pastoral Care · Children\'s Ministry · Kitchen Ministry',discipler:'Help them discover their own voice. Watch for passive resistance. Give direct but gentle accountability.'}
+  };
+
+  function infoRow(label, text, color) {
+    return `<div style="margin-bottom:.5rem"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:${color||'var(--muted)'};margin-bottom:2px">${label}</div><div style="font-size:12.5px;color:var(--ink);line-height:1.6">${text}</div></div>`;
+  }
+  function infoBox(label, text, bg, border) {
+    return `<div style="background:${bg};border-left:3px solid ${border};border-radius:0 6px 6px 0;padding:.6rem .8rem;margin-bottom:.45rem"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:${border};margin-bottom:2px">${label}</div><div style="font-size:12.5px;line-height:1.6">${text}</div></div>`;
+  }
+
+  // Build profile sections
+  const sections = [
+    {key:'gifts', label:'🎁 Spiritual Gifts', color:'var(--green)', pullData: giftsData,
+     render: (d) => {
+       if(!d) return null;
+       const top = [d.gift1,d.gift2,d.gift3].filter(Boolean);
+       const allGifts = [d.gift1,d.gift2,d.gift3,d.gift4,d.gift5].filter(Boolean);
+       return `
+         ${infoRow('Top Gifts', `<strong>${top.join(', ')||'—'}</strong>`, 'var(--green)')}
+         ${allGifts.length > 3 ? infoRow('All Top 5', allGifts.join(', '), 'var(--muted)') : ''}
+         ${d.natural_talents ? infoRow('Natural Talents', d.natural_talents, 'var(--muted)') : ''}
+         ${d.ministry_matches ? infoBox('⛪ Ministry Matches', d.ministry_matches, 'var(--green-bg)', 'var(--green)') : ''}
+         ${d.sports_inclination ? infoBox('🏀 Youth in Motion', 'High sports inclination — consider YiM placement', '#e8f6f0', '#2a8060') : ''}`;
+     }},
+    {key:'love_language', label:'❤️ Love Language', color:'#8a2040',
+     render: (d) => {
+       const kb = LL_KB[d.top_result] || {};
+       return `
+         ${infoRow('Primary', `<strong>${d.top_result||'—'}</strong>`, '#8a2040')}
+         ${d.second_result ? infoRow('Secondary', d.second_result, 'var(--muted)') : ''}
+         ${kb.ministry ? infoBox('⛪ Best Ministry Fit', kb.ministry, '#fdeef3', '#8a2040') : ''}
+         ${kb.team ? infoBox('👥 In a Team', kb.team, '#fff8f0', '#b8882a') : ''}
+         ${kb.discipler ? infoBox('🤝 Discipling This Person', kb.discipler, 'var(--green-bg)', 'var(--green)') : ''}`;
+     }},
+    {key:'disc', label:'🧭 DISC Profile', color:'#1a4a6b',
+     render: (d) => {
+       const p = DISC_KB[d.top_result] || {};
+       const s = DISC_KB[d.second_result] || {};
+       return `
+         ${infoRow('Profile', `<strong>${d.summary || (d.top_result+(d.second_result||''))}</strong> — ${p.name||''}${s.name?' / '+s.name:''}`, '#1a4a6b')}
+         ${p.ministry ? infoBox('⛪ Best Ministry Fit', p.ministry, '#e8f0f8', '#1a4a6b') : ''}
+         ${p.team ? infoBox('👥 In a Team', p.team+'<br><span style="color:#7a2020;font-size:11.5px">⚠ Under pressure: '+p.stress+'</span>', '#fff8f0', '#b8882a') : ''}
+         ${p.discipler ? infoBox('🤝 Discipling This Person', p.discipler, 'var(--green-bg)', 'var(--green)') : ''}`;
+     }},
+    {key:'enneagram', label:'🌀 Enneagram', color:'#b8882a',
+     render: (d) => {
+       const kb = ENNEA_KB[String(d.top_result)] || {};
+       return `
+         ${infoRow('Type', `<strong>${d.summary || 'Type '+d.top_result}</strong> — ${kb.name||''}`, '#b8882a')}
+         ${d.second_result ? infoRow('Second Highest', 'Type '+d.second_result+' — '+(ENNEA_KB[String(d.second_result)]?.name||''), 'var(--muted)') : ''}
+         ${kb.formation ? infoBox('✝ Formation Invitation', kb.formation, '#fdf6e8', '#b8882a') : ''}
+         ${kb.ministry ? infoBox('⛪ Best Ministry Fit', kb.ministry, '#e8f0f8', '#1a4a6b') : ''}
+         ${kb.discipler ? infoBox('🤝 Discipling This Person', kb.discipler, 'var(--green-bg)', 'var(--green)') : ''}`;
+     }},
+    {key:'strengths', label:'💪 Strengths Profile', color:'#2a5c40',
+     render: (d) => {
+       const top5 = [d.top_result,d.second_result,d.third_result].filter(Boolean);
+       const res = d.results || {};
+       const sorted = Object.entries(res).sort((a,b)=>b[1]-a[1]).slice(0,5);
+       const domainCount = {};
+       sorted.forEach(([id])=>{
+         const themeMap = {'achiever':'Executing','arranger':'Executing','belief':'Executing','consistency':'Executing','deliberative':'Executing','discipline':'Executing','focus':'Executing','responsibility':'Executing','restorative':'Executing','activator':'Influencing','command':'Influencing','communication':'Influencing','competition':'Influencing','maximizer':'Influencing','self-assurance':'Influencing','significance':'Influencing','woo':'Influencing','adaptability':'Relationship Building','connectedness':'Relationship Building','developer':'Relationship Building','empathy':'Relationship Building','harmony':'Relationship Building','includer':'Relationship Building','individualization':'Relationship Building','positivity':'Relationship Building','relator':'Relationship Building','analytical':'Strategic Thinking','context':'Strategic Thinking','futuristic':'Strategic Thinking','ideation':'Strategic Thinking','input':'Strategic Thinking','intellection':'Strategic Thinking','learner':'Strategic Thinking','strategic':'Strategic Thinking'};
+         const dom = themeMap[id]||'Unknown';
+         domainCount[dom] = (domainCount[dom]||0)+1;
+       });
+       const domStr = Object.entries(domainCount).sort((a,b)=>b[1]-a[1]).map(([d,c])=>`${d} (${c})`).join(' · ');
+       return `
+         ${infoRow('Top 3 Themes', `<strong>${top5.join(' · ')||d.summary||'—'}</strong>`, '#2a5c40')}
+         ${sorted.length>3 ? infoRow('Themes 4–5', sorted.slice(3).map(([id])=>id.charAt(0).toUpperCase()+id.slice(1).replace(/-/g,' ')).join(' · '), 'var(--muted)') : ''}
+         ${domStr ? infoBox('📊 Domain Breakdown', domStr, 'var(--green-bg)', 'var(--green)') : ''}
+         ${infoBox('⛪ Ministry Placement Principle', 'Lead with Executing themes → operational/admin roles. Influencing → evangelism/communications. Relationship Building → pastoral/discipleship. Strategic Thinking → leadership/teaching/planning.', '#e8f0f8', '#1a4a6b')}`;
+     }},
+  ];
+
+  let html = `<div style="display:flex;flex-direction:column;gap:.65rem;padding:.75rem 0">`;
+
+  sections.forEach(sec => {
+    const data = sec.key === 'gifts' ? sec.pullData : latest[sec.key];
+    const taken = data?.date_taken || data?.created_at?.split('T')[0] || null;
+    const rendered = data ? sec.render(data) : null;
+
+    html += `<div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)">
+      <div style="display:flex;align-items:center;gap:10px;padding:.75rem 1rem;border-bottom:1px solid ${data?'var(--border)':'transparent'}">
+        <div style="font-size:13px;font-weight:700;color:${sec.color};flex:1">${sec.label}</div>
+        ${taken?`<div style="font-size:10px;color:var(--lighter)">Taken: ${taken}</div>`:'<div style="font-size:10px;background:#fff3cd;color:#856404;padding:2px 8px;border-radius:10px;font-weight:600">Not yet taken</div>'}
+        <button onclick="copyProfileLink('${sec.key}','${m.id}')" title="Copy link" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">📋 Link</button>
+        ${data ? `<button onclick="window.open(getResultsUrl('${sec.key}','${m.id}'),'_blank')" style="font-size:11px;padding:4px 10px;background:var(--green-bg);border:1.5px solid rgba(42,92,64,.3);border-radius:6px;cursor:pointer;color:var(--green);font-weight:600;font-family:'DM Sans',sans-serif">👁 View Results</button>` : ''}
+        <button onclick="window.open(getProfileUrl('${sec.key}','${m.id}'),'_blank')" title="Retake assessment" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">${data ? '🔄 Retake' : '▶ Take'}</button>
+      </div>
+      <div id="result-${sec.key}" style="display:none">${rendered ? `<div style="padding:.65rem 1rem;border-top:1px solid var(--border)">${rendered}</div>` : ''}</div>
+    </div>`;
+  });
+
+  // History log
+  if(profileRows.length > 0) {
+    html += `<div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;box-shadow:var(--shadow)">
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.5rem">Assessment History</div>`;
+    profileRows.slice(0,8).forEach(r => {
+      const typeLabel = {love_language:'Love Language',disc:'DISC',enneagram:'Enneagram',strengths:'Strengths'}[r.profile_type]||r.profile_type;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span style="color:var(--muted);min-width:80px">${r.date_taken||'—'}</span>
+        <span style="font-weight:600;color:var(--ink)">${typeLabel}</span>
+        <span style="color:var(--muted);flex:1">${r.summary||r.top_result||'—'}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  wrap.innerHTML = html;
+}
+
+
+function toggleProfileResults(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  // Update button text
+  const btn = document.querySelector(`button[onclick="toggleProfileResults('${id}')"]`);
+  if (btn) btn.textContent = isOpen ? '👁 View Results' : '🙈 Hide Results';
+}
+function copyGiftsLink(memberId) {
+  const url = getGiftsUrl(memberId);
+  navigator.clipboard.writeText(url).then(() => {
+    toast('Gifts diagnostic link copied — paste into Viber 🎁');
+  }).catch(() => {
+    prompt('Copy this link and send to the member via Viber:', url);
+  });
+}
+
+function openGiftsDirect(memberId) {
+  window.open(getGiftsUrl(memberId), '_blank');
+}
+
+async function rGiftsTab(m) {
+  const wrap = document.getElementById('giftsTab');
+  if (!wrap) return;
+
+  // Try to load gifts diagnostic results from Supabase
+  let giftsData = null;
+  try {
+    const { data } = await db.from('gifts_diagnostic')
+      .select('*').eq('member_id', m.id)
+      .order('date_taken', {ascending: false}).limit(1).maybeSingle();
+    giftsData = data;
+  } catch(e) { console.warn('Gifts load error:', e); }
+
+  const giftsUrl = getGiftsUrl(m.id);
+
+  if (!giftsData) {
+    // No gifts diagnostic taken yet
+    wrap.innerHTML = `<div style="text-align:center;padding:1.5rem">
+      <div style="font-size:2rem;margin-bottom:.5rem">🎁</div>
+      <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.35rem">No Gifts Diagnostic taken yet</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:1rem;line-height:1.6">Generate a personalized link and send to the member via Viber. The diagnostic has 80 gift questions and 14 natural talent questions.</div>
+      <div style="background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:8px;padding:.85rem 1rem;margin-bottom:.75rem;font-size:12px;color:var(--green);word-break:break-all;text-align:left;">${giftsUrl}</div>
+      <button onclick="copyGiftsLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 22px;background:var(--green);color:white;border:none;border-radius:7px;cursor:pointer;width:100%;margin-bottom:.5rem">🎁 Copy Gifts Diagnostic Link</button>
+      <button onclick="openGiftsDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 18px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;width:100%">🔗 Open Gifts Diagnostic</button>
+    </div>`;
+    return;
+  }
+
+  // Gifts diagnostic has been taken — show results
+  const scores = giftsData.all_scores || {};
+  const talents = giftsData.natural_talents || {};
+  const giftOrder = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  const maxScore = 25;
+
+  const talentClusters = [
+    {id:'sports',name:'Sports',icon:'🏀'},
+    {id:'creative',name:'Creative',icon:'🎨'},
+    {id:'technical',name:'Technical',icon:'💻'},
+    {id:'culinary',name:'Culinary',icon:'🍳'},
+    {id:'admin',name:'Admin',icon:'📁'},
+    {id:'comms',name:'Communication',icon:'✍️'},
+    {id:'physical',name:'Physical',icon:'🔧'},
+  ];
+
+  const giftEmojis = {leadership:'⚡',administration:'📋',teaching:'📖',knowledge:'🔍',wisdom:'💡',prophecy:'🔥',discernment:'🛡',exhortation:'🤝',shepherding:'🐑',faith:'⛰',evangelism:'🌏',apostleship:'🚀',service:'🛠',mercy:'💙',giving:'🎁',hospitality:'🏠'};
+
+  wrap.innerHTML = `
+    <!-- HEADER -->
+    <div style="background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:14px;">
+      <div>
+        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--green);font-weight:600;margin-bottom:3px">Gifts Diagnostic Results</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink)">${giftsData.primary_gift||'—'} · ${giftsData.secondary_gift||'—'} · ${giftsData.supporting_gift||'—'}</div>
+        <div style="font-size:11px;color:var(--muted)">Taken: ${giftsData.date_taken||'—'} · Top Match: ${giftsData.ministry_match_1||'—'}</div>
+      </div>
+    </div>
+
+    <!-- TOP 3 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1rem;">
+      ${[{gift:giftsData.primary_gift,label:'Primary',bg:'var(--gold-bg)',color:'var(--gold-dim)'},
+         {gift:giftsData.secondary_gift,label:'Secondary',bg:'var(--green-bg)',color:'var(--green)'},
+         {gift:giftsData.supporting_gift,label:'Supporting',bg:'var(--blue-bg)',color:'var(--blue)'}
+        ].map(r=>`<div style="background:${r.bg};border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:.65rem;text-align:center;">
+          <div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:${r.color};margin-bottom:3px">${r.label}</div>
+          <div style="font-size:20px;margin-bottom:2px">${giftEmojis[r.gift?.toLowerCase()]||'🎁'}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--ink)">${r.gift||'—'}</div>
+        </div>`).join('')}
+    </div>
+
+    <!-- GIFT BARS -->
+    <div style="margin-bottom:1rem">
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">All 16 Gifts</div>
+      ${giftOrder.map(([gid,score])=>{
+        const pct=Math.round(score/maxScore*100);
+        const name=gid.charAt(0).toUpperCase()+gid.slice(1);
+        const emoji=giftEmojis[gid]||'🎁';
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="font-size:12px;color:var(--ink);min-width:130px;font-weight:${score>=18?'600':'400'}">${emoji} ${name}</div>
+          <div style="flex:1;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)">
+            <div style="height:100%;width:${pct}%;background:${score>=18?'var(--green)':score>=12?'var(--gold)':'var(--lighter)'};border-radius:3px;transition:width .5s"></div>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);min-width:24px;text-align:right">${score}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- NATURAL TALENTS -->
+    ${Object.keys(talents).length ? `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">Natural Talents</div>
+      ${talentClusters.map(c=>{
+        const s=talents[c.id]||0;const pct=Math.round(s/10*100);
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="font-size:12px;color:var(--ink);min-width:130px">${c.icon} ${c.name}</div>
+          <div style="flex:1;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)">
+            <div style="height:100%;width:${pct}%;background:${s>=8?'var(--red)':s>=5?'var(--gold)':'var(--lighter)'};border-radius:3px"></div>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);min-width:24px;text-align:right">${s}/10</div>
+        </div>`;
+      }).join('')}
+      ${(talents['sports']||0)>=6?`<div style="background:var(--red-bg);border:1px solid rgba(122,32,32,.2);border-radius:6px;padding:.6rem .85rem;margin-top:.5rem;font-size:12px;color:var(--red)">🏀 Sports inclination ≥ 6 — Youth in Motion candidate</div>`:''}
+    </div>` : ''}
+
+    <!-- MINISTRY MATCHES -->
+    <div style="margin-bottom:1rem">
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">Top Ministry Matches</div>
+      ${[giftsData.ministry_match_1,giftsData.ministry_match_2,giftsData.ministry_match_3].filter(Boolean).map((min,i)=>
+        `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${i===0?'var(--gold-bg)':'var(--green-bg)'};color:${i===0?'var(--gold-dim)':'var(--green)'}">${i===0?'Primary':'Good fit'}</span>
+          <span style="font-size:13px;font-weight:500;color:var(--ink)">${min}</span>
+        </div>`).join('')}
+    </div>
+
+    <!-- ACTIONS -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)">
+      <button onclick="copyGiftsLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">🎁 Copy New Gifts Link</button>
+      <button onclick="openGiftsDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;">🔗 Retake Gifts Diagnostic</button>
+    </div>`;
+}
+
+function copyDiagLink(memberId) {
+  const url = getDiagUrl(memberId);
+  navigator.clipboard.writeText(url).then(() => {
+    toast('Link copied — paste into Viber 📋');
+  }).catch(() => {
+    // Fallback for browsers that block clipboard
+    prompt('Copy this link and send to the member via Viber:', url);
+  });
+}
+
+function openDiagDirect(memberId) {
+  window.open(getDiagUrl(memberId), '_blank');
+}
+
+// ── Also add link button in member profile when zone IS set ──
+function addDiagLinkToExisting(memberId, wrap) {
+  const url = getDiagUrl(memberId);
+  const linkDiv = document.createElement('div');
+  linkDiv.style.cssText = 'margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;';
+  linkDiv.innerHTML = `
+    <button onclick="copyDiagLink('${memberId}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📋 Copy Diagnostic Link</button>
+    <button onclick="openDiagDirect('${memberId}')" style="font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;">🔗 Retake Diagnostic</button>
+  `;
+  wrap.appendChild(linkDiv);
+}
+
+function toast(msg,icon='✓'){
+  const t=document.getElementById('toast');
+  document.getElementById('tmsg').textContent=msg;document.getElementById('tico').textContent=icon;
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+
+// ═══════════════════════════════════════
+// DISCIPLER POPUP SEARCH
+// ═══════════════════════════════════════
+let facListVisible = false;
+
+function getFacilitators() {
+  // Include members where is_facilitator is true OR facilitator_role is set
+  return members.filter(m => m.is_facilitator || m.facilitator_role);
+}
+
+function searchFacilitators(q) {
+  const dd = document.getElementById('facDropdown');
+  const facs = getFacilitators().filter(m =>
+    !q || (m.name||'').toLowerCase().includes(q.toLowerCase())
+  );
+  if (!facs.length) {
+    dd.innerHTML = '<div style="padding:.75rem 1rem;font-size:12px;color:#6b5f4f">No facilitators found.<br><span style="font-size:11px">Flag a member as Facilitator/LC Leader first.</span></div>';
+  } else {
+    dd.innerHTML = facs.map(m =>
+      `<div onclick="selectFac('${m.id}','${m.name}');event.stopPropagation();"
+        style="padding:.6rem 1rem;font-size:13px;color:#1a1612;cursor:pointer;border-bottom:1px solid #e2d8cc;transition:background .1s;"
+        onmouseover="this.style.background='#eef6f1'" onmouseout="this.style.background='white'"
+      >
+        <span style="font-weight:600">${m.name}</span>
+        <span style="font-size:10px;color:#9a8f80;margin-left:8px">${m.facilitator_role||'Facilitator'}</span>
+      </div>`
+    ).join('');
+  }
+  dd.style.display = 'block';
+}
+
+function showFacList(event) {
+  // Stop the click from bubbling to document (which would close the dropdown)
+  if (event) event.stopPropagation();
+  const dd = document.getElementById('facDropdown');
+  const q = document.getElementById('fd').value;
+  const facs = getFacilitators().filter(m =>
+    !q || (m.name||'').toLowerCase().includes(q.toLowerCase())
+  );
+  if (!facs.length) {
+    dd.innerHTML = '<div style="padding:.75rem 1rem;font-size:12px;color:#6b5f4f">No facilitators found.<br><span style="font-size:11px">Flag a member as Facilitator/LC Leader first.</span></div>';
+  } else {
+    dd.innerHTML = facs.map(m =>
+      `<div onclick="selectFac('${m.id}','${m.name}');event.stopPropagation();"
+        style="padding:.6rem 1rem;font-size:13px;color:#1a1612;cursor:pointer;border-bottom:1px solid #e2d8cc;transition:background .1s;"
+        onmouseover="this.style.background='#eef6f1'" onmouseout="this.style.background='white'"
+      >
+        <span style="font-weight:600">${m.name}</span>
+        <span style="font-size:10px;color:#9a8f80;margin-left:8px">${m.facilitator_role||'Facilitator'}</span>
+      </div>`
+    ).join('');
+  }
+  dd.style.display = 'block';
+}
+
+function selectFac(id, name) {
+  document.getElementById('fd').value = name;
+  document.getElementById('fd_id').value = id;
+}
+
+// dropdown replaced with select element
+
+function toggleFacRole() {
+  const checked = document.getElementById('fIsFac').checked;
+  document.getElementById('facRoleRow').style.display = checked ? 'flex' : 'none';
+}
+
+// ═══════════════════════════════════════
+// FAMILY MEMBER SLOTS
+// ═══════════════════════════════════════
+const RELATIONSHIPS = ['Wife','Husband','Son','Daughter','Sibling','Parent','Other'];
+let familyData = [{},{},{},{},{}]; // up to 5 slots
+
+function buildFamilySlots(existing) {
+  familyData = existing && existing.length
+    ? [...existing, ...Array(5).fill({})].slice(0, 5)
+    : [{},{},{},{},{}];
+  const wrap = document.getElementById('familySlots');
+  wrap.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const slot = familyData[i] || {};
+    const div = document.createElement('div');
+    div.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;';
+    div.innerHTML = `
+      <div style="position:relative">
+        <input id="fam_name_${i}"
+          placeholder="${i===0?'Family member name...':'Optional family member...'}"
+          value="${slot.name||''}"
+          autocomplete="off"
+          oninput="searchFamMember(${i},this.value)"
+          onfocus="searchFamMember(${i},this.value)"
+          style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:100%">
+        <div id="fam_dd_${i}" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:100;max-height:150px;overflow-y:auto;"></div>
+        <input type="hidden" id="fam_id_${i}" value="${slot.member_id||''}">
+      </div>
+      <select id="fam_rel_${i}"
+        style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:7px 8px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:12px;width:110px">
+        <option value="">Relationship</option>
+        ${RELATIONSHIPS.map(r=>`<option value="${r}" ${slot.relationship===r?'selected':''}>${r}</option>`).join('')}
+      </select>
+      <button onclick="clearFamSlot(${i})"
+        style="width:28px;height:28px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center"
+        title="Clear">×</button>
+    `;
+    wrap.appendChild(div);
+  }
+}
+
+function searchFamMember(idx, q) {
+  const dd = document.getElementById('fam_dd_' + idx);
+  const results = q.length < 2 ? [] : members.filter(m =>
+    (m.name||'').toLowerCase().includes(q.toLowerCase()) && m.id !== eid
+  ).slice(0, 8);
+  if (!results.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = results.map(m =>
+    `<div onclick="selectFamMember(${idx},'${m.id}','${m.name.replace(/'/g,"\'")}')"
+      style="padding:.55rem 1rem;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--border);"
+      onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''">
+      ${m.name} <span style="font-size:10px;color:var(--muted)">${m.is_facilitator?'⭐ ':''}</span>
+    </div>`
+  ).join('');
+  dd.style.display = 'block';
+}
+
+function selectFamMember(idx, id, name) {
+  document.getElementById('fam_name_' + idx).value = name;
+  document.getElementById('fam_id_' + idx).value = id;
+  document.getElementById('fam_dd_' + idx).style.display = 'none';
+  familyData[idx] = { ...familyData[idx], member_id: id, name };
+}
+
+function clearFamSlot(idx) {
+  document.getElementById('fam_name_' + idx).value = '';
+  document.getElementById('fam_id_' + idx).value = '';
+  document.getElementById('fam_rel_' + idx).value = '';
+  familyData[idx] = {};
+}
+
+function collectFamilyData() {
+  return Array.from({length:5}, (_,i) => {
+    const name = document.getElementById('fam_name_' + i)?.value?.trim();
+    const id = document.getElementById('fam_id_' + i)?.value;
+    const rel = document.getElementById('fam_rel_' + i)?.value;
+    return name ? { name, member_id: id||null, relationship: rel||'' } : null;
+  }).filter(Boolean);
+}
+
+// Hide family dropdowns when clicking outside
+document.addEventListener('click', e => {
+  for (let i = 0; i < 5; i++) {
+    const dd = document.getElementById('fam_dd_' + i);
+    const inp = document.getElementById('fam_name_' + i);
+    if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) {
+      dd.style.display = 'none';
+    }
+  }
+});
+
+// ═══════════════════════════════════════
+// UPDATE buildMinistrySelect TO FILL ALL 3
+// ═══════════════════════════════════════
+function buildMinistrySelect() {
+  ['fmi','fmi2','fmi3'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Select ministry —</option>';
+    Object.entries(MINISTRIES).forEach(([cat, mins]) => {
+      const og = document.createElement('optgroup');
+      og.label = cat;
+      mins.forEach(m => {
+        const o = document.createElement('option');
+        o.value = m; o.textContent = m;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+  });
+}
+
+function populateDisciplerSelect(currentDisciplerName) {
+  const sel = document.getElementById('fd');
+  if (!sel) return;
+  const facs = members.filter(m => m.is_facilitator || m.facilitator_role);
+  sel.innerHTML = '<option value="">— Select Discipler / LC Leader —</option>';
+  facs.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.name;
+    o.dataset.id = m.id;
+    o.textContent = m.name + (m.facilitator_role ? ' (' + m.facilitator_role + ')' : '');
+    if (m.name === currentDisciplerName) o.selected = true;
+    sel.appendChild(o);
+  });
+  // When selection changes, update hidden id field
+  sel.onchange = function() {
+    const selected = this.options[this.selectedIndex];
+    document.getElementById('fd_id').value = selected?.dataset?.id || '';
+  };
+}
+
+// ═══════════════════════════════════════
+// SETTINGS MINISTRIES (replace placeholder)
+// ═══════════════════════════════════════
+// Built dynamically — see buildSettingsMinistries()
+document.querySelector('#panel-settings .ss:nth-child(3)').innerHTML=
+  `<div class="st">Rosehill Ministries (17 Teams)</div><div id="settingsMinList"></div>`;
+function buildSettingsMinistries2(){
+  const wrap=document.getElementById('settingsMinList');if(!wrap)return;
+  wrap.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-top:.5rem';
+  Object.entries(MINISTRIES).forEach(([cat,mins])=>{
+    const catDiv=document.createElement('div');
+    catDiv.style.cssText='grid-column:1/-1;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border);';
+    catDiv.textContent=cat;wrap.appendChild(catDiv);
+    mins.forEach(m=>{
+      const item=document.createElement('div');
+      item.style.cssText='font-size:12.5px;color:var(--text);padding:2px 0;';
+      item.innerHTML=`<span style="color:var(--green);margin-right:5px">•</span>${m}`;
+      wrap.appendChild(item);
+    });
+  });
+}
+buildSettingsMinistries2();
+</script>
+</body>
+</html>
