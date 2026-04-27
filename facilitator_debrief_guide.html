@@ -609,6 +609,16 @@ body {
   </div>
 </div>
 
+<!-- MEMBER BANNER — populated from ?id= URL param -->
+<div id="memberBanner" style="display:none;background:#eef6f1;border-bottom:2px solid rgba(42,92,64,.2);padding:.65rem 1.5rem;display:flex;align-items:center;gap:12px;">
+  <div style="width:32px;height:32px;border-radius:50%;background:#2a5c40;color:white;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">✓</div>
+  <div>
+    <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:#2a5c40">Debrief for</div>
+    <div id="memberBannerName" style="font-size:15px;font-weight:700;color:#1a1612"></div>
+    <div id="memberBannerMeta" style="font-size:11px;color:#6b8f70"></div>
+  </div>
+</div>
+
 <!-- STICKY NAV -->
 <div class="sticky-nav">
   <button class="nav-item active" onclick="scrollTo('prep')">Before You Begin</button>
@@ -1409,6 +1419,34 @@ window.addEventListener('scroll', () => {
     n.classList.toggle('active', i === sections.indexOf(current));
   });
 }, { passive: true });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var id = new URLSearchParams(window.location.search).get('id');
+  if (!id) return;
+  try {
+    var db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
+      auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
+    });
+    db.from('members').select('id,name,pipeline_level,discipler_name,discipler,diagnostic_score,diagnostic_zone')
+      .eq('id', id).single()
+      .then(function(res) {
+        if (!res.data) return;
+        var d = res.data;
+        var LN = ['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
+        var ZL = {1:'Zone 1 ✅',2:'Zone 2 🟡',3:'Zone 3 🟠',4:'Zone 4 🔴'};
+        document.getElementById('memberBanner').style.display = 'flex';
+        document.getElementById('memberBannerName').textContent = d.name;
+        var meta = LN[d.pipeline_level||0];
+        if (d.diagnostic_score) meta += ' · Score: ' + d.diagnostic_score + '%';
+        if (d.diagnostic_zone) meta += ' · ' + (ZL[d.diagnostic_zone]||'');
+        if (d.discipler_name||d.discipler) meta += ' · Discipler: ' + (d.discipler_name||d.discipler);
+        document.getElementById('memberBannerMeta').textContent = meta;
+        document.title = 'Debrief Guide — ' + d.name;
+      });
+  } catch(e) { console.error(e); }
+});
 </script>
 </body>
 </html>

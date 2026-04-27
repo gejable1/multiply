@@ -285,7 +285,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 // ═══════════════════════════════════════
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-const db = supabase.createClient(SB_URL, SB_KEY);
+let _db = null;
+function getDB() {
+  if (!_db) {
+    try {
+      _db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
+        auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
+      });
+    } catch(e) { console.error('Supabase init failed:', e); }
+  }
+  return _db;
+}
 
 // ═══════════════════════════════════════
 // TRACK DATA
@@ -588,19 +598,19 @@ async function init() {
 
   try {
     // Load member
-    const { data: mData, error: mErr } = await db.from('members').select('*').eq('id', memberId).single();
+    const { data: mData, error: mErr } = await getDB().from('members').select('*').eq('id', memberId).single();
     if (mErr || !mData) throw new Error('Member not found');
     member = mData;
 
     // Load all members for facilitator override dropdown
-    const { data: allData } = await db.from('members')
+    const { data: allData } = await getDB().from('members')
       .select('id,name,facilitator_role,is_facilitator,discipler')
       .or('is_facilitator.eq.true,facilitator_role.not.is.null')
       .order('name');
     allMembers = allData || [];
 
     // Load or create intervention record
-    const { data: intData } = await db.from('interventions')
+    const { data: intData } = await getDB().from('interventions')
       .select('*').eq('member_id', memberId)
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
 
@@ -615,7 +625,7 @@ async function init() {
       // Create new intervention record
       const zone = member.diagnostic_zone || member.diag_zone;
       const track = zone == 4 ? 'gospel_conversations' : zone == 2 ? 'assurance_formation' : 'first_steps';
-      const { data: newInt } = await db.from('interventions').insert({
+      const { data: newInt } = await getDB().from('interventions').insert({
         member_id: memberId,
         member_name: member.name,
         diag_zone: zone,
@@ -849,7 +859,7 @@ async function saveFacOverride() {
   await saveIntervention();
 
   // Also update the member record
-  await db.from('members').update({
+  await getDB().from('members').update({
     facilitator_id: currentFacId,
     facilitator_name: currentFacName,
     updated_at: new Date().toISOString()
@@ -910,7 +920,7 @@ async function markComplete() {
   await saveIntervention();
 
   // Update member record — move to Zone 1
-  await db.from('members').update({
+  await getDB().from('members').update({
     diagnostic_zone: 1,
     diag_zone: 1,
     intervention_status: 'completed',
@@ -925,7 +935,7 @@ async function markComplete() {
 // ═══════════════════════════════════════
 async function saveIntervention() {
   if (!intervention?.id) return;
-  const { error } = await db.from('interventions').update({
+  const { error } = await getDB().from('interventions').update({
     sessions_completed: sessionChecks,
     facilitator_notes: facilitatorNotes,
     status: currentStatus,
@@ -971,7 +981,7 @@ function toast(msg, icon='✓') {
 // ═══════════════════════════════════════
 // START
 // ═══════════════════════════════════════
-init();
+document.addEventListener("DOMContentLoaded", function(){ init(); });
 </script>
 </body>
 </html>
