@@ -1151,11 +1151,11 @@ async function loadMember(id) {
     // Member profile
     const memberRes = await supabase.from('members').select('*').eq('id', id).maybeSingle();
 
-    // Spiritual gifts (separate table)
+    // Spiritual gifts (separate table; uses created_at)
     let gifts = null;
     try {
       const gr = await supabase.from('gifts_diagnostic').select('*').eq('member_id', id)
-        .order('date_taken', { ascending: false }).limit(1);
+        .order('created_at', { ascending: false }).limit(1);
       gifts = gr.data?.[0] || null;
     } catch (e) { console.warn('gifts_diagnostic skipped:', e); }
 
@@ -1171,15 +1171,9 @@ async function loadMember(id) {
     const latest = {};
     profileRows.forEach(r => { if (!latest[r.profile_type]) latest[r.profile_type] = r; });
 
-    // FATS — try a few possible table names; if none exist, leave null
+    // FATS — no table exists for this yet; skip silently. When you create one,
+    // tell me the table name and column names and I'll wire it up.
     let fats = null;
-    for (const tbl of ['fats_assessment', 'fats_results', 'fats']) {
-      try {
-        const fr = await supabase.from(tbl).select('*').eq('member_id', id)
-          .order('date_taken', { ascending: false }).limit(1);
-        if (fr.data && fr.data.length) { fats = fr.data[0]; break; }
-      } catch (e) { /* table likely doesn't exist; try next */ }
-    }
 
     currentMember = {
       id,
