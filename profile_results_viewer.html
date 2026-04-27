@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile Results — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#faf7f2;--paper:#fff;--ink:#1a1410;--muted:#6b5f50;--lighter:#a09080;
+  --border:#e8ddd0;--surface2:#f5f0e8;
+  --green:#2a5c40;--green-bg:#eef6f1;
+  --gold:#b8882a;--gold-bg:#fdf6e8;
+  --navy:#1b2a4a;--navy-bg:#e8f0f8;
+  --rose:#8a2040;--rose-bg:#fdf0f4;
+  --red:#7a2020;--red-bg:#fdecea;
+  --shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 20px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+
+/* LOADING */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* COVER */
+.cover{padding:0;margin-bottom:0;}
+.cover-inner{padding:2.5rem 1.5rem 2rem;text-align:center;}
+.cover-badge{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);display:block;margin-bottom:.65rem;}
+.cover-name{font-family:'Cormorant Garamond',serif;font-size:clamp(1.6rem,5vw,2.5rem);font-weight:700;color:#f5edd8;line-height:1.2;margin-bottom:.2rem;}
+.cover-type{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:.75rem;}
+.cover-tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.ct{font-size:10px;padding:3px 12px;border-radius:20px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.5);}
+
+/* PROGRESS BAR */
+.prog-bar{position:sticky;top:0;z-index:100;background:var(--paper);border-bottom:1px solid var(--border);padding:.5rem 1.25rem;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);}
+.prog-label{font-size:11px;color:var(--muted);font-weight:500;}
+.print-btn{margin-left:auto;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:5px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);}
+.print-btn:hover{background:var(--gold-bg);border-color:var(--gold);color:var(--gold);}
+
+/* HERO RESULT */
+.hero{border-radius:14px;padding:2rem 1.5rem;text-align:center;margin:1.25rem;box-shadow:var(--shadow2);}
+.hero-rank{font-size:10px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;opacity:.6;margin-bottom:.35rem;}
+.hero-primary{font-family:'Cormorant Garamond',serif;font-size:clamp(1.75rem,6vw,3rem);font-weight:700;color:white;line-height:1.2;margin-bottom:.25rem;}
+.hero-secondary{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:.5rem;}
+.hero-date{font-size:10px;color:rgba(255,255,255,.3);}
+
+/* SCORE BARS SECTION */
+.section{max-width:720px;margin:0 auto;padding:0 1.25rem 1rem;}
+.section-title{font-size:10px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:1.5rem 0 .75rem;display:flex;align-items:center;gap:10px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* SCORE BAR */
+.score-card{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-bottom:.65rem;box-shadow:var(--shadow);}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.br-icon{font-size:1.1rem;flex-shrink:0;width:28px;text-align:center;}
+.br-name{font-size:13px;font-weight:600;color:var(--ink);flex:1;}
+.br-track{flex:2;height:20px;background:var(--border);border-radius:4px;overflow:hidden;}
+.br-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:8px;transition:width .8s ease;}
+.br-fill span{font-size:10px;font-weight:700;color:white;}
+.br-val{font-size:12px;font-weight:700;color:var(--muted);min-width:36px;text-align:right;}
+.br-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;flex-shrink:0;}
+
+/* PROFILE CARD (collapsible) */
+.profile-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:.85rem;overflow:hidden;box-shadow:var(--shadow);}
+.pc-head{display:flex;align-items:center;gap:14px;padding:1rem 1.1rem;cursor:pointer;transition:background .12s;user-select:none;}
+.pc-head:hover{background:var(--surface2);}
+.pc-icon{font-size:1.75rem;flex-shrink:0;}
+.pc-info{flex:1;}
+.pc-name{font-family:'Cormorant Garamond',serif;font-size:1rem;font-weight:600;color:var(--ink);}
+.pc-tagline{font-size:11px;color:var(--lighter);}
+.pc-rank{font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;margin-left:6px;}
+.pc-chev{font-size:11px;color:var(--lighter);transition:transform .2s;}
+.profile-card.open .pc-chev{transform:rotate(180deg);}
+.pc-body{display:none;padding:.85rem 1.1rem 1.1rem;border-top:1px solid var(--border);background:var(--surface2);}
+.profile-card.open .pc-body{display:block;}
+
+/* INFO BLOCKS */
+.ib{border-radius:7px;padding:.65rem .85rem;margin:.4rem 0;font-size:12.5px;line-height:1.7;}
+.ib-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+.ib-green{background:var(--green-bg);border-left:3px solid var(--green);} .ib-green .ib-label{color:var(--green);}
+.ib-gold{background:var(--gold-bg);border-left:3px solid var(--gold);} .ib-gold .ib-label{color:var(--gold);}
+.ib-red{background:var(--red-bg);border-left:3px solid var(--red);} .ib-red .ib-label{color:var(--red);}
+.ib-navy{background:var(--navy-bg);border-left:3px solid var(--navy);} .ib-navy .ib-label{color:var(--navy);}
+.ib-rose{background:var(--rose-bg);border-left:3px solid var(--rose);} .ib-rose .ib-label{color:var(--rose);}
+
+.desc-en{font-size:13px;color:var(--ink);line-height:1.75;margin-bottom:.5rem;}
+.desc-tl{font-size:13px;color:var(--muted);line-height:1.75;font-style:italic;border-left:3px solid var(--gold);padding-left:.75rem;margin-bottom:.85rem;}
+
+/* DOMAIN GRID */
+.domain-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:.5rem 0;}
+.dg-card{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:.65rem .85rem;text-align:center;}
+.dg-num{font-size:1.4rem;font-weight:700;}
+.dg-label{font-size:10px;color:var(--lighter);}
+
+/* ERROR */
+.error-box{max-width:480px;margin:3rem auto;padding:1.5rem;background:var(--red-bg);border:1px solid rgba(122,32,32,.2);border-radius:10px;text-align:center;}
+
+@media print{
+  .prog-bar,.print-btn{display:none!important;}
+  .profile-card.open .pc-body,.pc-body{display:block!important;}
+  .cover{margin-bottom:1rem;}
+}
+@media(max-width:480px){
+  .bar-row{flex-wrap:wrap;}
+  .br-track{flex:1 0 100%;}
+}
+</style>
+</head>
+<body>
+
+<div id="loadingView" class="loading">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--muted)">Loading profile results...</div>
+</div>
+
+<div id="mainView" style="display:none">
+  <div class="cover" id="coverWrap">
+    <div class="cover-inner">
+      <span class="cover-badge">MULTIPLY Pipeline · Profile Results</span>
+      <div class="cover-name" id="coverName"></div>
+      <div class="cover-type" id="coverType"></div>
+      <div class="cover-tags" id="coverTags"></div>
+    </div>
+  </div>
+
+  <div class="prog-bar">
+    <span class="prog-label" id="progLabel"></span>
+    <button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
+  </div>
+
+  <div id="heroWrap"></div>
+  <div class="section" id="scoresWrap"></div>
+  <div class="section" id="cardsWrap"></div>
+  <div style="height:3rem"></div>
+</div>
+
+<div id="errorView" style="display:none">
+  <div class="error-box">
+    <div style="font-size:2rem;margin-bottom:.5rem">⚠️</div>
+    <div style="font-size:14px;font-weight:600;color:var(--red);margin-bottom:.35rem" id="errorTitle">Profile Not Found</div>
+    <div style="font-size:12.5px;color:var(--muted)" id="errorMsg">No saved results found for this profile type.</div>
+  </div>
+</div>
+
+<script>
+
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+
+let _db=null;
+function getDB(){
+  if(!_db){try{_db=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});}catch(e){}}
+  return _db;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KNOWLEDGE BASE — all 5 profile types
+// ═══════════════════════════════════════════════════════════════
+
+const LL_DATA = [
+  {id:'words',name:'Words of Affirmation',icon:'💬',tagline:'Ang puso mo ay nagsasalita sa pamamagitan ng mga salita',
+   descEn:'You feel most loved when you receive sincere verbal encouragement, specific praise, and genuine affirmation. Criticism hits harder for you than most. A well-timed, heartfelt word can carry you for weeks.',
+   descTl:'Ikaw ay pinaka-nagmamahal kapag nakakatanggap ka ng tapat na verbal na pagpapalakas-loob at tunay na pagpapahalaga. Ang kritisismo ay mas matindi sa iyo. Isang napapanahon at tapat na salita ay nagdadala sa iyo nang ilang linggo.',
+   ministry:'Preaching Ministry · Publishing & Communications · Youth Ministry · Campus Life Coach · Young Professionals Ministry',
+   team:'Needs regular verbal recognition from their leader. Thrives when contributions are named aloud. Withers under silent leadership. Give specific, genuine praise — not generic compliments.',
+   discipler:'Affirm specifically and often. Open every session with something genuine you noticed. Ground their identity in Christ, not in others' words. Build resilience to criticism gradually.',
+   blindspot:'May soften feedback to protect feelings. May seek validation before acting. Can misread a quiet leader as disapproval. Learn to act on truth, not just affirmation.'},
+  {id:'service',name:'Acts of Service',icon:'🛠',tagline:'Ang iyong pagmamahal ay nakikita sa iyong mga kamay',
+   descEn:'You show and feel love through doing — practical help, tangible action, showing up and getting things done. You notice when others help without being asked, and it means everything. Laziness and broken promises feel like expressions of unlove.',
+   descTl:'Ipinapakita at nararamdaman mo ang pagmamahal sa pamamagitan ng paggawa — praktikal na tulong, kongkretong aksyon. Napapansin mo kapag tumutulong ang iba nang hindi tinanong.',
+   ministry:'Kitchen Ministry · Building Administration · Community Outreach · Interior Design · Lights & Tech · Documentation & Media',
+   team:'The invisible backbone of every ministry. Notices what needs doing without being told. Needs their unseen work seen and named. Do not take their service for granted.',
+   discipler:'Show up for them practically. Help without being asked. Then talk about it — model what healthy receiving looks like. Help them learn to ask for help.',
+   blindspot:'May become resentful if service is taken for granted. Struggles to ask for help. Can conflate busyness with love. Learn to receive, not just give.'},
+  {id:'gifts',name:'Receiving Gifts',icon:'🎁',tagline:'Ang mga regalo ay simbolo ng pagmamahal para sa iyo',
+   descEn:'For you it is not about materialism — it is about being thought of when you are not present. A thoughtful gift says "I saw this and thought of you." The price is irrelevant; the thought is everything. Forgetting special occasions is deeply painful.',
+   descTl:'Para sa iyo, hindi ito tungkol sa materialism — ito ay tungkol sa pagiging iniisip kahit wala ka. Ang isang maalalahanin na regalo ay nagsasabi: "Nakita ko ito at naisip kita."',
+   ministry:'Pastoral Care · Community Outreach · Kitchen Ministry · Stewardship education · Celebration programs',
+   team:'Brings a culture of recognition — remembers birthdays, milestones, and transitions. Thrives when leaders mark occasions. Appreciates tangible tokens even when small.',
+   discipler:'Remember special occasions. Bring something small occasionally — a note, a food item, a book. It communicates volumes. Teach them to express needs rather than waiting to be remembered.',
+   blindspot:'May interpret thoughtlessness as personal rejection. Can misread a practical team culture as cold. Learn to communicate needs rather than waiting to be remembered.'},
+  {id:'time',name:'Quality Time',icon:'⏱',tagline:'Ang iyong presensya ay ang pinakamahalagang regalong maaari mong ibigay',
+   descEn:'You feel most loved when given undivided, focused attention. Being with you — not just near you — is what communicates love. Distracted presence, postponed plans, and half-attention are deeply painful. It is not quantity; it is quality.',
+   descTl:'Nakakaramdam ka ng pinakamaraming pagmamahal kapag binibigyan ka ng walang hating, nakatuong atensyon. Hindi dami; kalidad. Ang pahiwatig ng pagpupursige ay nagpapalalim ng relasyon.',
+   ministry:'Discipleship (one-on-one) · Couples Ministry · Youth Ministry · Shepherding roles · Pastoral Care · Core Group',
+   team:'Natural discipler — invests deeply in a few. Needs regular face-to-face connection with their leader, not just task updates. Feels disconnected in purely transactional team cultures.',
+   discipler:'Be fully present in your meetings — no phone. Never cancel without rescheduling immediately. Invest in depth, not breadth. They grow best through sustained personal attention.',
+   blindspot:'May feel neglected in busy ministry seasons. Can over-invest in deep relationships and underperform in task-heavy roles. Learn to hold people with an open hand.'},
+  {id:'touch',name:'Physical Touch',icon:'🤝',tagline:'Ang pagmamahal ay nararamdaman sa pamamagitan ng pisikal na presensya',
+   descEn:'In the Filipino church context — a sincere handshake, a pat on the back, a warm embrace in greeting, a comforting hand on the shoulder in grief. Not romantic — it is about physical presence as solidarity, comfort, and belonging.',
+   descTl:'Sa konteksto ng simbahan — tapat na pakikipagkamay, tapik sa likod, mainit na yakap sa pagbati, mapagpaliwanag na kamay sa balikat sa kalungkutan. Hindi romantiko — ito ay tungkol sa pisikal na presensya bilang pagkakaisa.',
+   ministry:'Pastoral Care (hospital/prison visits) · Children's Ministry · Welcome/Greeting Ministry · Community Outreach (calamity response)',
+   team:'Creates warmth and belonging in team culture. Natural at making people feel welcomed and safe. Helps humanize the church environment, especially for first-time visitors.',
+   discipler:'Greet warmly — a handshake, a hand on the shoulder in prayer communicates deeply. Ensure all expressions are consensual, age-appropriate, and culturally sensitive.',
+   blindspot:'Must learn to read context carefully. In a culture that may misread warmth, channel this love language through appropriate, consensual expressions.'}
+];
+
+const DISC_DATA = [
+  {id:'D',name:'Dominance',color:'#7a2020',bg:'#fdecea',tagline:'Results-oriented, direct, decisive',
+   descEn:'You are driven by results, challenges, and overcoming opposition. You are direct, decisive, and bold. You see obstacles as opportunities and thrive in fast-moving, high-stakes environments. People know where they stand with you.',
+   atBest:'Gets things moving fast. Tackles problems head-on. Drives ministry forward when others hesitate. Creates momentum and accountability.',
+   underStress:'Can become controlling, impatient, and dismissive of others' feelings. May steamroll team members or make decisions without adequate input.',
+   ministry:'Church Council · Core Group · Community Outreach leadership · Preaching Ministry · Campus Life Coach',
+   discipler:'Give them responsibility, not just tasks. Challenge them with hard goals. Help them slow down enough to hear the people they lead. Earn their respect through character.',
+   needs:'Teammates who slow them down when needed, add warmth and people-consideration, follow through on details they overlook, and give honest pushback.'},
+  {id:'I',name:'Influence',color:'#b8882a',bg:'#fdf6e8',tagline:'Enthusiastic, optimistic, people-oriented',
+   descEn:'You are energized by people, enthusiasm, and recognition. You are optimistic, talkative, and naturally persuasive. You rally people to a cause, create excitement, and connect naturally with newcomers and outsiders.',
+   atBest:'Creates excitement around ministry vision. Connects easily with first-timers. Brings energy and warmth to every team. Makes people feel included and valued.',
+   underStress:'Can over-promise and under-deliver. Avoids difficult conversations. Loses focus on follow-through. May rely on charm instead of substance.',
+   ministry:'Youth in Motion · Evangelism · Youth Ministry · Young Professionals Ministry · Music Ministry · EOLO champion',
+   discipler:'Celebrate their wins publicly. Give them platforms and audiences. Help them develop follow-through. Address avoidance of difficult conversations directly but warmly.',
+   needs:'Teammates who handle the follow-through, keep them on task, add structure to their spontaneity, and give them honest feedback without crushing their spirit.'},
+  {id:'S',name:'Steadiness',color:'#2a5c40',bg:'#eef6f1',tagline:'Patient, reliable, loyal, team-oriented',
+   descEn:'You are the backbone of every ministry — consistent, patient, empathetic, and deeply loyal. You show up when it matters, build genuine relationships over time, and create stability in turbulent seasons.',
+   atBest:'Shows up faithfully in the long run. Builds deep, genuine relationships. Creates stability and trust. Rarely abandons a team or a commitment.',
+   underStress:'Resists change. Avoids conflict at the cost of honesty. May absorb too much without speaking up. Can become passive-aggressive when pushed too hard.',
+   ministry:'Couples Ministry · Children's Ministry · Kitchen Ministry · Pastoral Care · LC Group leadership',
+   discipler:'Give advance notice of changes. Create safe space for them to voice concerns. Recognize their faithfulness explicitly — they rarely ask for it. Push gently toward necessary confrontation.',
+   needs:'Teammates who push them toward necessary difficult conversations, introduce healthy change, help them speak up, and appreciate their unseen faithfulness.'},
+  {id:'C',name:'Conscientiousness',color:'#1a4a6b',bg:'#e8f0f8',tagline:'Accurate, systematic, quality-focused',
+   descEn:'You are driven by accuracy, quality, and competence. You build systems that last, catch errors before they become problems, and uphold standards that protect ministry integrity. You process carefully and deliver with excellence.',
+   atBest:'Ensures ministry standards are met. Catches errors before they escalate. Builds systems and processes that sustain long-term ministry. Provides quality control every team needs.',
+   underStress:'Analysis paralysis. Perfectionism that delays action. Emotional withdrawal when criticized. May be seen as cold or overly critical.',
+   ministry:'Publishing & Communications · Documentation & Media · Building Administration · Lights & Tech · Church Council (financial/policy)',
+   discipler:'Give them time to process. Appreciate their precision explicitly. Challenge them to act before perfect. Help them learn that done is sometimes better than perfect.',
+   needs:'Teammates who move decisively, bring relational warmth, push them out of over-analysis, and translate their precision into language the team can act on.'}
+];
+
+const DISC_COMBOS = {
+  DC:{name:'The Strategic Driver',desc:'Results and precision combined. You want to win — and you want to win the right way. Excellent for leadership roles that require both bold decisions and careful execution.'},
+  DI:{name:'The Bold Inspirer',desc:'Driven and enthusiastic. You set the vision and rally the people. Exceptional at launching new initiatives and energizing teams.'},
+  DS:{name:'The Determined Protector',desc:'Results-focused but deeply loyal. You drive hard for the mission while caring for the people on your team.'},
+  IS:{name:'The Warm Enthusiast',desc:'People-centered and relational. You create belonging, warmth, and team spirit naturally. Excellent for pastoral and discipleship roles.'},
+  IC:{name:'The Communicating Analyst',desc:'Enthusiastic with high standards. You rally people around quality ideas. Excellent for media, publishing, and communications roles.'},
+  SC:{name:'The Careful Servant',desc:'Patient and precise. You serve faithfully and never cut corners. The quiet backbone of any ministry operation.'},
+  CD:{name:'The Precise Strategist',desc:'Analytical and results-oriented. You build systems that deliver. Excellent for council and administrative leadership.'},
+  SI:{name:'The Empathetic Connector',desc:'Warm and enthusiastic. You make everyone feel seen and valued. Excellent for pastoral care, discipleship, and first-timer follow-up.'}
+};
+
+const ENNEA_DATA = [
+  {num:1,name:'The Reformer',color:'#7a4a10',bg:'#fef3e8',tagline:'Ang Prinsipyo at Katayuan',
+   desire:'To be good, right, and to have integrity',fear:'Being wrong, corrupt, or evil',
+   descEn:'You have a strong inner sense of right and wrong and a relentless drive to improve yourself and the world around you. You hold yourself and others to high standards. At your best, you are principled, purposeful, and ethical — the person who ensures the ministry does things the right way.',
+   atBest:'Principled, purposeful, self-disciplined, ethical, and deeply responsible. Brings a prophetic voice and moral backbone to ministry.',
+   underStress:'Critical, judgmental, perfectionistic, resentful, and self-righteous. Can damage team morale with relentless standards.',
+   formation:'Move from compulsive goodness to grace-based holiness. God accepts you before you are perfect. Romans 8:1 — "There is now no condemnation for those in Christ Jesus."',
+   ministry:'Preaching Ministry · Publishing & Communications · Church Council · Building Administration · Campus Life Coach',
+   discipler:'Help them distinguish between righteous standards and self-righteousness. Give them permission to rest. Show them that grace is not an excuse to stop growing — it is fuel to grow differently.',
+   shadow:'Can become critical of ministry leaders. Their correction style — though often accurate — can damage team morale if not tempered with grace.'},
+  {num:2,name:'The Helper',color:'#8a2040',bg:'#fdf0f4',tagline:'Ang Puso ng Pagtulong',
+   desire:'To be loved and to feel needed',fear:'Being unwanted or unworthy of love',
+   descEn:'You are naturally warm, generous, and attuned to the needs of others. You often know what people need before they ask. You give freely — of your time, energy, and care — and derive deep satisfaction from being someone others can depend on.',
+   atBest:'Caring, interpersonal, generous, warm, and deeply empathetic. The emotional heart of any ministry team.',
+   underStress:'Possessive, manipulative through giving, martyr-like, and unable to express their own needs honestly.',
+   formation:'Receive love without earning it. Your needs are as valid as everyone else's. God loves you when you have nothing to give. Matthew 3:17 — spoken over someone who had not yet done anything.',
+   ministry:'Couples Ministry · Children's Ministry · Kitchen Ministry · Pastoral Care · Community Outreach · Youth Ministry',
+   discipler:'Help them name their own needs. Watch for giving fatigue and hidden resentment. Examine their ministry motive — are they serving to be needed, or from a full heart?',
+   shadow:'May enable rather than disciple. May avoid confronting sin in people they deeply care for. Their love can become possessive.'},
+  {num:3,name:'The Achiever',color:'#1a4a6b',bg:'#e8f0f8',tagline:'Ang Tagumpay at Pagkakakilanlan',
+   desire:'To feel valuable, successful, and admired',fear:'Being worthless or seen as a failure',
+   descEn:'You are driven, adaptable, and goal-oriented. You know how to read a room, present yourself effectively, and produce results that others notice. You have a natural ability to inspire others through your own example of excellence.',
+   atBest:'Competent, driven, inspiring, and adaptable. Creates momentum and models excellence for the whole team.',
+   underStress:'Deceptive about failures, image-conscious at the cost of authenticity, workaholic, and unable to be vulnerable.',
+   formation:'Identity is not in achievement. The Father's love is not earned by performance. Matthew 3:17 — "This is my Son, whom I love" — spoken before Jesus had done any ministry.',
+   ministry:'Church Council · Young Professionals Ministry · Core Group · Preaching Ministry · Campus Life Coach',
+   discipler:'Create a space where failure is safe. Challenge them to be transparent about struggles. Watch for them performing discipleship rather than living it.',
+   shadow:'May project success in ministry even when struggling personally. Can drift toward using ministry as a platform for self-validation.'},
+  {num:4,name:'The Individualist',color:'#4a2060',bg:'#f0eaf8',tagline:'Ang Pagkakakilanlan at Kahulugan',
+   desire:'To find themselves and their significance',fear:'Having no identity or personal significance',
+   descEn:'You have a rich inner world, a deep capacity for empathy, and a longing for authenticity. You feel things more deeply than most and are often drawn to beauty, meaning, and creative expression.',
+   atBest:'Creative, expressive, emotionally honest, and deeply compassionate with those who suffer.',
+   underStress:'Melancholic, withdrawn, envious, and self-absorbed. Can romanticize suffering rather than moving through it.',
+   formation:'Significance is in Christ — not in uniqueness or emotional depth. Psalm 139:14 — "I am fearfully and wonderfully made."',
+   ministry:'Interior Design · Music Ministry · Documentation & Media · Publishing & Communications · Pastoral Care',
+   discipler:'Validate their emotional depth without enabling self-focus. Push them toward action and community. Help them see that feelings, while real, are not always accurate guides.',
+   shadow:'May drift toward spiritual elitism — feeling their suffering or sensitivity makes them more spiritually deep than others.'},
+  {num:5,name:'The Investigator',color:'#1a5a60',bg:'#e8f4f5',tagline:'Ang Kaalaman at Pag-unawa',
+   desire:'To be competent and to understand everything',fear:'Being helpless, incompetent, or overwhelmed',
+   descEn:'You have an extraordinary capacity to observe, analyze, and understand complex systems and ideas. You gather knowledge carefully, conserve your energy wisely, and prefer to think before you speak.',
+   atBest:'Perceptive, insightful, objective, scholarly, and deeply focused. Provides analytical depth that protects the church from shallow thinking.',
+   underStress:'Isolated, withholding, detached, contrarian, and hoarding knowledge rather than sharing it.',
+   formation:'Knowledge without love puffs up (1 Corinthians 8:1). The goal is not to know — it is to be known. John 15:4 — "Abide in me." Abiding requires presence, not just study.',
+   ministry:'Publishing & Communications · Documentation & Media · Preaching research support · Church Council',
+   discipler:'Draw them out of isolation into community. Give them meaningful roles requiring collaboration. Appreciate their depth without letting them hide behind it.',
+   shadow:'May critique more than contribute. Can become an observer of ministry rather than a participant.'},
+  {num:6,name:'The Loyalist',color:'#2a5c40',bg:'#eef6f1',tagline:'Ang Katapatan at Seguridad',
+   desire:'Security, support, and reliable guidance',fear:'Being without support, abandoned, or in danger',
+   descEn:'You are the most committed, responsible, and trustworthy person in any team. Once you are all-in, you are completely all-in. You are vigilant, perceptive about risk, and deeply loyal to those who have earned your trust.',
+   atBest:'Committed, responsible, trustworthy, courageous against real threats, and deeply loyal to the people and mission they serve.',
+   underStress:'Anxious, suspicious, reactive, self-doubting, and prone to worst-case thinking that can paralyze action.',
+   formation:'Perfect love casts out fear (1 John 4:18). Security is not found in systems or leaders — it is found in a faithful God. Isaiah 41:10 — "Do not fear, for I am with you."',
+   ministry:'Building Administration · Kitchen Ministry · LC Group · Community Outreach · Children's Ministry',
+   discipler:'Build trust slowly and consistently. Never make promises you cannot keep. Expose them regularly to God's faithfulness in Scripture and testimony.',
+   shadow:'Can undermine new leaders or directions out of anxiety. Their loyalty can become tribalism. May catastrophize change even when change is healthy.'},
+  {num:7,name:'The Enthusiast',color:'#b8882a',bg:'#fdf6e8',tagline:'Ang Kagalakan at Kalayaan',
+   desire:'To be happy, satisfied, and to have their needs met',fear:'Being trapped in pain or deprivation',
+   descEn:'You are spontaneous, adventurous, and endlessly enthusiastic. You see possibility everywhere and have the rare gift of making even difficult things feel exciting and worth doing.',
+   atBest:'Spontaneous, versatile, enthusiastic, optimistic, and life-giving. Creates energy and momentum that launches ministry initiatives.',
+   underStress:'Scattered, escapist, impulsive, and uncommitted. Avoids painful emotions by staying constantly busy.',
+   formation:'Joy is not the absence of pain — it is the presence of God in pain. Philippians 4:11 — "I have learned to be content." Contentment is a spiritual discipline, not a personality trait.',
+   ministry:'Youth in Motion · Evangelism · Youth Ministry · Music Ministry · EOLO campaign leadership · Campus Life Coach',
+   discipler:'Help them finish what they start. Pair with a structured, follow-through type. Celebrate their joy while gently confronting avoidance of difficulty.',
+   shadow:'Ministry hopping — excited about new things, struggles with unglamorous long-term faithfulness.'},
+  {num:8,name:'The Challenger',color:'#7a2020',bg:'#fdecea',tagline:'Ang Lakas at Proteksyon',
+   desire:'To protect themselves and those they care for',fear:'Being controlled, harmed, or betrayed',
+   descEn:'You are powerful, decisive, and protective. You assert yourself naturally and move boldly toward what you believe is right. You have a gift for confronting injustice and protecting those who cannot protect themselves.',
+   atBest:'Decisive, protective, confident, generous with those they love, and a powerful advocate for the vulnerable.',
+   underStress:'Domineering, confrontational, intimidating, and unaware of the impact their forcefulness has on others.',
+   formation:'Strength is made perfect in weakness (2 Corinthians 12:9). True power is submitted power. The greatest leader washed feet (John 13).',
+   ministry:'Church Council · Core Group · Community Outreach · Preaching Ministry · Youth in Motion',
+   discipler:'Earn their respect through character, not title. Give them hard challenges and real responsibility. Help them see their impact on quieter team members.',
+   shadow:'Can bulldoze team members. Needs accountability for their tone and impact. Watch for using anger as a tool rather than an honest response.'},
+  {num:9,name:'The Peacemaker',color:'#3a6060',bg:'#e8f4f5',tagline:'Ang Kapayapaan at Pagkakaisa',
+   desire:'Peace, harmony, and union with others',fear:'Loss, separation, conflict, and fragmentation',
+   descEn:'You are one of the most receptive, patient, and deeply empathetic people in any room. You naturally see all sides of a conflict, make everyone feel heard, and create an atmosphere where people feel safe to be themselves.',
+   atBest:'Receptive, reassuring, patient, creative, and a powerful peacemaker who brings unity to divided communities.',
+   underStress:'Passive-aggressive, complacent, stubborn through inaction, and disengaged from what matters most.',
+   formation:'Peace is not the absence of conflict — it is the presence of justice and truth. Matthew 10:34 — Jesus said he came to bring a sword of truth that divides what is real from what is false.',
+   ministry:'Couples Ministry · Pastoral Care · Children's Ministry · Kitchen Ministry · Music Ministry · LC Group',
+   discipler:'Help them discover their own voice and opinions. Push them to name what they want. Watch for passive resistance. Give direct but gentle accountability.',
+   shadow:'Can enable dysfunction by keeping peace at the cost of truth. May protect people from the very correction that would set them free.'}
+];
+
+const STRENGTHS_DOMAINS = {
+  achiever:'Executing',arranger:'Executing',belief:'Executing',consistency:'Executing',
+  deliberative:'Executing',discipline:'Executing',focus:'Executing',responsibility:'Executing',restorative:'Executing',
+  activator:'Influencing',command:'Influencing',communication:'Influencing',competition:'Influencing',
+  maximizer:'Influencing','self-assurance':'Influencing',significance:'Influencing',woo:'Influencing',
+  adaptability:'Relationship Building',connectedness:'Relationship Building',developer:'Relationship Building',
+  empathy:'Relationship Building',harmony:'Relationship Building',includer:'Relationship Building',
+  individualization:'Relationship Building',positivity:'Relationship Building',relator:'Relationship Building',
+  analytical:'Strategic Thinking',context:'Strategic Thinking',futuristic:'Strategic Thinking',
+  ideation:'Strategic Thinking',input:'Strategic Thinking',intellection:'Strategic Thinking',
+  learner:'Strategic Thinking',strategic:'Strategic Thinking'
+};
+
+const STRENGTHS_DESC = {
+  achiever:{desc:'You have a great deal of stamina and work hard. Every day starts at zero — and you are driven to accomplish something tangible before the day ends.',ministry:'Kitchen Ministry · Building Administration · Documentation — roles requiring sustained output and follow-through.'},
+  arranger:{desc:'You can organize, but you also have a flexibility that complements this ability. You like to figure out how all the pieces and resources can be arranged for maximum productivity.',ministry:'Events coordination · Core Group logistics · Building Administration'},
+  belief:{desc:'You have certain core values that are unchanging. These values give your life meaning and satisfaction. You are family-oriented, altruistic, and spiritual.',ministry:'Preaching Ministry · Core Group · Church Council'},
+  consistency:{desc:'You are keenly aware of the need to treat people the same. You crave clear rules and standards applied equally to everyone.',ministry:'Church Council (policy) · Building Administration · Kitchen Ministry'},
+  deliberative:{desc:'You are careful and vigilant. You identify risks before they become problems. You want to think things through before committing.',ministry:'Church Council (risk assessment) · Publishing & Communications'},
+  discipline:{desc:'Your world needs to be ordered and planned. You instinctively impose structure on your life and the world around you.',ministry:'Lights & Tech · Documentation & Media · Building Administration'},
+  focus:{desc:'You can take a direction, follow through, and make the corrections necessary to stay on track. You prioritize, then act.',ministry:'Preaching Ministry · Campus Life Coach · Core Group'},
+  responsibility:{desc:'You take psychological ownership of what you commit to. Your good name depends on it. Others can count on you.',ministry:'Any ministry role — Responsibility is foundational across all of Rosehill's ministry teams.'},
+  restorative:{desc:'You love to solve problems. You are energized by studying a situation, identifying what is wrong, and finding the solution.',ministry:'Building Administration · Community Outreach · Pastoral Care'},
+  activator:{desc:'You can make things happen by turning thoughts into action. You know that only action is real — and you act.',ministry:'Youth in Motion · EOLO campaign · Community Outreach'},
+  command:{desc:'You have presence. You can take control of a situation and make decisions. You are not frightened by confrontation.',ministry:'Church Council · Core Group · Community Outreach leadership'},
+  communication:{desc:'You like to explain, describe, host, speak in public, and write. You want to capture people's attention and hold it.',ministry:'Preaching Ministry · Publishing & Communications · Youth Ministry'},
+  competition:{desc:'You are driven by measuring your performance against clear benchmarks and coming out on top.',ministry:'Youth in Motion · EOLO campaign · Campus Life Coach'},
+  maximizer:{desc:'Excellence, not average, is your measure. You focus on strengths as a way to stimulate growth in people and ministry.',ministry:'Leadership development · Core Group · Preaching Ministry'},
+  'self-assurance':{desc:'You have confidence in your strengths and your ability to manage your own life. Your self-assurance is your anchor.',ministry:'Preaching Ministry · Church Council · Core Group'},
+  significance:{desc:'You want to be very significant in the eyes of other people. You want your work to be recognized as exceptional.',ministry:'Preaching Ministry · Young Professionals Ministry · Music Ministry'},
+  woo:{desc:'Woo stands for winning others over. You enjoy the challenge of meeting new people and getting them to like you.',ministry:'EOLO campaign · Welcome Ministry · Youth in Motion · Young Professionals'},
+  adaptability:{desc:'You live in the moment. You don't resent sudden requests or unforeseen detours — you expect them.',ministry:'Community Outreach · Kitchen Ministry · Youth Ministry'},
+  connectedness:{desc:'You have faith that we are all connected. You believe there are few coincidences — that almost every event has meaning.',ministry:'Preaching Ministry · Pastoral Care · Couples Ministry · Community Outreach'},
+  developer:{desc:'You see the potential in others — very often before they see it in themselves. You find satisfaction in helping them grow.',ministry:'Discipleship · Youth Ministry · Campus Life Coach · Children's Ministry'},
+  empathy:{desc:'You can sense the emotions of those around you. You can feel what they are feeling as though their feelings are your own.',ministry:'Pastoral Care · Couples Ministry · Community Outreach · Children's Ministry'},
+  harmony:{desc:'You look for consensus. You don't enjoy conflict. You know that the world will go better if there is more agreement in it.',ministry:'Couples Ministry · Pastoral Care · Music Ministry · Kitchen Ministry'},
+  includer:{desc:'You are accepting of others. You show awareness of those who feel left out and make an effort to include them.',ministry:'Welcome Ministry · Youth Ministry · Community Outreach · Children's Ministry'},
+  individualization:{desc:'You are intrigued by the unique qualities of each person. You have a gift for figuring out how people can work together productively.',ministry:'LC Group leadership · Discipleship · Youth Ministry'},
+  positivity:{desc:'You have an enthusiasm that is contagious. You are upbeat and can get others excited about what they are going to do.',ministry:'Youth Ministry · Music Ministry · EOLO · Welcome Ministry'},
+  relator:{desc:'You are drawn toward people you already know. You prefer to deepen friendships rather than constantly make new ones.',ministry:'Core Group · Couples Ministry · LC Group (long-term discipleship) · Pastoral Care'},
+  analytical:{desc:'You search for reasons and causes. You have the ability to think about all the factors that might affect a situation.',ministry:'Church Council · Publishing & Communications · Documentation'},
+  context:{desc:'You look back to understand the present. You research history to find patterns that explain today.',ministry:'Preaching Ministry (historical-redemptive) · Church Council · Publishing'},
+  futuristic:{desc:'You are inspired by the future and what might be. You love to peer over the horizon and inspire others with possibilities.',ministry:'Core Group · Young Professionals Ministry · Campus Life Coach · EOLO vision-casting'},
+  ideation:{desc:'You are fascinated by ideas. You have the ability to find connections between seemingly disparate phenomena.',ministry:'Preaching Ministry · Publishing & Communications · Interior Design'},
+  input:{desc:'You have a craving to know more. You collect and archive all kinds of information. You like to keep things.',ministry:'Publishing & Communications · Documentation & Media · Preaching research · Church Council'},
+  intellection:{desc:'You like to think. You like mental activity and exercising the muscles of your brain in multiple directions.',ministry:'Preaching Ministry · Publishing & Communications · Theological education'},
+  learner:{desc:'You love to learn. The subject matter is less important than the process of learning itself. Growth energizes you.',ministry:'BTLI · Preaching Ministry · Publishing'},
+  strategic:{desc:'You have the ability to create alternative ways to proceed. You quickly spot the most relevant patterns and select the best route.',ministry:'Church Council · Core Group · MULTIPLY Pipeline development'}
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+
+function ib(cls, label, text) {
+  return `<div class="ib ib-${cls}"><div class="ib-label">${label}</div>${text}</div>`;
+}
+
+function renderLL(d, member) {
+  const scores = d.results || {};
+  const sorted = LL_DATA.slice().sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
+  const total = Object.values(scores).reduce((a,b)=>a+b,0)||1;
+
+  // Cover
+  document.getElementById('coverWrap').style.background = 'linear-gradient(135deg,#2a0a1a,#4a1030,#1b2a4a)';
+  document.getElementById('coverName').textContent = (member?.name||d.member_name||'Member') + "'s Love Language Profile";
+  document.getElementById('coverType').textContent = 'Love Language Assessment';
+  document.getElementById('coverTags').innerHTML = '<span class="ct">❤️ Primary: '+sorted[0].name+'</span><span class="ct">Secondary: '+sorted[1].name+'</span>';
+  document.getElementById('progLabel').textContent = 'Love Language Profile · Taken: '+(d.date_taken||'—');
+
+  // Hero
+  document.getElementById('heroWrap').innerHTML = `<div class="section"><div class="hero" style="background:linear-gradient(135deg,#2a0a1a,#4a1030)">
+    <div class="hero-rank">Primary Love Language</div>
+    <div class="hero-primary">${sorted[0].icon} ${sorted[0].name}</div>
+    <div class="hero-secondary">Secondary: ${sorted[1].icon} ${sorted[1].name}</div>
+    <div class="hero-date">Taken: ${d.date_taken||'—'} · ${member?.name||d.member_name||''}</div>
+  </div></div>`;
+
+  // Score bars
+  const sw = document.getElementById('scoresWrap');
+  sw.innerHTML = '<div class="section-title">All 5 Love Languages — Score Breakdown</div>';
+  sorted.forEach((l,i) => {
+    const s = scores[l.id]||0;
+    const pct = Math.round(s/total*100);
+    const colors = ['#8a2040','#7a4010','#1a4a6b','#7a6010','#2a5c40'];
+    sw.innerHTML += `<div class="bar-row">
+      <span class="br-icon">${l.icon}</span>
+      <span class="br-name">${l.name}${i===0?' <span class="br-badge" style="background:#fdf0f4;color:#8a2040">Primary</span>':i===1?' <span class="br-badge" style="background:#fdf6e8;color:#b8882a">Secondary</span>':''}</span>
+      <div class="br-track"><div class="br-fill" style="width:${Math.max(pct,3)}%;background:${colors[i%5]}"><span>${s}</span></div></div>
+      <span class="br-val">${s} pts</span>
+    </div>`;
+  });
+
+  // Profile cards
+  const cw = document.getElementById('cardsWrap');
+  cw.innerHTML = '<div class="section-title">Love Language Profiles — Full Detail</div>';
+  sorted.forEach((l,i) => {
+    const isOpen = i < 2;
+    const rankLabel = i===0?'Primary':i===1?'Secondary':'';
+    const rankStyle = i===0?'background:#fdf0f4;color:#8a2040':i===1?'background:#fdf6e8;color:#b8882a':'';
+    cw.innerHTML += `<div class="profile-card ${isOpen?'open':''}">
+      <div class="pc-head" onclick="this.closest('.profile-card').classList.toggle('open')">
+        <div class="pc-icon">${l.icon}</div>
+        <div class="pc-info">
+          <div class="pc-name">${l.name}${rankLabel?` <span class="pc-rank" style="${rankStyle}">${rankLabel}</span>`:''}</div>
+          <div class="pc-tagline">${l.tagline}</div>
+        </div>
+        <span class="pc-chev">▼</span>
+      </div>
+      <div class="pc-body">
+        <div class="desc-en">${l.descEn}</div>
+        <div class="desc-tl">${l.descTl}</div>
+        ${ib('green','⛪ Best Ministry Fit',l.ministry)}
+        ${ib('gold','👥 In a Team / Sa Koponan',l.team)}
+        ${ib('navy','🤝 Discipling This Person',l.discipler)}
+        ${ib('red','⚠ Growth Edge / Blindspot',l.blindspot)}
+      </div>
+    </div>`;
+  });
+}
+
+function renderDISC(d, member) {
+  const scores = d.results || {};
+  const sorted = DISC_DATA.slice().sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
+  const primary = sorted[0]; const secondary = sorted[1];
+  const combo = primary.id+secondary.id;
+  const comboAlt = secondary.id+primary.id;
+  const comboData = DISC_COMBOS[combo]||DISC_COMBOS[comboAlt]||null;
+
+  document.getElementById('coverWrap').style.background = 'linear-gradient(135deg,#0a1a2a,#1b2a4a,#0a2a1a)';
+  document.getElementById('coverName').textContent = (member?.name||d.member_name||'Member') + "'s DISC Profile";
+  document.getElementById('coverType').textContent = 'DISC Behavioral Profile';
+  document.getElementById('coverTags').innerHTML = `<span class="ct">Profile: ${d.summary||primary.id+secondary.id}</span><span class="ct">${comboData?.name||primary.name+' / '+secondary.name}</span>`;
+  document.getElementById('progLabel').textContent = 'DISC Profile · Taken: '+(d.date_taken||'—');
+
+  document.getElementById('heroWrap').innerHTML = `<div class="section"><div class="hero" style="background:linear-gradient(135deg,#0a1a2a,#1b2a4a)">
+    <div class="hero-rank">DISC Profile</div>
+    <div class="hero-primary" style="font-size:3.5rem;font-weight:900;letter-spacing:-.02em">${d.summary||primary.id+secondary.id}</div>
+    <div class="hero-secondary">${comboData?comboData.name:primary.name+' / '+secondary.name}</div>
+    <div class="hero-date">Taken: ${d.date_taken||'—'}</div>
+  </div>
+  ${comboData?`<div class="ib ib-navy" style="margin-top:.65rem"><div class="ib-label">🔗 Combination Profile</div><strong>${comboData.name}</strong> — ${comboData.desc}</div>`:''}
+  </div>`;
+
+  const sw = document.getElementById('scoresWrap');
+  sw.innerHTML = '<div class="section-title">DISC Dimension Scores</div>';
+  sorted.forEach((d2,i) => {
+    const s = scores[d2.id]||0;
+    const pct = Math.round(s/50*100);
+    sw.innerHTML += `<div class="bar-row">
+      <span class="br-icon" style="font-size:1rem;font-weight:900;color:${d2.color}">${d2.id}</span>
+      <span class="br-name">${d2.name}${i===0?' <span class="br-badge" style="background:${d2.bg};color:${d2.color}">Primary</span>':i===1?' <span class="br-badge" style="background:${d2.bg};color:${d2.color}">Secondary</span>':''}</span>
+      <div class="br-track"><div class="br-fill" style="width:${Math.max(pct,2)}%;background:${d2.color}"><span>${s}</span></div></div>
+      <span class="br-val">${s}/50</span>
+    </div>`;
+  });
+
+  const cw = document.getElementById('cardsWrap');
+  cw.innerHTML = '<div class="section-title">DISC Dimensions — Full Detail</div>';
+  sorted.forEach((d2,i) => {
+    const isOpen = i < 2;
+    const rankLabel = i===0?'Primary':i===1?'Secondary':'';
+    cw.innerHTML += `<div class="profile-card ${isOpen?'open':''}">
+      <div class="pc-head" onclick="this.closest('.profile-card').classList.toggle('open')">
+        <div class="pc-icon" style="width:44px;height:44px;border-radius:50%;background:${d2.color};color:white;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:900">${d2.id}</div>
+        <div class="pc-info">
+          <div class="pc-name">${d2.name}${rankLabel?` <span class="pc-rank" style="background:${d2.bg};color:${d2.color}">${rankLabel}</span>`:''}</div>
+          <div class="pc-tagline">${d2.tagline}</div>
+        </div>
+        <span class="pc-chev">▼</span>
+      </div>
+      <div class="pc-body">
+        <div class="desc-en">${d2.descEn}</div>
+        ${ib('green','✅ At Their Best',d2.atBest)}
+        ${ib('red','⚠ Under Pressure',d2.underStress)}
+        ${ib('navy','⛪ Best Ministry Fit',d2.ministry)}
+        ${ib('gold','🤝 Discipling This Person',d2.discipler)}
+        ${ib('rose','👥 Ideal Teammates',d2.needs)}
+      </div>
+    </div>`;
+  });
+}
+
+function renderEnneagram(d, member) {
+  const scores = d.results || {};
+  const sorted = ENNEA_DATA.slice().sort((a,b)=>(scores[String(b.num)]||0)-(scores[String(a.num)]||0));
+  const primary = sorted[0];
+
+  document.getElementById('coverWrap').style.background = 'linear-gradient(135deg,#0a1a0a,#1a2a1a,#1b2a4a)';
+  document.getElementById('coverName').textContent = (member?.name||d.member_name||'Member') + "'s Enneagram Profile";
+  document.getElementById('coverType').textContent = 'Enneagram Assessment';
+  document.getElementById('coverTags').innerHTML = `<span class="ct">${d.summary||'Type '+primary.num}</span><span class="ct">${primary.name}</span>`;
+  document.getElementById('progLabel').textContent = 'Enneagram Profile · Taken: '+(d.date_taken||'—');
+
+  document.getElementById('heroWrap').innerHTML = `<div class="section"><div class="hero" style="background:linear-gradient(135deg,#0a1a0a,#1a2a1a)">
+    <div class="hero-rank">Enneagram Type</div>
+    <div class="hero-primary" style="font-size:5rem;font-weight:900;color:#b8882a;line-height:1">${primary.num}</div>
+    <div class="hero-primary" style="font-size:1.5rem;margin-top:.25rem">${primary.name}</div>
+    <div class="hero-secondary">${d.summary||''}</div>
+    <div class="hero-date">Taken: ${d.date_taken||'—'}</div>
+  </div></div>`;
+
+  const sw = document.getElementById('scoresWrap');
+  sw.innerHTML = '<div class="section-title">All 9 Types — Score Overview</div><div class="domain-grid" style="grid-template-columns:repeat(3,1fr)">';
+  sorted.forEach(t => {
+    const s = scores[String(t.num)]||0;
+    const pct = Math.round(s/35*100);
+    sw.innerHTML += `<div class="dg-card">
+      <div class="dg-num" style="color:${t.color}">${s}</div>
+      <div class="dg-label">Type ${t.num}: ${t.name}</div>
+      <div style="height:4px;background:var(--border);border-radius:2px;margin-top:.35rem"><div style="width:${pct}%;height:100%;background:${t.color};border-radius:2px"></div></div>
+    </div>`;
+  });
+  sw.innerHTML += '</div>';
+
+  const cw = document.getElementById('cardsWrap');
+  cw.innerHTML = '<div class="section-title">Top Types — Full Detail</div>';
+  sorted.slice(0,3).forEach((t,i) => {
+    const s = scores[String(t.num)]||0;
+    const isOpen = i < 1;
+    const rankLabel = i===0?'Primary Type':i===1?'Second Highest':'Third';
+    cw.innerHTML += `<div class="profile-card ${isOpen?'open':''}">
+      <div class="pc-head" onclick="this.closest('.profile-card').classList.toggle('open')">
+        <div class="pc-icon" style="width:44px;height:44px;border-radius:50%;background:${t.color};color:white;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:900">${t.num}</div>
+        <div class="pc-info">
+          <div class="pc-name">${t.name} <span class="pc-rank" style="background:${t.bg};color:${t.color}">${rankLabel}</span></div>
+          <div class="pc-tagline">${t.tagline}</div>
+        </div>
+        <span class="pc-chev">▼</span>
+      </div>
+      <div class="pc-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.85rem">
+          <div class="ib ib-green"><div class="ib-label">Core Desire</div>${t.desire}</div>
+          <div class="ib ib-red"><div class="ib-label">Core Fear</div>${t.fear}</div>
+        </div>
+        <div class="desc-en">${t.descEn}</div>
+        ${ib('green','✅ At Their Best',t.atBest)}
+        ${ib('red','⚠ Under Pressure',t.underStress)}
+        ${ib('gold','✝ Spiritual Formation Invitation',t.formation)}
+        ${ib('navy','⛪ Best Ministry Fit',t.ministry)}
+        ${ib('rose','🤝 Discipling This Person',t.discipler)}
+        ${ib('red','🌑 Shadow to Watch',t.shadow)}
+      </div>
+    </div>`;
+  });
+}
+
+function renderStrengths(d, member) {
+  const scores = d.results || {};
+  const sorted = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  const top5 = sorted.slice(0,5);
+  const top5Names = [d.top_result,d.second_result,d.third_result].filter(Boolean);
+
+  // Domain counts
+  const domCount = {};
+  top5.forEach(([id])=>{
+    const dom = STRENGTHS_DOMAINS[id]||'Unknown';
+    domCount[dom]=(domCount[dom]||0)+1;
+  });
+  const domColors = {'Executing':'#7a2020','Influencing':'#1a4a6b','Relationship Building':'#2a5c40','Strategic Thinking':'#b8882a'};
+
+  document.getElementById('coverWrap').style.background = 'linear-gradient(135deg,#1a0a0a,#2a1a0a,#0a1a2a)';
+  document.getElementById('coverName').textContent = (member?.name||d.member_name||'Member') + "'s Strengths Profile";
+  document.getElementById('coverType').textContent = 'CliftonStrengths-Inspired Assessment';
+  document.getElementById('coverTags').innerHTML = top5Names.map(n=>`<span class="ct">${n}</span>`).join('');
+  document.getElementById('progLabel').textContent = 'Strengths Profile · Taken: '+(d.date_taken||'—');
+
+  document.getElementById('heroWrap').innerHTML = `<div class="section"><div class="hero" style="background:linear-gradient(135deg,#1a0a0a,#2a1a0a,#0a1a2a)">
+    <div class="hero-rank">Top 5 Strengths</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:.65rem 0">
+      ${top5.map(([id],i)=>{
+        const dom = STRENGTHS_DOMAINS[id]||'Unknown';
+        const c = domColors[dom]||'#888';
+        const name = id.charAt(0).toUpperCase()+id.slice(1).replace(/-/g,' ');
+        return `<div style="background:rgba(255,255,255,.08);border-radius:8px;padding:.5rem .3rem;text-align:center">
+          <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.4)">#${i+1}</div>
+          <div style="font-size:11px;font-weight:700;color:white;line-height:1.2;margin:.2rem 0">${name}</div>
+          <div style="font-size:9px;color:${c};font-weight:600">${dom.replace('Relationship Building','Rel. Bldg')}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="hero-date">Taken: ${d.date_taken||'—'}</div>
+  </div></div>`;
+
+  const sw = document.getElementById('scoresWrap');
+  sw.innerHTML = '<div class="section-title">Domain Breakdown</div><div class="domain-grid">';
+  ['Executing','Influencing','Relationship Building','Strategic Thinking'].forEach(dom=>{
+    const c = domColors[dom]||'#888';
+    const cnt = domCount[dom]||0;
+    sw.innerHTML += `<div class="dg-card"><div class="dg-num" style="color:${c}">${cnt}</div><div class="dg-label">${dom}</div><div style="font-size:10px;color:var(--lighter)">of top 5</div></div>`;
+  });
+  sw.innerHTML += '</div>';
+
+  if(sorted.length > 5) {
+    sw.innerHTML += '<div class="section-title" style="margin-top:1.25rem">All Themes — Score Breakdown</div>';
+    sorted.slice(0,15).forEach(([id,s],i)=>{
+      const dom = STRENGTHS_DOMAINS[id]||'Unknown';
+      const c = domColors[dom]||'#888';
+      const name = id.charAt(0).toUpperCase()+id.slice(1).replace(/-/g,' ');
+      const maxScore = sorted[0][1]||1;
+      const pct = Math.round(s/maxScore*100);
+      sw.innerHTML += `<div class="bar-row">
+        <span class="br-icon" style="font-size:11px;font-weight:700;color:var(--lighter)">#${i+1}</span>
+        <span class="br-name">${name}${i<5?` <span class="br-badge" style="background:${c}22;color:${c}">Top 5</span>`:''}</span>
+        <div class="br-track"><div class="br-fill" style="width:${Math.max(pct,2)}%;background:${c}"><span>${s}</span></div></div>
+        <span class="br-val" style="font-size:10px;color:var(--lighter)">${dom.split(' ')[0]}</span>
+      </div>`;
+    });
+  }
+
+  const cw = document.getElementById('cardsWrap');
+  cw.innerHTML = '<div class="section-title">Top 5 Themes — Full Detail</div>';
+  top5.forEach(([id],i)=>{
+    const info = STRENGTHS_DESC[id]||{desc:'',ministry:''};
+    const dom = STRENGTHS_DOMAINS[id]||'Unknown';
+    const c = domColors[dom]||'#888';
+    const name = id.charAt(0).toUpperCase()+id.slice(1).replace(/-/g,' ');
+    cw.innerHTML += `<div class="profile-card ${i<2?'open':''}">
+      <div class="pc-head" onclick="this.closest('.profile-card').classList.toggle('open')">
+        <div class="pc-icon" style="width:44px;height:44px;border-radius:50%;background:${c};color:white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;text-align:center;line-height:1.1">#${i+1}</div>
+        <div class="pc-info">
+          <div class="pc-name">${name} <span class="pc-rank" style="background:${c}22;color:${c}">${dom}</span></div>
+          <div class="pc-tagline">Theme ${i+1} of ${top5.length}</div>
+        </div>
+        <span class="pc-chev">▼</span>
+      </div>
+      <div class="pc-body">
+        <div class="desc-en">${info.desc||'—'}</div>
+        ${ib('green','⛪ Ministry Fit',info.ministry||'—')}
+        ${ib('navy','💡 Discipleship Application','Lead with your '+name+' strength. In a team, you need someone who complements this with '+(dom==='Executing'?'Influencing or Relationship Building':dom==='Influencing'?'Executing or Strategic Thinking':dom==='Relationship Building'?'Executing or Strategic Thinking':'Executing or Relationship Building')+'.')}
+      </div>
+    </div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN LOAD
+// ═══════════════════════════════════════════════════════════════
+
+async function loadResults() {
+  const params = new URLSearchParams(window.location.search);
+  const memberId = params.get('id');
+  const type = params.get('type');
+
+  if(!memberId || !type) {
+    showError('Missing Parameters', 'This page requires ?id= and ?type= parameters in the URL.');
+    return;
+  }
+
+  try {
+    const db = getDB();
+    if(!db) { showError('Connection Failed', 'Could not connect to the database.'); return; }
+
+    // Fetch member
+    const {data:member} = await db.from('members').select('id,name,pipeline_level,discipler_name').eq('id',memberId).single().catch(()=>({data:null}));
+
+    // Fetch most recent result for this type
+    const {data:rows, error} = await db.from('member_profiles')
+      .select('*').eq('member_id',memberId).eq('profile_type',type)
+      .order('date_taken',{ascending:false}).limit(1);
+
+    if(error || !rows || rows.length===0) {
+      showError('No Results Found', `No saved ${type.replace(/_/g,' ')} results found for this member. Please take the assessment first.`);
+      return;
+    }
+
+    const d = rows[0];
+    document.getElementById('loadingView').style.display='none';
+    document.getElementById('mainView').style.display='block';
+
+    if(type==='love_language') renderLL(d, member);
+    else if(type==='disc') renderDISC(d, member);
+    else if(type==='enneagram') renderEnneagram(d, member);
+    else if(type==='strengths') renderStrengths(d, member);
+    else showError('Unknown Type', 'Profile type "'+type+'" is not supported.');
+
+  } catch(e) {
+    showError('Error Loading Results', e.message);
+  }
+}
+
+function showError(title, msg) {
+  document.getElementById('loadingView').style.display='none';
+  document.getElementById('errorView').style.display='block';
+  document.getElementById('errorTitle').textContent=title;
+  document.getElementById('errorMsg').textContent=msg;
+}
+
+document.addEventListener('DOMContentLoaded', loadResults);
+</script>
+</body>
+</html>
