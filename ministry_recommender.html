@@ -1147,40 +1147,61 @@ window.reloadCandidate = async function() {
 async function loadMember(id) {
   document.getElementById('chartArea').innerHTML = '<div class="loading">Loading member data…</div>';
 
-  // Helper: try to fetch from a table; if table doesn't exist or query fails, return null silently
-  async function safeFetch(table, orderCol = 'created_at') {
-    try {
-      const res = await supabase
-        .from(table)
-        .select('*')
-        .eq('member_id', id)
-        .order(orderCol, { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return res.data || null;
-    } catch (e) {
-      console.warn(`Skipping ${table}:`, e.message || e);
-      return null;
-    }
-  }
-
   try {
+    // Member profile
     const memberRes = await supabase.from('members').select('*').eq('id', id).maybeSingle();
 
-    const [gifts, disc, enn, str, ll, fats] = await Promise.all([
-      safeFetch('gifts_diagnostic'),
-      safeFetch('disc_results'),
-      safeFetch('enneagram_results'),
-      safeFetch('strengths_results'),
-      safeFetch('love_language_results'),
-      safeFetch('fats_assessment'),
-    ]);
+    // Spiritual gifts (separate table)
+    let gifts = null;
+    try {
+      const gr = await supabase.from('gifts_diagnostic').select('*').eq('member_id', id)
+        .order('date_taken', { ascending: false }).limit(1);
+      gifts = gr.data?.[0] || null;
+    } catch (e) { console.warn('gifts_diagnostic skipped:', e); }
+
+    // member_profiles holds love_language, disc, enneagram, strengths
+    let profileRows = [];
+    try {
+      const pr = await supabase.from('member_profiles').select('*').eq('member_id', id)
+        .order('date_taken', { ascending: false });
+      profileRows = pr.data || [];
+    } catch (e) { console.warn('member_profiles skipped:', e); }
+
+    // Get latest of each type
+    const latest = {};
+    profileRows.forEach(r => { if (!latest[r.profile_type]) latest[r.profile_type] = r; });
+
+    // FATS — try a few possible table names; if none exist, leave null
+    let fats = null;
+    for (const tbl of ['fats_assessment', 'fats_results', 'fats']) {
+      try {
+        const fr = await supabase.from(tbl).select('*').eq('member_id', id)
+          .order('date_taken', { ascending: false }).limit(1);
+        if (fr.data && fr.data.length) { fats = fr.data[0]; break; }
+      } catch (e) { /* table likely doesn't exist; try next */ }
+    }
 
     currentMember = {
       id,
       profile: memberRes.data || {},
-      gifts, disc, enneagram: enn, strengths: str, love_language: ll, fats,
+      gifts,
+      disc: latest.disc || null,
+      enneagram: latest.enneagram || null,
+      strengths: latest.strengths || null,
+      love_language: latest.love_language || null,
+      fats,
     };
+
+    // ── DEBUG: dump loaded data so we can see exactly what came back ──
+    console.log('=== Ministry Recommender · Loaded Data ===');
+    console.log('member profile:', currentMember.profile);
+    console.log('gifts_diagnostic row:', gifts);
+    console.log('member_profiles rows (all):', profileRows);
+    console.log('latest by type:', latest);
+    console.log('FATS:', fats);
+    window._lastLoaded = currentMember;
+    window._lastProfileRows = profileRows;
+    // ─────────────────────────────────────────────────────────────────
 
     computeSignals();
     renderSummary();
@@ -1200,78 +1221,122 @@ async function loadMember(id) {
 // ─────────────────────────────────────────────────────────────────
 function computeSignals() {
   const m = currentMember;
-  const t = systemSettings?.thresholds || { gift_strong: 18, gift_weak: 8, talent_strong: 8, talent_weak: 4 };
+  const t = systemSettings?.thresholds || { gift_strong: 18, gift_moderate: 13, gift_weak: 8, talent_strong: 8, talent_moderate: 5, talent_weak: 4 };
   const fatsMin = systemSettings?.fats || { faithful_min: 4, available_min: 4, teachable_min: 4, selfless_min: 4 };
   const sigs = {};
   const avail = {};
 
-  // === GIFTS ===
-  if (m.gifts && m.gifts.all_scores) {
+  // === GIFTS & TALENTS (gifts_diagnostic table) ===
+  // Schema: gift1..gift5, all_scores (JSON of 16 gift -> score), natural_talents (JSON of 7 cluster -> score)
+  if (m.gifts && (m.gifts.all_scores || m.gifts.gift1)) {
     avail.gifts = true;
-    avail.talents = true; // talents also live in gifts_diagnostic
-    const scores = m.gifts.all_scores;
-    const gifts = ['leadership','administration','teaching','knowledge','wisdom','prophecy','discernment','exhortation','shepherding','faith','evangelism','apostleship','service','mercy','giving','hospitality'];
-    gifts.forEach(g => {
-      const s = scores[g];
-      if (s == null) return;
-      if (s >= t.gift_strong) sigs[`gift_${g}_strong`] = true;
-      if (s <= t.gift_weak) sigs[`gift_${g}_weak`] = true;
+    const scores = m.gifts.all_scores || {};
+    // Normalize keys to lowercase to match signal keys
+    const giftKeyMap = {
+      'leadership':'leadership','administration':'administration','teaching':'teaching','knowledge':'knowledge',
+      'wisdom':'wisdom','prophecy':'prophecy','discernment':'discernment','exhortation':'exhortation',
+      'shepherding':'shepherding','faith':'faith','evangelism':'evangelism','apostleship':'apostleship',
+      'service':'service','service/helps':'service','service_helps':'service',
+      'mercy':'mercy','giving':'giving','hospitality':'hospitality'
+    };
+    Object.entries(scores).forEach(([rawKey, val]) => {
+      const k = giftKeyMap[String(rawKey).toLowerCase()] || String(rawKey).toLowerCase();
+      const v = Number(val);
+      if (isNaN(v)) return;
+      if (v >= t.gift_strong) sigs[`gift_${k}_strong`] = true;
+      if (v <= t.gift_weak) sigs[`gift_${k}_weak`] = true;
     });
+    // Fallback: if all_scores empty but gift1..gift3 are present, mark them as strong
+    if (Object.keys(scores).length === 0) {
+      [m.gifts.gift1, m.gifts.gift2, m.gifts.gift3].forEach(g => {
+        if (!g) return;
+        const k = giftKeyMap[String(g).toLowerCase()] || String(g).toLowerCase();
+        sigs[`gift_${k}_strong`] = true;
+      });
+    }
 
-    // Talents
-    const talents = m.gifts.talent_scores || {};
-    Object.entries(talents).forEach(([k, v]) => {
-      if (v >= t.talent_strong) sigs[`talent_${k}_strong`] = true;
-      if (v <= t.talent_weak) sigs[`talent_${k}_weak`] = true;
-    });
+    // Natural talents
+    const talents = m.gifts.natural_talents || {};
+    if (Object.keys(talents).length > 0) {
+      avail.talents = true;
+      Object.entries(talents).forEach(([k, v]) => {
+        const score = Number(v);
+        if (isNaN(score)) return;
+        if (score >= t.talent_strong) sigs[`talent_${k}_strong`] = true;
+        if (score <= t.talent_weak) sigs[`talent_${k}_weak`] = true;
+      });
+    } else {
+      avail.talents = false;
+    }
   } else {
     avail.gifts = false;
     avail.talents = false;
   }
 
-  // === DISC ===
-  if (m.disc && (m.disc.primary || m.disc.scores)) {
+  // === DISC (member_profiles where profile_type='disc') ===
+  // top_result: "D" | "I" | "S" | "C", second_result: same
+  if (m.disc && m.disc.top_result) {
     avail.disc = true;
-    const primary = (m.disc.primary || '').toUpperCase();
-    const secondary = (m.disc.secondary || '').toUpperCase();
+    const primary = String(m.disc.top_result).toUpperCase().trim();
+    const secondary = String(m.disc.second_result || '').toUpperCase().trim();
     ['D','I','S','C'].forEach(letter => {
       if (primary === letter || secondary === letter) sigs[`disc_${letter}`] = true;
     });
-    // High variants — primary letter with score above threshold
-    const scores = m.disc.scores || {};
-    if (scores[primary] >= 80) sigs[`disc_${primary}_high`] = true;
-    if (primary && !secondary) sigs[`disc_${primary}_only_high`] = (scores[primary] >= 80);
+    // _high: primary letter is dominant (no clear secondary)
+    if (primary && !secondary) {
+      sigs[`disc_${primary}_high`] = true;
+      sigs[`disc_${primary}_only_high`] = true;
+    } else if (primary) {
+      // Even with a secondary, treat the primary as "high" for risk-checking
+      sigs[`disc_${primary}_high`] = true;
+    }
   } else {
     avail.disc = false;
   }
 
-  // === ENNEAGRAM ===
-  if (m.enneagram && m.enneagram.primary_type) {
+  // === ENNEAGRAM (profile_type='enneagram') ===
+  // top_result: "1"–"9"
+  if (m.enneagram && m.enneagram.top_result != null) {
     avail.enneagram = true;
-    const t = m.enneagram.primary_type;
-    sigs[`enn_${t}`] = true;
-    // _only variants — primary type with no clear wing or others
-    sigs[`enn_${t}_only`] = true;
+    const tt = String(m.enneagram.top_result).trim();
+    if (tt) {
+      sigs[`enn_${tt}`] = true;
+      // _only variant
+      if (!m.enneagram.second_result) sigs[`enn_${tt}_only`] = true;
+    }
   } else {
     avail.enneagram = false;
   }
 
-  // === STRENGTHS ===
-  if (m.strengths && Array.isArray(m.strengths.top_strengths)) {
+  // === STRENGTHS (profile_type='strengths') ===
+  // top_result, second_result, third_result are lowercase strength ids
+  // Also results: { strength_id: score, ... }
+  if (m.strengths && (m.strengths.top_result || m.strengths.results)) {
     avail.strengths = true;
-    m.strengths.top_strengths.forEach(s => {
-      if (s) sigs[`str_${s}`] = true;
-    });
+    const top = [m.strengths.top_result, m.strengths.second_result, m.strengths.third_result].filter(Boolean);
+    // If we have a results map, take top 5 by score
+    if (m.strengths.results && typeof m.strengths.results === 'object') {
+      const sorted = Object.entries(m.strengths.results).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>e[0]);
+      sorted.forEach(s => { if (s) markStrengthSignal(sigs, s); });
+    }
+    top.forEach(s => { if (s) markStrengthSignal(sigs, s); });
   } else {
     avail.strengths = false;
   }
 
-  // === LOVE LANGUAGE ===
-  if (m.love_language && m.love_language.primary) {
+  // === LOVE LANGUAGE (profile_type='love_language') ===
+  // top_result: "Words of Affirmation" | "Acts of Service" | "Receiving Gifts" | "Quality Time" | "Physical Touch"
+  if (m.love_language && m.love_language.top_result) {
     avail.love_language = true;
-    const map = { words_of_affirmation: 'words', acts_of_service: 'acts', receiving_gifts: 'gifts', quality_time: 'quality_time', physical_touch: 'physical_touch' };
-    const key = map[m.love_language.primary] || m.love_language.primary;
-    sigs[`ll_${key}`] = true;
+    const llMap = {
+      'words of affirmation':'words',
+      'acts of service':'acts',
+      'receiving gifts':'gifts',
+      'quality time':'quality_time',
+      'physical touch':'physical_touch'
+    };
+    const key = llMap[String(m.love_language.top_result).toLowerCase().trim()];
+    if (key) sigs[`ll_${key}`] = true;
   } else {
     avail.love_language = false;
   }
@@ -1283,10 +1348,10 @@ function computeSignals() {
     const allStrong = (f.faithful >= fatsMin.faithful_min) && (f.available >= fatsMin.available_min)
                    && (f.teachable >= fatsMin.teachable_min) && (f.selfless >= fatsMin.selfless_min);
     if (allStrong) sigs.fats_all_strong = true;
-    if (f.faithful < fatsMin.faithful_min) sigs.fats_faithful_low = true;
-    if (f.available < fatsMin.available_min) sigs.fats_available_low = true;
-    if (f.teachable < fatsMin.teachable_min) sigs.fats_teachable_low = true;
-    if (f.selfless < fatsMin.selfless_min) sigs.fats_selfless_low = true;
+    if (f.faithful != null && f.faithful < fatsMin.faithful_min) sigs.fats_faithful_low = true;
+    if (f.available != null && f.available < fatsMin.available_min) sigs.fats_available_low = true;
+    if (f.teachable != null && f.teachable < fatsMin.teachable_min) sigs.fats_teachable_low = true;
+    if (f.selfless != null && f.selfless < fatsMin.selfless_min) sigs.fats_selfless_low = true;
     if (sigs.fats_faithful_low || sigs.fats_available_low || sigs.fats_teachable_low || sigs.fats_selfless_low) {
       sigs.fats_any_low = true;
     }
@@ -1294,8 +1359,9 @@ function computeSignals() {
     avail.fats = false;
   }
 
-  // === PIPELINE ===
-  const pl = m.profile?.pipeline_level;
+  // === PIPELINE LEVEL ===
+  // Dashboard stores it as members.level (0-5)
+  const pl = m.profile?.level ?? m.profile?.pipeline_level ?? null;
   if (pl != null) {
     avail.pipeline = true;
     if (pl >= 3) sigs.pipeline_coach_or_above = true;
@@ -1309,6 +1375,25 @@ function computeSignals() {
   availableSources = avail;
 }
 
+// Helper: convert a strength id (e.g. "self-assurance") to its CamelCase signal key (e.g. "Self-Assurance")
+function markStrengthSignal(sigs, strengthId) {
+  const id = String(strengthId).toLowerCase().trim();
+  // Map to capitalized form used in MINISTRIES signal keys
+  const map = {
+    'achiever':'Achiever','arranger':'Arranger','belief':'Belief','consistency':'Consistency',
+    'deliberative':'Deliberative','discipline':'Discipline','focus':'Focus','responsibility':'Responsibility',
+    'restorative':'Restorative','activator':'Activator','command':'Command','communication':'Communication',
+    'competition':'Competition','maximizer':'Maximizer','self-assurance':'Self-Assurance',
+    'significance':'Significance','woo':'Woo','adaptability':'Adaptability','connectedness':'Connectedness',
+    'developer':'Developer','empathy':'Empathy','harmony':'Harmony','includer':'Includer',
+    'individualization':'Individualization','positivity':'Positivity','relator':'Relator',
+    'analytical':'Analytical','context':'Context','futuristic':'Futuristic','ideation':'Ideation',
+    'input':'Input','intellection':'Intellection','learner':'Learner','strategic':'Strategic'
+  };
+  const k = map[id];
+  if (k) sigs[`str_${k}`] = true;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // RENDERING
 // ─────────────────────────────────────────────────────────────────
@@ -1318,23 +1403,28 @@ function renderSummary() {
 
   if (m.profile?.name) chips.push(`<span class="chip"><strong>${escapeHtml(m.profile.name)}</strong></span>`);
 
-  if (availableSources.gifts && m.gifts?.top_3) {
-    chips.push(`<span class="chip">Top Gifts: <strong>${escapeHtml(m.gifts.top_3.join(', '))}</strong></span>`);
+  if (availableSources.gifts && m.gifts) {
+    const top = [m.gifts.gift1, m.gifts.gift2, m.gifts.gift3].filter(Boolean);
+    if (top.length) chips.push(`<span class="chip">Top Gifts: <strong>${escapeHtml(top.join(', '))}</strong></span>`);
   }
-  if (availableSources.disc && m.disc?.primary) {
-    chips.push(`<span class="chip">DISC: <strong>${escapeHtml(m.disc.primary)}${m.disc.secondary ? '/' + escapeHtml(m.disc.secondary) : ''}</strong></span>`);
+  if (availableSources.disc && m.disc?.top_result) {
+    const lbl = m.disc.summary || (m.disc.top_result + (m.disc.second_result || ''));
+    chips.push(`<span class="chip">DISC: <strong>${escapeHtml(lbl)}</strong></span>`);
   }
-  if (availableSources.enneagram && m.enneagram?.primary_type) {
-    chips.push(`<span class="chip">Enneagram: <strong>${escapeHtml(String(m.enneagram.primary_type))}</strong></span>`);
+  if (availableSources.enneagram && m.enneagram?.top_result != null) {
+    chips.push(`<span class="chip">Enneagram: <strong>Type ${escapeHtml(String(m.enneagram.top_result))}</strong></span>`);
   }
-  if (availableSources.strengths && m.strengths?.top_strengths?.length) {
-    chips.push(`<span class="chip">Strengths: <strong>${escapeHtml(m.strengths.top_strengths.slice(0,3).join(', '))}</strong></span>`);
+  if (availableSources.strengths && m.strengths) {
+    const top = [m.strengths.top_result, m.strengths.second_result, m.strengths.third_result]
+      .filter(Boolean).map(s => s.charAt(0).toUpperCase() + s.slice(1));
+    if (top.length) chips.push(`<span class="chip">Strengths: <strong>${escapeHtml(top.join(', '))}</strong></span>`);
   }
-  if (availableSources.love_language && m.love_language?.primary) {
-    chips.push(`<span class="chip">LL: <strong>${escapeHtml(m.love_language.primary.replace(/_/g, ' '))}</strong></span>`);
+  if (availableSources.love_language && m.love_language?.top_result) {
+    chips.push(`<span class="chip">LL: <strong>${escapeHtml(m.love_language.top_result)}</strong></span>`);
   }
-  if (m.profile?.pipeline_level != null) {
-    chips.push(`<span class="chip">Pipeline: <strong>L${m.profile.pipeline_level}</strong></span>`);
+  const pl = m.profile?.level ?? m.profile?.pipeline_level;
+  if (pl != null) {
+    chips.push(`<span class="chip">Pipeline: <strong>L${pl}</strong></span>`);
   }
 
   document.getElementById('summaryArea').innerHTML =
