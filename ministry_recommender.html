@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ministry Recommender · MULTIPLY Pipeline</title>
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --gold: #B8882A;
+    --green: #2A5C40;
+    --green-light: #5BA378;
+    --red: #7A2020;
+    --red-light: #C75555;
+    --bg: #FAF7F0;
+    --card: #FFFFFF;
+    --border: #E5E0D5;
+    --text: #2A2A2A;
+    --muted: #777;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  .header {
+    background: linear-gradient(135deg, var(--navy), #2C4470);
+    color: white;
+    padding: 24px 30px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .header h1 { font-size: 24px; }
+  .header p { opacity: 0.85; font-size: 14px; margin-top: 4px; }
+
+  .candidate-bar {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .candidate-bar select {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    flex: 1;
+    min-width: 240px;
+  }
+  .candidate-bar select:focus { outline: none; border-color: var(--gold); }
+
+  .summary-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .chip {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .chip strong { color: var(--navy); }
+
+  /* Sliders panel */
+  .sliders-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--card);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+  .sliders-toggle:hover { border-color: var(--gold); }
+  .sliders-toggle .arrow {
+    transition: transform 0.2s;
+    color: var(--muted);
+  }
+  .sliders-toggle.open .arrow { transform: rotate(90deg); }
+  .sliders-toggle .label { flex: 1; font-weight: 500; }
+  .sliders-toggle .label-sub { font-size: 13px; color: var(--muted); margin-left: 8px; }
+
+  .sliders-panel {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .sliders-panel.hidden { display: none; }
+
+  .slider-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 50px;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+  }
+  .slider-row.disabled { opacity: 0.45; }
+  .slider-row.disabled .sub-note { display: block; }
+  .slider-row label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .slider-row label .sub-note {
+    display: none;
+    font-size: 11px;
+    color: var(--red);
+    font-weight: normal;
+  }
+  .slider-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--gold);
+  }
+  .slider-row .value {
+    text-align: center;
+    font-weight: 600;
+    color: var(--navy);
+    font-family: monospace;
+    font-size: 13px;
+    background: var(--bg);
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .sliders-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--gold); color: white; }
+  .btn-primary:hover { background: #A37820; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--bg); color: var(--text); }
+
+  /* Chart */
+  .chart-card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    overflow-x: auto;
+  }
+  .chart-title {
+    color: var(--navy);
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .chart-subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chart {
+    display: grid;
+    grid-template-columns: repeat(17, minmax(70px, 1fr));
+    gap: 4px;
+    align-items: end;
+    min-height: 380px;
+    padding-bottom: 20px;
+  }
+
+  .ministry-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  .ministry-bars {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 280px;
+    justify-content: flex-end;
+  }
+
+  .bar {
+    width: 80%;
+    min-height: 2px;
+    transition: all 0.3s;
+    cursor: pointer;
+    border-radius: 3px 3px 0 0;
+    position: relative;
+  }
+  .bar.adv {
+    background: linear-gradient(180deg, var(--green-light), var(--green));
+  }
+  .bar.adv:hover { filter: brightness(1.1); transform: scaleY(1.02); }
+  .bar.risk {
+    background: linear-gradient(180deg, var(--red-light), var(--red));
+    border-radius: 0 0 3px 3px;
+    margin-top: 1px;
+  }
+  .bar.risk:hover { filter: brightness(1.1); transform: scaleY(1.02); }
+
+  .bar-value {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 600;
+    margin-top: 2px;
+    height: 12px;
+  }
+
+  .ministry-label {
+    font-size: 11px;
+    text-align: center;
+    color: var(--text);
+    line-height: 1.2;
+    padding: 4px 2px;
+    min-height: 28px;
+    word-wrap: break-word;
+    border-top: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  .ministry-col:hover .ministry-label { border-top-color: var(--gold); color: var(--navy); }
+
+  .net-score {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-top: 2px;
+  }
+  .net-score.positive { background: #D1F2DC; color: var(--green); }
+  .net-score.negative { background: #F9D5D5; color: var(--red); }
+  .net-score.zero { background: var(--bg); color: var(--muted); }
+
+  .legend {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
+  .legend-swatch.adv { background: var(--green); }
+  .legend-swatch.risk { background: var(--red); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--card);
+    border-radius: 12px;
+    max-width: 700px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  }
+  .modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    z-index: 1;
+  }
+  .modal-header h3 {
+    color: var(--navy);
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .modal-header .subtitle { color: var(--muted); font-size: 13px; }
+  .close-btn {
+    background: transparent;
+    border: none;
+    font-size: 28px;
+    color: var(--muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .close-btn:hover { color: var(--red); }
+  .modal-body { padding: 20px 24px; }
+
+  .modal-section-title {
+    font-weight: 600;
+    color: var(--navy);
+    margin: 16px 0 8px 0;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .modal-section-title.adv { color: var(--green); }
+  .modal-section-title.risk { color: var(--red); }
+  .modal-section-title.excluded { color: var(--muted); }
+
+  .signal-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 50px;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 4px 0;
+    background: var(--bg);
+    border-radius: 6px;
+    align-items: start;
+    font-size: 13px;
+  }
+  .signal-row.excluded {
+    opacity: 0.45;
+    background: #F2F2F2;
+    text-decoration: none;
+  }
+  .signal-row.excluded .src { background: #DDD; color: #888; }
+  .signal-row.excluded .reason { font-style: italic; }
+  .signal-row .src {
+    background: var(--navy);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .signal-row.adv .src { background: var(--green); }
+  .signal-row.risk .src { background: var(--red); }
+  .signal-row .signal-name { font-weight: 500; }
+  .signal-row .reason {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 3px;
+  }
+  .signal-row .points {
+    font-weight: 600;
+    text-align: center;
+    font-family: monospace;
+    color: var(--navy);
+  }
+  .signal-row.adv .points { color: var(--green); }
+  .signal-row.risk .points { color: var(--red); }
+
+  .excluded-note {
+    background: #FFF8E5;
+    border-left: 3px solid var(--gold);
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #5C4615;
+    margin: 10px 0;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .loading { text-align: center; padding: 40px; color: var(--muted); }
+
+  /* PIN modal for slider unlock */
+  .pin-modal {
+    background: var(--card);
+    padding: 30px;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 380px;
+    width: 100%;
+  }
+  .pin-modal h3 { color: var(--navy); margin-bottom: 8px; }
+  .pin-modal p { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
+  .pin-modal input {
+    padding: 12px;
+    font-size: 22px;
+    text-align: center;
+    letter-spacing: 6px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    width: 180px;
+    margin-bottom: 12px;
+    font-family: monospace;
+  }
+  .pin-modal input:focus { outline: none; border-color: var(--gold); }
+  .pin-modal .pin-error { color: var(--red); font-size: 13px; min-height: 18px; margin: 6px 0; }
+  .pin-modal .pin-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 8px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1>🎯 Ministry Recommender</h1>
+      <p>Best-fit ministry placement based on five assessments + character + pipeline level</p>
+    </div>
+    <a href="dashboard.html" class="btn btn-secondary" style="background: rgba(255,255,255,0.1); color: white; border-color: rgba(255,255,255,0.3);">← Dashboard</a>
+  </div>
+
+  <div class="candidate-bar">
+    <label style="font-weight: 500; color: var(--navy);">Candidate:</label>
+    <select id="candidateSelect">
+      <option value="">— Select a member —</option>
+    </select>
+    <button class="btn btn-secondary" onclick="reloadCandidate()">↻ Refresh</button>
+  </div>
+
+  <div id="summaryArea"></div>
+
+  <div id="slidersToggle" class="sliders-toggle hidden" onclick="toggleSlidersPanel()">
+    <span class="arrow">▶</span>
+    <span class="label">Tweak weights for this recommendation</span>
+    <span class="label-sub">🔒 PIN required</span>
+  </div>
+
+  <div id="slidersPanel" class="sliders-panel hidden">
+    <div class="slider-row" data-source="gifts">
+      <label>Spiritual Gifts<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="gifts" value="3.0">
+      <div class="value" data-display="gifts">3.0</div>
+    </div>
+    <div class="slider-row" data-source="talents">
+      <label>Natural Talents<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="talents" value="3.0">
+      <div class="value" data-display="talents">3.0</div>
+    </div>
+    <div class="slider-row" data-source="disc">
+      <label>DISC<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="disc" value="2.0">
+      <div class="value" data-display="disc">2.0</div>
+    </div>
+    <div class="slider-row" data-source="enneagram">
+      <label>Enneagram<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="enneagram" value="2.0">
+      <div class="value" data-display="enneagram">2.0</div>
+    </div>
+    <div class="slider-row" data-source="strengths">
+      <label>Strengths<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="strengths" value="2.0">
+      <div class="value" data-display="strengths">2.0</div>
+    </div>
+    <div class="slider-row" data-source="love_language">
+      <label>Love Language<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="love_language" value="1.0">
+      <div class="value" data-display="love_language">1.0</div>
+    </div>
+    <div class="slider-row" data-source="fats">
+      <label>FATS Character<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="fats" value="3.0">
+      <div class="value" data-display="fats">3.0</div>
+    </div>
+    <div class="slider-row" data-source="pipeline">
+      <label>Pipeline Level<span class="sub-note">(no data)</span></label>
+      <input type="range" min="0" max="5" step="0.5" data-weight="pipeline" value="3.0">
+      <div class="value" data-display="pipeline">3.0</div>
+    </div>
+
+    <div class="sliders-actions">
+      <button class="btn btn-secondary" onclick="resetWeightsToDefaults()">↺ Reset to system defaults</button>
+      <span style="color: var(--muted); font-size: 12px;">Changes are temporary · don't affect other recommendations</span>
+    </div>
+  </div>
+
+  <div id="chartArea"></div>
+
+</div>
+
+<!-- Detail modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h3 id="modalTitle">Ministry Detail</h3>
+        <div class="subtitle" id="modalSubtitle"></div>
+      </div>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- PIN modal -->
+<div class="modal-overlay" id="pinModal" onclick="if(event.target===this) closePinModal()">
+  <div class="pin-modal">
+    <h3>🔒 Settings PIN</h3>
+    <p>Tweaking weights on the fly is a Pastor-only feature.</p>
+    <input type="password" id="pinUnlockInput" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="••••">
+    <div class="pin-error" id="pinUnlockError"></div>
+    <div class="pin-buttons">
+      <button class="btn btn-secondary" onclick="closePinModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="verifySliderPin()">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ─────────────────────────────────────────────────────────────────
+// CONFIG  (replace with your actual Supabase project credentials)
+// ─────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.supabase = supabase;
+
+// ─────────────────────────────────────────────────────────────────
+// MINISTRY SCORING MATRIX (v2 from project knowledge)
+// ─────────────────────────────────────────────────────────────────
+const MINISTRIES = [
+  {
+    name: "Children's Ministry",
+    short: "Children",
+    summary: "Teaching and shepherding kids ages 4-12.",
+    rosehill: { primary: ["teaching","shepherding","mercy"], secondary: ["exhortation","hospitality","service"] },
+    adv: [
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:3, key:"gift_teaching_strong", reason:"Core function — instructing children in Scripture." },
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Pastoral care of young hearts." },
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Children need compassionate adults." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Building up children in their faith identity." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Welcoming visiting kids and parents." },
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:2, key:"gift_service_strong", reason:"Supports lead teachers." },
+      { src:"DISC", sig:"S primary or secondary", w:2, key:"disc_S", reason:"Patient, steady — children need consistency." },
+      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Naturally caring; reads kids' emotions well." },
+      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Faithful, dependable — shows up week after week." },
+      { src:"STR",  sig:"Developer", w:2, key:"str_Developer", reason:"Sees potential in each child." },
+      { src:"STR",  sig:"Empathy", w:2, key:"str_Empathy", reason:"Catches the child hurting silently." },
+      { src:"STR",  sig:"Includer", w:2, key:"str_Includer", reason:"Notices the shy or new child." },
+      { src:"LL",   sig:"Quality Time primary", w:1, key:"ll_quality_time", reason:"Gives full presence to kids." },
+      { src:"LL",   sig:"Physical Touch primary", w:1, key:"ll_physical_touch", reason:"Appropriate warmth communicates safety." },
+    ],
+    risk: [
+      { src:"GIFT", sig:"Mercy weak (≤8)", w:3, key:"gift_mercy_weak", reason:"Low compassion is a serious mismatch." },
+      { src:"GIFT", sig:"Teaching weak (≤8)", w:2, key:"gift_teaching_weak", reason:"Teaching is core — low gift makes it a struggle." },
+      { src:"DISC", sig:"D primary (high)", w:3, key:"disc_D_high", reason:"Impatience can frighten children." },
+      { src:"ENN",  sig:"Type 8 (Challenger)", w:3, key:"enn_8", reason:"Intensity can overwhelm sensitive children." },
+      { src:"STR",  sig:"Command", w:2, key:"str_Command", reason:"Direct/forceful style not ideal." },
+      { src:"STR",  sig:"Competition", w:2, key:"str_Competition", reason:"Children's ministry is not performance-driven." },
+      { src:"ENN",  sig:"Type 5 (Investigator)", w:1, key:"enn_5", reason:"May prefer solitary thought." },
+    ]
+  },
+  {
+    name: "Campus Life Coach", short: "Campus",
+    summary: "Volunteers teaching values formation in high schools and colleges.",
+    rosehill: { primary: ["evangelism","teaching","apostleship"], secondary: ["wisdom","exhortation","mercy"] },
+    adv: [
+      { src:"GIFT", sig:"Evangelism strong (≥18)", w:3, key:"gift_evangelism_strong", reason:"Public school context = unchurched students." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:3, key:"gift_teaching_strong", reason:"Primary function." },
+      { src:"GIFT", sig:"Apostleship strong (≥18)", w:3, key:"gift_apostleship_strong", reason:"Pioneering ministry." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Students bring complex life issues." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Encouraging young people." },
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:2, key:"gift_mercy_strong", reason:"Students carry hidden burdens." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Engages students through enthusiasm." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Values formation is about right and wrong." },
+      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:1, key:"enn_7", reason:"Energy keeps young audiences engaged." },
+      { src:"STR",  sig:"Communication", w:2, key:"str_Communication", reason:"Public speaking is essential." },
+      { src:"STR",  sig:"Developer", w:2, key:"str_Developer", reason:"Sees potential in young people." },
+      { src:"STR",  sig:"Learner", w:1, key:"str_Learner", reason:"Models lifelong learning." },
+    ],
+    risk: [
+      { src:"GIFT", sig:"Teaching weak (≤8)", w:3, key:"gift_teaching_weak", reason:"Teaching is the core function." },
+      { src:"DISC", sig:"C primary (very high)", w:2, key:"disc_C_high", reason:"Too rigid or academic for teens." },
+      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Detached style does not connect." },
+    ]
+  },
+  {
+    name: "Preaching Ministry", short: "Preaching",
+    summary: "Pulpit preaching, devotional speakers, seminar lectures.",
+    rosehill: { primary: ["prophecy","teaching","knowledge"], secondary: ["wisdom","faith","discernment"] },
+    adv: [
+      { src:"GIFT", sig:"Prophecy strong (≥18)", w:3, key:"gift_prophecy_strong", reason:"Speaking God's word." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:3, key:"gift_teaching_strong", reason:"Foundational requirement." },
+      { src:"GIFT", sig:"Knowledge strong (≥18)", w:3, key:"gift_knowledge_strong", reason:"Preaching requires deep biblical knowledge." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Application requires wisdom." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:2, key:"gift_faith_strong", reason:"Calls people beyond what is visible." },
+      { src:"GIFT", sig:"Discernment strong (≥18)", w:2, key:"gift_discernment_strong", reason:"Recognizes truth from error." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Engaging delivery style." },
+      { src:"DISC", sig:"D primary or secondary", w:1, key:"disc_D", reason:"Bold proclamation when needed." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Conviction and standards." },
+      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Depth of preparation." },
+      { src:"ENN",  sig:"Type 8 (Challenger)", w:1, key:"enn_8", reason:"Bold prophetic voice." },
+      { src:"STR",  sig:"Communication", w:3, key:"str_Communication", reason:"Core skill." },
+      { src:"STR",  sig:"Intellection", w:2, key:"str_Intellection", reason:"Thoughtful sermon prep." },
+      { src:"STR",  sig:"Input", w:2, key:"str_Input", reason:"Wide reading enriches preaching." },
+      { src:"STR",  sig:"Context", w:2, key:"str_Context", reason:"Historical-redemptive preaching." },
+      { src:"STR",  sig:"Self-Assurance", w:1, key:"str_Self-Assurance", reason:"Pulpit demands confident delivery." },
+    ],
+    risk: [
+      { src:"GIFT", sig:"Teaching weak (≤8)", w:3, key:"gift_teaching_weak", reason:"Without teaching gift, preaching becomes opinion." },
+      { src:"DISC", sig:"S only (very high)", w:2, key:"disc_S_only_high", reason:"May lack the bold edge." },
+      { src:"ENN",  sig:"Type 9 only (Peacemaker)", w:1, key:"enn_9_only", reason:"Risk of avoiding hard texts." },
+    ]
+  },
+  {
+    name: "Music Ministry", short: "Music",
+    summary: "Worship leading, vocals, instrumentalists, sound design.",
+    rosehill: { primary: ["service","exhortation","hospitality"], secondary: ["leadership","shepherding"] },
+    adv: [
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Worship serves the congregation." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Worship leaders draw people to encounter God." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:3, key:"gift_hospitality_strong", reason:"Welcomes congregation into worship space." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Worship leading is leading." },
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:2, key:"gift_shepherding_strong", reason:"Pastoral concern in song." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:1, key:"gift_faith_strong", reason:"Worship leading is a faith act." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Stage presence." },
+      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Reliable rehearsal attendance." },
+      { src:"ENN",  sig:"Type 4 (Individualist)", w:2, key:"enn_4", reason:"Creative depth in worship." },
+      { src:"ENN",  sig:"Type 2 (Helper)", w:1, key:"enn_2", reason:"Serves the congregation through song." },
+      { src:"STR",  sig:"Connectedness", w:1, key:"str_Connectedness", reason:"Sees worship as joining heaven's song." },
+      { src:"STR",  sig:"Significance", w:1, key:"str_Significance", reason:"Healthy desire for meaningful platform." },
+      { src:"LL",   sig:"Words of Affirmation primary", w:1, key:"ll_words", reason:"Worship is verbal proclamation." },
+      { src:"TALENT", sig:"Creative & Aesthetic strong (≥8)", w:2, key:"talent_creative_strong", reason:"Musical artistry overlaps with creative cluster." },
+    ],
+    risk: [
+      { src:"ENN", sig:"Type 3 (Achiever) ungrounded", w:2, key:"enn_3", reason:"Risk of performance-driven worship." },
+      { src:"STR", sig:"Significance (extreme)", w:1, key:"str_Significance_extreme", reason:"Watch for using worship as personal platform." },
+    ]
+  },
+  {
+    name: "Interior Design", short: "Interior",
+    summary: "Visual aesthetics of the church space.",
+    rosehill: { primary: ["service","hospitality"], secondary: ["administration","giving"] },
+    adv: [
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Behind-the-scenes ministry of beauty." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:3, key:"gift_hospitality_strong", reason:"Beauty serves welcoming function." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:2, key:"gift_administration_strong", reason:"Coordinates suppliers and materials." },
+      { src:"GIFT", sig:"Giving strong (≥18)", w:2, key:"gift_giving_strong", reason:"Often donates materials." },
+      { src:"TALENT", sig:"Creative & Aesthetic strong (≥8)", w:3, key:"talent_creative_strong", reason:"Visual sense is core requirement." },
+      { src:"DISC", sig:"C primary or secondary", w:2, key:"disc_C", reason:"Detail and precision essential." },
+      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Patient methodical execution." },
+      { src:"ENN",  sig:"Type 4 (Individualist)", w:3, key:"enn_4", reason:"Creative aesthetic is natural domain." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:1, key:"enn_1", reason:"Standards of excellence." },
+      { src:"STR",  sig:"Ideation", w:2, key:"str_Ideation", reason:"Generates creative concepts." },
+      { src:"STR",  sig:"Arranger", w:2, key:"str_Arranger", reason:"Organizes elements into beautiful wholes." },
+      { src:"LL",   sig:"Acts of Service primary", w:1, key:"ll_acts", reason:"Quietly serves through tangible work." },
+    ],
+    risk: [
+      { src:"TALENT", sig:"Creative & Aesthetic weak (≤4)", w:3, key:"talent_creative_weak", reason:"Without visual sense, output suffers." },
+      { src:"DISC", sig:"D primary (high)", w:1, key:"disc_D_high", reason:"Impatience with iteration." },
+    ]
+  },
+  {
+    name: "Lights & Tech", short: "Lights/Tech",
+    summary: "AVL — sound, lights, slides, livestream.",
+    rosehill: { primary: ["service","administration"], secondary: ["knowledge","leadership"] },
+    adv: [
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Tech ministry is service par excellence." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Systems thinking is core." },
+      { src:"GIFT", sig:"Knowledge strong (≥18)", w:2, key:"gift_knowledge_strong", reason:"Steep learning curve." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Tech team coordination." },
+      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:3, key:"talent_technical_strong", reason:"Must understand equipment." },
+      { src:"DISC", sig:"C primary or secondary", w:3, key:"disc_C", reason:"Precision under pressure." },
+      { src:"DISC", sig:"S primary or secondary", w:2, key:"disc_S", reason:"Steady consistency every Sunday." },
+      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Loves technical depth." },
+      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Risk-aware; ready for problems." },
+      { src:"STR",  sig:"Discipline", w:3, key:"str_Discipline", reason:"Routines and checklists." },
+      { src:"STR",  sig:"Restorative", w:2, key:"str_Restorative", reason:"Troubleshoots problems on the fly." },
+      { src:"STR",  sig:"Deliberative", w:2, key:"str_Deliberative", reason:"Spots failure points." },
+      { src:"STR",  sig:"Focus", w:2, key:"str_Focus", reason:"Stays locked on signal during live service." },
+    ],
+    risk: [
+      { src:"TALENT", sig:"Technical & Digital weak (≤4)", w:3, key:"talent_technical_weak", reason:"Tech requires foundational understanding." },
+      { src:"DISC", sig:"I primary (high)", w:2, key:"disc_I_high", reason:"May enjoy attention more than precision." },
+      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:1, key:"enn_7", reason:"Spontaneity ill-suited to predictable routines." },
+    ]
+  },
+  {
+    name: "Documentation & Media", short: "Doc/Media",
+    summary: "Photography, video, livestream, social media.",
+    rosehill: { primary: ["service","administration","knowledge"], secondary: ["teaching","giving"] },
+    adv: [
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Behind-the-scenes ministry." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Workflow and asset management." },
+      { src:"GIFT", sig:"Knowledge strong (≥18)", w:3, key:"gift_knowledge_strong", reason:"Research and accuracy." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Visual storytelling teaches through media." },
+      { src:"GIFT", sig:"Giving strong (≥18)", w:2, key:"gift_giving_strong", reason:"Often donates equipment." },
+      { src:"TALENT", sig:"Creative & Aesthetic strong (≥8)", w:3, key:"talent_creative_strong", reason:"Visual storytelling is core." },
+      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:3, key:"talent_technical_strong", reason:"Equipment and software fluency required." },
+      { src:"TALENT", sig:"Communication & Writing strong (≥8)", w:2, key:"talent_comms_strong", reason:"Captions, scripts, editorial writing." },
+      { src:"DISC", sig:"C primary or secondary", w:2, key:"disc_C", reason:"Quality control on output." },
+      { src:"DISC", sig:"I primary or secondary", w:1, key:"disc_I", reason:"Connects with subjects on camera." },
+      { src:"ENN",  sig:"Type 4 (Individualist)", w:2, key:"enn_4", reason:"Aesthetic sensibility." },
+      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Technical media depth." },
+      { src:"STR",  sig:"Input", w:2, key:"str_Input", reason:"Loves capturing and archiving." },
+      { src:"STR",  sig:"Communication", w:2, key:"str_Communication", reason:"Storytelling skill." },
+      { src:"STR",  sig:"Ideation", w:2, key:"str_Ideation", reason:"Creative concepts for content." },
+      { src:"STR",  sig:"Discipline", w:1, key:"str_Discipline", reason:"Editing requires consistency." },
+    ],
+    risk: [
+      { src:"TALENT", sig:"Creative & Aesthetic weak (≤4)", w:3, key:"talent_creative_weak", reason:"Output quality limited." },
+      { src:"TALENT", sig:"Technical & Digital weak (≤4)", w:3, key:"talent_technical_weak", reason:"Cannot operate production tools." },
+    ]
+  },
+  {
+    name: "Publishing & Communications", short: "Publishing",
+    summary: "Newsletter, devotional guide, written content.",
+    rosehill: { primary: ["knowledge","administration","prophecy"], secondary: ["teaching","wisdom","service"] },
+    adv: [
+      { src:"GIFT", sig:"Knowledge strong (≥18)", w:3, key:"gift_knowledge_strong", reason:"Strong knowledge produces accurate content." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Editorial calendar, workflow." },
+      { src:"GIFT", sig:"Prophecy strong (≥18)", w:3, key:"gift_prophecy_strong", reason:"Sometimes writing speaks needed truth." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Written communication is teaching in print." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Devotionals need wisdom application." },
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:2, key:"gift_service_strong", reason:"Quiet service through written ministry." },
+      { src:"TALENT", sig:"Communication & Writing strong (≥8)", w:3, key:"talent_comms_strong", reason:"Core requirement." },
+      { src:"TALENT", sig:"Administrative & Organizational strong (≥8)", w:2, key:"talent_admin_strong", reason:"Editorial workflow needs organization." },
+      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:1, key:"talent_technical_strong", reason:"Layout and digital publishing tools." },
+      { src:"DISC", sig:"C primary or secondary", w:3, key:"disc_C", reason:"Editing precision and grammar." },
+      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Steady output over time." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Standards in writing and editing." },
+      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Research depth informs publications." },
+      { src:"STR",  sig:"Communication", w:3, key:"str_Communication", reason:"Core competency." },
+      { src:"STR",  sig:"Input", w:2, key:"str_Input", reason:"Vast information stockpile." },
+      { src:"STR",  sig:"Intellection", w:2, key:"str_Intellection", reason:"Thoughtful processing produces deeper writing." },
+      { src:"LL",   sig:"Words of Affirmation primary", w:1, key:"ll_words", reason:"Words are their natural medium." },
+    ],
+    risk: [
+      { src:"GIFT", sig:"Teaching weak (≤8)", w:2, key:"gift_teaching_weak", reason:"Information without formation." },
+      { src:"TALENT", sig:"Communication & Writing weak (≤4)", w:3, key:"talent_comms_weak", reason:"Cannot do central task." },
+      { src:"DISC", sig:"D primary (high)", w:1, key:"disc_D_high", reason:"May rush content; impatient with editing." },
+    ]
+  },
+  {
+    name: "Kitchen Ministry", short: "Kitchen",
+    summary: "Food preparation for fellowship meals.",
+    rosehill: { primary: ["mercy","service","hospitality","giving"], secondary: ["administration","faith"] },
+    adv: [
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Often serves grieving families." },
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Practical hands-on service." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:3, key:"gift_hospitality_strong", reason:"Core gift — welcome through food." },
+      { src:"GIFT", sig:"Giving strong (≥18)", w:3, key:"gift_giving_strong", reason:"Donates ingredients and time." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:2, key:"gift_administration_strong", reason:"Coordinates ingredients, timing, team." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:2, key:"gift_faith_strong", reason:"Trusts that meals will bless." },
+      { src:"TALENT", sig:"Culinary & Hospitality strong (≥8)", w:3, key:"talent_culinary_strong", reason:"Cooking and food prep skill required." },
+      { src:"TALENT", sig:"Physical & Maintenance strong (≥8)", w:2, key:"talent_physical_strong", reason:"Setup, cleanup, physical work." },
+      { src:"DISC", sig:"S primary or secondary", w:3, key:"disc_S", reason:"Steady — meals must be ready on time." },
+      { src:"ENN",  sig:"Type 2 (Helper)", w:3, key:"enn_2", reason:"Caring through nourishment." },
+      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Faithful weekly presence." },
+      { src:"ENN",  sig:"Type 9 (Peacemaker)", w:2, key:"enn_9", reason:"Calm, harmonious team." },
+      { src:"STR",  sig:"Arranger", w:2, key:"str_Arranger", reason:"Coordinates timing and people." },
+      { src:"STR",  sig:"Adaptability", w:2, key:"str_Adaptability", reason:"Last-minute changes happen often." },
+      { src:"STR",  sig:"Responsibility", w:2, key:"str_Responsibility", reason:"Owns the outcome." },
+      { src:"STR",  sig:"Harmony", w:1, key:"str_Harmony", reason:"Kitchen teams need cohesion." },
+      { src:"LL",   sig:"Acts of Service primary", w:2, key:"ll_acts", reason:"Kitchen ministry is acts of service literally." },
+    ],
+    risk: [
+      { src:"ENN", sig:"Type 3 (Achiever)", w:1, key:"enn_3", reason:"Behind-the-scenes may feel insignificant." },
+      { src:"DISC", sig:"D primary (high)", w:1, key:"disc_D_high", reason:"May find repetitive prep boring." },
+    ]
+  },
+  {
+    name: "Building Administration", short: "Building",
+    summary: "Facilities, maintenance, security, scheduling.",
+    rosehill: { primary: ["service","administration"], secondary: ["giving","faith","leadership"] },
+    adv: [
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Tangible practical service." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Core gift." },
+      { src:"GIFT", sig:"Giving strong (≥18)", w:2, key:"gift_giving_strong", reason:"Often donates time and materials." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:2, key:"gift_faith_strong", reason:"Trusts God for resources." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Coordinates volunteers and contractors." },
+      { src:"TALENT", sig:"Administrative & Organizational strong (≥8)", w:3, key:"talent_admin_strong", reason:"Core requirement." },
+      { src:"TALENT", sig:"Physical & Maintenance strong (≥8)", w:3, key:"talent_physical_strong", reason:"Hands-on maintenance ability." },
+      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:1, key:"talent_technical_strong", reason:"Booking and equipment systems." },
+      { src:"DISC", sig:"C primary or secondary", w:3, key:"disc_C", reason:"Detail-oriented; spots issues early." },
+      { src:"DISC", sig:"S primary or secondary", w:2, key:"disc_S", reason:"Dependable ongoing oversight." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Standards of order and excellence." },
+      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Risk-conscious; spots safety issues." },
+      { src:"STR",  sig:"Discipline", w:3, key:"str_Discipline", reason:"Maintenance routines need consistency." },
+      { src:"STR",  sig:"Responsibility", w:3, key:"str_Responsibility", reason:"Ownership essential." },
+      { src:"STR",  sig:"Restorative", w:2, key:"str_Restorative", reason:"Loves fixing things." },
+      { src:"STR",  sig:"Arranger", w:2, key:"str_Arranger", reason:"Schedules space and resources." },
+      { src:"STR",  sig:"Consistency", w:2, key:"str_Consistency", reason:"Applies rules fairly." },
+    ],
+    risk: [
+      { src:"TALENT", sig:"Administrative & Organizational weak (≤4)", w:2, key:"talent_admin_weak", reason:"Cannot manage facilities." },
+      { src:"ENN", sig:"Type 4 (Individualist)", w:1, key:"enn_4", reason:"May find facilities work mundane." },
+      { src:"DISC", sig:"I primary (high)", w:2, key:"disc_I_high", reason:"Bored by detail; may neglect documentation." },
+    ]
+  },
+  {
+    name: "Community Outreach", short: "Outreach",
+    summary: "Calamity response, evangelism, EOLO support.",
+    rosehill: { primary: ["evangelism","mercy","giving","faith"], secondary: ["apostleship","hospitality","service"] },
+    adv: [
+      { src:"GIFT", sig:"Evangelism strong (≥18)", w:3, key:"gift_evangelism_strong", reason:"Outreach is evangelism in action." },
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Calamity work demands compassion." },
+      { src:"GIFT", sig:"Giving strong (≥18)", w:3, key:"gift_giving_strong", reason:"Outreach runs on generous donors." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:3, key:"gift_faith_strong", reason:"Stepping into hard places." },
+      { src:"GIFT", sig:"Apostleship strong (≥18)", w:2, key:"gift_apostleship_strong", reason:"Pioneering into new contexts." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Welcoming strangers." },
+      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:2, key:"gift_service_strong", reason:"Practical service in disasters." },
+      { src:"TALENT", sig:"Culinary & Hospitality strong (≥8)", w:2, key:"talent_culinary_strong", reason:"Often involves feeding programs." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Energy and connection essential." },
+      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Reliable in long-term outreach." },
+      { src:"ENN",  sig:"Type 8 (Challenger)", w:2, key:"enn_8", reason:"Bold to enter hard places." },
+      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Naturally compassionate." },
+      { src:"STR",  sig:"Empathy", w:2, key:"str_Empathy", reason:"Reads needs in the community." },
+      { src:"STR",  sig:"Activator", w:2, key:"str_Activator", reason:"Mobilizes responses quickly." },
+      { src:"STR",  sig:"Connectedness", w:1, key:"str_Connectedness", reason:"Sees outreach as kingdom thread." },
+    ],
+    risk: [
+      { src:"GIFT", sig:"Mercy weak (≤8)", w:2, key:"gift_mercy_weak", reason:"Without compassion outreach becomes mechanical." },
+      { src:"ENN", sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Prefers analysis to engagement." },
+      { src:"DISC", sig:"C primary (very high)", w:1, key:"disc_C_high", reason:"May overthink; needs immediate action." },
+    ]
+  },
+  {
+    name: "Youth in Motion", short: "YIM (Sports)",
+    summary: "Basketball-based outreach to young people.",
+    rosehill: { primary: ["evangelism","exhortation","mercy"], secondary: ["hospitality","shepherding","leadership"] },
+    adv: [
+      { src:"GIFT", sig:"Evangelism strong (≥18)", w:3, key:"gift_evangelism_strong", reason:"Bringing unchurched youth to Christ." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Coaches challenge players spiritually." },
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Many players come from hard backgrounds." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Welcoming new players." },
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:2, key:"gift_shepherding_strong", reason:"Pastoral care once they engage." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Coaches lead their teams." },
+      { src:"TALENT", sig:"Sports & Athletics strong (≥8)", w:3, key:"talent_sports_strong", reason:"Required — sports-based ministry." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Energy draws youth in." },
+      { src:"DISC", sig:"D primary or secondary", w:1, key:"disc_D", reason:"Drive fits sports culture." },
+      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:2, key:"enn_7", reason:"Joy and energy match the environment." },
+      { src:"ENN",  sig:"Type 3 (Achiever)", w:1, key:"enn_3", reason:"Drives team excellence." },
+      { src:"STR",  sig:"Activator", w:2, key:"str_Activator", reason:"Sports requires execution." },
+      { src:"STR",  sig:"Competition", w:2, key:"str_Competition", reason:"Healthy competitive instinct." },
+      { src:"STR",  sig:"Woo", w:2, key:"str_Woo", reason:"Wins over new players quickly." },
+      { src:"STR",  sig:"Positivity", w:1, key:"str_Positivity", reason:"Keeps morale up through losses." },
+    ],
+    risk: [
+      { src:"TALENT", sig:"Sports & Athletics weak (≤4)", w:3, key:"talent_sports_weak", reason:"Major mismatch — players will sense discomfort." },
+      { src:"ENN", sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Prefers solitude; sports culture exhausts." },
+      { src:"ENN", sig:"Type 4 (Individualist)", w:1, key:"enn_4", reason:"May find team culture too uniform." },
+      { src:"DISC", sig:"C primary (very high)", w:1, key:"disc_C_high", reason:"Perfectionism clashes with chaos." },
+      { src:"STR", sig:"Deliberative", w:1, key:"str_Deliberative", reason:"Sports needs quick action." },
+    ]
+  },
+  {
+    name: "Youth Ministry", short: "Youth",
+    summary: "Discipling teens — sermons, small groups, retreats.",
+    rosehill: { primary: ["shepherding","exhortation","leadership"], secondary: ["teaching","evangelism","mercy"] },
+    adv: [
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Discipleship of adolescents." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Youth need encouragement through identity formation." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Casts vision for youth." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Solid biblical formation." },
+      { src:"GIFT", sig:"Evangelism strong (≥18)", w:2, key:"gift_evangelism_strong", reason:"Many teens still need salvation moment." },
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:2, key:"gift_mercy_strong", reason:"Teens carry hidden wounds." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Energy connects with teens." },
+      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Patient through teen struggles." },
+      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:2, key:"enn_7", reason:"Energy matches age group." },
+      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Caring presence teens need." },
+      { src:"STR",  sig:"Developer", w:3, key:"str_Developer", reason:"Sees who the teen will become." },
+      { src:"STR",  sig:"Connectedness", w:2, key:"str_Connectedness", reason:"Helps teens see meaning." },
+      { src:"STR",  sig:"Positivity", w:2, key:"str_Positivity", reason:"Counters cynicism." },
+      { src:"LL",   sig:"Quality Time primary", w:2, key:"ll_quality_time", reason:"Teens crave undivided attention." },
+    ],
+    risk: [
+      { src:"DISC", sig:"C primary (very high)", w:2, key:"disc_C_high", reason:"Too rigid or cold." },
+      { src:"ENN", sig:"Type 1 (Reformer) without grace", w:2, key:"enn_1_rigid", reason:"Standards-heavy approach can crush teen identity." },
+      { src:"ENN", sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Detached style does not connect." },
+    ]
+  },
+  {
+    name: "Couples Ministry", short: "Couples",
+    summary: "Marriage discipleship — preparation, enrichment, restoration.",
+    rosehill: { primary: ["shepherding","wisdom","discernment"], secondary: ["exhortation","mercy","hospitality"] },
+    adv: [
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Pastoral care for couples in crisis." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:3, key:"gift_wisdom_strong", reason:"Marriage counseling requires deep wisdom." },
+      { src:"GIFT", sig:"Discernment strong (≥18)", w:3, key:"gift_discernment_strong", reason:"Recognizing real issues beneath complaints." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Couples in crisis need encouragement." },
+      { src:"GIFT", sig:"Mercy strong (≥18)", w:2, key:"gift_mercy_strong", reason:"Couples in crisis need compassion." },
+      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Sessions over meals or in homes." },
+      { src:"DISC", sig:"S primary or secondary", w:3, key:"disc_S", reason:"Patient through long restoration journeys." },
+      { src:"DISC", sig:"C primary or secondary", w:1, key:"disc_C", reason:"Thoughtful process in counseling." },
+      { src:"ENN",  sig:"Type 9 (Peacemaker)", w:3, key:"enn_9", reason:"Sees both sides; mediates conflict." },
+      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Caring presence couples need." },
+      { src:"ENN",  sig:"Type 6 (Loyalist)", w:1, key:"enn_6", reason:"Faithful confidentiality." },
+      { src:"STR",  sig:"Empathy", w:3, key:"str_Empathy", reason:"Reads tension and pain accurately." },
+      { src:"STR",  sig:"Connectedness", w:2, key:"str_Connectedness", reason:"Helps couples see redemptively." },
+      { src:"STR",  sig:"Relator", w:2, key:"str_Relator", reason:"Long-term investment." },
+      { src:"STR",  sig:"Harmony", w:2, key:"str_Harmony", reason:"De-escalates conflict." },
+      { src:"LL",   sig:"Quality Time primary", w:2, key:"ll_quality_time", reason:"Couples need undivided attention." },
+    ],
+    risk: [
+      { src:"DISC", sig:"D primary (high)", w:3, key:"disc_D_high", reason:"Couples need patience, not fast fixes." },
+      { src:"ENN", sig:"Type 8 (Challenger)", w:2, key:"enn_8", reason:"Confrontational style can wound." },
+      { src:"STR", sig:"Command", w:2, key:"str_Command", reason:"Authority style mismatched." },
+    ]
+  },
+  {
+    name: "Young Pro Ministry", short: "Young Pro",
+    summary: "Discipling 25-35 year olds — career, faith integration.",
+    rosehill: { primary: ["shepherding","leadership","exhortation"], secondary: ["wisdom","evangelism","teaching"] },
+    adv: [
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Long-term discipleship investment." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Young pros respect strong leadership." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Identity pressure." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Career and life decisions." },
+      { src:"GIFT", sig:"Evangelism strong (≥18)", w:2, key:"gift_evangelism_strong", reason:"Many still need conversion." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Doctrinal formation for thinking adults." },
+      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Connects with social, professional vibe." },
+      { src:"DISC", sig:"C primary or secondary", w:1, key:"disc_C", reason:"Thoughtful engagement." },
+      { src:"ENN",  sig:"Type 3 (Achiever)", w:2, key:"enn_3", reason:"Speaks the language of ambition." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:1, key:"enn_1", reason:"High standards for life integration." },
+      { src:"STR",  sig:"Futuristic", w:2, key:"str_Futuristic", reason:"Casts vision for their lives." },
+      { src:"STR",  sig:"Communication", w:2, key:"str_Communication", reason:"Articulates faith intelligently." },
+      { src:"STR",  sig:"Strategic", w:2, key:"str_Strategic", reason:"Helps think through decisions." },
+      { src:"STR",  sig:"Significance", w:1, key:"str_Significance", reason:"Resonates with drive for meaningful life." },
+    ],
+    risk: [
+      { src:"ENN", sig:"Type 5 (Investigator)", w:1, key:"enn_5", reason:"Misses emotional pressures." },
+      { src:"DISC", sig:"S only (very high)", w:1, key:"disc_S_only_high", reason:"Too passive for high-energy demographic." },
+    ]
+  },
+  {
+    name: "Church Council", short: "Council",
+    summary: "Governance, policy, financial oversight.",
+    leadership: true,
+    rosehill: { primary: ["leadership","wisdom","discernment","faith"], secondary: ["administration","knowledge","prophecy"] },
+    adv: [
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Council leads the church." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:3, key:"gift_wisdom_strong", reason:"Decisions affect the whole church." },
+      { src:"GIFT", sig:"Discernment strong (≥18)", w:3, key:"gift_discernment_strong", reason:"Recognizing motives." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:3, key:"gift_faith_strong", reason:"Stepping into the unknown." },
+      { src:"GIFT", sig:"Administration strong (≥18)", w:2, key:"gift_administration_strong", reason:"Policy and systems." },
+      { src:"GIFT", sig:"Knowledge strong (≥18)", w:2, key:"gift_knowledge_strong", reason:"Informed decisions." },
+      { src:"GIFT", sig:"Prophecy strong (≥18)", w:2, key:"gift_prophecy_strong", reason:"Speaks needed truth." },
+      { src:"DISC", sig:"C primary or secondary", w:2, key:"disc_C", reason:"Detail and policy precision." },
+      { src:"DISC", sig:"D primary or secondary", w:2, key:"disc_D", reason:"Decisive when needed." },
+      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Standards and integrity." },
+      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Risk awareness." },
+      { src:"ENN",  sig:"Type 8 (Challenger)", w:1, key:"enn_8", reason:"Willing to make hard calls." },
+      { src:"STR",  sig:"Strategic", w:3, key:"str_Strategic", reason:"Governance is strategic." },
+      { src:"STR",  sig:"Analytical", w:2, key:"str_Analytical", reason:"Examines proposals critically." },
+      { src:"STR",  sig:"Deliberative", w:2, key:"str_Deliberative", reason:"Risk-aware." },
+      { src:"STR",  sig:"Responsibility", w:2, key:"str_Responsibility", reason:"Owns outcomes." },
+      { src:"STR",  sig:"Belief", w:1, key:"str_Belief", reason:"Anchors decisions in core values." },
+      { src:"FATS", sig:"All four FATS markers strong", w:3, key:"fats_all_strong", reason:"Council demands trustworthy character." },
+      { src:"PIPELINE", sig:"Director or Executive level", w:3, key:"pipeline_director_or_exec", reason:"Demonstrated leadership maturity." },
+    ],
+    risk: [
+      { src:"FATS", sig:"Faithful low", w:3, key:"fats_faithful_low", reason:"Inconsistency disqualifies." },
+      { src:"FATS", sig:"Selfless low", w:3, key:"fats_selfless_low", reason:"Self-interest is corrosive." },
+      { src:"PIPELINE", sig:"Below Coach level", w:3, key:"pipeline_below_coach", reason:"Premature placement risks both leader and church." },
+      { src:"ENN", sig:"Type 7 (Enthusiast)", w:2, key:"enn_7", reason:"May rush decisions." },
+      { src:"DISC", sig:"I only (very high)", w:1, key:"disc_I_only_high", reason:"Too people-pleasing for hard decisions." },
+    ]
+  },
+  {
+    name: "Core Group", short: "Core",
+    summary: "Inner leadership circle — vision carriers, multipliers.",
+    leadership: true,
+    rosehill: { primary: ["shepherding","leadership","faith"], secondary: ["wisdom","discernment","exhortation"] },
+    adv: [
+      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Cares for emerging leaders." },
+      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Multiplying leaders requires leaders." },
+      { src:"GIFT", sig:"Faith strong (≥18)", w:3, key:"gift_faith_strong", reason:"Carries vision beyond current reality." },
+      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Decisions shape direction." },
+      { src:"GIFT", sig:"Discernment strong (≥18)", w:2, key:"gift_discernment_strong", reason:"Evaluates emerging leaders." },
+      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Builds up leaders they multiply." },
+      { src:"GIFT", sig:"Apostleship strong (≥18)", w:2, key:"gift_apostleship_strong", reason:"Pioneering and multiplying." },
+      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Discipling future leaders." },
+      { src:"ENN",  sig:"Type 3 (Achiever)", w:2, key:"enn_3", reason:"Drives multiplication." },
+      { src:"ENN",  sig:"Type 8 (Challenger)", w:1, key:"enn_8", reason:"Bold vision-casting." },
+      { src:"STR",  sig:"Strategic", w:3, key:"str_Strategic", reason:"Sees the multiplication paths." },
+      { src:"STR",  sig:"Developer", w:3, key:"str_Developer", reason:"Develops leaders by trade." },
+      { src:"STR",  sig:"Maximizer", w:2, key:"str_Maximizer", reason:"Develops to full potential." },
+      { src:"STR",  sig:"Futuristic", w:2, key:"str_Futuristic", reason:"Casts vision for future church." },
+      { src:"STR",  sig:"Activator", w:2, key:"str_Activator", reason:"Turns vision into action." },
+      { src:"FATS", sig:"All four FATS markers strong", w:3, key:"fats_all_strong", reason:"Inner circle demands FATS character." },
+      { src:"PIPELINE", sig:"Coach level or above", w:3, key:"pipeline_coach_or_above", reason:"Demonstrated multiplication." },
+    ],
+    risk: [
+      { src:"FATS", sig:"Any FATS marker low", w:3, key:"fats_any_low", reason:"Core Group is character-first." },
+      { src:"PIPELINE", sig:"Below Coach level", w:3, key:"pipeline_below_coach", reason:"Pipeline progression matters." },
+      { src:"ENN", sig:"Type 9 only (Peacemaker)", w:1, key:"enn_9_only", reason:"May avoid hard conflicts." },
+    ]
+  },
+];
+
+// Map source code -> weight key
+const SOURCE_TO_WEIGHT = {
+  GIFT: 'gifts',
+  TALENT: 'talents',
+  DISC: 'disc',
+  ENN: 'enneagram',
+  STR: 'strengths',
+  LL: 'love_language',
+  FATS: 'fats',
+  PIPELINE: 'pipeline'
+};
+
+// ─────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────
+let systemSettings = null;       // loaded from system_settings table
+let currentWeights = {};         // working weights (may differ from system defaults if Pastor tweaked)
+let currentMember = null;        // the selected member's full data
+let memberSignals = null;        // computed signal-key -> true map (which signals fire for this member)
+let availableSources = {};       // which sources have data for this member
+let slidersUnlocked = false;     // PIN-gated
+
+// ─────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────
+async function init() {
+  await loadSystemSettings();
+  await loadMemberList();
+}
+init();
+
+async function loadSystemSettings() {
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) throw error;
+    systemSettings = data || null;
+  } catch (e) {
+    console.error('Could not load system_settings:', e);
+  }
+
+  // Fall back to hardcoded defaults if no system_settings row
+  const fallback = { gifts: 3.0, talents: 3.0, disc: 2.0, enneagram: 2.0, strengths: 2.0, love_language: 1.0, fats: 3.0, pipeline: 3.0 };
+  currentWeights = { ...fallback, ...(systemSettings?.weights || {}) };
+  applyWeightsToSliders();
+}
+
+async function loadMemberList() {
+  try {
+    const { data, error } = await supabase
+      .from('members')
+      .select('id, full_name')
+      .order('full_name');
+    if (error) throw error;
+
+    const sel = document.getElementById('candidateSelect');
+    sel.innerHTML = '<option value="">— Select a member —</option>';
+    (data || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.full_name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Could not load members:', e);
+    document.getElementById('candidateSelect').innerHTML =
+      '<option value="">⚠ Could not load member list</option>';
+  }
+}
+
+document.getElementById('candidateSelect').addEventListener('change', async e => {
+  const id = e.target.value;
+  if (!id) {
+    currentMember = null;
+    memberSignals = null;
+    document.getElementById('summaryArea').innerHTML = '';
+    document.getElementById('chartArea').innerHTML = '';
+    document.getElementById('slidersToggle').classList.add('hidden');
+    document.getElementById('slidersPanel').classList.add('hidden');
+    return;
+  }
+  await loadMember(id);
+});
+
+window.reloadCandidate = async function() {
+  if (currentMember?.id) await loadMember(currentMember.id);
+};
+
+async function loadMember(id) {
+  document.getElementById('chartArea').innerHTML = '<div class="loading">Loading member data…</div>';
+
+  try {
+    // Pull everything related in parallel
+    const [memberRes, giftsRes, discRes, ennRes, strRes, llRes, fatsRes] = await Promise.all([
+      supabase.from('members').select('*').eq('id', id).maybeSingle(),
+      supabase.from('gifts_diagnostic').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('disc_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('enneagram_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('strengths_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('love_language_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('fats_assessment').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+
+    currentMember = {
+      id,
+      profile: memberRes.data || {},
+      gifts: giftsRes.data || null,
+      disc: discRes.data || null,
+      enneagram: ennRes.data || null,
+      strengths: strRes.data || null,
+      love_language: llRes.data || null,
+      fats: fatsRes.data || null,
+    };
+
+    computeSignals();
+    renderSummary();
+    renderChart();
+    renderSliderAvailability();
+
+    document.getElementById('slidersToggle').classList.remove('hidden');
+  } catch (e) {
+    console.error(e);
+    document.getElementById('chartArea').innerHTML =
+      `<div class="empty-state" style="color: var(--red);">Error loading member: ${e.message || e}</div>`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SIGNAL COMPUTATION
+// ─────────────────────────────────────────────────────────────────
+function computeSignals() {
+  const m = currentMember;
+  const t = systemSettings?.thresholds || { gift_strong: 18, gift_weak: 8, talent_strong: 8, talent_weak: 4 };
+  const fatsMin = systemSettings?.fats || { faithful_min: 4, available_min: 4, teachable_min: 4, selfless_min: 4 };
+  const sigs = {};
+  const avail = {};
+
+  // === GIFTS ===
+  if (m.gifts && m.gifts.all_scores) {
+    avail.gifts = true;
+    avail.talents = true; // talents also live in gifts_diagnostic
+    const scores = m.gifts.all_scores;
+    const gifts = ['leadership','administration','teaching','knowledge','wisdom','prophecy','discernment','exhortation','shepherding','faith','evangelism','apostleship','service','mercy','giving','hospitality'];
+    gifts.forEach(g => {
+      const s = scores[g];
+      if (s == null) return;
+      if (s >= t.gift_strong) sigs[`gift_${g}_strong`] = true;
+      if (s <= t.gift_weak) sigs[`gift_${g}_weak`] = true;
+    });
+
+    // Talents
+    const talents = m.gifts.talent_scores || {};
+    Object.entries(talents).forEach(([k, v]) => {
+      if (v >= t.talent_strong) sigs[`talent_${k}_strong`] = true;
+      if (v <= t.talent_weak) sigs[`talent_${k}_weak`] = true;
+    });
+  } else {
+    avail.gifts = false;
+    avail.talents = false;
+  }
+
+  // === DISC ===
+  if (m.disc && (m.disc.primary || m.disc.scores)) {
+    avail.disc = true;
+    const primary = (m.disc.primary || '').toUpperCase();
+    const secondary = (m.disc.secondary || '').toUpperCase();
+    ['D','I','S','C'].forEach(letter => {
+      if (primary === letter || secondary === letter) sigs[`disc_${letter}`] = true;
+    });
+    // High variants — primary letter with score above threshold
+    const scores = m.disc.scores || {};
+    if (scores[primary] >= 80) sigs[`disc_${primary}_high`] = true;
+    if (primary && !secondary) sigs[`disc_${primary}_only_high`] = (scores[primary] >= 80);
+  } else {
+    avail.disc = false;
+  }
+
+  // === ENNEAGRAM ===
+  if (m.enneagram && m.enneagram.primary_type) {
+    avail.enneagram = true;
+    const t = m.enneagram.primary_type;
+    sigs[`enn_${t}`] = true;
+    // _only variants — primary type with no clear wing or others
+    sigs[`enn_${t}_only`] = true;
+  } else {
+    avail.enneagram = false;
+  }
+
+  // === STRENGTHS ===
+  if (m.strengths && Array.isArray(m.strengths.top_strengths)) {
+    avail.strengths = true;
+    m.strengths.top_strengths.forEach(s => {
+      if (s) sigs[`str_${s}`] = true;
+    });
+  } else {
+    avail.strengths = false;
+  }
+
+  // === LOVE LANGUAGE ===
+  if (m.love_language && m.love_language.primary) {
+    avail.love_language = true;
+    const map = { words_of_affirmation: 'words', acts_of_service: 'acts', receiving_gifts: 'gifts', quality_time: 'quality_time', physical_touch: 'physical_touch' };
+    const key = map[m.love_language.primary] || m.love_language.primary;
+    sigs[`ll_${key}`] = true;
+  } else {
+    avail.love_language = false;
+  }
+
+  // === FATS ===
+  if (m.fats) {
+    avail.fats = true;
+    const f = m.fats;
+    const allStrong = (f.faithful >= fatsMin.faithful_min) && (f.available >= fatsMin.available_min)
+                   && (f.teachable >= fatsMin.teachable_min) && (f.selfless >= fatsMin.selfless_min);
+    if (allStrong) sigs.fats_all_strong = true;
+    if (f.faithful < fatsMin.faithful_min) sigs.fats_faithful_low = true;
+    if (f.available < fatsMin.available_min) sigs.fats_available_low = true;
+    if (f.teachable < fatsMin.teachable_min) sigs.fats_teachable_low = true;
+    if (f.selfless < fatsMin.selfless_min) sigs.fats_selfless_low = true;
+    if (sigs.fats_faithful_low || sigs.fats_available_low || sigs.fats_teachable_low || sigs.fats_selfless_low) {
+      sigs.fats_any_low = true;
+    }
+  } else {
+    avail.fats = false;
+  }
+
+  // === PIPELINE ===
+  const pl = m.profile?.pipeline_level;
+  if (pl != null) {
+    avail.pipeline = true;
+    if (pl >= 3) sigs.pipeline_coach_or_above = true;
+    if (pl >= 4) sigs.pipeline_director_or_exec = true;
+    if (pl < 3) sigs.pipeline_below_coach = true;
+  } else {
+    avail.pipeline = false;
+  }
+
+  memberSignals = sigs;
+  availableSources = avail;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RENDERING
+// ─────────────────────────────────────────────────────────────────
+function renderSummary() {
+  const m = currentMember;
+  const chips = [];
+
+  if (m.profile?.full_name) chips.push(`<span class="chip"><strong>${escapeHtml(m.profile.full_name)}</strong></span>`);
+
+  if (availableSources.gifts && m.gifts?.top_3) {
+    chips.push(`<span class="chip">Top Gifts: <strong>${escapeHtml(m.gifts.top_3.join(', '))}</strong></span>`);
+  }
+  if (availableSources.disc && m.disc?.primary) {
+    chips.push(`<span class="chip">DISC: <strong>${escapeHtml(m.disc.primary)}${m.disc.secondary ? '/' + escapeHtml(m.disc.secondary) : ''}</strong></span>`);
+  }
+  if (availableSources.enneagram && m.enneagram?.primary_type) {
+    chips.push(`<span class="chip">Enneagram: <strong>${escapeHtml(String(m.enneagram.primary_type))}</strong></span>`);
+  }
+  if (availableSources.strengths && m.strengths?.top_strengths?.length) {
+    chips.push(`<span class="chip">Strengths: <strong>${escapeHtml(m.strengths.top_strengths.slice(0,3).join(', '))}</strong></span>`);
+  }
+  if (availableSources.love_language && m.love_language?.primary) {
+    chips.push(`<span class="chip">LL: <strong>${escapeHtml(m.love_language.primary.replace(/_/g, ' '))}</strong></span>`);
+  }
+  if (m.profile?.pipeline_level != null) {
+    chips.push(`<span class="chip">Pipeline: <strong>L${m.profile.pipeline_level}</strong></span>`);
+  }
+
+  document.getElementById('summaryArea').innerHTML =
+    chips.length
+      ? `<div class="candidate-bar"><div class="summary-chips">${chips.join('')}</div></div>`
+      : '';
+}
+
+function computeMinistryScores(ministry) {
+  let advTotal = 0, riskTotal = 0;
+  const advHits = [], riskHits = [], advExcluded = [], riskExcluded = [];
+
+  ministry.adv.forEach(s => {
+    if (memberSignals[s.key]) {
+      const wKey = SOURCE_TO_WEIGHT[s.src];
+      const mult = currentWeights[wKey] ?? 1;
+      const points = s.w * mult;
+      if (mult === 0) {
+        advExcluded.push({ ...s, points: 0, mult });
+      } else {
+        advTotal += points;
+        advHits.push({ ...s, points, mult });
+      }
+    }
+  });
+
+  ministry.risk.forEach(s => {
+    if (memberSignals[s.key]) {
+      const wKey = SOURCE_TO_WEIGHT[s.src];
+      const mult = currentWeights[wKey] ?? 1;
+      const points = s.w * mult;
+      if (mult === 0) {
+        riskExcluded.push({ ...s, points: 0, mult });
+      } else {
+        riskTotal += points;
+        riskHits.push({ ...s, points, mult });
+      }
+    }
+  });
+
+  return { advTotal, riskTotal, net: advTotal - riskTotal, advHits, riskHits, advExcluded, riskExcluded };
+}
+
+function renderChart() {
+  if (!currentMember) {
+    document.getElementById('chartArea').innerHTML = '';
+    return;
+  }
+
+  const scored = MINISTRIES.map(m => ({ ministry: m, ...computeMinistryScores(m) }));
+  // Sort by net score descending
+  scored.sort((a, b) => b.net - a.net);
+
+  // Find max bar height for scaling
+  const maxAdv = Math.max(...scored.map(s => s.advTotal), 1);
+  const maxRisk = Math.max(...scored.map(s => s.riskTotal), 1);
+  const maxBar = Math.max(maxAdv, maxRisk, 1);
+
+  const cols = scored.map(s => {
+    const advHeight = (s.advTotal / maxBar) * 130;
+    const riskHeight = (s.riskTotal / maxBar) * 130;
+    const netClass = s.net > 0 ? 'positive' : (s.net < 0 ? 'negative' : 'zero');
+    const netLabel = s.net > 0 ? `+${s.net.toFixed(0)}` : s.net.toFixed(0);
+
+    return `
+      <div class="ministry-col" data-ministry="${escapeHtml(s.ministry.name)}" onclick="showMinistryDetail('${escapeHtml(s.ministry.name)}')">
+        <div class="bar-value">${s.advTotal > 0 ? '+' + s.advTotal.toFixed(0) : ''}</div>
+        <div class="ministry-bars">
+          ${s.advTotal > 0 ? `<div class="bar adv" style="height: ${advHeight}px;" title="Advantages: ${s.advTotal.toFixed(1)}"></div>` : '<div style="flex:1;"></div>'}
+          ${s.riskTotal > 0 ? `<div class="bar risk" style="height: ${riskHeight}px;" title="Risks: ${s.riskTotal.toFixed(1)}"></div>` : ''}
+        </div>
+        <div class="bar-value" style="color: var(--red);">${s.riskTotal > 0 ? '−' + s.riskTotal.toFixed(0) : ''}</div>
+        <div class="ministry-label">${escapeHtml(s.ministry.short)}</div>
+        <div class="net-score ${netClass}">${netLabel}</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('chartArea').innerHTML = `
+    <div class="chart-card">
+      <div class="chart-title">Ministry Fit · ${escapeHtml(currentMember.profile?.full_name || 'Member')}</div>
+      <div class="chart-subtitle">Sorted by net score (advantages minus risks). Click any bar for details.</div>
+      <div class="chart">${cols}</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch adv"></div> Advantages (fit signals)</div>
+        <div class="legend-item"><div class="legend-swatch risk"></div> Risks (mismatch signals)</div>
+      </div>
+    </div>
+  `;
+}
+
+window.showMinistryDetail = function(ministryName) {
+  const ministry = MINISTRIES.find(m => m.name === ministryName);
+  if (!ministry) return;
+  const scored = computeMinistryScores(ministry);
+
+  document.getElementById('modalTitle').textContent = ministry.name;
+  document.getElementById('modalSubtitle').textContent =
+    ministry.summary + ` · Net score: ${(scored.net > 0 ? '+' : '') + scored.net.toFixed(1)}`;
+
+  let html = '';
+
+  if (scored.advHits.length === 0 && scored.advExcluded.length === 0) {
+    html += '<div style="padding: 12px; color: var(--muted); text-align: center;">No advantage signals fired for this ministry.</div>';
+  } else {
+    html += `<div class="modal-section-title adv">✓ Advantages (${scored.advTotal.toFixed(1)} pts)</div>`;
+    scored.advHits.forEach(h => {
+      html += renderSignalRow(h, 'adv');
+    });
+    if (scored.advExcluded.length > 0) {
+      html += `<div class="modal-section-title excluded" style="margin-top: 16px;">⊘ Excluded by current weights (${scored.advExcluded.length})</div>`;
+      scored.advExcluded.forEach(h => {
+        html += renderSignalRow(h, 'adv excluded', true);
+      });
+    }
+  }
+
+  if (scored.riskHits.length > 0 || scored.riskExcluded.length > 0) {
+    html += `<div class="modal-section-title risk" style="margin-top: 16px;">⚠ Risks (${scored.riskTotal.toFixed(1)} pts)</div>`;
+    scored.riskHits.forEach(h => {
+      html += renderSignalRow(h, 'risk');
+    });
+    if (scored.riskExcluded.length > 0) {
+      html += `<div class="modal-section-title excluded" style="margin-top: 16px;">⊘ Excluded by current weights (${scored.riskExcluded.length})</div>`;
+      scored.riskExcluded.forEach(h => {
+        html += renderSignalRow(h, 'risk excluded', true);
+      });
+    }
+  }
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('show');
+};
+
+function renderSignalRow(s, cssClass, isExcluded = false) {
+  const wKey = SOURCE_TO_WEIGHT[s.src];
+  const wMult = currentWeights[wKey] ?? 1;
+  const pointsLabel = isExcluded
+    ? `<span style="color: var(--muted);">excluded</span>`
+    : `${s.points >= 0 ? '+' : ''}${s.points.toFixed(1)}`;
+  const sub = isExcluded
+    ? ` (weight set to 0)`
+    : ` × ${wMult.toFixed(1)}`;
+  return `
+    <div class="signal-row ${cssClass}">
+      <div class="src">${s.src}</div>
+      <div>
+        <div class="signal-name">${escapeHtml(s.sig)} <span style="color: var(--muted); font-size: 11px;">(base ${s.w}${sub})</span></div>
+        <div class="reason">${escapeHtml(s.reason)}</div>
+      </div>
+      <div class="points">${pointsLabel}</div>
+    </div>
+  `;
+}
+
+window.closeModal = function() {
+  document.getElementById('modalOverlay').classList.remove('show');
+};
+
+// ─────────────────────────────────────────────────────────────────
+// SLIDERS
+// ─────────────────────────────────────────────────────────────────
+function applyWeightsToSliders() {
+  Object.entries(currentWeights).forEach(([k, v]) => {
+    const slider = document.querySelector(`input[data-weight="${k}"]`);
+    const display = document.querySelector(`[data-display="${k}"]`);
+    if (slider) slider.value = v;
+    if (display) display.textContent = Number(v).toFixed(1);
+  });
+}
+
+function renderSliderAvailability() {
+  document.querySelectorAll('.slider-row').forEach(row => {
+    const src = row.dataset.source;
+    const has = !!availableSources[src];
+    row.classList.toggle('disabled', !has);
+    const slider = row.querySelector('input[type="range"]');
+    if (slider) slider.disabled = !has;
+  });
+}
+
+window.toggleSlidersPanel = function() {
+  if (!slidersUnlocked) {
+    document.getElementById('pinModal').classList.add('show');
+    setTimeout(() => document.getElementById('pinUnlockInput').focus(), 50);
+    return;
+  }
+  const toggle = document.getElementById('slidersToggle');
+  const panel = document.getElementById('slidersPanel');
+  toggle.classList.toggle('open');
+  panel.classList.toggle('hidden');
+};
+
+window.verifySliderPin = async function() {
+  const entered = document.getElementById('pinUnlockInput').value.trim();
+  const errEl = document.getElementById('pinUnlockError');
+
+  const storedPin = systemSettings?.meta?.settings_pin || '6858';
+
+  if (entered === storedPin) {
+    slidersUnlocked = true;
+    closePinModal();
+    // Open the panel
+    document.getElementById('slidersToggle').classList.add('open');
+    document.getElementById('slidersPanel').classList.remove('hidden');
+  } else {
+    errEl.textContent = 'Wrong PIN.';
+    document.getElementById('pinUnlockInput').value = '';
+  }
+};
+
+window.closePinModal = function() {
+  document.getElementById('pinModal').classList.remove('show');
+  document.getElementById('pinUnlockInput').value = '';
+  document.getElementById('pinUnlockError').textContent = '';
+};
+
+document.getElementById('pinUnlockInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') verifySliderPin();
+});
+
+// Slider changes — recalculate everything live
+document.querySelectorAll('.sliders-panel input[type="range"]').forEach(slider => {
+  slider.addEventListener('input', e => {
+    const k = e.target.dataset.weight;
+    const v = parseFloat(e.target.value);
+    currentWeights[k] = v;
+    const display = document.querySelector(`[data-display="${k}"]`);
+    if (display) display.textContent = v.toFixed(1);
+    if (currentMember) renderChart();
+  });
+});
+
+window.resetWeightsToDefaults = function() {
+  currentWeights = { ...(systemSettings?.weights || {
+    gifts: 3.0, talents: 3.0, disc: 2.0, enneagram: 2.0, strengths: 2.0, love_language: 1.0, fats: 3.0, pipeline: 3.0
+  }) };
+  applyWeightsToSliders();
+  if (currentMember) renderChart();
+};
+
+// ─────────────────────────────────────────────────────────────────
+// UTIL
+// ─────────────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+</script>
+
+</body>
+</html>
