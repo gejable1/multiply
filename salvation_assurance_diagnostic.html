@@ -1777,11 +1777,13 @@ body {
 // SCORING ENGINE
 // ── SHARED COMPLETION HELPER ─────────────────────────────────
 function getCompletionStatus() {
+  // Count radio groups (each unique name = one question)
   var radioNames = new Set();
   document.querySelectorAll('input[type="radio"]').forEach(function(r){ if(r.name) radioNames.add(r.name); });
   var answered = new Set();
   document.querySelectorAll('input[type="radio"]:checked').forEach(function(r){ if(r.name) answered.add(r.name); });
-  var textareas = document.querySelectorAll('textarea[data-scorable="open"]');
+  // Only count sections A-G textareas as required (section H = optional reflection)
+  var textareas = document.querySelectorAll('textarea[data-scorable="open"]:not([data-section="H"])');
   var filledTA  = [].filter.call(textareas, function(t){ return t.value.trim().length > 5; });
   var total = radioNames.size + textareas.length;
   var done  = answered.size + filledTA.length;
@@ -1789,11 +1791,30 @@ function getCompletionStatus() {
 }
 
 function goBackToComplete() {
+  // Hide the score panel so user returns to questionnaire view
+  var panel = document.getElementById('scorePanel');
+  if (panel) panel.classList.remove('visible');
+  // Scroll to first unanswered question
   var cs = getCompletionStatus();
+  var scrolled = false;
   for (var name of cs.radioNames) {
     if (!cs.answered.has(name)) {
       var el = document.querySelector('input[name="'+name+'"]');
-      if (el) { el.closest('.q-card').scrollIntoView({behavior:'smooth',block:'center'}); break; }
+      if (el) {
+        var card = el.closest('.q-card');
+        if (card) { card.scrollIntoView({behavior:'smooth', block:'center'}); scrolled = true; break; }
+      }
+    }
+  }
+  // If all radios answered, scroll to first unfilled textarea
+  if (!scrolled) {
+    var textareas = document.querySelectorAll('textarea[data-scorable="open"]:not([data-section="H"])');
+    for (var i=0; i<textareas.length; i++) {
+      if (textareas[i].value.trim().length <= 5) {
+        textareas[i].scrollIntoView({behavior:'smooth', block:'center'});
+        textareas[i].focus();
+        break;
+      }
     }
   }
 }
@@ -2054,7 +2075,7 @@ async function submitToDashboard() {
   // Final completeness guard before saving
   const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
   const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
-  const allTA = document.querySelectorAll('textarea[data-scorable="open"]');
+  const allTA = document.querySelectorAll('textarea[data-scorable="open"]:not([data-section="H"])');
   const doneTA = [...allTA].filter(t=>t.value.trim().length>5);
   const totalQ = allRN.size + allTA.length;
   const doneQ  = doneRN.size + doneTA.length;
@@ -2168,7 +2189,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const answeredRadios = new Set();
     document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
     // Open text fields
-    const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]');
+    const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]:not([data-section="H"])');
     const filledTextareas = [...allTextareas].filter(t => t.value.trim().length > 5);
     const total = allRadioNames.size + allTextareas.length;
     const done  = answeredRadios.size + filledTextareas.length;
@@ -2198,7 +2219,7 @@ function clearForm() {
   // Re-run progress after clear
   const allRadioNames = new Set();
   document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
-  const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]');
+  const allTextareas = document.querySelectorAll('textarea[data-scorable="open"]:not([data-section="H"])');
   const total = allRadioNames.size + allTextareas.length;
   const ptEl = document.getElementById('progressText');
   const pfEl = document.getElementById('progressFill');
