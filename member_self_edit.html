@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Profile · Rosehill Christian Church</title>
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --gold: #B8882A;
+    --gold-light: #D4A04A;
+    --green: #2A5C40;
+    --red: #7A2020;
+    --bg: #FAF7F0;
+    --card: #FFFFFF;
+    --border: #E5E0D5;
+    --text: #2A2A2A;
+    --muted: #777;
+    --soft: #FFF8E5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .container { max-width: 600px; margin: 0 auto; }
+
+  .header {
+    background: linear-gradient(135deg, var(--navy), #2C4470);
+    color: white;
+    padding: 28px 24px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .header h1 { font-size: 22px; margin-bottom: 4px; }
+  .header .greeting { font-size: 17px; opacity: 0.95; margin: 8px 0 4px; }
+  .header .sub { font-size: 13px; opacity: 0.8; }
+
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  }
+  .card h2 {
+    color: var(--navy);
+    font-size: 16px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card .desc {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .field label .req { color: var(--gold); margin-left: 3px; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 11px 13px;
+    font-size: 15px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--text);
+    font-family: inherit;
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+  .field input:disabled {
+    background: var(--bg);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .field .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  /* Family slot */
+  .family-slot {
+    display: grid;
+    grid-template-columns: 1fr 130px;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  @media (max-width: 480px) {
+    .family-slot { grid-template-columns: 1fr; }
+  }
+
+  /* Save bar */
+  .save-bar {
+    position: sticky;
+    bottom: 16px;
+    background: var(--card);
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+  }
+  .btn {
+    flex: 1;
+    padding: 14px 18px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: var(--gold);
+    color: white;
+  }
+  .btn-primary:hover { background: var(--gold-light); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%) translateY(150px);
+    background: var(--green);
+    color: white;
+    padding: 14px 26px;
+    border-radius: 8px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    transition: transform 0.3s;
+    z-index: 100;
+    max-width: 90%;
+    text-align: center;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--red); }
+
+  /* Status pages */
+  .status-page {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 50px 28px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    max-width: 500px;
+    margin: 60px auto;
+  }
+  .status-page .icon { font-size: 48px; margin-bottom: 16px; }
+  .status-page h2 {
+    color: var(--navy);
+    font-size: 22px;
+    margin-bottom: 12px;
+  }
+  .status-page p {
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .status-page .meta {
+    background: var(--soft);
+    border-left: 4px solid var(--gold);
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-top: 18px;
+    font-size: 13px;
+    color: #5C4615;
+    text-align: left;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .saved-banner {
+    background: #E5F2EA;
+    border-left: 4px solid var(--green);
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: var(--green);
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Loading state -->
+  <div id="loadingState" class="loading">Loading your profile…</div>
+
+  <!-- Error states -->
+  <div id="invalidToken" class="status-page hidden">
+    <div class="icon">🔒</div>
+    <h2>Link is invalid or has expired</h2>
+    <p>The profile link you used is no longer valid. Please contact your church facilitator to receive a new link.</p>
+    <div class="meta" id="errorDetail"></div>
+  </div>
+
+  <!-- Main form -->
+  <div id="formContainer" class="hidden">
+
+    <div class="header">
+      <h1>📋 My Profile</h1>
+      <div class="greeting" id="greeting">Hello!</div>
+      <div class="sub">Please fill in your information below. You can come back and update this until <span id="expiryText">—</span>.</div>
+    </div>
+
+    <div id="savedBanner" class="saved-banner hidden">
+      ✓ Saved successfully. You can keep editing or close this page.
+    </div>
+
+    <!-- Basic info -->
+    <div class="card">
+      <h2>👤 Basic Information</h2>
+      <p class="desc">Your essential details</p>
+
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="fld_name" disabled>
+        <div class="hint">If your name needs to be changed, please contact your facilitator.</div>
+      </div>
+
+      <div class="field">
+        <label>Birthday</label>
+        <input type="date" id="fld_bday">
+      </div>
+
+      <div class="field">
+        <label>Civil Status</label>
+        <select id="fld_civil">
+          <option value="">— Select —</option>
+          <option value="Single">Single</option>
+          <option value="Married">Married</option>
+          <option value="Widowed">Widowed</option>
+          <option value="Separated">Separated</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Contact Number</label>
+        <input type="tel" id="fld_contact" placeholder="+63 9XX XXX XXXX" inputmode="tel">
+        <div class="hint">Include country code, e.g. +63 for Philippines</div>
+      </div>
+
+      <div class="field">
+        <label>Address</label>
+        <textarea id="fld_address" placeholder="House #, street, barangay, city, province"></textarea>
+      </div>
+    </div>
+
+    <!-- Spiritual journey -->
+    <div class="card">
+      <h2>✝️ Spiritual Journey</h2>
+      <p class="desc">Important dates and gifts</p>
+
+      <div class="field">
+        <label>Date of Baptism</label>
+        <input type="date" id="fld_baptism">
+        <div class="hint">Leave blank if you have not been baptized yet.</div>
+      </div>
+
+      <div class="field">
+        <label>Date Enrolled in Church</label>
+        <input type="date" id="fld_enrolled">
+      </div>
+
+      <div class="field">
+        <label>Spiritual Gifts (top 2)</label>
+        <input type="text" id="fld_gifts" placeholder="e.g. Teaching, Hospitality">
+        <div class="hint">Optional. Based on what you sense God has gifted you with.</div>
+      </div>
+    </div>
+
+    <!-- Family -->
+    <div class="card">
+      <h2>👨‍👩‍👧‍👦 Family Members</h2>
+      <p class="desc">Up to 5 family members. Add as many as you like.</p>
+
+      <div id="familySlots"></div>
+    </div>
+
+    <!-- Save bar -->
+    <div class="save-bar">
+      <button class="btn btn-primary" id="saveBtn" onclick="saveProfile()">💾 Save My Profile</button>
+    </div>
+
+    <div style="text-align: center; padding: 20px 10px 30px; color: var(--muted); font-size: 12px;">
+      Rosehill Christian Church · MULTIPLY Pipeline
+    </div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast">Saved successfully</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const RELATIONSHIPS = ['Spouse', 'Father', 'Mother', 'Son', 'Daughter', 'Brother', 'Sister', 'Grandparent', 'Grandchild', 'In-law', 'Other'];
+
+let currentToken = null;
+let currentMember = null;
+
+// ─────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+
+  if (!token) {
+    return showInvalid('No access token provided in the URL.');
+  }
+
+  try {
+    // Fetch token row
+    const { data: tokenRow, error: tErr } = await supabase
+      .from('profile_tokens')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+
+    if (tErr) throw tErr;
+    if (!tokenRow) return showInvalid('Token not found.');
+
+    // Check expiry
+    const now = new Date();
+    const expiresAt = new Date(tokenRow.expires_at);
+    if (expiresAt < now) {
+      return showInvalid(`This link expired on ${expiresAt.toLocaleDateString()}.`);
+    }
+
+    currentToken = tokenRow;
+
+    // Fetch member
+    const { data: member, error: mErr } = await supabase
+      .from('members')
+      .select('*')
+      .eq('id', tokenRow.member_id)
+      .maybeSingle();
+
+    if (mErr) throw mErr;
+    if (!member) return showInvalid('Member record not found.');
+
+    currentMember = member;
+    renderForm();
+  } catch (e) {
+    showInvalid(e.message || String(e));
+  }
+}
+
+function showInvalid(detail) {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('formContainer').classList.add('hidden');
+  document.getElementById('invalidToken').classList.remove('hidden');
+  document.getElementById('errorDetail').textContent = detail || '';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────
+function renderForm() {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('formContainer').classList.remove('hidden');
+
+  // Greeting
+  const firstName = (currentMember.name || '').split(' ')[0] || 'Friend';
+  document.getElementById('greeting').textContent = `Hello, ${firstName}!`;
+
+  // Expiry text
+  const expiry = new Date(currentToken.expires_at);
+  document.getElementById('expiryText').textContent = expiry.toLocaleDateString(undefined, {
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+  });
+
+  // Show "saved" banner if they've used this token before
+  if (currentToken.used_count > 0) {
+    document.getElementById('savedBanner').classList.remove('hidden');
+    document.getElementById('savedBanner').innerHTML =
+      `✓ You last saved on ${new Date(currentToken.used_at).toLocaleDateString()}. Feel free to update anything.`;
+  }
+
+  // Populate fields
+  setVal('fld_name', currentMember.name || '');
+  setVal('fld_bday', currentMember.bday || '');
+  setVal('fld_civil', currentMember.civil || '');
+  setVal('fld_contact', currentMember.contact || '');
+  setVal('fld_address', currentMember.address || '');
+  setVal('fld_baptism', currentMember.baptism || '');
+  setVal('fld_enrolled', currentMember.enrolled || '');
+  setVal('fld_gifts', currentMember.gifts || '');
+
+  buildFamilySlots(currentMember.family_members || []);
+}
+
+function setVal(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.value = v;
+}
+
+function buildFamilySlots(existing) {
+  const wrap = document.getElementById('familySlots');
+  wrap.innerHTML = '';
+  // Up to 5 slots; pre-fill from existing entries
+  const slots = [...existing, ...Array(5).fill({})].slice(0, 5);
+  slots.forEach((slot, i) => {
+    const div = document.createElement('div');
+    div.className = 'family-slot';
+    div.innerHTML = `
+      <input type="text" id="fam_name_${i}" placeholder="${i === 0 ? 'Family member name' : 'Optional'}" value="${escapeAttr(slot.name || '')}">
+      <select id="fam_rel_${i}">
+        <option value="">Relationship</option>
+        ${RELATIONSHIPS.map(r => `<option value="${r}" ${slot.relationship === r ? 'selected' : ''}>${r}</option>`).join('')}
+      </select>
+    `;
+    wrap.appendChild(div);
+  });
+}
+
+function collectFamily() {
+  const fam = [];
+  for (let i = 0; i < 5; i++) {
+    const name = document.getElementById(`fam_name_${i}`)?.value.trim();
+    const rel = document.getElementById(`fam_rel_${i}`)?.value;
+    if (name) fam.push({ name, relationship: rel || '' });
+  }
+  return fam;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SAVE
+// ─────────────────────────────────────────────────────────────────
+window.saveProfile = async function() {
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  // Build payload — only the fields members are allowed to edit
+  const payload = {
+    bday: document.getElementById('fld_bday').value || null,
+    civil: document.getElementById('fld_civil').value || null,
+    contact: document.getElementById('fld_contact').value.trim() || null,
+    address: document.getElementById('fld_address').value.trim() || null,
+    baptism: document.getElementById('fld_baptism').value || null,
+    enrolled: document.getElementById('fld_enrolled').value || null,
+    gifts: document.getElementById('fld_gifts').value.trim() || null,
+    family_members: collectFamily(),
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    // Update member
+    const { error: memErr } = await supabase
+      .from('members')
+      .update(payload)
+      .eq('id', currentMember.id);
+
+    if (memErr) throw memErr;
+
+    // Update token usage
+    const { error: tokErr } = await supabase
+      .from('profile_tokens')
+      .update({
+        used_at: new Date().toISOString(),
+        used_count: (currentToken.used_count || 0) + 1
+      })
+      .eq('id', currentToken.id);
+
+    if (tokErr) throw tokErr;
+
+    // Update local state
+    currentMember = { ...currentMember, ...payload };
+    currentToken.used_count = (currentToken.used_count || 0) + 1;
+    currentToken.used_at = new Date().toISOString();
+
+    showToast('Saved successfully! You can keep editing or close this page.', false);
+    document.getElementById('savedBanner').classList.remove('hidden');
+    document.getElementById('savedBanner').innerHTML =
+      `✓ Last saved just now. Feel free to update anything.`;
+
+    // Smooth scroll back to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) {
+    showToast('Save failed: ' + (e.message || e), true);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = '💾 Save My Profile';
+  }
+};
+
+function showToast(msg, isError) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.toggle('error', !!isError);
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3500);
+}
+
+init();
+</script>
+
+</body>
+</html>
