@@ -856,12 +856,12 @@ body {
       </div>
     </div>
     <div class="mc-grid">
-      <label class="mc-opt"><input type="checkbox"> From the penalty of my sin (hell)</label>
-      <label class="mc-opt"><input type="checkbox"> From the power of sin in my life</label>
-      <label class="mc-opt"><input type="checkbox"> From separation from God</label>
-      <label class="mc-opt"><input type="checkbox"> To have a better life on earth</label>
-      <label class="mc-opt"><input type="checkbox"> Because my family wanted me to</label>
-      <label class="mc-opt"><input type="checkbox"> I'm not sure what I was responding to</label>
+      <label class="mc-opt"><input type="checkbox" name="A4" value="penalty"> From the penalty of my sin (hell)</label>
+      <label class="mc-opt"><input type="checkbox" name="A4" value="power"> From the power of sin in my life</label>
+      <label class="mc-opt"><input type="checkbox" name="A4" value="separation"> From separation from God</label>
+      <label class="mc-opt"><input type="checkbox" name="A4" value="better_life"> To have a better life on earth</label>
+      <label class="mc-opt"><input type="checkbox" name="A4" value="family"> Because my family wanted me to</label>
+      <label class="mc-opt"><input type="checkbox" name="A4" value="unsure"> I'm not sure what I was responding to</label>
     </div>
   </div>
 
@@ -1782,12 +1782,17 @@ function getCompletionStatus() {
   document.querySelectorAll('input[type="radio"]').forEach(function(r){ if(r.name) radioNames.add(r.name); });
   var answered = new Set();
   document.querySelectorAll('input[type="radio"]:checked').forEach(function(r){ if(r.name) answered.add(r.name); });
+  // Count checkbox groups (each unique name = one question, answered if any checked)
+  var cbNames = new Set();
+  document.querySelectorAll('input[type="checkbox"]').forEach(function(c){ if(c.name) cbNames.add(c.name); });
+  var cbAnswered = new Set();
+  document.querySelectorAll('input[type="checkbox"]:checked').forEach(function(c){ if(c.name) cbAnswered.add(c.name); });
   // Only count sections A-G textareas as required (section H = optional reflection)
   var textareas = [].filter.call(document.querySelectorAll('textarea[data-scorable="open"]'), function(t){ return t.dataset.section !== "H"; });
-  var filledTA  = [].filter.call(textareas, function(t){ return t.value.trim().length > 5; });
-  var total = radioNames.size + textareas.length;
-  var done  = answered.size + filledTA.length;
-  return { radioNames:radioNames, answered:answered, total:total, done:done, isComplete: done >= total };
+  var filledTA  = [].filter.call(textareas, function(t){ return t.value.trim().length >= 1; });
+  var total = radioNames.size + cbNames.size + textareas.length;
+  var done  = answered.size + cbAnswered.size + filledTA.length;
+  return { radioNames:radioNames, answered:answered, cbNames:cbNames, cbAnswered:cbAnswered, total:total, done:done, isComplete: done >= total };
 }
 
 function goBackToComplete() {
@@ -1810,7 +1815,7 @@ function goBackToComplete() {
   if (!scrolled) {
     var textareas = [].filter.call(document.querySelectorAll('textarea[data-scorable="open"]'), function(t){ return t.dataset.section !== "H"; });
     for (var i=0; i<textareas.length; i++) {
-      if (textareas[i].value.trim().length <= 5) {
+      if (textareas[i].value.trim().length < 1) {
         textareas[i].scrollIntoView({behavior:'smooth', block:'center'});
         textareas[i].focus();
         break;
@@ -2188,11 +2193,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
     const answeredRadios = new Set();
     document.querySelectorAll('input[type="radio"]:checked').forEach(r => { if(r.name) answeredRadios.add(r.name); });
-    // Open text fields
+    // Checkbox groups (e.g. A4 — Select all that apply)
+    const allCbNames = new Set();
+    document.querySelectorAll('input[type="checkbox"]').forEach(c => { if(c.name) allCbNames.add(c.name); });
+    const answeredCb = new Set();
+    document.querySelectorAll('input[type="checkbox"]:checked').forEach(c => { if(c.name) answeredCb.add(c.name); });
+    // Open text fields — exclude section H
     const allTextareas = [].filter.call(document.querySelectorAll('textarea[data-scorable="open"]'), function(t){ return t.dataset.section !== "H"; });
-    const filledTextareas = [...allTextareas].filter(t => t.value.trim().length > 5);
-    const total = allRadioNames.size + allTextareas.length;
-    const done  = answeredRadios.size + filledTextareas.length;
+    const filledTextareas = [...allTextareas].filter(t => t.value.trim().length >= 1);
+    const total = allRadioNames.size + allCbNames.size + allTextareas.length;
+    const done  = answeredRadios.size + answeredCb.size + filledTextareas.length;
     const pct   = total > 0 ? Math.round(done/total*100) : 0;
     const ptEl  = document.getElementById('progressText');
     const pfEl  = document.getElementById('progressFill');
@@ -2200,8 +2210,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (pfEl) pfEl.style.width = pct + '%';
   }
 
-  // Attach to all radio + textarea inputs
-  document.querySelectorAll('input[type="radio"], textarea').forEach(el => {
+  // Attach to all radio, checkbox + textarea inputs
+  document.querySelectorAll('input[type="radio"], input[type="checkbox"], textarea').forEach(el => {
     el.addEventListener('change', updateProgress);
     el.addEventListener('input',  updateProgress);
   });
@@ -2219,8 +2229,10 @@ function clearForm() {
   // Re-run progress after clear
   const allRadioNames = new Set();
   document.querySelectorAll('input[type="radio"]').forEach(r => { if(r.name) allRadioNames.add(r.name); });
+  const allCbNames2 = new Set();
+  document.querySelectorAll('input[type="checkbox"]').forEach(c => { if(c.name) allCbNames2.add(c.name); });
   const allTextareas = [].filter.call(document.querySelectorAll('textarea[data-scorable="open"]'), function(t){ return t.dataset.section !== "H"; });
-  const total = allRadioNames.size + allTextareas.length;
+  const total = allRadioNames.size + allCbNames2.size + allTextareas.length;
   const ptEl = document.getElementById('progressText');
   const pfEl = document.getElementById('progressFill');
   if (ptEl) ptEl.textContent = '0 of ' + total + ' answered';
