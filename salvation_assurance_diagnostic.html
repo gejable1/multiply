@@ -2077,19 +2077,14 @@ async function submitToDashboard() {
   const btn = document.getElementById('submitBtn');
   const msg = document.getElementById('submitMsg');
 
-  // Final completeness guard before saving
-  const allRN = new Set(); document.querySelectorAll('input[type="radio"]').forEach(r=>{if(r.name)allRN.add(r.name);});
-  const doneRN = new Set(); document.querySelectorAll('input[type="radio"]:checked').forEach(r=>{if(r.name)doneRN.add(r.name);});
-  const allTA = [].filter.call(document.querySelectorAll('textarea[data-scorable="open"]'), function(t){ return t.dataset.section !== "H"; });
-  const doneTA = [...allTA].filter(t=>t.value.trim().length>5);
-  const totalQ = allRN.size + allTA.length;
-  const doneQ  = doneRN.size + doneTA.length;
-  if (doneQ < totalQ) {
-    const pctDone = Math.round(doneQ/totalQ*100);
+  // Use shared completion checker — same logic as tracker and score panel
+  var cs = getCompletionStatus();
+  if (!cs.isComplete) {
+    const pctDone = Math.round(cs.done/cs.total*100);
     msg.style.display = 'block';
     msg.style.background = '#fdecea';
     msg.style.color = '#7a2020';
-    msg.innerHTML = '⛔ Cannot save — survey is only ' + pctDone + '% complete (' + (totalQ-doneQ) + ' questions unanswered). Please complete the survey before submitting.';
+    msg.innerHTML = '⛔ Cannot save — survey is only ' + pctDone + '% complete (' + (cs.total-cs.done) + ' questions unanswered). Please complete the survey before submitting.';
     return;
   }
 
