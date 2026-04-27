@@ -1107,8 +1107,8 @@ async function loadMemberList() {
   try {
     const { data, error } = await supabase
       .from('members')
-      .select('id, full_name')
-      .order('full_name');
+      .select('id, name')
+      .order('name');
     if (error) throw error;
 
     const sel = document.getElementById('candidateSelect');
@@ -1116,7 +1116,7 @@ async function loadMemberList() {
     (data || []).forEach(m => {
       const opt = document.createElement('option');
       opt.value = m.id;
-      opt.textContent = m.full_name;
+      opt.textContent = m.name;
       sel.appendChild(opt);
     });
   } catch (e) {
@@ -1147,27 +1147,39 @@ window.reloadCandidate = async function() {
 async function loadMember(id) {
   document.getElementById('chartArea').innerHTML = '<div class="loading">Loading member data…</div>';
 
+  // Helper: try to fetch from a table; if table doesn't exist or query fails, return null silently
+  async function safeFetch(table, orderCol = 'created_at') {
+    try {
+      const res = await supabase
+        .from(table)
+        .select('*')
+        .eq('member_id', id)
+        .order(orderCol, { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return res.data || null;
+    } catch (e) {
+      console.warn(`Skipping ${table}:`, e.message || e);
+      return null;
+    }
+  }
+
   try {
-    // Pull everything related in parallel
-    const [memberRes, giftsRes, discRes, ennRes, strRes, llRes, fatsRes] = await Promise.all([
-      supabase.from('members').select('*').eq('id', id).maybeSingle(),
-      supabase.from('gifts_diagnostic').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('disc_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('enneagram_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('strengths_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('love_language_results').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('fats_assessment').select('*').eq('member_id', id).order('completed_at', { ascending: false }).limit(1).maybeSingle(),
+    const memberRes = await supabase.from('members').select('*').eq('id', id).maybeSingle();
+
+    const [gifts, disc, enn, str, ll, fats] = await Promise.all([
+      safeFetch('gifts_diagnostic'),
+      safeFetch('disc_results'),
+      safeFetch('enneagram_results'),
+      safeFetch('strengths_results'),
+      safeFetch('love_language_results'),
+      safeFetch('fats_assessment'),
     ]);
 
     currentMember = {
       id,
       profile: memberRes.data || {},
-      gifts: giftsRes.data || null,
-      disc: discRes.data || null,
-      enneagram: ennRes.data || null,
-      strengths: strRes.data || null,
-      love_language: llRes.data || null,
-      fats: fatsRes.data || null,
+      gifts, disc, enneagram: enn, strengths: str, love_language: ll, fats,
     };
 
     computeSignals();
@@ -1304,7 +1316,7 @@ function renderSummary() {
   const m = currentMember;
   const chips = [];
 
-  if (m.profile?.full_name) chips.push(`<span class="chip"><strong>${escapeHtml(m.profile.full_name)}</strong></span>`);
+  if (m.profile?.name) chips.push(`<span class="chip"><strong>${escapeHtml(m.profile.name)}</strong></span>`);
 
   if (availableSources.gifts && m.gifts?.top_3) {
     chips.push(`<span class="chip">Top Gifts: <strong>${escapeHtml(m.gifts.top_3.join(', '))}</strong></span>`);
@@ -1403,7 +1415,7 @@ function renderChart() {
 
   document.getElementById('chartArea').innerHTML = `
     <div class="chart-card">
-      <div class="chart-title">Ministry Fit · ${escapeHtml(currentMember.profile?.full_name || 'Member')}</div>
+      <div class="chart-title">Ministry Fit · ${escapeHtml(currentMember.profile?.name || 'Member')}</div>
       <div class="chart-subtitle">Sorted by net score (advantages minus risks). Click any bar for details.</div>
       <div class="chart">${cols}</div>
       <div class="legend">
