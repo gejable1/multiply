@@ -1772,6 +1772,7 @@ body {
 
 </div><!-- /container -->
 
+
 <script>
 // SCORING ENGINE
 // ── SHARED COMPLETION HELPER ─────────────────────────────────
@@ -1914,34 +1915,24 @@ let _selectedMemberName = null;
 
 // ── AUTO-LINK FROM URL ?id= PARAMETER ──
 async function autoLinkFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const memberId = params.get('id');
+  var params = new URLSearchParams(window.location.search);
+  var memberId = params.get('id');
   if (!memberId) return;
 
-  // Show loading state immediately so user knows something is happening
-  const lb = document.getElementById('linkBox');
-  if (lb) lb.innerHTML += '<div id="dbStatus" style="font-size:12px;color:#b8882a;margin-top:.5rem">⏳ Loading member data...</div>';
-
-  function setStatus(msg, color) {
-    const el = document.getElementById('dbStatus');
-    if (el) { el.textContent = msg; el.style.color = color || '#b8882a'; }
-  }
-
   try {
-    const db = getDB();
-    if (!db) { setStatus('❌ Database connection failed — Supabase not loaded.', '#c0392b'); return; }
+    var db = getDB();
+    if (!db) return;
 
-    setStatus('⏳ Fetching member record...');
-    const { data, error } = await db
+    var res = await db
       .from('members')
       .select('id,name,discipler_name,discipler,pipeline_level,lc_group,ministry,ministry_role,ministry2,ministry2_role')
       .eq('id', memberId)
       .single();
 
-    if (error) { setStatus('❌ Error: ' + error.message, '#c0392b'); return; }
-    if (!data)  { setStatus('❌ Member ID not found in database.', '#c0392b'); return; }
+    var data = res.data;
+    var error = res.error;
 
-    setStatus('');
+    if (error || !data) return;
 
     // Pre-link
     _selectedMemberId = data.id;
@@ -2215,5 +2206,6 @@ function clearForm() {
   if (pfEl) pfEl.style.width = '0%';
 }
 </script>
+
 </body>
 </html>
