@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#2A5C40"/><path d="M14 46 L14 22 L24 36 L32 24 L40 36 L50 22 L50 46" stroke="#FFFFFF" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="50" r="2.5" fill="#B8882A"/><circle cx="32" cy="50" r="2.5" fill="#B8882A"/><circle cx="50" cy="50" r="2.5" fill="#B8882A"/></svg>'>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Profile · Rosehill Christian Church</title>
 <style>
@@ -461,7 +462,8 @@ function collectFamily() {
   for (let i = 0; i < 5; i++) {
     const name = document.getElementById(`fam_name_${i}`)?.value.trim();
     const rel = document.getElementById(`fam_rel_${i}`)?.value;
-    if (name) fam.push({ name, relationship: rel || '' });
+    // Match the dashboard's exact shape: { name, member_id, relationship }
+    if (name) fam.push({ name, member_id: null, relationship: rel || '' });
   }
   return fam;
 }
@@ -495,13 +497,30 @@ window.saveProfile = async function() {
   };
 
   try {
-    // Update member
-    const { error: memErr } = await supabase
+    // ── DEBUG: log payload so we can see what's being sent ──
+    console.log('=== Save Profile · Payload ===');
+    console.log('payload:', JSON.parse(JSON.stringify(payload)));
+    console.log('family_members specifically:', payload.family_members);
+    // ────────────────────────────────────────────────────────
+
+    // Update member — chain .select() so we can verify the row was actually updated
+    const { data: updated, error: memErr } = await supabase
       .from('members')
       .update(payload)
-      .eq('id', currentMember.id);
+      .eq('id', currentMember.id)
+      .select();
+
+    // ── DEBUG: log what came back ──
+    console.log('=== Save Profile · Result ===');
+    console.log('error:', memErr);
+    console.log('updated row(s):', updated);
+    if (updated?.[0]) console.log('family_members in saved row:', updated[0].family_members);
+    // ───────────────────────────────
 
     if (memErr) throw memErr;
+    if (!updated || updated.length === 0) {
+      throw new Error('Update silently failed (0 rows affected). This usually means a Row Level Security policy is blocking the write. Please contact your facilitator.');
+    }
 
     // Update token usage
     const { error: tokErr } = await supabase
@@ -512,10 +531,10 @@ window.saveProfile = async function() {
       })
       .eq('id', currentToken.id);
 
-    if (tokErr) throw tokErr;
+    if (tokErr) console.warn('Token usage update failed (non-fatal):', tokErr);
 
-    // Update local state
-    currentMember = { ...currentMember, ...payload };
+    // Update local state from what was actually saved (in case Supabase normalized any values)
+    currentMember = { ...currentMember, ...updated[0] };
     currentToken.used_count = (currentToken.used_count || 0) + 1;
     currentToken.used_at = new Date().toISOString();
 
@@ -527,6 +546,7 @@ window.saveProfile = async function() {
     // Smooth scroll back to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
+    console.error('Save error:', e);
     showToast('Save failed: ' + (e.message || e), true);
   } finally {
     saveBtn.disabled = false;

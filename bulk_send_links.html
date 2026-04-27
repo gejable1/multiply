@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#2A5C40"/><path d="M14 46 L14 22 L24 36 L32 24 L40 36 L50 22 L50 46" stroke="#FFFFFF" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="50" r="2.5" fill="#B8882A"/><circle cx="32" cy="50" r="2.5" fill="#B8882A"/><circle cx="50" cy="50" r="2.5" fill="#B8882A"/></svg>'>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bulk Send Profile Links · MULTIPLY Pipeline</title>
 <style>
@@ -381,7 +382,7 @@ async function init() {
   try {
     const { data, error } = await supabase
       .from('members')
-      .select('id, name, contact, bday, civil, address, baptism, family_members, pipeline_level')
+      .select('id, name, contact, birthday, civil_status, address, baptism_date, family_members, pipeline_level')
       .order('name');
     if (error) throw error;
     allMembers = data || [];
@@ -393,7 +394,7 @@ async function init() {
 }
 
 function isMissingData(m) {
-  return !m.bday || !m.civil || !m.contact || !m.address || !(m.family_members && m.family_members.length);
+  return !m.birthday || !m.civil_status || !m.contact || !m.address || !(m.family_members && m.family_members.length);
 }
 
 window.setFilter = function(f) {
@@ -423,8 +424,8 @@ window.renderMemberList = function() {
     <div class="member-list">
       ${filtered.map(m => {
         const missing = [];
-        if (!m.bday) missing.push('birthday');
-        if (!m.civil) missing.push('civil');
+        if (!m.birthday) missing.push('birthday');
+        if (!m.civil_status) missing.push('civil');
         if (!m.contact) missing.push('contact');
         if (!m.address) missing.push('address');
         if (!(m.family_members && m.family_members.length)) missing.push('family');
