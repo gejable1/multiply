@@ -1070,6 +1070,17 @@ let slidersUnlocked = false;     // PIN-gated
 async function init() {
   await loadSystemSettings();
   await loadMemberList();
+
+  // If launched with ?member_id=... auto-select that member
+  const params = new URLSearchParams(window.location.search);
+  const requestedId = params.get('member_id');
+  if (requestedId) {
+    const sel = document.getElementById('candidateSelect');
+    sel.value = requestedId;
+    if (sel.value === requestedId) {
+      await loadMember(requestedId);
+    }
+  }
 }
 init();
 
