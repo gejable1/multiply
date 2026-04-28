@@ -2,8 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="shortcut icon" href="favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MULTIPLY Dashboard — Rosehill Christian Church</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -369,7 +367,7 @@ tbody tr:hover{background:var(--green-light);}
 <!-- MEMBERS -->
 <div id="panel-members" class="panel"><div class="pw">
   <div class="fbar">
-    <input type="search" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="dashboard_filter_no_save" data-form-type="other" data-lpignore="true" data-1p-ignore="true">
+    <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()">
     <button class="fc on" onclick="setF('all',this)">All</button>
     <button class="fc" onclick="setF('L0',this)">Pre-Pipeline</button>
     <button class="fc" onclick="setF('L1',this)">Level 1</button>
@@ -440,20 +438,6 @@ tbody tr:hover{background:var(--green-light);}
   <div class="ss"><div class="st">Rosehill Ministries</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:.5rem">
       ${ROSEHILL_MINISTRIES_PLACEHOLDER}
-    </div>
-  </div>
-  <div class="ss"><div class="st">Tools & Modules</div>
-    <div class="sr"><span class="sl">🎯 Ministry Recommender — best-fit ministry per member</span>
-      <button class="sbtn" style="margin-top:0" onclick="window.open('ministry_recommender.html','_blank')">Open</button>
-    </div>
-    <div class="sr"><span class="sl">📲 Bulk Send Profile Links — let members fill in their own info</span>
-      <button class="sbtn" style="margin-top:0" onclick="window.open('bulk_send_links.html','_blank')">Open</button>
-    </div>
-    <div class="sr"><span class="sl">⚙️ System Settings — weights, thresholds, zones (Pastor PIN required)</span>
-      <button class="sbtn" style="margin-top:0" onclick="window.open('system_settings.html','_blank')">Open</button>
-    </div>
-    <div class="sr"><span class="sl">📲 Bulk Send Profile Links — generate self-edit links for many members at once</span>
-      <button class="sbtn" style="margin-top:0" onclick="window.open('bulk_send_links.html','_blank')">Open</button>
     </div>
   </div>
   <div class="ss"><div class="st">Data Management</div>
@@ -554,8 +538,6 @@ tbody tr:hover{background:var(--green-light);}
   </div>
   <div class="mf">
     <button class="bdl" id="delbtn" onclick="doDelete()" style="display:none">Delete</button>
-    <button class="bcn" onclick="openRecommenderForMember()" id="recbtn" style="display:none;background:var(--gold);color:#fff;border-color:var(--gold)" title="Open Ministry Recommender for this member">🎯 Find Best Ministry</button>
-    <button class="bcn" onclick="sendProfileLink()" id="sendlnkbtn" style="display:none;background:#5C8B6E;color:#fff;border-color:#5C8B6E" title="Generate a link the member can use to fill in their own info">📱 Send Profile Link</button>
     <button class="bcn" onclick="closeMD()">Cancel</button>
     <button class="bsv" onclick="saveMember()">Save Member</button>
   </div>
@@ -564,70 +546,6 @@ tbody tr:hover{background:var(--green-light);}
 <div class="toast" id="toast"><span id="tico">✓</span><span id="tmsg">Saved</span></div>
 
 <script>
-// ═══════════════════════════════════════
-// URL CLEANUP — strip tracking params (Facebook fbclid, etc.)
-// and ensure search box starts empty regardless of any URL state
-// ═══════════════════════════════════════
-(function(){
-  const trackingParams = ['fbclid','gclid','utm_source','utm_medium','utm_campaign','utm_term','utm_content','mc_cid','mc_eid','_ga','ref','ref_src'];
-  try {
-    const url = new URL(window.location.href);
-    let changed = false;
-    trackingParams.forEach(p => {
-      if (url.searchParams.has(p)) { url.searchParams.delete(p); changed = true; }
-    });
-    if (changed) {
-      // Clean the URL without reloading the page
-      window.history.replaceState({}, '', url.pathname + (url.search || '') + url.hash);
-    }
-  } catch(e) { /* ignore */ }
-
-  // Aggressively clear the search box — extensions/autofill can inject values
-  // even after DOMContentLoaded, so we use multiple layered defenses
-  let userTypedAt = 0;
-
-  function clearSearchIfInjected() {
-    const sq = document.getElementById('sq');
-    if (!sq) return;
-    // If there's a value but the user hasn't typed in the last 5 seconds,
-    // it was injected by something (extension, autofill) — clear it
-    const sinceTyped = Date.now() - userTypedAt;
-    if (sq.value && sinceTyped > 5000) {
-      sq.value = '';
-      sq.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }
-
-  function installSearchGuard() {
-    const sq = document.getElementById('sq');
-    if (!sq) { setTimeout(installSearchGuard, 100); return; }
-
-    // Mark every keystroke from the user — any input near a keystroke is legit
-    ['keydown', 'beforeinput'].forEach(evt => {
-      sq.addEventListener(evt, () => { userTypedAt = Date.now(); });
-    });
-
-    // Initial cleanup blast in case value is already set
-    setTimeout(clearSearchIfInjected, 0);
-    setTimeout(clearSearchIfInjected, 100);
-    setTimeout(clearSearchIfInjected, 500);
-    setTimeout(clearSearchIfInjected, 1500);
-    setTimeout(clearSearchIfInjected, 3000);
-
-    // Continuous guardian: every 500ms, check if something injected. After
-    // 30 seconds we stop polling (assume any extension has given up by then).
-    let ticks = 0;
-    const guard = setInterval(() => {
-      clearSearchIfInjected();
-      if (++ticks > 60) clearInterval(guard);
-    }, 500);
-  }
-
-  document.addEventListener('DOMContentLoaded', installSearchGuard);
-  // In case DOM is already ready
-  if (document.readyState !== 'loading') installSearchGuard();
-})();
-
 // ═══════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════
@@ -1223,8 +1141,6 @@ function openAdd(){
   document.getElementById('mav').textContent='?';document.getElementById('mav').style.background='var(--muted)';
   document.getElementById('mti').textContent='Add New Member';document.getElementById('mme').textContent='';
   document.getElementById('delbtn').style.display='none';
-  document.getElementById('recbtn').style.display='none';
-  document.getElementById('sendlnkbtn').style.display='none';
   showMT('info',document.querySelector('.mtb'));
   rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
@@ -1239,8 +1155,6 @@ function openEdit(id){
   document.getElementById('mti').textContent=m.name;
   document.getElementById('mme').textContent=`${LN[m.level||0]} · ${m.group||'No group'}${m.is_facilitator?' · ⭐ Facilitator':''}`;
   document.getElementById('delbtn').style.display='block';
-  document.getElementById('recbtn').style.display='block';
-  document.getElementById('sendlnkbtn').style.display='block';
   showMT('info',document.querySelector('.mtb'));
   buildMinistrySelect();populateDisciplerSelect(m.discipler_name||m.discipler||'');
   rPCL(m);rET(m);rNT(m);rDiagTab(m);
@@ -1249,101 +1163,6 @@ function openEdit(id){
 }
 function closeMO(e){if(e.target===document.getElementById('mo'))closeMD();}
 function closeMD(){document.getElementById('mo').classList.remove('open');}
-function openRecommenderForMember(){
-  if(!eid){alert('Please save the member first.');return;}
-  window.open('ministry_recommender.html?member_id='+encodeURIComponent(eid),'_blank');
-}
-
-// ─────────────────────────────────────────────────────────────────
-// SEND PROFILE LINK — generates one-time-ish token, shows share dialog
-// ─────────────────────────────────────────────────────────────────
-async function sendProfileLink(){
-  if(!eid){alert('Please save the member first.');return;}
-  const m = members.find(x => x.id === eid);
-  if(!m){alert('Member not found.');return;}
-
-  // Get token expiry from settings (default 14 days)
-  let expiryDays = 14;
-  try {
-    const {data} = await db.from('system_settings').select('meta').eq('id',1).maybeSingle();
-    const days = parseInt(data?.meta?.token_expiry_days);
-    if(!isNaN(days) && days > 0) expiryDays = days;
-  } catch(e){}
-
-  // Generate random token
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  const token = Array.from(bytes).map(b=>b.toString(36).padStart(2,'0')).join('').slice(0,32);
-  const expiresAt = new Date(Date.now() + expiryDays*24*60*60*1000).toISOString();
-
-  // Insert token
-  try {
-    const {error} = await db.from('profile_tokens').insert({
-      token, member_id: eid, expires_at: expiresAt, notes: 'Generated from member modal'
-    });
-    if(error) throw error;
-  } catch(e){
-    alert('Could not generate link: ' + (e.message || e) + '\n\nDid you run the profile_tokens.sql migration?');
-    return;
-  }
-
-  // Build URL — same folder as dashboard
-  const baseUrl = window.location.href.split('/').slice(0,-1).join('/') + '/member_self_edit.html';
-  const fullUrl = `${baseUrl}?token=${token}`;
-
-  // Build WhatsApp + Email URLs
-  const firstName = (m.name||'').split(' ')[0] || 'there';
-  const msg = `Hi ${firstName}! 🌿 Please take a moment to update your profile at Rosehill Christian Church. It only takes a few minutes:\n\n${fullUrl}\n\nThank you and God bless!`;
-
-  let phone = (m.contact||'').replace(/[^\d+]/g,'');
-  if(phone.startsWith('0')) phone = '63' + phone.slice(1);
-  if(phone.startsWith('+')) phone = phone.slice(1);
-  const waUrl = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : null;
-  const emailSubject = encodeURIComponent('Please update your profile · Rosehill Christian Church');
-  const emailBody = encodeURIComponent(msg);
-  const mailUrl = `mailto:?subject=${emailSubject}&body=${emailBody}`;
-
-  // Show share dialog
-  const dlg = document.createElement('div');
-  dlg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
-  dlg.innerHTML = `
-    <div style="background:#fff;max-width:520px;width:100%;border-radius:14px;padding:28px;box-shadow:0 10px 30px rgba(0,0,0,.25);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-        <div>
-          <h3 style="color:var(--green);margin:0 0 4px 0;font-size:18px;">📱 Profile Link Generated</h3>
-          <div style="color:var(--muted);font-size:13px;">For <strong>${m.name||'?'}</strong> · Valid for ${expiryDays} days</div>
-        </div>
-        <button onclick="this.closest('[data-dlg]').remove()" style="background:transparent;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>
-      </div>
-      <div style="background:#fafaf8;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;font-family:monospace;font-size:11.5px;word-break:break-all;color:var(--muted);">${fullUrl}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-        <button id="copyBtnDlg" style="flex:1;background:#fff;color:var(--green);border:1.5px solid var(--green);padding:10px;border-radius:8px;cursor:pointer;font-weight:600;min-width:100px;">📋 Copy Link</button>
-        <a href="${waUrl||'#'}" target="_blank" ${waUrl?'':'style="opacity:.4;pointer-events:none;"'} style="flex:1;background:#25D366;color:#fff;text-decoration:none;padding:10px;border-radius:8px;text-align:center;font-weight:600;min-width:100px;">📲 WhatsApp${!waUrl?' (no #)':''}</a>
-        <a href="${mailUrl}" style="flex:1;background:var(--green);color:#fff;text-decoration:none;padding:10px;border-radius:8px;text-align:center;font-weight:600;min-width:100px;">📧 Email</a>
-      </div>
-      <div style="font-size:12px;color:var(--muted);background:#FFF8E5;border-left:3px solid var(--gold);padding:10px 14px;border-radius:4px;">
-        💡 The link works on phone or computer. ${m.name||'They'} can come back and edit until ${new Date(expiresAt).toLocaleDateString()}.
-      </div>
-    </div>
-  `;
-  dlg.setAttribute('data-dlg','1');
-  dlg.addEventListener('click', e => { if(e.target===dlg) dlg.remove(); });
-  document.body.appendChild(dlg);
-
-  document.getElementById('copyBtnDlg').addEventListener('click', () => {
-    navigator.clipboard.writeText(fullUrl).then(() => {
-      const btn = document.getElementById('copyBtnDlg');
-      btn.textContent = '✓ Copied';
-      btn.style.background = 'var(--green)';
-      btn.style.color = '#fff';
-      setTimeout(() => {
-        btn.textContent = '📋 Copy Link';
-        btn.style.background = '#fff';
-        btn.style.color = 'var(--green)';
-      }, 2000);
-    });
-  });
-}
 function showMT(t,btn){
   ['info','diag','profile','pipe','eolo','notes'].forEach(x=>{
     const el=document.getElementById('mt-'+x);if(el)el.style.display=x===t?'block':'none';
@@ -1775,31 +1594,9 @@ async function rProfileTab(m) {
     {key:'love_language', label:'❤️ Love Language', color:'#8a2040',
      render: (d) => {
        const kb = LL_KB[d.top_result] || {};
-       // Map short keys (used in stored results) to friendly display names
-       const LL_LABELS = {words:'Words of Affirmation', service:'Acts of Service', gifts:'Receiving Gifts', time:'Quality Time', touch:'Physical Touch'};
-       const scores = d.results || {};
-       // Sort descending by score; show all five even if zero
-       const sorted = Object.keys(LL_LABELS)
-         .map(k => ({ key: k, label: LL_LABELS[k], score: parseInt(scores[k]) || 0 }))
-         .sort((a, b) => b.score - a.score);
-       const total = sorted.reduce((s, r) => s + r.score, 0) || 30;
-       const max = Math.max(...sorted.map(r => r.score), 1);
-       const rows = sorted.map((r, i) => {
-         const pct = Math.round((r.score / max) * 100);
-         const isTop = i === 0;
-         return `<div style="display:grid;grid-template-columns:140px 1fr 36px;gap:8px;align-items:center;margin-bottom:4px">
-           <div style="font-size:12px;color:var(--ink);${isTop?'font-weight:600':''}">${r.label}</div>
-           <div style="background:#f5e8ed;border-radius:4px;height:14px;overflow:hidden">
-             <div style="background:#8a2040;height:100%;width:${pct}%;transition:width .3s"></div>
-           </div>
-           <div style="font-size:11px;color:var(--muted);text-align:right;font-family:monospace">${r.score}</div>
-         </div>`;
-       }).join('');
        return `
          ${infoRow('Primary', `<strong>${d.top_result||'—'}</strong>`, '#8a2040')}
          ${d.second_result ? infoRow('Secondary', d.second_result, 'var(--muted)') : ''}
-         <div style="margin:.75rem 0 .5rem 0;font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#8a2040">All five (score / ${total})</div>
-         ${rows}
          ${kb.ministry ? infoBox('⛪ Best Ministry Fit', kb.ministry, '#fdeef3', '#8a2040') : ''}
          ${kb.team ? infoBox('👥 In a Team', kb.team, '#fff8f0', '#b8882a') : ''}
          ${kb.discipler ? infoBox('🤝 Discipling This Person', kb.discipler, 'var(--green-bg)', 'var(--green)') : ''}`;
@@ -2127,7 +1924,7 @@ function toggleFacRole() {
 // ═══════════════════════════════════════
 // FAMILY MEMBER SLOTS
 // ═══════════════════════════════════════
-const RELATIONSHIPS = ['Spouse','Father','Mother','Son','Daughter','Brother','Sister','Grandparent','Grandchild','In-law','Other'];
+const RELATIONSHIPS = ['Wife','Husband','Son','Daughter','Sibling','Parent','Other'];
 let familyData = [{},{},{},{},{}]; // up to 5 slots
 
 function buildFamilySlots(existing) {
