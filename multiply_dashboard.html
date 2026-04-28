@@ -549,6 +549,55 @@ tbody tr:hover{background:var(--green-light);}
 
 <script>
 // ═══════════════════════════════════════
+// URL CLEANUP — strip tracking params and protect search box
+// ═══════════════════════════════════════
+(function(){
+  // Strip Facebook and marketing tracking parameters
+  const trackingParams = ['fbclid','gclid','utm_source','utm_medium','utm_campaign','utm_term','utm_content','mc_cid','mc_eid','_ga','ref','ref_src'];
+  try {
+    const url = new URL(window.location.href);
+    let changed = false;
+    trackingParams.forEach(p => {
+      if (url.searchParams.has(p)) { url.searchParams.delete(p); changed = true; }
+    });
+    if (changed) {
+      window.history.replaceState({}, '', url.pathname + (url.search || '') + url.hash);
+    }
+  } catch(e) { /* ignore */ }
+
+  // Protect search box from extension auto-fill (polling-based guardian)
+  let userTypedAt = 0;
+  function clearSearchIfInjected() {
+    const sq = document.getElementById('sq');
+    if (!sq) return;
+    const sinceTyped = Date.now() - userTypedAt;
+    if (sq.value && sinceTyped > 5000) {
+      sq.value = '';
+      sq.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  function installSearchGuard() {
+    const sq = document.getElementById('sq');
+    if (!sq) { setTimeout(installSearchGuard, 100); return; }
+    ['keydown', 'beforeinput'].forEach(evt => {
+      sq.addEventListener(evt, () => { userTypedAt = Date.now(); });
+    });
+    setTimeout(clearSearchIfInjected, 0);
+    setTimeout(clearSearchIfInjected, 100);
+    setTimeout(clearSearchIfInjected, 500);
+    setTimeout(clearSearchIfInjected, 1500);
+    setTimeout(clearSearchIfInjected, 3000);
+    let ticks = 0;
+    const guard = setInterval(() => {
+      clearSearchIfInjected();
+      if (++ticks > 60) clearInterval(guard);
+    }, 500);
+  }
+  document.addEventListener('DOMContentLoaded', installSearchGuard);
+  if (document.readyState !== 'loading') installSearchGuard();
+})();
+
+// ═══════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
