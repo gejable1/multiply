@@ -592,7 +592,160 @@ body {
   .preamble input, .preamble select { font-size: 16px; }
   .notes-field { font-size: 16px; }
 }
-</style>
+/* ── AI PASTORAL ASSIST ── */
+.ai-panel {
+  background: #fffef5;
+  border: 2px solid var(--gold, #b8882a);
+  border-radius: 12px;
+  padding: 0;
+  margin: 28px 0;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(184,136,42,.12);
+}
+.ai-panel-header {
+  background: linear-gradient(135deg, #b8882a, #d4a04a);
+  color: white;
+  padding: 16px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.ai-panel-header h3 { font-size: 16px; margin: 0; }
+.ai-panel-header p { font-size: 12px; opacity: .9; margin: 3px 0 0; }
+.ai-run-btn {
+  background: white;
+  color: #b8882a;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.ai-run-btn:hover { background: #fff8e5; transform: translateY(-1px); }
+.ai-run-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.ai-body { padding: 20px 22px; }
+.ai-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #b8882a;
+  font-style: italic;
+  padding: 8px 0;
+}
+.ai-loading::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2d5b5;
+  border-top-color: #b8882a;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.ai-q-block {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e8e0cc;
+}
+.ai-q-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.ai-q-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #b8882a;
+  margin-bottom: 6px;
+}
+.ai-q-text {
+  font-size: 13px;
+  color: #6b5e47;
+  font-style: italic;
+  margin-bottom: 8px;
+  padding-left: 10px;
+  border-left: 2px solid #e2d5b5;
+}
+.ai-member-answer {
+  background: #f5f0e8;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #1c1810;
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+.ai-member-answer .label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #9b8c75;
+  margin-bottom: 4px;
+}
+.ai-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.ai-flag.green { background: #e5f2ea; color: #1e5c35; }
+.ai-flag.yellow { background: #fff8e0; color: #7a5c00; }
+.ai-flag.red { background: #fdf0f0; color: #7a2020; }
+.ai-followups { margin-top: 8px; }
+.ai-followups .label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #9b8c75;
+  margin-bottom: 8px;
+}
+.ai-followup-q {
+  display: flex;
+  gap: 10px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e2d5b5;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1c1810;
+}
+.ai-followup-q::before {
+  content: '→';
+  color: #b8882a;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.ai-disclaimer {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: #f5f0e8;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: #9b8c75;
+  font-style: italic;
+  line-height: 1.5;
+}
+.ai-no-answers {
+  color: #9b8c75;
+  font-style: italic;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
 </head>
 <body>
 
@@ -618,6 +771,20 @@ body {
     <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:#2a5c40">Debrief for</div>
     <div id="memberBannerName" style="font-size:15px;font-weight:700;color:#1a1612"></div>
     <div id="memberBannerMeta" style="font-size:11px;color:#6b8f70"></div>
+  </div>
+</div>
+
+<!-- AI PASTORAL ASSIST PANEL -->
+<div id="aiPanel" class="ai-panel" style="display:none; margin: 20px 24px;">
+  <div class="ai-panel-header">
+    <div>
+      <h3>🤖 AI Pastoral Assist</h3>
+      <p>Analyzes open-ended answers · Suggests follow-up questions for your debrief conversation</p>
+    </div>
+    <button class="ai-run-btn" id="aiRunBtn" onclick="runAIAssist()">▶ Run Analysis</button>
+  </div>
+  <div class="ai-body" id="aiBody">
+    <p class="ai-no-answers" id="aiIntro">Click "Run Analysis" to generate suggested follow-up questions based on this member's written answers. This may take 15–30 seconds.</p>
   </div>
 </div>
 
@@ -1424,6 +1591,12 @@ window.addEventListener('scroll', () => {
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+// ─────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────
+var _memberOpenAnswers = null;   // Loaded from diagnostic_results.open_answers
+var _memberName = '';
+
 document.addEventListener('DOMContentLoaded', function() {
   var id = new URLSearchParams(window.location.search).get('id');
   if (!id) return;
@@ -1431,11 +1604,14 @@ document.addEventListener('DOMContentLoaded', function() {
     var db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
       auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
     });
+
+    // Load member summary
     db.from('members').select('id,name,pipeline_level,discipler_name,discipler,diagnostic_score,diagnostic_zone')
       .eq('id', id).single()
       .then(function(res) {
         if (!res.data) return;
         var d = res.data;
+        _memberName = d.name || '';
         var LN = ['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
         var ZL = {1:'Zone 1 ✅',2:'Zone 2 🟡',3:'Zone 3 🟠',4:'Zone 4 🔴'};
         document.getElementById('memberBanner').style.display = 'flex';
@@ -1447,8 +1623,266 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('memberBannerMeta').textContent = meta;
         document.title = 'Debrief Guide — ' + d.name;
       });
+
+    // Load most recent diagnostic results (including open_answers)
+    db.from('diagnostic_results')
+      .select('open_answers, date_taken, total_score, diag_zone')
+      .eq('member_id', id)
+      .order('date_taken', { ascending: false })
+      .limit(1)
+      .then(function(res) {
+        if (!res.data || !res.data.length) return;
+        var row = res.data[0];
+        _memberOpenAnswers = row.open_answers || null;
+
+        // Show AI panel only if there are open answers to analyze
+        var panel = document.getElementById('aiPanel');
+        if (_memberOpenAnswers && Object.keys(_memberOpenAnswers).length > 0) {
+          panel.style.display = 'block';
+          document.getElementById('aiIntro').textContent =
+            'Found ' + Object.keys(_memberOpenAnswers).length + ' written answer(s) from ' +
+            (row.date_taken || 'this session') +
+            '. Click "Run Analysis" to generate suggested follow-up questions.';
+        }
+      });
+
   } catch(e) { console.error(e); }
 });
+
+// ─────────────────────────────────────────────────────────────────
+// AI Pastoral Assist
+// ─────────────────────────────────────────────────────────────────
+
+// Question metadata — label, full text, and scoring rubric for each q-id
+var Q_META = {
+  A1: {
+    label: 'A1 — The Gospel',
+    text: 'In your own words, explain what the gospel is — what is the "good news" that Christians believe?',
+    rubric: 'Look for: sin acknowledged, Christ\'s death and resurrection, salvation by grace through faith, not by works. Red flags: works-righteousness ("I try to be good"), vague ("Jesus helps me"), missing the cross or resurrection.'
+  },
+  A3: {
+    label: 'A3 — Moment of Decision',
+    text: 'If you answered yes, describe what happened — when, where, and what you understood and decided.',
+    rubric: 'Look for: specific moment or genuine gradual conviction, understanding of what they were trusting Christ for. Red flags: "I was born into a Christian family," purely social reasons, no personal decision language.'
+  },
+  A5: {
+    label: 'A5 — Basis of Acceptance',
+    text: 'On what basis do you believe God accepts you? Why would God let you into heaven?',
+    rubric: 'CRITICAL. Look for: grace, faith, Christ\'s righteousness credited. Red flags: "I am a good person," "I go to church," "I was baptized," "I try my best." Any answer based on personal merit is a serious theological concern.'
+  },
+  B2: {
+    label: 'B2 — Basis of Confidence',
+    text: 'What is the basis of your confidence? Or, if not confident — what is causing the doubt?',
+    rubric: 'Look for: resting on God\'s promise (1 John 5:13), not on personal goodness. Red flags: confidence based on behavior ("I haven\'t sinned much"), doubt based on recent failures rather than questioning God\'s faithfulness.'
+  },
+  B5: {
+    label: 'B5 — Response to Sin',
+    text: 'When I sin or fail morally, my first instinct is to...',
+    rubric: 'Look for: confession, repentance, running to God. Red flags: hiding, trying harder in own strength, despair, minimizing sin, no conviction described.'
+  },
+  C1: {
+    label: 'C1 — Fruit Growing',
+    text: 'Which fruit of the Spirit is most visibly growing? Describe a specific recent example.',
+    rubric: 'Look for specificity and genuine reflection. Red flags: vague ("I am more patient now"), no example given, claiming perfection in an area.'
+  },
+  C2: {
+    label: 'C2 — Fruit Struggling',
+    text: 'Which fruit of the Spirit is the greatest area of weakness? What is at the root of that struggle?',
+    rubric: 'Look for honesty and self-awareness. Red flags: cannot identify any struggle, blames others entirely, no reflection on root causes.'
+  },
+  D1: {
+    label: 'D1 — Broken Relationship',
+    text: 'Is there any person with whom you have an unresolved broken relationship — bitterness, unforgiveness, or avoidance?',
+    rubric: 'Look for honesty. Red flags: "I forgive everyone" without reflection, visible bitterness about someone described, isolation patterns.'
+  },
+  F1: {
+    label: 'F1 — Last Gospel Sharing',
+    text: 'When was the last time you shared your faith or the gospel with someone outside the church?',
+    rubric: 'Look for: recent, specific, genuine attempt to share. Red flags: never, "I don\'t know how," last time was years ago, no EOLO person identified.'
+  },
+  H1: {
+    label: 'H1 — Greatest Spiritual Struggle',
+    text: 'What is the greatest spiritual struggle you are facing right now?',
+    rubric: 'Free reflection — look for honesty and self-awareness. This answer often reveals what all the scale questions could not.'
+  },
+  H2: {
+    label: 'H2 — Resisting God',
+    text: 'What is the one area where you know God is calling you to change but you have been resisting? Why?',
+    rubric: 'High-value pastoral data. Look for: genuine awareness of conviction vs. defensiveness. This is often where the most important debrief conversation begins.'
+  },
+  H3: {
+    label: 'H3 — What Jesus Would Say',
+    text: 'If Jesus were physically sitting with you right now, what do you think He would say to you?',
+    rubric: 'Look for: healthy sense of grace and accountability. Red flags: "He would be angry with me" (performance anxiety), "He would say I\'m doing great" (no self-awareness).'
+  },
+  H4: {
+    label: 'H4 — 12-Month Prayer',
+    text: 'What do you most want God to do in your life in the next 12 months?',
+    rubric: 'Look for: spiritual aspirations vs. purely material requests. Neither is wrong, but the balance reveals what the person values most.'
+  },
+  H5: {
+    label: 'H5 — Additional Information',
+    text: 'Is there anything you want your discipler or pastor to know that this form did not ask?',
+    rubric: 'Read this carefully. Members sometimes disclose the most important information here — abuse history, secret sin, health crises, doubts they were afraid to put in earlier questions.'
+  },
+};
+
+window.runAIAssist = async function() {
+  if (!_memberOpenAnswers || Object.keys(_memberOpenAnswers).length === 0) {
+    document.getElementById('aiBody').innerHTML =
+      '<p class="ai-no-answers">No written answers found for this member\'s diagnostic. The member may not have completed the form yet, or their answers were submitted before this feature was added.</p>';
+    return;
+  }
+
+  var btn = document.getElementById('aiRunBtn');
+  var body = document.getElementById('aiBody');
+  btn.disabled = true;
+  btn.textContent = '⏳ Analyzing…';
+  body.innerHTML = '<div class="ai-loading">Generating pastoral follow-up questions — this takes 15–30 seconds…</div>';
+
+  // Build prompt
+  var questionBlocks = [];
+  Object.entries(_memberOpenAnswers).forEach(function([qid, answer]) {
+    var meta = Q_META[qid];
+    if (!meta || !answer.trim()) return;
+    questionBlocks.push(
+      'QUESTION ' + meta.label + '\n' +
+      'Question text: ' + meta.text + '\n' +
+      'Scoring rubric: ' + meta.rubric + '\n' +
+      'Member\'s written answer:\n"""\n' + answer.trim() + '\n"""'
+    );
+  });
+
+  if (!questionBlocks.length) {
+    body.innerHTML = '<p class="ai-no-answers">No analyzable written answers found.</p>';
+    btn.disabled = false;
+    btn.textContent = '▶ Run Analysis';
+    return;
+  }
+
+  var systemPrompt = `You are assisting a Filipino church pastor or discipler preparing for a pastoral debrief session with a church member who completed a Salvation Assurance Diagnostic. Your role is to analyze the member's open-ended written answers and suggest 2–3 gentle, pastoral follow-up questions for each answer.
+
+IMPORTANT GUIDELINES:
+- Do NOT make a verdict on the person's salvation — only God and the shepherd know that
+- Do NOT use clinical, cold, or judgmental language
+- Questions should feel warm, curious, and conversational — as a caring pastor would ask
+- Be sensitive to Filipino church culture (relational, communal, respectful of elders)
+- Flag theological concerns clearly but gently
+- You may flag: works-righteousness, false assurance, lack of assurance, bitterness/unforgiveness, isolation, unresolved sin patterns
+- For each question, provide: (1) a brief flag (CLEAR/NEEDS CLARIFICATION/CONCERN), and (2) 2–3 follow-up questions
+
+RESPONSE FORMAT — respond ONLY with valid JSON, no markdown:
+{
+  "analyses": [
+    {
+      "qid": "A1",
+      "flag": "CONCERN",
+      "flag_reason": "Brief explanation of why this was flagged",
+      "followup_questions": [
+        "Follow-up question 1",
+        "Follow-up question 2",
+        "Follow-up question 3"
+      ]
+    }
+  ],
+  "overall_note": "One paragraph of overall pastoral observations for the facilitator — what to prioritize in the conversation."
+}`;
+
+  var userPrompt = 'Member name: ' + (_memberName || 'this member') + '\n\n' +
+    'Here are their written answers from the Salvation Assurance Diagnostic:\n\n' +
+    questionBlocks.join('\n\n---\n\n');
+
+  try {
+    var response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+
+    var data = await response.json();
+    var rawText = data.content && data.content[0] && data.content[0].text || '';
+
+    // Parse JSON response
+    var parsed;
+    try {
+      var cleaned = rawText.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch(e) {
+      throw new Error('Could not parse AI response. Raw response: ' + rawText.slice(0, 300));
+    }
+
+    renderAIResults(parsed);
+
+  } catch(e) {
+    body.innerHTML = '<p style="color:#7a2020;font-size:13px;">⚠ Analysis failed: ' + escapeHtml(e.message) + '</p>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↺ Re-run Analysis';
+  }
+};
+
+function renderAIResults(parsed) {
+  var body = document.getElementById('aiBody');
+  var html = '';
+
+  // Overall note
+  if (parsed.overall_note) {
+    html += '<div style="background:#fff8e5;border-left:4px solid #b8882a;padding:14px 18px;border-radius:6px;margin-bottom:20px;font-size:13px;line-height:1.6;color:#5c4615;">' +
+      '<strong style="display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;color:#9b7820;">📋 Overall Pastoral Notes</strong>' +
+      escapeHtml(parsed.overall_note) + '</div>';
+  }
+
+  // Per-question analyses
+  var analyses = parsed.analyses || [];
+  if (!analyses.length) {
+    html += '<p class="ai-no-answers">No analyses returned.</p>';
+  } else {
+    analyses.forEach(function(a) {
+      var meta = Q_META[a.qid] || { label: a.qid, text: '' };
+      var flagClass = a.flag === 'CLEAR' ? 'green' : (a.flag === 'CONCERN' ? 'red' : 'yellow');
+      var flagIcon = a.flag === 'CLEAR' ? '✅' : (a.flag === 'CONCERN' ? '⚠️' : '🔍');
+      var memberAnswer = (_memberOpenAnswers && _memberOpenAnswers[a.qid]) || '';
+
+      html += '<div class="ai-q-block">';
+      html += '<div class="ai-q-label">' + escapeHtml(meta.label) + '</div>';
+      html += '<div class="ai-q-text">' + escapeHtml(meta.text) + '</div>';
+
+      if (memberAnswer) {
+        html += '<div class="ai-member-answer"><div class="label">Member\'s answer</div>' + escapeHtml(memberAnswer) + '</div>';
+      }
+
+      html += '<div class="ai-flag ' + flagClass + '">' + flagIcon + ' ' + escapeHtml(a.flag);
+      if (a.flag_reason) html += ' — ' + escapeHtml(a.flag_reason);
+      html += '</div>';
+
+      if (a.followup_questions && a.followup_questions.length) {
+        html += '<div class="ai-followups">';
+        html += '<div class="label">Suggested follow-up questions</div>';
+        a.followup_questions.forEach(function(q) {
+          html += '<div class="ai-followup-q">' + escapeHtml(q) + '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
+    });
+  }
+
+  html += '<div class="ai-disclaimer">AI assistance only. Always use your own pastoral judgment. These questions are starting points — not scripts. The Holy Spirit is the primary guide in this conversation.</div>';
+
+  body.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
 </script>
 </body>
 </html>
