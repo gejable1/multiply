@@ -2,8 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%232A5C40"/><path d="M14 46 L14 22 L24 36 L32 24 L40 36 L50 22 L50 46" stroke="%23FFFFFF" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="50" r="2.5" fill="%23B8882A"/><circle cx="32" cy="50" r="2.5" fill="%23B8882A"/><circle cx="50" cy="50" r="2.5" fill="%23B8882A"/></svg>'>
-<link rel="shortcut icon" href="favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MULTIPLY Dashboard — Rosehill Christian Church</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -369,7 +367,7 @@ tbody tr:hover{background:var(--green-light);}
 <!-- MEMBERS -->
 <div id="panel-members" class="panel"><div class="pw">
   <div class="fbar">
-    <input type="search" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()" autocomplete="off" name="dashboard_filter_no_save" data-form-type="other" data-lpignore="true" data-1p-ignore="true">
+    <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..." oninput="renderTable()">
     <button class="fc on" onclick="setF('all',this)">All</button>
     <button class="fc" onclick="setF('L0',this)">Pre-Pipeline</button>
     <button class="fc" onclick="setF('L1',this)">Level 1</button>
@@ -548,55 +546,6 @@ tbody tr:hover{background:var(--green-light);}
 <div class="toast" id="toast"><span id="tico">✓</span><span id="tmsg">Saved</span></div>
 
 <script>
-// ═══════════════════════════════════════
-// URL CLEANUP — strip tracking params and protect search box
-// ═══════════════════════════════════════
-(function(){
-  // Strip Facebook and marketing tracking parameters
-  const trackingParams = ['fbclid','gclid','utm_source','utm_medium','utm_campaign','utm_term','utm_content','mc_cid','mc_eid','_ga','ref','ref_src'];
-  try {
-    const url = new URL(window.location.href);
-    let changed = false;
-    trackingParams.forEach(p => {
-      if (url.searchParams.has(p)) { url.searchParams.delete(p); changed = true; }
-    });
-    if (changed) {
-      window.history.replaceState({}, '', url.pathname + (url.search || '') + url.hash);
-    }
-  } catch(e) { /* ignore */ }
-
-  // Protect search box from extension auto-fill (polling-based guardian)
-  let userTypedAt = 0;
-  function clearSearchIfInjected() {
-    const sq = document.getElementById('sq');
-    if (!sq) return;
-    const sinceTyped = Date.now() - userTypedAt;
-    if (sq.value && sinceTyped > 5000) {
-      sq.value = '';
-      sq.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }
-  function installSearchGuard() {
-    const sq = document.getElementById('sq');
-    if (!sq) { setTimeout(installSearchGuard, 100); return; }
-    ['keydown', 'beforeinput'].forEach(evt => {
-      sq.addEventListener(evt, () => { userTypedAt = Date.now(); });
-    });
-    setTimeout(clearSearchIfInjected, 0);
-    setTimeout(clearSearchIfInjected, 100);
-    setTimeout(clearSearchIfInjected, 500);
-    setTimeout(clearSearchIfInjected, 1500);
-    setTimeout(clearSearchIfInjected, 3000);
-    let ticks = 0;
-    const guard = setInterval(() => {
-      clearSearchIfInjected();
-      if (++ticks > 60) clearInterval(guard);
-    }, 500);
-  }
-  document.addEventListener('DOMContentLoaded', installSearchGuard);
-  if (document.readyState !== 'loading') installSearchGuard();
-})();
-
 // ═══════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════
@@ -1645,9 +1594,38 @@ async function rProfileTab(m) {
     {key:'love_language', label:'❤️ Love Language', color:'#8a2040',
      render: (d) => {
        const kb = LL_KB[d.top_result] || {};
+       // Build all-five ranked list from results JSON
+       const LL_NAMES = {
+         words:   'Words of Affirmation',
+         service: 'Acts of Service',
+         gifts:   'Receiving Gifts',
+         time:    'Quality Time',
+         touch:   'Physical Touch'
+       };
+       let allFive = '';
+       if (d.results && typeof d.results === 'object') {
+         const sorted = Object.entries(d.results)
+           .map(([k,v]) => ({ name: LL_NAMES[k] || k, score: v }))
+           .sort((a,b) => b.score - a.score);
+         const maxScore = sorted[0]?.score || 1;
+         allFive = `<div style="margin-bottom:.6rem">
+           <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#8a2040;margin-bottom:6px">All Five Languages (Score)</div>
+           ${sorted.map((ll, i) => {
+             const pct = Math.round(ll.score / maxScore * 100);
+             const isTop = i === 0;
+             const isSecond = i === 1;
+             return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+               <div style="font-size:11px;font-weight:${isTop?'800':isSecond?'700':'400'};color:${isTop?'#8a2040':isSecond?'var(--ink)':'var(--muted)'};width:148px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''} ${ll.name}</div>
+               <div style="flex:1;background:#f0e0e6;border-radius:4px;height:10px;overflow:hidden">
+                 <div style="width:${pct}%;height:100%;background:${isTop?'#8a2040':'#c07090'};border-radius:4px;transition:width .5s ease"></div>
+               </div>
+               <div style="font-size:11px;font-weight:700;color:${isTop?'#8a2040':'var(--muted)'};width:22px;text-align:right">${ll.score}</div>
+             </div>`;
+           }).join('')}
+         </div>`;
+       }
        return `
-         ${infoRow('Primary', `<strong>${d.top_result||'—'}</strong>`, '#8a2040')}
-         ${d.second_result ? infoRow('Secondary', d.second_result, 'var(--muted)') : ''}
+         ${allFive || infoRow('Primary', `<strong>${d.top_result||'—'}</strong>`, '#8a2040') + (d.second_result ? infoRow('Secondary', d.second_result, 'var(--muted)') : '')}
          ${kb.ministry ? infoBox('⛪ Best Ministry Fit', kb.ministry, '#fdeef3', '#8a2040') : ''}
          ${kb.team ? infoBox('👥 In a Team', kb.team, '#fff8f0', '#b8882a') : ''}
          ${kb.discipler ? infoBox('🤝 Discipling This Person', kb.discipler, 'var(--green-bg)', 'var(--green)') : ''}`;
