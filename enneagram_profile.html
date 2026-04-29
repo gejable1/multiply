@@ -98,9 +98,65 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .save-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;}
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
 .toast.show{opacity:1;transform:translateY(0);}
-</style>
+/* Language Toggle */
+.lang-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  gap: 4px;
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: var(--shadow2);
+}
+.lang-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.lang-btn.active {
+  background: var(--green);
+  color: white;
+}
+.lang-btn:hover:not(.active) {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+/* Language-specific display */
+.q-text-en, .desc-en { display: block; }
+.q-text-tl, .desc-tl { display: none; }
+.lang-tl .q-text-en, .lang-tl .desc-en { display: none; }
+.lang-tl .q-text-tl, .lang-tl .desc-tl { display: block; }
+
+@media (max-width: 768px) {
+  .lang-toggle {
+    top: 10px;
+    right: 10px;
+    padding: 2px;
+  }
+  .lang-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
 </head>
-<body>
+<body class="lang-en">
+<!-- Language Toggle -->
+<div class="lang-toggle">
+  <button class="lang-btn active" onclick="setLanguage('en')">🇺🇸 EN</button>
+  <button class="lang-btn" onclick="setLanguage('tl')">🇵🇭 TL</button>
+</div>
+
 <div class="cover">
   <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
   <div class="cover-title">Enneagram Profile</div>
@@ -259,7 +315,7 @@ function buildQuestions(){
       const card=document.createElement('div');card.className='q-card';card.id=`qcard-${ti}-${qi}`;
       let scaleHtml='';
       for(let v=1;v<=5;v++)scaleHtml+=`<label class="sopt"><input type="radio" name="q${ti}-${qi}" value="${v}" onchange="onAnswer(${ti},${qi})"><div class="d">${v}</div></label>`;
-      card.innerHTML=`<div class="q-top"><span class="q-num">Q${qNum}</span><div><div class="q-en">${q.en}</div><div class="q-tl">${q.tl}</div></div></div><div class="scale-row"><div class="s-label">Hindi ito ako</div><div class="s-opts">${scaleHtml}</div><div class="s-label">Ito talaga ako</div></div>`;
+      card.innerHTML=`<div class="q-top"><span class="q-num">Q${qNum}</span><div><div class="q-text-en">${q.en}</div><div class="q-text-tl">${q.tl}</div></div></div><div class="scale-row"><div class="s-label">Hindi ito ako</div><div class="s-opts">${scaleHtml}</div><div class="s-label">Ito talaga ako</div></div>`;
       tbody.appendChild(card);
     });
   });
@@ -410,7 +466,22 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 document.addEventListener('DOMContentLoaded', function() {
   buildQuestions();
   autoLinkFromUrl();
+  // Load saved language preference
+  const saved = localStorage.getItem('enneagram_language') || 'en';
+  setLanguage(saved);
 });
+
+// Language Toggle
+function setLanguage(lang) {
+  document.body.className = `lang-${lang}`;
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`.lang-btn[onclick="setLanguage('${lang}')"]`).classList.add('active');
+  
+  // Save preference
+  localStorage.setItem('enneagram_language', lang);
+}
 </script>
 </body>
 </html>
