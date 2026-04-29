@@ -1239,6 +1239,7 @@ function resumeAssessment(){
   });
   updateProgress();
   toast(_lang==='tl'?'✅ Na-resume ang iyong mga sagot!':'✅ Your answers have been restored!');
+  _consecutiveTimeouts = 0; // fresh start on resume
   // Start timer on first unanswered pair
   for(let i=0;i<170;i++){
     if(responses[i]===undefined){
@@ -1328,6 +1329,7 @@ function showPauseModal(){
 
 function closePauseModal(){
   document.getElementById('pauseModal').classList.remove('open');
+  _consecutiveTimeouts = 0; // reset — user is back
   // Restart timer on current unanswered pair
   for(let i=0;i<170;i++){
     if(responses[i]===undefined){
@@ -1393,8 +1395,10 @@ function updateProgLabel(){
 // TIMER
 // ═══════════════════════════════════════════════════════
 const TIMER_SECS = 25;
+const AUTO_PAUSE_AFTER = 5; // consecutive timeouts before auto-pause
 let _activeTimer = null;
 let _timerPairIdx = null;
+let _consecutiveTimeouts = 0; // tracks unanswered pairs in a row
 
 function startTimer(idx){
   // Clear any existing timer
@@ -1425,15 +1429,23 @@ function startTimer(idx){
   _activeTimer = setInterval(()=>{
     remaining--;
     if(responses[_timerPairIdx] !== undefined){
-      // Already answered — stop
+      // Already answered — stop and reset timeout streak
       clearInterval(_activeTimer); _activeTimer=null;
       wrap.innerHTML='<span style="font-size:10px;color:var(--green)">✓</span>';
+      _consecutiveTimeouts = 0;
       return;
     }
     if(remaining <= 0){
       clearInterval(_activeTimer); _activeTimer=null;
       wrap.innerHTML='<span style="font-size:9px;color:var(--lighter)">—</span>';
-      // Auto-scroll to next unanswered without forcing an answer
+      _consecutiveTimeouts++;
+      // Auto-pause if user has missed AUTO_PAUSE_AFTER pairs in a row
+      if(_consecutiveTimeouts >= AUTO_PAUSE_AFTER){
+        _consecutiveTimeouts = 0;
+        autoPause();
+        return;
+      }
+      // Otherwise scroll to next unanswered
       scrollToNextUnanswered(_timerPairIdx);
       return;
     }
@@ -1454,6 +1466,29 @@ function scrollToNextUnanswered(fromIdx){
   }
 }
 
+function autoPause(){
+  saveProgress();
+  // Show the pause modal with a special message
+  const answered = Object.keys(responses).length;
+  const pct = Math.round(answered/170*100);
+  document.getElementById('pmSavedCount').textContent =
+    _lang==='tl'
+      ? `✅ ${answered} sa 170 nasagutan na-save (${pct}%) — Auto-paused`
+      : `✅ ${answered} of 170 answers saved (${pct}%) — Auto-paused`;
+  // Swap modal subtitle to explain what happened
+  const subTl = document.querySelector('#pauseModal .pm-sub.tl-text');
+  const subEn = document.querySelector('#pauseModal .pm-sub.en-text');
+  const titleTl = document.querySelector('#pauseModal .pm-title.tl-text');
+  const titleEn = document.querySelector('#pauseModal .pm-title.en-text');
+  if(titleTl) titleTl.textContent = 'Na-pause Awtomatiko!';
+  if(titleEn) titleEn.textContent = 'Auto-Paused!';
+  if(subTl) subTl.textContent = 'Tila nalayo ka — na-save ang iyong mga sagot. I-copy ang link para matuloy ang test kahit kailan sa parehong device.';
+  if(subEn) subEn.textContent = 'It looks like you stepped away — your answers have been saved. Copy the link to continue the test anytime on the same device.';
+  const resumeUrl = window.location.href.split('#')[0];
+  document.getElementById('pmUrl').textContent = resumeUrl;
+  document.getElementById('pauseModal').classList.add('open');
+}
+
 // ═══════════════════════════════════════════════════════
 // ANSWER & PROGRESS
 // ═══════════════════════════════════════════════════════
@@ -1466,6 +1501,7 @@ function answer(idx, val){
   card.querySelector('.cb-'+map[val])?.classList.add('sel-'+map[val]);
   card.className = 'pair-card ' + (val>=1?'answered':val<=-1?'answered-b':'answered');
   if(!wasAnswered){ _answered++; }
+  _consecutiveTimeouts = 0; // user is still here — reset streak
   updateProgress();
   saveProgress(); // save on every answer
   // Show pause button after first answer
