@@ -212,6 +212,29 @@ body[data-lang="en"] .tl-text{display:none;}
 body[data-lang="en"] .sl-tl-txt{display:none;}
 body[data-lang="tl"] .sl-en-txt{display:none;}
 
+
+/* PAUSE INSTRUCTION BOX */
+.pause-note{max-width:700px;margin:.75rem auto 0;padding:0 1.25rem;}
+.pn-inner{background:#fdf6e8;border:1px solid rgba(184,136,42,.25);border-radius:10px;padding:.85rem 1.1rem;font-size:12px;color:#3a2e10;line-height:1.65;}
+.pn-inner strong{color:var(--gold);}
+/* PAUSE BUTTON in progress bar */
+.pause-btn{padding:4px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;}
+.pause-btn:hover{background:var(--gold);border-color:var(--gold);color:white;}
+/* PAUSE MODAL */
+.pause-modal{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1.5rem;}
+.pause-modal.open{display:flex;}
+.pm-card{background:var(--paper);border-radius:16px;padding:1.75rem;max-width:360px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.2);text-align:center;}
+.pm-icon{font-size:2.5rem;margin-bottom:.65rem;}
+.pm-title{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;color:var(--ink);margin-bottom:.35rem;}
+.pm-sub{font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:1rem;}
+.pm-url{background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;font-size:11px;color:var(--ink);word-break:break-all;margin-bottom:.85rem;text-align:left;font-family:monospace;}
+.pm-btns{display:flex;gap:8px;flex-direction:column;}
+.pm-btn{padding:11px;border-radius:9px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:filter .15s;}
+.pm-btn-primary{background:var(--green);color:white;}
+.pm-btn-copy{background:var(--gold);color:white;}
+.pm-btn-close{background:var(--surface2);color:var(--muted);border:1.5px solid var(--border);}
+.pm-saved-badge{font-size:11px;color:var(--green);font-weight:700;margin-bottom:.65rem;}
+
 @media(max-width:540px){
   .top5-grid{grid-template-columns:repeat(3,1fr);}
   .domain-strip{grid-template-columns:repeat(2,1fr);}
@@ -221,7 +244,7 @@ body[data-lang="tl"] .sl-en-txt{display:none;}
   .br-name{width:90px;font-size:11px;}
 }
 @media print{
-  .prog-bar,.calc-wrap,.save-wrap,.mode-toggle,.gallup-note,.resume-banner,#assessSection{display:none!important;}
+  .prog-bar,.calc-wrap,.save-wrap,.mode-toggle,.gallup-note,.pause-note,.resume-banner,.pause-modal,#assessSection{display:none!important;}
   .results-wrap{display:block!important;}
   .theme-card .tc-body{display:block!important;}
 }
@@ -263,6 +286,7 @@ body[data-lang="tl"] .sl-en-txt{display:none;}
   <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
   <div class="prog-label" id="progLabel">0 sa 170</div>
   <div class="prog-pct" id="progPct">0%</div>
+  <button class="pause-btn" id="pauseBtn" onclick="showPauseModal()" style="display:none"><span class="tl-text">⏸ I-pause</span><span class="en-text">⏸ Pause</span></button>
 </div>
 
 <!-- GALLUP NOTE -->
@@ -270,6 +294,24 @@ body[data-lang="tl"] .sl-en-txt{display:none;}
   <div class="gn-inner">
     <span class="tl-text"><strong>Paalala:</strong> Ang assessment na ito ay inspirado ng CliftonStrengths® ng Gallup (177–200 paired statements). Para sa pinaka-tumpak na resulta, ang mga lider sa antas ng Coach pataas ay hinihikayat na kumuha ng opisyal na Gallup assessment (<em>gallup.com/cliftonstrengths</em>, ~$25) at gamitin ang <strong>Manual Entry</strong> tab.</span>
     <span class="en-text"><strong>Note:</strong> This assessment is inspired by Gallup's CliftonStrengths®. For leaders at Coach level and above, the official Gallup assessment is recommended. Use the Manual Entry tab to record your official results.</span>
+  </div>
+</div>
+
+<!-- PAUSE / RESUME INSTRUCTIONS -->
+<div class="pause-note" id="pauseNote">
+  <div class="pn-inner">
+    <span class="tl-text">
+      <strong>⏸ Paano Mag-pause at Mag-resume:</strong> Maaari mong itigil ang test kahit kailan at ituloy ito mamaya.
+      Pindutin ang <strong>"I-pause"</strong> na buton sa progress bar para i-save ang iyong mga sagot at makita ang iyong resume link.
+      I-bookmark o i-copy ang link para madali mong mabalik sa kung saan ka natigil — kahit sarado na ang browser.
+      <em>Nino-note: Ang naka-save na sagot ay nananatili sa device na ito lamang.</em>
+    </span>
+    <span class="en-text">
+      <strong>⏸ How to Pause &amp; Resume:</strong> You can stop the test at any time and continue later.
+      Press the <strong>"Pause"</strong> button in the progress bar to save your answers and see your resume link.
+      Bookmark or copy the link to easily return to where you left off — even after closing the browser.
+      <em>Note: Saved answers are stored on this device only.</em>
+    </span>
   </div>
 </div>
 
@@ -382,6 +424,24 @@ body[data-lang="tl"] .sl-en-txt{display:none;}
 <div class="save-wrap">
   <button class="save-btn" id="saveBtn" onclick="saveToDashboard()"><span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span><span class="en-text">💾 Save to MULTIPLY Dashboard</span></button>
   <div class="save-msg" id="saveMsg"></div>
+</div>
+
+<!-- PAUSE MODAL -->
+<div class="pause-modal" id="pauseModal">
+  <div class="pm-card">
+    <div class="pm-icon">⏸</div>
+    <div class="pm-title tl-text">Na-save ang Iyong Progreso!</div>
+    <div class="pm-title en-text">Your Progress is Saved!</div>
+    <div class="pm-saved-badge" id="pmSavedCount"></div>
+    <div class="pm-sub tl-text">I-bookmark o i-copy ang link na ito para mabalik sa iyong test kahit kailan — sa parehong device.</div>
+    <div class="pm-sub en-text">Bookmark or copy this link to return to your test anytime — on the same device.</div>
+    <div class="pm-url" id="pmUrl"></div>
+    <div class="pm-btns">
+      <button class="pm-btn pm-btn-copy" onclick="copyPauseUrl()">📋 <span class="tl-text">I-copy ang Link</span><span class="en-text">Copy Link</span></button>
+      <button class="pm-btn pm-btn-primary" onclick="closePauseModal()">▶ <span class="tl-text">Ituloy ang Test</span><span class="en-text">Continue Test</span></button>
+      <button class="pm-btn pm-btn-close" onclick="closePauseModal()"><span class="tl-text">Isara</span><span class="en-text">Close</span></button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1243,6 +1303,63 @@ function buildPairs(){
 }
 
 
+
+// ═══════════════════════════════════════════════════════
+// PAUSE & RESUME
+// ═══════════════════════════════════════════════════════
+function showPauseModal(){
+  saveProgress();
+  // Stop active timer while paused
+  if(_activeTimer){ clearInterval(_activeTimer); _activeTimer=null; }
+
+  const answered = Object.keys(responses).length;
+  const pct = Math.round(answered/170*100);
+  document.getElementById('pmSavedCount').textContent =
+    _lang==='tl'
+      ? `✅ ${answered} sa 170 nasagutan na-save (${pct}%)`
+      : `✅ ${answered} of 170 answers saved (${pct}%)`;
+
+  // Build resume URL — current page URL with ?id= preserved
+  const resumeUrl = window.location.href.split('#')[0];
+  document.getElementById('pmUrl').textContent = resumeUrl;
+
+  document.getElementById('pauseModal').classList.add('open');
+}
+
+function closePauseModal(){
+  document.getElementById('pauseModal').classList.remove('open');
+  // Restart timer on current unanswered pair
+  for(let i=0;i<170;i++){
+    if(responses[i]===undefined){
+      setTimeout(()=>startTimer(i),300);
+      break;
+    }
+  }
+}
+
+function copyPauseUrl(){
+  const url = document.getElementById('pmUrl').textContent;
+  navigator.clipboard.writeText(url).then(()=>{
+    toast(_lang==='tl'?'📋 Na-copy ang link!':'📋 Link copied!');
+  }).catch(()=>{
+    // Fallback for browsers that block clipboard
+    const el = document.getElementById('pmUrl');
+    const range = document.createRange();
+    range.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    toast(_lang==='tl'?'I-highlight at i-copy ang link.':'Highlight and copy the link above.');
+  });
+}
+
+// Also hide pause note once test is underway (after 5 answers)
+function maybeHidePauseNote(){
+  if(_answered === 5){
+    const note = document.getElementById('pauseNote');
+    if(note) note.style.transition='opacity .5s', note.style.opacity='0', setTimeout(()=>note.style.display='none',500);
+  }
+}
+
 // ═══════════════════════════════════════════════════════
 // LANGUAGE TOGGLE
 // ═══════════════════════════════════════════════════════
@@ -1350,7 +1467,10 @@ function answer(idx, val){
   card.className = 'pair-card ' + (val>=1?'answered':val<=-1?'answered-b':'answered');
   if(!wasAnswered){ _answered++; }
   updateProgress();
-  if(_answered % 10 === 0) saveProgress();
+  saveProgress(); // save on every answer
+  // Show pause button after first answer
+  if(_answered === 1) { const pb = document.getElementById('pauseBtn'); if(pb) pb.style.display='block'; }
+  maybeHidePauseNote();
   // Stop timer for this pair, mark done
   if(_activeTimer && _timerPairIdx === idx){
     clearInterval(_activeTimer); _activeTimer=null;
@@ -1622,10 +1742,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   const saved=loadProgress();
   if(saved && Object.keys(saved.responses||{}).length>0){
     document.getElementById('resumeBanner').style.display='block';
-  } else {
-    // Start timer on first pair
-    setTimeout(()=>startTimer(0), 400);
   }
+  // Timer starts only after user answers pair 0 — not on page load
 });
 </script>
 </body>
