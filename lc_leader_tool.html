@@ -576,36 +576,77 @@ function showScreen(id){
 // ═══════════════════════════════════════════════════════
 // LOGIN — LEADER SEARCH
 // ═══════════════════════════════════════════════════════
+let leaderResults = []; // store results by index to avoid JSON-in-onclick issues
+
 async function searchLeader(q){
   const dd = document.getElementById('loginDropdown');
   if(q.length < 2){ dd.style.display='none'; return; }
-  const {data} = await db.from('members').select('id,name,pipeline_level,lc_group,discipler_name')
-    .ilike('name','%'+q+'%').gte('pipeline_level',2).limit(8);
-  if(!data?.length){ dd.innerHTML='<div class="search-item"><div style="color:var(--muted);font-size:13px">No leaders found matching "'+q+'"</div></div>'; dd.style.display='block'; return; }
-  dd.innerHTML = data.map(m=>`
-    <div class="search-item" onclick="selectLeader(${JSON.stringify(m).replace(/"/g,'&quot;')})">
-      <div class="si-av" style="background:${avColor(m.pipeline_level)};color:#0f0f13">${initials(m.name)}</div>
-      <div>
-        <div class="si-name">${m.name}</div>
-        <div class="si-meta">${LEVEL_NAMES[m.pipeline_level]||'Leader'} · ${m.lc_group||'No group'}</div>
-      </div>
-    </div>`).join('');
-  dd.style.display = 'block';
+  dd.innerHTML='<div class="search-item"><div style="color:var(--muted);font-size:12px">Searching...</div></div>';
+  dd.style.display='block';
+  try{
+    const {data, error} = await db.from('members')
+      .select('id,name,pipeline_level,lc_group,discipler_name')
+      .ilike('name','%'+q+'%')
+      .order('name')
+      .limit(10);
+    if(error) throw error;
+    if(!data?.length){
+      dd.innerHTML='<div class="search-item"><div style="color:var(--muted);font-size:13px">No members found for "'+q+'"</div></div>';
+      dd.style.display='block'; return;
+    }
+    leaderResults = data;
+    dd.innerHTML = data.map((m,i)=>`
+      <div class="search-item" onclick="selectLeader(${i})">
+        <div class="si-av" style="background:${avColor(m.pipeline_level)};color:#f0f0f8">${initials(m.name)}</div>
+        <div>
+          <div class="si-name">${m.name}</div>
+          <div class="si-meta">${LEVEL_NAMES[m.pipeline_level]||'Member'} ${m.lc_group?'· '+m.lc_group:''}</div>
+        </div>
+      </div>`).join('');
+    dd.style.display='block';
+  }catch(e){
+    dd.innerHTML=`<div class="search-item"><div style="color:var(--red);font-size:12px">Error: ${e.message}</div></div>`;
+    dd.style.display='block';
+  }
 }
 
-async function selectLeader(m){
+async function selectLeader(idx){
+  const m = leaderResults[idx];
+  if(!m) return;
   document.getElementById('loginDropdown').style.display='none';
+  document.getElementById('loginSearch').value = m.name;
   currentLeader = m;
-  // Load their mentees
-  const {data} = await db.from('members').select('*')
-    .or(`discipler_name.ilike.%${m.name}%,discipler.ilike.%${m.name}%,discipler_id.eq.${m.id}`)
-    .order('name');
-  myMembers = data || [];
-  // Also try lc_group match as fallback
-  if(!myMembers.length && m.lc_group){
-    const {data:d2} = await db.from('members').select('*').ilike('lc_group','%'+m.lc_group+'%').order('name');
-    myMembers = (d2||[]).filter(x=>x.id !== m.id);
+
+  // Load their mentees — try multiple strategies
+  let mentees = [];
+
+  // Strategy 1: discipler_name or discipler field contains leader's name
+  const {data:d1} = await db.from('members').select('*')
+    .ilike('discipler_name','%'+m.name+'%').order('name');
+  if(d1?.length) mentees = d1;
+
+  // Strategy 2: discipler field (alternate column name)
+  if(!mentees.length){
+    const {data:d2} = await db.from('members').select('*')
+      .ilike('discipler','%'+m.name+'%').order('name');
+    if(d2?.length) mentees = d2;
   }
+
+  // Strategy 3: same lc_group
+  if(!mentees.length && m.lc_group){
+    const {data:d3} = await db.from('members').select('*')
+      .ilike('lc_group','%'+m.lc_group+'%').order('name');
+    // Exclude self
+    if(d3?.length) mentees = d3.filter(x=>x.id !== m.id);
+  }
+
+  // Strategy 4: If pastor or high-level, show all members
+  if(!mentees.length && (m.pipeline_level||0) >= 4){
+    const {data:d4} = await db.from('members').select('*').order('name').limit(200);
+    if(d4?.length) mentees = d4.filter(x=>x.id !== m.id);
+  }
+
+  myMembers = mentees;
   renderHome();
   showScreen('screenHome');
 }
@@ -1081,7 +1122,10 @@ function sendLink_(memberId, memberName, file, assessName){
 // HELPERS
 // ═══════════════════════════════════════════════════════
 function initials(name){return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
-function avColor(level){const colors={1:'#374151',2:'#1e3a5f',3:'#1a3d2b',4:'#4a2060',5:'#7a3010'};return colors[level]||'#374151';}
+function avColor(level){
+  const colors={0:'#2a2a38',1:'#1e2a3a',2:'#1a3d2b',3:'#3d2060',4:'#5a2010',5:'#7a4a00'};
+  return colors[level]||'#2a2a38';
+}
 function toast(msg,type=''){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className='toast '+(type||'');
