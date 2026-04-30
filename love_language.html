@@ -101,33 +101,51 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
 .toast.show{opacity:1;transform:translateY(0);}
 @media(max-width:520px){.choice-wrap{grid-template-columns:1fr;}.choice{border-right:none;border-bottom:1px solid var(--border);}.choice:last-child{border-bottom:none;}}
+
+/* ── Language Toggle ── */
+.lang-toggle{position:fixed;top:12px;right:12px;z-index:300;display:flex;background:var(--paper);border:1.5px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.12);}
+.lt-btn{padding:5px 14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;border:none;background:transparent;cursor:pointer;color:var(--muted);transition:all .15s;letter-spacing:.03em;}
+.lt-btn.active{background:var(--gold,#b8882a);color:white;}
+/* Show/hide by lang */
+body[data-lang="en"] .tl-text{display:none!important;}
+body[data-lang="tl"] .en-text{display:none!important;}
+/* Questions: both classes use same font/size */
+.q-tl,.q-en,.choice-tl,.choice-en{font-size:13.5px;font-weight:600;color:var(--ink,#1a1612);line-height:1.6;display:block;}
+
 </style>
 </head>
-<body>
+<body data-lang="en">
+
+<!-- Language Toggle -->
+<div class="lang-toggle">
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+  <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+</div>
+
 <div class="cover">
   <div class="cover-icon">❤️</div>
   <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
   <div class="cover-title">Love Language Profile</div>
-  <div class="cover-sub">Discover how you give and receive love — and how that shapes your ministry, relationships, and discipleship journey.</div>
-  <div class="cover-tags"><span class="ct">30 Questions</span><span class="ct">Choose A or B</span><span class="ct">~8 Minutes</span><span class="ct">Bilingual</span></div>
+  <div class="cover-sub"><span class="en-text">Discover how you give and receive love — and how that shapes your ministry, relationships, and discipleship journey.</span><span class="tl-text">Tuklasin kung paano mo pinaka-malalim na nararamdaman ang pagmamahal — at kung paano ito humuhubog sa iyong ministeryo at disipuladong relasyon.</span></div>
+  <div class="cover-tags"><span class="ct">30 Questions</span><span class="ct">Choose A or B</span><span class="ct en-text">~8 Minutes</span><span class="ct tl-text">~8 Minuto</span><span class="ct">Bilingual</span></div>
 </div>
 <div class="prog-bar">
   <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
-  <div class="prog-label" id="progLabel">0 of 30 answered</div>
+  <div class="prog-label" id="progLabel"><span class="en-text">0 of 30 answered</span><span class="tl-text">0 sa 30 nasagutan</span></div>
 </div>
 <div class="link-box"><div class="lb-in">
   <div id="autoLinked" style="display:none">
     <div style="display:flex;align-items:center;gap:10px">
       <div style="width:32px;height:32px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">✓</div>
-      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--green);margin-bottom:2px">✅ Pre-Linked from Dashboard</div>
+      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--green);margin-bottom:2px"><span class="en-text">✅ Pre-Linked from Dashboard</span><span class="tl-text">✅ Naka-link sa Dashboard</span></div>
       <div id="autoLinkedName" style="font-size:14px;font-weight:600;color:var(--ink)"></div>
       <div id="autoLinkedMeta" style="font-size:11px;color:var(--muted)"></div></div>
     </div>
   </div>
   <div id="manualSearch">
-    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--rose);margin-bottom:.35rem">🔗 Link to Dashboard</div>
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--rose);margin-bottom:.35rem"><span class="en-text">🔗 Link to Dashboard</span><span class="tl-text">🔗 I-link sa Dashboard</span></div>
     <div style="position:relative">
-      <input id="memberSearch" placeholder="Type your name to search..." autocomplete="off" oninput="searchMember(this.value)"
+      <input id="memberSearch" placeholder="Type your name to search..." data-en="Type your name to search..." data-tl="I-type ang pangalan para hanapin..." autocomplete="off" oninput="searchMember(this.value)"
         style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);">
       <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:var(--shadow2);z-index:100;max-height:160px;overflow-y:auto;"></div>
     </div>
@@ -137,12 +155,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 </div></div>
 <div class="page">
   <div class="profile-card">
-    <div class="pc-label">Your Information</div>
-    <input class="pc-field" id="pName" placeholder="Full Name *">
-    <input class="pc-field" id="pGroup" placeholder="LC Group (optional)">
+    <div class="pc-label"><span class="en-text">Your Information</span><span class="tl-text">Iyong Impormasyon</span></div>
+    <input class="pc-field" id="pName" placeholder="Full Name *" data-en="Full Name *" data-tl="Buong Pangalan *">
+    <input class="pc-field" id="pGroup" placeholder="LC Group (optional)" data-en="LC Group (optional)" data-tl="LC Group (opsyonal)">
   </div>
   <div class="instr">
-    <div class="instr-label">📋 Instructions · Panuto</div>
+    <div class="instr-label">📋 <span class="en-text">Instructions</span><span class="tl-text">Panuto</span></div>
     <div class="instr-text">For each question, choose <strong>A or B</strong> — the one that feels more like you in real life.<br>
     <span style="color:var(--rose);font-weight:500">Sa bawat tanong, piliin ang A o B</span> — ang mas katulad mo sa tunay na buhay, hindi ang "tamang" sagot.</div>
   </div>
@@ -166,7 +184,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
   <div id="langCards"></div>
 </div>
 <div class="save-wrap">
-  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()">💾 Save to MULTIPLY Dashboard</button>
+  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()"><span class="en-text">💾 Save to MULTIPLY Dashboard</span><span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span></button>
   <div class="save-msg" id="saveMsg"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -385,6 +403,22 @@ document.addEventListener('DOMContentLoaded', function() {
   buildQuestions();
   autoLinkFromUrl();
 });
+
+// ── Language Toggle ──────────────────────────────────────────
+let _lang = 'en';
+function setLang(lang){
+  _lang = lang;
+  document.body.setAttribute('data-lang', lang);
+  document.getElementById('lt-en').classList.toggle('active', lang==='en');
+  document.getElementById('lt-tl').classList.toggle('active', lang==='tl');
+  document.documentElement.setAttribute('lang', lang);
+  // Swap placeholder text on inputs with data-tl/data-en attrs
+  document.querySelectorAll('[data-tl][data-en]').forEach(el=>{
+    if(el.tagName==='INPUT') el.placeholder = lang==='tl' ? el.dataset.tl : el.dataset.en;
+  });
+  if(typeof updateProgLabel==='function') updateProgLabel();
+}
+
 </script>
 </body>
 </html>

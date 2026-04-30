@@ -108,38 +108,56 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .save-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;}
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
 .toast.show{opacity:1;transform:translateY(0);}
+
+/* ── Language Toggle ── */
+.lang-toggle{position:fixed;top:12px;right:12px;z-index:300;display:flex;background:var(--paper);border:1.5px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.12);}
+.lt-btn{padding:5px 14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;border:none;background:transparent;cursor:pointer;color:var(--muted);transition:all .15s;letter-spacing:.03em;}
+.lt-btn.active{background:var(--gold,#b8882a);color:white;}
+/* Show/hide by lang */
+body[data-lang="en"] .tl-text{display:none!important;}
+body[data-lang="tl"] .en-text{display:none!important;}
+/* Questions: both classes use same font/size */
+.q-tl,.q-en,.choice-tl,.choice-en{font-size:13.5px;font-weight:600;color:var(--ink,#1a1612);line-height:1.6;display:block;}
+
 </style>
 </head>
-<body>
+<body data-lang="en">
+
+<!-- Language Toggle -->
+<div class="lang-toggle">
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+  <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+</div>
+
 <div class="cover">
   <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
   <div class="cover-title">DISC Profile</div>
-  <div class="cover-sub">Discover how you communicate, lead, and relate — and how your behavioral style shapes your ministry placement and discipleship journey.</div>
+  <div class="cover-sub"><span class="en-text">Discover how you communicate, lead, and relate — and how your behavioral style shapes your ministry placement and discipleship journey.</span><span class="tl-text">Tuklasin kung paano ka nakikipag-communicate, nangunguna, at nakikipag-ugnayan — at kung paano ang iyong behavioral style ay humuhubog sa iyong paglalagay sa ministeryo.</span></div>
   <div class="disc-grid">
     <span class="disc-pill dp-d">D — Dominance</span>
     <span class="disc-pill dp-i">I — Influence</span>
     <span class="disc-pill dp-s">S — Steadiness</span>
     <span class="disc-pill dp-c">C — Conscientiousness</span>
   </div>
-  <div class="cover-tags"><span class="ct">40 Questions</span><span class="ct">1–5 Scale</span><span class="ct">~12 Minutes</span><span class="ct">Bilingual</span></div>
+  <div class="cover-tags"><span class="ct">40 <span class="en-text">Questions</span><span class="tl-text">Tanong</span></span><span class="ct">1–5 Scale</span><span class="ct en-text">~12 Minutes</span><span class="ct tl-text">~12 Minuto</span><span class="ct">Bilingual</span></div>
 </div>
 <div class="prog-bar">
   <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
-  <div class="prog-label" id="progLabel">0 of 40 answered</div>
+  <div class="prog-label" id="progLabel"><span class="en-text">0 of 40 answered</span><span class="tl-text">0 sa 40 nasagutan</span></div>
 </div>
 <div class="link-box"><div class="lb-in">
   <div id="autoLinked" style="display:none">
     <div style="display:flex;align-items:center;gap:10px">
       <div style="width:32px;height:32px;border-radius:50%;background:#2a5c40;color:white;display:flex;align-items:center;justify-content:center;font-size:14px">✓</div>
-      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:#2a5c40;margin-bottom:2px">✅ Pre-Linked from Dashboard</div>
+      <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:#2a5c40;margin-bottom:2px"><span class="en-text">✅ Pre-Linked from Dashboard</span><span class="tl-text">✅ Naka-link sa Dashboard</span></div>
       <div id="autoLinkedName" style="font-size:14px;font-weight:600;color:var(--ink)"></div>
       <div id="autoLinkedMeta" style="font-size:11px;color:var(--muted)"></div></div>
     </div>
   </div>
   <div id="manualSearch">
-    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--navy);margin-bottom:.35rem">🔗 Link to Dashboard</div>
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--navy);margin-bottom:.35rem"><span class="en-text">🔗 Link to Dashboard</span><span class="tl-text">🔗 I-link sa Dashboard</span></div>
     <div style="position:relative">
-      <input id="memberSearch" placeholder="Type your name to search..." autocomplete="off" oninput="searchMember(this.value)" class="pf" style="margin-bottom:0">
+      <input id="memberSearch" placeholder="Type your name to search..." data-en="Type your name to search..." data-tl="I-type ang pangalan para hanapin..." autocomplete="off" oninput="searchMember(this.value)" class="pf" style="margin-bottom:0">
       <div id="memberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:7px;box-shadow:var(--shadow2);z-index:100;max-height:160px;overflow-y:auto;"></div>
     </div>
     <div id="memberSelected" style="display:none;background:#eef6f1;border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:5px 10px;font-size:12px;color:#2a5c40;font-weight:500;margin-top:.35rem;"></div>
@@ -148,19 +166,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 </div></div>
 <div class="page">
   <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
-    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.4rem">Your Information</div>
-    <input class="pf" id="pName" placeholder="Full Name *">
-    <input class="pf" id="pGroup" placeholder="LC Group (optional)">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.4rem"><span class="en-text">Your Information</span><span class="tl-text">Iyong Impormasyon</span></div>
+    <input class="pf" id="pName" placeholder="Full Name *" data-en="Full Name *" data-tl="Buong Pangalan *">
+    <input class="pf" id="pGroup" placeholder="LC Group (optional)" data-en="LC Group (optional)" data-tl="LC Group (opsyonal)">
   </div>
   <div style="background:#e8f0f8;border:1px solid rgba(26,74,107,.15);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;">
-    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--c);margin-bottom:.35rem">📋 Instructions · Panuto</div>
-    <div style="font-size:13px;color:#0a2040;line-height:1.7">Rate each statement from <strong>1 (Hindi talaga ako)</strong> to <strong>5 (Ako talaga ito)</strong> based on how you naturally are — not how you think a good leader should be.<br>
-    <span style="color:var(--c);font-weight:500">I-rate ang bawat pahayag mula 1 hanggang 5</span> batay sa kung paano ka natural — hindi kung paano dapat maging isang mabuting lider.</div>
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--c);margin-bottom:.35rem"><span class="en-text">📋 Instructions</span><span class="tl-text">📋 Panuto</span></div>
+    <div style="font-size:13px;color:#0a2040;line-height:1.7"><span class="en-text">Rate each statement from <strong>1 (Not at all like me)</strong> to <strong>5 (Very much like me)</strong> based on how you naturally are — not how you think a good leader should be.</span><span class="tl-text">I-rate ang bawat pahayag mula <strong>1 (Hindi talaga ako)</strong> hanggang <strong>5 (Ako talaga ito)</strong> batay sa kung paano ka natural — hindi kung paano dapat maging isang mabuting lider.</span></div>
   </div>
   <div id="questionsWrap"></div>
 </div>
 <div class="calc-wrap">
-  <button class="calc-btn" onclick="calculate()">🧭 Calculate My DISC Profile</button>
+  <button class="calc-btn" onclick="calculate()"><span class="en-text">🧭 Calculate My DISC Profile</span><span class="tl-text">🧭 Kalkulahin ang Aking DISC Profile</span></button>
 </div>
 <div class="results-wrap" id="resultsWrap">
   <div class="res-hero">
@@ -177,7 +194,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
   <div class="combo-section" id="comboSection"></div>
 </div>
 <div class="save-wrap">
-  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()">💾 Save to MULTIPLY Dashboard</button>
+  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()"><span class="en-text">💾 Save to MULTIPLY Dashboard</span><span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span></button>
   <div class="save-msg" id="saveMsg"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -291,9 +308,9 @@ let answered=0;
 function buildQuestions(){
   const wrap=document.getElementById('questionsWrap');
   const sections=[
-    {letter:'D',color:'var(--d)',title:'Section D — Dominance · Pamumuno at Desisyon',items:QUESTIONS.filter(q=>q.dim==='D')},
+    {letter:'D',color:'var(--d)',titleEn:'Section D — Dominance',titleTl:'Seksiyon D — Pamumuno at Desisyon',items:QUESTIONS.filter(q=>q.dim==='D')},
     {letter:'I',color:'var(--i)',title:'Section I — Influence · Impluwensya at Relasyon',items:QUESTIONS.filter(q=>q.dim==='I')},
-    {letter:'S',color:'var(--s)',title:'Section S — Steadiness · Katatagan at Katapatan',items:QUESTIONS.filter(q=>q.dim==='S')},
+    {letter:'S',color:'var(--s)',titleEn:'Section S — Steadiness',titleTl:'Seksiyon S — Katatagan at Katapatan',items:QUESTIONS.filter(q=>q.dim==='S')},
     {letter:'C',color:'var(--c)',title:'Section C — Conscientiousness · Katumpakan at Kalidad',items:QUESTIONS.filter(q=>q.dim==='C')}
   ];
   let qNum=0;
@@ -456,6 +473,22 @@ document.addEventListener('DOMContentLoaded', function() {
   buildQuestions();
   autoLinkFromUrl();
 });
+
+// ── Language Toggle ──────────────────────────────────────────
+let _lang = 'en';
+function setLang(lang){
+  _lang = lang;
+  document.body.setAttribute('data-lang', lang);
+  document.getElementById('lt-en').classList.toggle('active', lang==='en');
+  document.getElementById('lt-tl').classList.toggle('active', lang==='tl');
+  document.documentElement.setAttribute('lang', lang);
+  // Swap placeholder text on inputs with data-tl/data-en attrs
+  document.querySelectorAll('[data-tl][data-en]').forEach(el=>{
+    if(el.tagName==='INPUT') el.placeholder = lang==='tl' ? el.dataset.tl : el.dataset.en;
+  });
+  if(typeof updateProgLabel==='function') updateProgLabel();
+}
+
 </script>
 </body>
 </html>
