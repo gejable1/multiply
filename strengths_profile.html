@@ -1229,7 +1229,6 @@ function resumeAssessment(){
   Object.entries(d.responses||{}).forEach(([k,v])=>{
     const idx = parseInt(k);
     responses[idx] = v;
-    // Re-apply visual selection
     const sel = v===2?'sa':v===1?'a':v===0?'n':v===-1?'b':'sb';
     document.querySelectorAll(`#pair-${idx} .choice-btn`).forEach(b=>b.classList.remove('sel-sa','sel-a','sel-n','sel-b','sel-sb'));
     const btn = document.querySelector(`#pair-${idx} .cb-${sel}`);
@@ -1238,15 +1237,28 @@ function resumeAssessment(){
     _answered = Object.keys(responses).length;
   });
   updateProgress();
-  toast(_lang==='tl'?'✅ Na-resume ang iyong mga sagot!':'✅ Your answers have been restored!');
-  _consecutiveTimeouts = 0; // fresh start on resume
-  // Start timer on first unanswered pair
+  _consecutiveTimeouts = 0;
+
+  // Show pause button — they have saved answers worth protecting
+  const pb = document.getElementById('pauseBtn');
+  if(pb) pb.style.display='block';
+
+  toast(_lang==='tl'?'✅ Na-resume! Dine-diretso kayo sa susunod na tanong...':'✅ Resumed! Scrolling to your next question...');
+
+  // Find first unanswered pair
+  let firstUnanswered = -1;
   for(let i=0;i<170;i++){
-    if(responses[i]===undefined){
-      setTimeout(()=>startTimer(i),600);
-      break;
-    }
+    if(responses[i]===undefined){ firstUnanswered=i; break; }
   }
+  if(firstUnanswered === -1) return; // all answered
+
+  // Scroll to first unanswered after a short delay so highlights render first
+  setTimeout(()=>{
+    const target = document.getElementById(`pair-${firstUnanswered}`);
+    if(target) target.scrollIntoView({behavior:'smooth', block:'center'});
+    // NO timer start here — timer begins only after user answers this pair
+    // (same pattern as the very first pair on initial load)
+  }, 700);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1330,10 +1342,15 @@ function showPauseModal(){
 function closePauseModal(){
   document.getElementById('pauseModal').classList.remove('open');
   _consecutiveTimeouts = 0; // reset — user is back
-  // Restart timer on current unanswered pair
+
+  // Find first unanswered and scroll to it — no timer until they answer
   for(let i=0;i<170;i++){
     if(responses[i]===undefined){
-      setTimeout(()=>startTimer(i),300);
+      setTimeout(()=>{
+        const target = document.getElementById(`pair-${i}`);
+        if(target) target.scrollIntoView({behavior:'smooth', block:'center'});
+        // Timer will start naturally when they answer this pair
+      }, 300);
       break;
     }
   }
