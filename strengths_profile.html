@@ -1715,38 +1715,89 @@ function setMode(mode){
 // SAVE TO DASHBOARD
 // ═══════════════════════════════════════════════════════
 async function saveToDashboard(){
-  const btn=document.getElementById('saveBtn');const msg=document.getElementById('saveMsg');
-  btn.innerHTML='<span>⏳ Sine-save... / Saving...</span>';btn.disabled=true;
+  const btn=document.getElementById('saveBtn');
+  const msg=document.getElementById('saveMsg');
+
+  // ── Guard 1: must have run calculate first ──────────────
+  if(!_sortedThemes || _sortedThemes.length === 0){
+    msg.style.cssText='display:block;background:#fdecea;border:1px solid #f09090;border-radius:8px;padding:.75rem 1rem;font-size:13px;color:#7a2020;text-align:center;';
+    msg.textContent = _lang==='tl'
+      ? '⚠️ I-calculate muna ang iyong mga resulta bago i-save.'
+      : '⚠️ Please calculate your results first before saving.';
+    return;
+  }
+
+  // ── Guard 2: must have a name ───────────────────────────
   const name=document.getElementById('pName').value.trim();
+  if(!name){
+    msg.style.cssText='display:block;background:#fdecea;border:1px solid #f09090;border-radius:8px;padding:.75rem 1rem;font-size:13px;color:#7a2020;text-align:center;';
+    msg.textContent = _lang==='tl' ? '⚠️ Pakisulat ang iyong pangalan.' : '⚠️ Please enter your name.';
+    document.getElementById('pName').focus();
+    return;
+  }
+
+  btn.innerHTML='<span>⏳ '+(_lang==='tl'?'Sine-save...':'Saving...')+'</span>';
+  btn.disabled=true;
+  msg.style.display='none';
+
   const memberId=_memberId||document.getElementById('selectedMemberId').value||null;
   const top5=_sortedThemes.slice(0,5);
   const scoresData=Object.fromEntries(Object.entries(_scores).map(([k,v])=>[k,v]));
-  const top5Names=top5.map(t=>THEMES[t].name);
-  const domains=[...new Set(top5.map(t=>THEMES[t].domain))];
-  try{
-    const _db=getDB();if(!_db)throw new Error('Database not initialized — check Supabase key');
-    const {error}=await _db.from('member_profiles').insert({
-      member_id:memberId||null,member_name:name,
-      lc_group:document.getElementById('pGroup').value||null,
-      profile_type:'strengths',results:scoresData,
-      top_result:top5Names[0]||null,second_result:top5Names[1]||null,third_result:top5Names[2]||null,
-      summary:top5Names.slice(0,3).join(', '),date_taken:new Date().toISOString().split('T')[0]
-    });
-    if(error)throw error;
-    if(memberId){
-      await _db.from('members').update({
-        strengths_top5:top5Names,strengths_domain:domains[0]||null,
-        updated_at:new Date().toISOString()
-      }).eq('id',memberId);
-    }
-    btn.style.display='none';msg.style.display='block';
-    msg.innerHTML=`${_lang==='tl'?'✅ Na-save!':'✅ Saved!'} <strong>${name}</strong> · Top 3: ${top5Names.slice(0,3).join(', ')}${memberId?' · Dashboard updated.':' · Hindi naka-link sa member record.'}`;
-    localStorage.removeItem(SAVE_KEY);
-  }catch(e){
-    btn.innerHTML='<span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span><span class="en-text">💾 Save to MULTIPLY Dashboard</span>';btn.disabled=false;
-    msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';
-    msg.textContent='❌ Error: '+e.message;
+  const top5Names=top5.map(t=>(THEMES[t]||{}).name||t);
+  const domains=[...new Set(top5.map(t=>(THEMES[t]||{}).domain||''))];
+
+  // ── Guard 3: DB init check ──────────────────────────────
+  const _db=getDB();
+  if(!_db){
+    _showSaveError(btn, msg, 'Database not initialized — check Supabase connection.');
+    return;
   }
+
+  try{
+    // ── Step 1: Save to member_profiles ─────────────────────
+    const {error}=await _db.from('member_profiles').insert({
+      member_id:memberId||null,
+      member_name:name,
+      lc_group:document.getElementById('pGroup')?.value||null,
+      profile_type:'strengths',
+      results:scoresData,
+      top_result:top5Names[0]||null,
+      second_result:top5Names[1]||null,
+      third_result:top5Names[2]||null,
+      summary:top5Names.slice(0,3).join(', '),
+      date_taken:new Date().toISOString().split('T')[0]
+    });
+    if(error) throw error;
+
+    // ── Step 2: Update members table (non-fatal if fails) ───
+    let memberUpdated = false;
+    if(memberId){
+      try{
+        await _db.from('members').update({
+          updated_at:new Date().toISOString()
+        }).eq('id',memberId);
+        memberUpdated = true;
+      }catch(memberErr){
+        console.warn('members update failed (non-fatal):', memberErr.message);
+      }
+    }
+
+    // ── Success ──────────────────────────────────────────────
+    btn.style.display='none';
+    msg.style.cssText='display:block;background:#d4edda;border:1px solid #a0d8b0;border-radius:8px;padding:.75rem 1rem;font-size:13px;color:#1a5a30;text-align:center;';
+    msg.innerHTML=`${_lang==='tl'?'✅ Na-save!':'✅ Saved!'} <strong>${name}</strong> · Top 3: ${top5Names.slice(0,3).join(', ')}${memberUpdated?' · Dashboard updated.':memberId?' · Profile saved (dashboard link optional).':' · Saved to database.'}`;
+    localStorage.removeItem(SAVE_KEY);
+
+  }catch(e){
+    _showSaveError(btn, msg, e.message);
+  }
+}
+
+function _showSaveError(btn, msg, errMsg){
+  btn.innerHTML='<span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span><span class="en-text">💾 Save to MULTIPLY Dashboard</span>';
+  btn.disabled=false;
+  msg.style.cssText='display:block;background:#fdecea;border:1px solid #f09090;border-radius:8px;padding:.75rem 1rem;font-size:13px;color:#7a2020;text-align:center;';
+  msg.textContent='❌ Error: '+errMsg;
 }
 
 // ═══════════════════════════════════════════════════════
