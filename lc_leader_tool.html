@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LC Leader Tool · MULTIPLY</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0f0f13;--surface:#18181f;--surface2:#22222c;--surface3:#2a2a38;
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.14);
+  --gold:#e8b84b;--gold2:#f5d78e;--green:#34d399;--red:#f87171;
+  --blue:#60a5fa;--purple:#a78bfa;--orange:#fb923c;
+  --text:#f0f0f8;--muted:#8888a8;--lighter:#5a5a78;
+  --z1:#34d399;--z2:#60a5fa;--z3:#fb923c;--z4:#f87171;
+  --r:14px;--r-sm:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior:none;}
+
+/* ── SCREENS ── */
+.screen{display:none;min-height:100vh;}
+.screen.active{display:flex;flex-direction:column;}
+
+/* ── SPLASH / LOGIN ── */
+#screenLogin{background:linear-gradient(160deg,#0f0f13 0%,#1a1228 50%,#0f1318 100%);
+  align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center;}
+.logo-wrap{margin-bottom:2rem;}
+.logo-m{font-family:'Syne',serif;font-size:64px;font-weight:800;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;}
+.logo-sub{font-size:10px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--muted);margin-top:4px;}
+.login-title{font-family:'Syne',serif;font-size:22px;font-weight:700;margin-bottom:.35rem;}
+.login-desc{font-size:13px;color:var(--muted);margin-bottom:2rem;line-height:1.65;}
+.search-wrap{width:100%;max-width:360px;position:relative;}
+.search-input{width:100%;background:var(--surface2);border:1.5px solid var(--border2);
+  border-radius:var(--r);padding:14px 16px;color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:15px;outline:none;
+  transition:border-color .15s;}
+.search-input:focus{border-color:var(--gold);}
+.search-input::placeholder{color:var(--lighter);}
+.search-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;
+  background:var(--surface2);border:1.5px solid var(--border2);border-radius:var(--r);
+  box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:100;display:none;
+  max-height:260px;overflow-y:auto;}
+.search-item{padding:12px 16px;cursor:pointer;transition:background .1s;
+  display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);}
+.search-item:last-child{border-bottom:none;}
+.search-item:hover,.search-item:active{background:var(--surface3);}
+.si-av{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.si-name{font-size:14px;font-weight:600;}
+.si-meta{font-size:11px;color:var(--muted);margin-top:1px;}
+.login-note{font-size:11px;color:var(--lighter);margin-top:1.5rem;max-width:300px;}
+
+/* ── TOP BAR ── */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:12px 16px;display:flex;align-items:center;gap:12px;
+  position:sticky;top:0;z-index:50;}
+.tb-back{width:34px;height:34px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:16px;flex-shrink:0;color:var(--muted);}
+.tb-title{font-family:'Syne',serif;font-size:16px;font-weight:700;flex:1;}
+.tb-action{font-size:11px;font-weight:700;color:var(--gold);cursor:pointer;
+  padding:6px 10px;background:rgba(232,184,75,.1);border-radius:20px;
+  border:1px solid rgba(232,184,75,.2);white-space:nowrap;}
+
+/* ── LEADER HOME ── */
+#screenHome{background:var(--bg);}
+.home-header{background:linear-gradient(135deg,var(--surface) 0%,var(--surface2) 100%);
+  padding:20px 16px 16px;border-bottom:1px solid var(--border);}
+.leader-card{display:flex;align-items:center;gap:12px;}
+.leader-av{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--gold),#b8860b);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Syne',serif;font-size:18px;font-weight:800;color:#0f0f13;flex-shrink:0;}
+.leader-name{font-family:'Syne',serif;font-size:17px;font-weight:700;}
+.leader-role{font-size:11px;color:var(--muted);margin-top:2px;}
+.leader-lc{font-size:11px;color:var(--gold);margin-top:1px;font-weight:600;}
+
+.stats-row{display:flex;gap:8px;padding:14px 16px 0;overflow-x:auto;scrollbar-width:none;}
+.stats-row::-webkit-scrollbar{display:none;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:12px 14px;flex-shrink:0;min-width:100px;text-align:center;}
+.stat-num{font-family:'Syne',serif;font-size:24px;font-weight:800;}
+.stat-label{font-size:10px;color:var(--muted);margin-top:2px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+
+.section-head{padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between;}
+.section-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+.section-action{font-size:12px;color:var(--gold);font-weight:600;cursor:pointer;}
+
+/* Quick actions */
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 16px;}
+.qa-btn{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 14px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:6px;}
+.qa-btn:active{transform:scale(.97);background:var(--surface2);}
+.qa-icon{font-size:22px;}
+.qa-label{font-size:13px;font-weight:700;color:var(--text);}
+.qa-desc{font-size:11px;color:var(--muted);}
+
+/* Alert strip */
+.alert-strip{margin:0 16px 14px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);
+  border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:10px;}
+.alert-strip.green{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.25);}
+.alert-strip.amber{background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.25);}
+.as-icon{font-size:18px;flex-shrink:0;}
+.as-text{font-size:12.5px;color:var(--text);line-height:1.55;}
+.as-text strong{color:var(--red);}
+.alert-strip.green .as-text strong{color:var(--green);}
+.alert-strip.amber .as-text strong{color:var(--orange);}
+
+/* ── MEMBER LIST ── */
+#screenMembers{background:var(--bg);}
+.filter-tabs{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;
+  background:var(--surface);border-bottom:1px solid var(--border);}
+.filter-tabs::-webkit-scrollbar{display:none;}
+.ftab{padding:6px 14px;border-radius:20px;border:1px solid var(--border);
+  background:transparent;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;
+  color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s;white-space:nowrap;}
+.ftab.active{background:var(--gold);border-color:var(--gold);color:#0f0f13;}
+
+.member-search{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);}
+.member-search input{width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:9px 12px;color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
+.member-search input::placeholder{color:var(--lighter);}
+
+.member-list{flex:1;overflow-y:auto;padding:8px 16px 100px;}
+.member-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color .15s;
+  position:relative;}
+.member-card:active{background:var(--surface2);}
+.mc-left-bar{position:absolute;left:0;top:0;bottom:0;width:3px;}
+.z1-bar{background:var(--z1);} .z2-bar{background:var(--z2);}
+.z3-bar{background:var(--z3);} .z4-bar{background:var(--z4);}
+.mc-body{padding:12px 12px 10px 16px;display:flex;align-items:center;gap:11px;}
+.mc-av{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;
+  justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
+.mc-info{flex:1;min-width:0;}
+.mc-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mc-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.mc-right{text-align:right;flex-shrink:0;}
+.zone-badge{font-size:9px;font-weight:800;padding:3px 8px;border-radius:12px;letter-spacing:.05em;}
+.z1-badge{background:rgba(52,211,153,.15);color:var(--z1);}
+.z2-badge{background:rgba(96,165,250,.15);color:var(--z2);}
+.z3-badge{background:rgba(251,146,60,.15);color:var(--z3);}
+.z4-badge{background:rgba(248,113,113,.15);color:var(--z4);}
+.mc-tags{padding:0 12px 10px 16px;display:flex;gap:5px;flex-wrap:wrap;}
+.mc-tag{font-size:9.5px;padding:2px 7px;border-radius:6px;
+  background:var(--surface2);color:var(--muted);font-weight:600;}
+.mc-tag.pending{background:rgba(248,113,113,.12);color:var(--red);}
+.mc-tag.done{background:rgba(52,211,153,.12);color:var(--green);}
+
+/* ── ATTENDANCE ── */
+#screenAttendance{background:var(--bg);}
+.att-meta{padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);}
+.att-date-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.att-type-pill{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);
+  font-size:12px;font-weight:700;cursor:pointer;color:var(--muted);transition:all .15s;}
+.att-type-pill.selected{border-color:var(--gold);color:var(--gold);background:rgba(232,184,75,.1);}
+.att-date-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:7px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
+.att-list{flex:1;overflow-y:auto;padding:8px 16px 100px;}
+.att-member{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:8px;display:flex;align-items:center;gap:12px;padding:12px 14px;
+  cursor:pointer;transition:all .15s;position:relative;overflow:hidden;}
+.att-member.present{border-color:var(--green);background:rgba(52,211,153,.06);}
+.att-member.absent{opacity:.55;}
+.att-member:active{transform:scale(.98);}
+.att-check{width:28px;height:28px;border-radius:8px;border:2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  flex-shrink:0;transition:all .15s;}
+.att-member.present .att-check{background:var(--green);border-color:var(--green);color:#0f0f13;}
+.att-av{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.att-name{font-size:14px;font-weight:600;flex:1;}
+.att-streak{font-size:10px;color:var(--muted);}
+.att-save-bar{position:fixed;bottom:0;left:0;right:0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--border);
+  display:flex;gap:10px;z-index:40;}
+.att-count{font-size:13px;color:var(--muted);display:flex;align-items:center;}
+.att-save-btn{flex:1;padding:13px;background:var(--gold);border:none;border-radius:var(--r);
+  font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;color:#0f0f13;cursor:pointer;}
+.att-save-btn:active{filter:brightness(.9);}
+.select-all-btn{padding:13px 16px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:13px;
+  font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;}
+
+/* ── MEMBER DETAIL ── */
+#screenDetail{background:var(--bg);}
+.detail-hero{background:var(--surface);border-bottom:1px solid var(--border);padding:16px;}
+.dh-top{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+.dh-av{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;
+  justify-content:center;font-family:'Syne',serif;font-size:20px;font-weight:800;flex-shrink:0;}
+.dh-name{font-family:'Syne',serif;font-size:18px;font-weight:700;}
+.dh-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+.dh-zone-bar{display:flex;align-items:center;gap:8px;}
+.zone-dot{width:10px;height:10px;border-radius:50%;}
+.zone-label{font-size:13px;font-weight:700;}
+.zone-desc{font-size:12px;color:var(--muted);}
+
+.detail-sections{flex:1;overflow-y:auto;padding:12px 16px 120px;}
+.ds-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  margin-bottom:10px;overflow:hidden;}
+.ds-header{padding:12px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;
+  background:var(--surface);}
+.ds-header:active{background:var(--surface2);}
+.ds-icon{font-size:16px;}
+.ds-title{font-size:13px;font-weight:700;flex:1;}
+.ds-status{font-size:11px;font-weight:700;}
+.ds-chevron{font-size:11px;color:var(--lighter);transition:transform .2s;}
+.ds-card.open .ds-chevron{transform:rotate(180deg);}
+.ds-body{display:none;padding:12px 14px;border-top:1px solid var(--border);background:var(--surface2);}
+.ds-card.open .ds-body{display:block;}
+
+/* Assessment rows */
+.assess-row{display:flex;align-items:center;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--border);}
+.assess-row:last-child{border-bottom:none;}
+.ar-icon{font-size:16px;flex-shrink:0;}
+.ar-info{flex:1;}
+.ar-name{font-size:13px;font-weight:600;}
+.ar-result{font-size:11px;color:var(--muted);}
+.ar-action{padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;
+  cursor:pointer;border:none;font-family:'DM Sans',sans-serif;}
+.ar-send{background:rgba(96,165,250,.15);color:var(--blue);border:1px solid rgba(96,165,250,.3);}
+.ar-done{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.2);}
+
+/* Attendance history */
+.att-hist-row{display:flex;gap:4px;margin-bottom:8px;}
+.att-dot{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;font-size:9px;font-weight:700;}
+.att-dot.p{background:rgba(52,211,153,.2);color:var(--green);}
+.att-dot.a{background:var(--surface3);color:var(--lighter);}
+.att-dot.u{background:var(--surface3);color:var(--lighter);opacity:.4;}
+
+/* Next step box */
+.next-step-box{background:var(--surface3);border-radius:var(--r-sm);padding:12px 14px;margin-top:10px;}
+.nsb-label{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;}
+.nsb-text{font-size:13px;font-weight:600;line-height:1.6;}
+.nsb-action{margin-top:8px;padding:8px 14px;background:var(--gold);border:none;
+  border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;
+  color:#0f0f13;cursor:pointer;width:100%;}
+
+/* Notes */
+.note-input{width:100%;background:var(--surface3);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:10px 12px;color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:13px;resize:none;outline:none;
+  min-height:80px;}
+.note-save{margin-top:6px;padding:8px 14px;background:var(--surface3);
+  border:1px solid var(--border);border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;
+  font-size:12px;font-weight:700;color:var(--text);cursor:pointer;}
+
+/* Detail action buttons */
+.detail-actions{position:fixed;bottom:0;left:0;right:0;
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--border);
+  display:flex;gap:8px;z-index:40;}
+.da-btn{flex:1;padding:12px;border:none;border-radius:var(--r);
+  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;
+  transition:filter .15s;}
+.da-btn:active{filter:brightness(.85);}
+.da-primary{background:var(--gold);color:#0f0f13;}
+.da-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+
+/* ── REPORTS ── */
+#screenReports{background:var(--bg);}
+.report-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  margin:10px 16px 0;padding:14px;}
+.rc-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;}
+.zone-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.zbr-label{font-size:12px;font-weight:600;width:60px;flex-shrink:0;}
+.zbr-track{flex:1;background:var(--surface2);border-radius:4px;height:18px;overflow:hidden;}
+.zbr-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;
+  font-size:10px;font-weight:800;color:rgba(255,255,255,.9);transition:width .6s ease;}
+.zbr-count{font-size:12px;font-weight:700;width:20px;text-align:right;flex-shrink:0;}
+
+.absent-list{margin-top:10px;}
+.absent-item{display:flex;align-items:center;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--border);}
+.absent-item:last-child{border-bottom:none;}
+.ai-av{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.ai-name{font-size:13px;font-weight:600;flex:1;}
+.ai-streak{font-size:11px;color:var(--red);}
+
+.pending-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;}
+.pg-card{background:var(--surface2);border-radius:var(--r-sm);padding:10px 12px;
+  text-align:center;}
+.pg-num{font-family:'Syne',serif;font-size:22px;font-weight:800;}
+.pg-label{font-size:10px;color:var(--muted);margin-top:2px;}
+
+/* ── SEND LINKS ── */
+#screenSendLinks{background:var(--bg);}
+.sl-member{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  margin:8px 16px 0;padding:12px 14px;}
+.slm-name{font-size:14px;font-weight:700;margin-bottom:10px;}
+.slm-links{display:flex;flex-direction:column;gap:6px;}
+.slm-link-row{display:flex;align-items:center;gap:8px;}
+.slr-name{font-size:12px;flex:1;color:var(--text);}
+.slr-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;}
+.slr-done{background:rgba(52,211,153,.12);color:var(--green);}
+.slr-pending{background:rgba(248,113,113,.12);color:var(--red);}
+.slr-send{padding:5px 12px;background:rgba(96,165,250,.15);color:var(--blue);
+  border:1px solid rgba(96,165,250,.3);border-radius:20px;font-family:'DM Sans',sans-serif;
+  font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.slr-send:active{background:rgba(96,165,250,.3);}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(10px);
+  background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);
+  padding:10px 18px;font-size:13px;font-weight:600;color:var(--text);
+  z-index:300;opacity:0;transition:all .25s;white-space:nowrap;
+  box-shadow:0 4px 20px rgba(0,0,0,.4);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:rgba(52,211,153,.4);color:var(--green);}
+.toast.error{border-color:rgba(248,113,113,.4);color:var(--red);}
+
+/* ── LOADING ── */
+.loading{display:flex;align-items:center;justify-content:center;
+  padding:48px 16px;flex-direction:column;gap:12px;}
+.spinner{width:32px;height:32px;border:3px solid var(--border2);
+  border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:13px;color:var(--muted);}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:48px 20px;}
+.empty-icon{font-size:36px;margin-bottom:10px;}
+.empty-title{font-size:16px;font-weight:700;margin-bottom:6px;}
+.empty-sub{font-size:13px;color:var(--muted);}
+
+/* utility */
+.sep{height:1px;background:var(--border);margin:0 16px;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCREEN: LOGIN ══════════════════ -->
+<div class="screen active" id="screenLogin">
+  <div class="logo-wrap">
+    <div class="logo-m">M</div>
+    <div class="logo-sub">MULTIPLY · ROSEHILL</div>
+  </div>
+  <div class="login-title">LC Leader Access</div>
+  <div class="login-desc">Search your name to access your group's dashboard. Leaders at Level 2 and above can view and manage their mentees.</div>
+  <div class="search-wrap">
+    <input class="search-input" id="loginSearch" type="text" placeholder="Type your name..."
+           autocomplete="off" oninput="searchLeader(this.value)">
+    <div class="search-dropdown" id="loginDropdown"></div>
+  </div>
+  <div class="login-note">💡 Your access level is determined by your pipeline level in the church database.</div>
+</div>
+
+<!-- ══════════════════ SCREEN: HOME ══════════════════ -->
+<div class="screen" id="screenHome">
+  <div class="home-header">
+    <div class="leader-card">
+      <div class="leader-av" id="homeAv">?</div>
+      <div>
+        <div class="leader-name" id="homeName">Leader Name</div>
+        <div class="leader-role" id="homeRole">LC Leader</div>
+        <div class="leader-lc" id="homeLc"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Members</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--z1)" id="statZ1">—</div><div class="stat-label">Zone 1 ✅</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--z3)" id="statZ3">—</div><div class="stat-label">Zone 3 🟠</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--z4)" id="statZ4">—</div><div class="stat-label">Zone 4 🔴</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--muted)" id="statPending">—</div><div class="stat-label">Pending Diag</div></div>
+  </div>
+
+  <div id="alertsWrap"></div>
+
+  <div class="section-head">
+    <div class="section-title">Quick Actions</div>
+  </div>
+  <div class="quick-actions">
+    <div class="qa-btn" onclick="showScreen('screenMembers')">
+      <div class="qa-icon">👥</div>
+      <div class="qa-label">My Group</div>
+      <div class="qa-desc">View all members & zones</div>
+    </div>
+    <div class="qa-btn" onclick="showAttendance()">
+      <div class="qa-icon">📋</div>
+      <div class="qa-label">Log Attendance</div>
+      <div class="qa-desc">Mark today's meeting</div>
+    </div>
+    <div class="qa-btn" onclick="showSendLinks()">
+      <div class="qa-icon">🔗</div>
+      <div class="qa-label">Send Links</div>
+      <div class="qa-desc">Share assessment links</div>
+    </div>
+    <div class="qa-btn" onclick="showScreen('screenReports')">
+      <div class="qa-icon">📊</div>
+      <div class="qa-label">Reports</div>
+      <div class="qa-desc">Attendance & zone summary</div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Needs Attention</div>
+    <div class="section-action" onclick="showScreen('screenMembers');setFilter('z4')">See all</div>
+  </div>
+  <div id="needsAttentionList" style="padding:0 16px 24px"></div>
+</div>
+
+<!-- ══════════════════ SCREEN: MEMBERS ══════════════════ -->
+<div class="screen" id="screenMembers">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">My Group</div>
+    <div class="tb-action" onclick="showAttendance()">+ Attendance</div>
+  </div>
+  <div class="filter-tabs">
+    <div class="ftab active" onclick="setFilter('all',this)">All</div>
+    <div class="ftab" onclick="setFilter('z1',this)">Zone 1 ✅</div>
+    <div class="ftab" onclick="setFilter('z2',this)">Zone 2 🔵</div>
+    <div class="ftab" onclick="setFilter('z3',this)">Zone 3 🟠</div>
+    <div class="ftab" onclick="setFilter('z4',this)">Zone 4 🔴</div>
+    <div class="ftab" onclick="setFilter('no_diag',this)">No Diag</div>
+  </div>
+  <div class="member-search">
+    <input type="text" placeholder="Search member..." oninput="filterMembers(this.value)" id="memberSearchInput">
+  </div>
+  <div class="member-list" id="memberList">
+    <div class="loading"><div class="spinner"></div><div class="loading-text">Loading members...</div></div>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: ATTENDANCE ══════════════════ -->
+<div class="screen" id="screenAttendance">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title" id="attTitle">Log Attendance</div>
+  </div>
+  <div class="att-meta">
+    <div class="att-date-row" style="margin-bottom:8px">
+      <input type="date" class="att-date-input" id="attDate">
+      <div style="font-size:12px;color:var(--muted);padding:4px 0">←  Date of meeting</div>
+    </div>
+    <div class="att-date-row" id="attTypeRow">
+      <div class="att-type-pill selected" data-type="LC Meeting" onclick="selectAttType(this)">LC Meeting</div>
+      <div class="att-type-pill" data-type="Sunday Service" onclick="selectAttType(this)">Sunday Service</div>
+      <div class="att-type-pill" data-type="Prayer Meeting" onclick="selectAttType(this)">Prayer Meeting</div>
+      <div class="att-type-pill" data-type="Team Building" onclick="selectAttType(this)">Team Building</div>
+      <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
+      <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
+    </div>
+  </div>
+  <div class="att-list" id="attList"></div>
+  <div class="att-save-bar">
+    <div class="att-count" id="attCount">0 present</div>
+    <button class="select-all-btn" onclick="toggleSelectAll()">Select All</button>
+    <button class="att-save-btn" onclick="saveAttendance()">💾 Save</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: MEMBER DETAIL ══════════════════ -->
+<div class="screen" id="screenDetail">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenMembers')">←</div>
+    <div class="tb-title" id="detailTitle">Member</div>
+    <div class="tb-action" onclick="openAssessmentLink()">Send Link</div>
+  </div>
+  <div class="detail-hero">
+    <div class="dh-top">
+      <div class="dh-av" id="detailAv">?</div>
+      <div>
+        <div class="dh-name" id="detailName"></div>
+        <div class="dh-meta" id="detailMeta"></div>
+      </div>
+    </div>
+    <div class="dh-zone-bar">
+      <div class="zone-dot" id="detailZoneDot"></div>
+      <div class="zone-label" id="detailZoneLabel"></div>
+      <div class="zone-desc" id="detailZoneDesc"></div>
+    </div>
+  </div>
+  <div class="detail-sections" id="detailSections"></div>
+  <div class="detail-actions">
+    <button class="da-btn da-secondary" onclick="logQuickAttendance()">✓ Mark Present</button>
+    <button class="da-btn da-primary" onclick="openSalvationDiag()">📋 Salvation Diag</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: REPORTS ══════════════════ -->
+<div class="screen" id="screenReports">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">Reports</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0 0 40px">
+    <div id="reportsContent" style="padding-bottom:24px">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: SEND LINKS ══════════════════ -->
+<div class="screen" id="screenSendLinks">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">Send Assessment Links</div>
+  </div>
+  <div style="padding:12px 16px;font-size:12.5px;color:var(--muted);line-height:1.6;
+    background:var(--surface);border-bottom:1px solid var(--border)">
+    Tap <strong style="color:var(--blue)">Send</strong> to open WhatsApp with a pre-filled message and link for each pending assessment.
+  </div>
+  <div style="flex:1;overflow-y:auto;padding-bottom:40px" id="sendLinksContent">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════════════════════
+const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const BASE_URL = 'https://gejable1.github.io/multiply/';
+const db = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let currentLeader = null;
+let myMembers = [];
+let attendanceState = {}; // memberId -> present boolean
+let currentFilter = 'all';
+let currentMember = null;
+let selectedAttType = 'LC Meeting';
+const LEVEL_NAMES = {0:'Pre-Pipeline',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Exec. Leader'};
+const ZONE_DATA = {
+  1:{label:'Zone 1 ✅',desc:'Healthy & Multiplying',color:'var(--z1)',bg:'rgba(52,211,153,.15)'},
+  2:{label:'Zone 2 🔵',desc:'Stable & Growing',color:'var(--z2)',bg:'rgba(96,165,250,.15)'},
+  3:{label:'Zone 3 🟠',desc:'Needs Intervention',color:'var(--z3)',bg:'rgba(251,146,60,.15)'},
+  4:{label:'Zone 4 🔴',desc:'Critical — Act Now',color:'var(--z4)',bg:'rgba(248,113,113,.15)'},
+};
+const ASSESSMENTS = [
+  {key:'salvation',    name:'Salvation Assurance', file:'salvation_assurance_diagnostic.html', field:'diagnostic_zone', icon:'✝️'},
+  {key:'gifts',        name:'Spiritual Gifts',      file:'spiritual_gifts_diagnostic.html',     field:'spiritual_gifts', icon:'🎁'},
+  {key:'disc',         name:'DISC Profile',         file:'disc_profile.html',                   field:'disc_primary',    icon:'🧭'},
+  {key:'strengths',    name:'Strengths Profile',    file:'strengths_profile.html',              field:'strengths_top5',  icon:'💪'},
+  {key:'love',         name:'Love Language',        file:'love_language.html',                  field:'love_language_primary', icon:'❤️'},
+  {key:'enneagram',    name:'Enneagram',            file:'enneagram_profile.html',              field:'enneagram_type',  icon:'⭕'},
+];
+const NEXT_STEPS = {
+  4:'Prayerfully reach out this week. Offer to meet one-on-one. Start with the Salvation Diagnostic if not done.',
+  3:'Follow up from last meeting. Invite to next LC. Encourage daily devotional.',
+  2:'Continue current track. Look for an area of ministry to involve them. Schedule discipleship check-in.',
+  1:'Identify who they can disciple next. Begin BTLI or next training track.',
+};
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='screenMembers') renderMemberList();
+  if(id==='screenReports') renderReports();
+  if(id==='screenSendLinks') renderSendLinks();
+  window.scrollTo(0,0);
+}
+
+// ═══════════════════════════════════════════════════════
+// LOGIN — LEADER SEARCH
+// ═══════════════════════════════════════════════════════
+async function searchLeader(q){
+  const dd = document.getElementById('loginDropdown');
+  if(q.length < 2){ dd.style.display='none'; return; }
+  const {data} = await db.from('members').select('id,name,pipeline_level,lc_group,discipler_name')
+    .ilike('name','%'+q+'%').gte('pipeline_level',2).limit(8);
+  if(!data?.length){ dd.innerHTML='<div class="search-item"><div style="color:var(--muted);font-size:13px">No leaders found matching "'+q+'"</div></div>'; dd.style.display='block'; return; }
+  dd.innerHTML = data.map(m=>`
+    <div class="search-item" onclick="selectLeader(${JSON.stringify(m).replace(/"/g,'&quot;')})">
+      <div class="si-av" style="background:${avColor(m.pipeline_level)};color:#0f0f13">${initials(m.name)}</div>
+      <div>
+        <div class="si-name">${m.name}</div>
+        <div class="si-meta">${LEVEL_NAMES[m.pipeline_level]||'Leader'} · ${m.lc_group||'No group'}</div>
+      </div>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+async function selectLeader(m){
+  document.getElementById('loginDropdown').style.display='none';
+  currentLeader = m;
+  // Load their mentees
+  const {data} = await db.from('members').select('*')
+    .or(`discipler_name.ilike.%${m.name}%,discipler.ilike.%${m.name}%,discipler_id.eq.${m.id}`)
+    .order('name');
+  myMembers = data || [];
+  // Also try lc_group match as fallback
+  if(!myMembers.length && m.lc_group){
+    const {data:d2} = await db.from('members').select('*').ilike('lc_group','%'+m.lc_group+'%').order('name');
+    myMembers = (d2||[]).filter(x=>x.id !== m.id);
+  }
+  renderHome();
+  showScreen('screenHome');
+}
+
+// ═══════════════════════════════════════════════════════
+// HOME
+// ═══════════════════════════════════════════════════════
+function renderHome(){
+  const m = currentLeader;
+  document.getElementById('homeAv').textContent = initials(m.name);
+  document.getElementById('homeAv').style.background = avColor(m.pipeline_level);
+  document.getElementById('homeName').textContent = m.name;
+  document.getElementById('homeRole').textContent = LEVEL_NAMES[m.pipeline_level]||'Leader';
+  document.getElementById('homeLc').textContent = m.lc_group ? '📍 '+m.lc_group : '';
+
+  // Stats
+  const total = myMembers.length;
+  const z1 = myMembers.filter(x=>x.diagnostic_zone===1).length;
+  const z3 = myMembers.filter(x=>x.diagnostic_zone===3).length;
+  const z4 = myMembers.filter(x=>x.diagnostic_zone===4).length;
+  const noDiag = myMembers.filter(x=>!x.diagnostic_zone).length;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statZ1').textContent = z1;
+  document.getElementById('statZ3').textContent = z3;
+  document.getElementById('statZ4').textContent = z4;
+  document.getElementById('statPending').textContent = noDiag;
+
+  // Alerts
+  const alerts = document.getElementById('alertsWrap');
+  alerts.innerHTML = '';
+  if(z4>0) alerts.innerHTML += `<div class="alert-strip" style="margin:12px 16px 0">
+    <div class="as-icon">🔴</div>
+    <div class="as-text"><strong>${z4} member${z4>1?'s':''} in Zone 4</strong> need immediate pastoral attention. Tap "My Group" → Zone 4.</div>
+  </div>`;
+  if(noDiag>0) alerts.innerHTML += `<div class="alert-strip amber" style="margin:8px 16px 0">
+    <div class="as-icon">⚠️</div>
+    <div class="as-text"><strong>${noDiag} member${noDiag>1?'s':''}</strong> haven't taken the Salvation Diagnostic yet. Send them the link.</div>
+  </div>`;
+  if(z4===0&&noDiag===0) alerts.innerHTML = `<div class="alert-strip green" style="margin:12px 16px 0">
+    <div class="as-icon">✅</div>
+    <div class="as-text"><strong>Great work!</strong> No critical members and everyone has a salvation diagnostic on file.</div>
+  </div>`;
+
+  // Needs attention — Zone 4 + Zone 3
+  const critical = myMembers.filter(x=>x.diagnostic_zone>=3).sort((a,b)=>(b.diagnostic_zone||0)-(a.diagnostic_zone||0)).slice(0,4);
+  const nal = document.getElementById('needsAttentionList');
+  if(!critical.length){ nal.innerHTML='<div style="text-align:center;padding:16px;font-size:13px;color:var(--muted)">No critical members right now 🎉</div>'; return; }
+  nal.innerHTML = critical.map(mem=>{
+    const z = mem.diagnostic_zone||0;
+    const zd = ZONE_DATA[z]||{};
+    return `<div class="member-card" onclick="openMember(${mem.id})" style="margin-bottom:8px">
+      <div class="mc-left-bar z${z}-bar"></div>
+      <div class="mc-body">
+        <div class="mc-av" style="background:${zd.bg||'var(--surface2)'};color:${zd.color||'var(--muted)'}">${initials(mem.name)}</div>
+        <div class="mc-info">
+          <div class="mc-name">${mem.name}</div>
+          <div class="mc-sub">${mem.contact||'No contact'}</div>
+        </div>
+        <div><span class="zone-badge z${z}-badge">${zd.label||'Zone '+z}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// MEMBER LIST
+// ═══════════════════════════════════════════════════════
+let filterStr = '';
+function setFilter(f, el){
+  currentFilter = f;
+  if(el){ document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); }
+  renderMemberList();
+}
+
+function filterMembers(q){ filterStr = q; renderMemberList(); }
+
+function renderMemberList(){
+  let members = [...myMembers];
+  if(filterStr) members = members.filter(m=>m.name.toLowerCase().includes(filterStr.toLowerCase()));
+  if(currentFilter==='z1') members = members.filter(m=>m.diagnostic_zone===1);
+  else if(currentFilter==='z2') members = members.filter(m=>m.diagnostic_zone===2);
+  else if(currentFilter==='z3') members = members.filter(m=>m.diagnostic_zone===3);
+  else if(currentFilter==='z4') members = members.filter(m=>m.diagnostic_zone===4);
+  else if(currentFilter==='no_diag') members = members.filter(m=>!m.diagnostic_zone);
+  const list = document.getElementById('memberList');
+  if(!members.length){ list.innerHTML='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No members found</div><div class="empty-sub">Try a different filter</div></div>'; return; }
+  list.innerHTML = members.map(mem=>{
+    const z = mem.diagnostic_zone||0;
+    const zd = ZONE_DATA[z]||{color:'var(--muted)',bg:'var(--surface2)',label:'No Zone'};
+    const pendingAssess = ASSESSMENTS.filter(a=>!mem[a.field]).length;
+    const tags = [];
+    if(mem.spiritual_gifts) tags.push({text:'🎁 '+mem.spiritual_gifts.split(',')[0].trim(),cls:'done'});
+    if(mem.disc_primary) tags.push({text:'🧭 '+mem.disc_primary,cls:'done'});
+    if(pendingAssess>0) tags.push({text:pendingAssess+' assessment'+(pendingAssess>1?'s':'')+' pending',cls:'pending'});
+    return `<div class="member-card" onclick="openMember(${mem.id})">
+      <div class="mc-left-bar z${z}-bar"></div>
+      <div class="mc-body">
+        <div class="mc-av" style="background:${zd.bg};color:${zd.color}">${initials(mem.name)}</div>
+        <div class="mc-info">
+          <div class="mc-name">${mem.name}</div>
+          <div class="mc-sub">${mem.contact||''} ${mem.grace_stage?'· '+mem.grace_stage+'-Stage':''}</div>
+        </div>
+        <div><span class="zone-badge z${z||0}-badge">${zd.label}</span></div>
+      </div>
+      ${tags.length?`<div class="mc-tags">${tags.map(t=>`<span class="mc-tag ${t.cls}">${t.text}</span>`).join('')}</div>`:''}</div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// MEMBER DETAIL
+// ═══════════════════════════════════════════════════════
+function openMember(id){
+  const mem = myMembers.find(m=>m.id===id);
+  if(!mem) return;
+  currentMember = mem;
+  const z = mem.diagnostic_zone||0;
+  const zd = ZONE_DATA[z]||{label:'No Assessment',desc:'Salvation Diagnostic needed',color:'var(--muted)',bg:'var(--surface2)'};
+  // Header
+  document.getElementById('detailTitle').textContent = mem.name.split(' ')[0];
+  const av = document.getElementById('detailAv');
+  av.textContent = initials(mem.name);
+  av.style.background = zd.bg; av.style.color = zd.color;
+  document.getElementById('detailName').textContent = mem.name;
+  document.getElementById('detailMeta').textContent = [
+    LEVEL_NAMES[mem.pipeline_level]||'Pre-Pipeline',
+    mem.lc_group||'',
+    mem.contact||''
+  ].filter(Boolean).join(' · ');
+  document.getElementById('detailZoneDot').style.background = zd.color;
+  document.getElementById('detailZoneLabel').textContent = zd.label;
+  document.getElementById('detailZoneLabel').style.color = zd.color;
+  document.getElementById('detailZoneDesc').textContent = ' — '+zd.desc;
+  buildDetailSections(mem);
+  showScreen('screenDetail');
+}
+
+function buildDetailSections(mem){
+  const z = mem.diagnostic_zone||0;
+  const sections = document.getElementById('detailSections');
+  let html = '';
+
+  // Next Step
+  html += `<div class="ds-card open">
+    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+      <div class="ds-icon">🎯</div>
+      <div class="ds-title">Suggested Next Step</div>
+      <div class="ds-chevron">▼</div>
+    </div>
+    <div class="ds-body">
+      <div class="next-step-box">
+        <div class="nsb-label">Recommended Action</div>
+        <div class="nsb-text">${NEXT_STEPS[z]||NEXT_STEPS[4]}</div>
+        ${!mem.diagnostic_zone?`<button class="nsb-action" onclick="openSalvationDiag()">📋 Open Salvation Diagnostic</button>`:
+          z>=3?`<button class="nsb-action" onclick="openInterventionTracker()">🛤 Open Intervention Tracker</button>`:''}
+      </div>
+    </div>
+  </div>`;
+
+  // Assessments
+  const pendingCount = ASSESSMENTS.filter(a=>!mem[a.field]).length;
+  html += `<div class="ds-card open">
+    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+      <div class="ds-icon">📋</div>
+      <div class="ds-title">Assessments</div>
+      <div class="ds-status" style="color:${pendingCount?'var(--red)':'var(--green)'}">${pendingCount?pendingCount+' pending':'Complete ✓'}</div>
+      <div class="ds-chevron">▼</div>
+    </div>
+    <div class="ds-body">
+      ${ASSESSMENTS.map(a=>{
+        const done = !!mem[a.field];
+        const val = done ? (Array.isArray(mem[a.field])?mem[a.field].slice(0,2).join(', '):String(mem[a.field]).split(',')[0].trim()) : null;
+        return `<div class="assess-row">
+          <div class="ar-icon">${a.icon}</div>
+          <div class="ar-info">
+            <div class="ar-name">${a.name}</div>
+            ${done?`<div class="ar-result">${val}</div>`:'<div class="ar-result" style="color:var(--red)">Not taken</div>'}
+          </div>
+          <button class="ar-action ${done?'ar-done':'ar-send'}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
+            ${done?'Retake':'Send'}
+          </button>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  // Profile
+  html += `<div class="ds-card">
+    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+      <div class="ds-icon">👤</div>
+      <div class="ds-title">Profile</div>
+      <div class="ds-chevron">▼</div>
+    </div>
+    <div class="ds-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${[
+        ['GRACE Stage', mem.grace_stage?mem.grace_stage+' — '+({'G':'Gather','R':'Receive','A':'Anchor','C':'Cultivate','E':'Extend'}[mem.grace_stage]||''):'—'],
+        ['Pipeline', LEVEL_NAMES[mem.pipeline_level]||'—'],
+        ['Baptism', mem.baptism_date||'—'],
+        ['Enrolled', mem.enrolled_date||'—'],
+        ['Gifts', mem.spiritual_gifts||'—'],
+        ['Strengths', (mem.strengths_top5||[]).slice(0,2).join(', ')||'—'],
+      ].map(([l,v])=>`<div style="background:var(--surface3);border-radius:8px;padding:8px 10px">
+        <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">${l}</div>
+        <div style="font-size:13px;font-weight:600">${v||'—'}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+
+  // Attendance history (last 8 records from localStorage as demo — real would query DB)
+  html += `<div class="ds-card">
+    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+      <div class="ds-icon">📅</div>
+      <div class="ds-title">Attendance</div>
+      <div class="ds-chevron">▼</div>
+    </div>
+    <div class="ds-body">
+      <div id="attHistoryFor_${mem.id}"><div class="loading-text" style="font-size:12px;color:var(--muted)">Loading...</div></div>
+    </div>
+  </div>`;
+
+  // Notes
+  const noteKey = 'lc_note_'+mem.id;
+  const savedNote = localStorage.getItem(noteKey)||'';
+  html += `<div class="ds-card">
+    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+      <div class="ds-icon">📝</div>
+      <div class="ds-title">Leader Notes</div>
+      <div class="ds-chevron">▼</div>
+    </div>
+    <div class="ds-body">
+      <textarea class="note-input" id="noteFor_${mem.id}" placeholder="Observations, prayer requests, follow-up needed...">${savedNote}</textarea>
+      <button class="note-save" onclick="saveNote(${mem.id})">Save Note</button>
+    </div>
+  </div>`;
+
+  sections.innerHTML = html;
+  loadAttHistory(mem.id);
+}
+
+async function loadAttHistory(memberId){
+  const el = document.getElementById('attHistoryFor_'+memberId);
+  if(!el) return;
+  const {data} = await db.from('attendance').select('date,type,present')
+    .eq('member_id',memberId).order('date',{ascending:false}).limit(12);
+  if(!data?.length){ el.innerHTML='<div style="font-size:12px;color:var(--muted)">No attendance records yet.</div>'; return; }
+  const byType = {};
+  data.forEach(r=>{ if(!byType[r.type]) byType[r.type]=[]; byType[r.type].push(r); });
+  el.innerHTML = Object.entries(byType).map(([type,records])=>`
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">${type}</div>
+      <div class="att-hist-row">
+        ${records.map(r=>`<div class="att-dot ${r.present?'p':'a'}" title="${r.date}">${r.present?'✓':'✗'}</div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function saveNote(memberId){
+  const val = document.getElementById('noteFor_'+memberId)?.value||'';
+  localStorage.setItem('lc_note_'+memberId, val);
+  toast('Note saved ✓','success');
+}
+
+function openSalvationDiag(){
+  if(!currentMember) return;
+  const url = BASE_URL+'salvation_assurance_diagnostic.html?id='+currentMember.id+'&name='+encodeURIComponent(currentMember.name);
+  window.open(url,'_blank');
+}
+
+function openInterventionTracker(){
+  if(!currentMember) return;
+  const url = BASE_URL+'intervention_tracker.html?id='+currentMember.id;
+  window.open(url,'_blank');
+}
+
+function openAssessmentLink(){
+  if(!currentMember) return;
+  // Show assessment picker (simple prompt for now)
+  const a = ASSESSMENTS.find(x=>!currentMember[x.field]);
+  if(a) sendAssessmentLink(a.file, a.name);
+  else sendAssessmentLink('salvation_assurance_diagnostic.html','Salvation Assurance');
+}
+
+function sendAssessmentLink(file, name){
+  if(!currentMember) return;
+  const url = BASE_URL+file+'?id='+currentMember.id+'&name='+encodeURIComponent(currentMember.name);
+  const msg = encodeURIComponent(`Hi ${currentMember.name.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey sa Rosehill, nakakagawa ka ng ${name} assessment.\n\nI-click lang ang link na ito at sagutan mo ito nang tapat:\n${url}\n\nGod bless! 🙏`);
+  window.open('https://wa.me/?text='+msg,'_blank');
+}
+
+async function logQuickAttendance(){
+  if(!currentMember) return;
+  const today = new Date().toISOString().split('T')[0];
+  const {error} = await db.from('attendance').insert({
+    member_id:currentMember.id, member_name:currentMember.name,
+    date:today, type:'LC Meeting', present:true,
+    logged_by:currentLeader.name
+  });
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast('✓ Marked present for today','success');
+}
+
+// ═══════════════════════════════════════════════════════
+// ATTENDANCE
+// ═══════════════════════════════════════════════════════
+function showAttendance(){
+  // Set today's date
+  document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
+  attendanceState = {};
+  myMembers.forEach(m=>{ attendanceState[m.id]=false; });
+  renderAttList();
+  showScreen('screenAttendance');
+}
+
+function selectAttType(el){
+  document.querySelectorAll('.att-type-pill').forEach(p=>p.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedAttType = el.dataset.type;
+}
+
+function renderAttList(){
+  const list = document.getElementById('attList');
+  const presentCount = Object.values(attendanceState).filter(Boolean).length;
+  document.getElementById('attCount').textContent = presentCount+' present';
+  list.innerHTML = myMembers.map(mem=>{
+    const present = attendanceState[mem.id];
+    return `<div class="att-member ${present?'present':''}" id="att_${mem.id}" onclick="toggleAtt(${mem.id})">
+      <div class="att-check">${present?'✓':''}</div>
+      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
+      <div class="att-name">${mem.name}</div>
+      <div class="att-streak" id="streak_${mem.id}"></div>
+    </div>`;
+  }).join('');
+}
+
+function toggleAtt(id){
+  attendanceState[id] = !attendanceState[id];
+  const el = document.getElementById('att_'+id);
+  const present = attendanceState[id];
+  el.classList.toggle('present', present);
+  el.querySelector('.att-check').textContent = present?'✓':'';
+  el.querySelector('.att-av').style.background = present?'rgba(52,211,153,.15)':'var(--surface2)';
+  el.querySelector('.att-av').style.color = present?'var(--z1)':'var(--muted)';
+  const cnt = Object.values(attendanceState).filter(Boolean).length;
+  document.getElementById('attCount').textContent = cnt+' present';
+}
+
+let allSelected = false;
+function toggleSelectAll(){
+  allSelected = !allSelected;
+  myMembers.forEach(m=>{ attendanceState[m.id]=allSelected; });
+  renderAttList();
+}
+
+async function saveAttendance(){
+  const date = document.getElementById('attDate').value;
+  if(!date){ toast('Please select a date','error'); return; }
+  const rows = myMembers.map(m=>({
+    member_id:m.id, member_name:m.name,
+    date, type:selectedAttType,
+    present:!!attendanceState[m.id],
+    logged_by:currentLeader?.name||'Unknown',
+    lc_group:currentLeader?.lc_group||''
+  }));
+  const {error} = await db.from('attendance').upsert(rows,{onConflict:'member_id,date,type'});
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  const cnt = Object.values(attendanceState).filter(Boolean).length;
+  toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
+  setTimeout(()=>showScreen('screenHome'),1500);
+}
+
+// ═══════════════════════════════════════════════════════
+// REPORTS
+// ═══════════════════════════════════════════════════════
+async function renderReports(){
+  const el = document.getElementById('reportsContent');
+  const total = myMembers.length||1;
+  const zones = {1:0,2:0,3:0,4:0,0:0};
+  myMembers.forEach(m=>zones[m.diagnostic_zone||0]++);
+  const pendingByAssess = {};
+  ASSESSMENTS.forEach(a=>{ pendingByAssess[a.name] = myMembers.filter(m=>!m[a.field]).length; });
+
+  // Attendance summary — last 30 days
+  const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
+  const {data:attData} = await db.from('attendance').select('member_id,member_name,present,date,type')
+    .in('member_id', myMembers.map(m=>m.id)).gte('date',thirtyAgo).eq('present',false);
+
+  const absentCounts = {};
+  (attData||[]).forEach(r=>{ absentCounts[r.member_id]=(absentCounts[r.member_id]||0)+1; });
+  const frequentAbsent = myMembers.filter(m=>absentCounts[m.id]>=2).sort((a,b)=>(absentCounts[b.id]||0)-(absentCounts[a.id]||0));
+
+  el.innerHTML = `
+    <div class="report-card" style="margin-top:12px">
+      <div class="rc-title">Zone Distribution</div>
+      ${[1,2,3,4].map(z=>{
+        const count = zones[z]||0;
+        const pct = Math.round(count/total*100);
+        const zd = ZONE_DATA[z];
+        return `<div class="zone-bar-row">
+          <div class="zbr-label" style="color:${zd.color}">${z===1?'✅':z===2?'🔵':z===3?'🟠':'🔴'} Z${z}</div>
+          <div class="zbr-track"><div class="zbr-fill" style="width:${pct}%;background:${zd.color}">${pct>10?pct+'%':''}</div></div>
+          <div class="zbr-count" style="color:${zd.color}">${count}</div>
+        </div>`;
+      }).join('')}
+      ${zones[0]?`<div class="zone-bar-row">
+        <div class="zbr-label" style="color:var(--muted)">❔ None</div>
+        <div class="zbr-track"><div class="zbr-fill" style="width:${Math.round(zones[0]/total*100)}%;background:var(--muted)"></div></div>
+        <div class="zbr-count" style="color:var(--muted)">${zones[0]}</div>
+      </div>`:''}
+    </div>
+
+    <div class="report-card">
+      <div class="rc-title">Pending Assessments</div>
+      <div class="pending-grid">
+        ${ASSESSMENTS.map(a=>`<div class="pg-card">
+          <div class="pg-num" style="color:${pendingByAssess[a.name]?'var(--red)':'var(--green)'}">${pendingByAssess[a.name]}</div>
+          <div class="pg-label">${a.icon} ${a.name}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    ${frequentAbsent.length?`<div class="report-card">
+      <div class="rc-title">Frequent Absences (30 days)</div>
+      <div class="absent-list">
+        ${frequentAbsent.map(m=>`<div class="absent-item" onclick="openMember(${m.id})">
+          <div class="ai-av" style="background:rgba(248,113,113,.15);color:var(--red)">${initials(m.name)}</div>
+          <div class="ai-name">${m.name}</div>
+          <div class="ai-streak">${absentCounts[m.id]} absences</div>
+        </div>`).join('')}
+      </div>
+    </div>`:''}
+
+    <div class="report-card" style="margin-bottom:24px">
+      <div class="rc-title">Group Summary</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="pg-card"><div class="pg-num">${total}</div><div class="pg-label">Total Members</div></div>
+        <div class="pg-card"><div class="pg-num" style="color:var(--green)">${Math.round((zones[1]||0)/total*100)}%</div><div class="pg-label">Zone 1 Rate</div></div>
+        <div class="pg-card"><div class="pg-num" style="color:var(--muted)">${zones[0]||0}</div><div class="pg-label">Not Assessed</div></div>
+        <div class="pg-card"><div class="pg-num" style="color:var(--orange)">${frequentAbsent.length}</div><div class="pg-label">Frequent Absent</div></div>
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SEND LINKS
+// ═══════════════════════════════════════════════════════
+function renderSendLinks(){
+  const el = document.getElementById('sendLinksContent');
+  if(!myMembers.length){ el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No members</div></div>'; return; }
+  el.innerHTML = myMembers.map(mem=>{
+    const pending = ASSESSMENTS.filter(a=>!mem[a.field]);
+    const done = ASSESSMENTS.filter(a=>!!mem[a.field]);
+    return `<div class="sl-member">
+      <div class="slm-name">${mem.name}</div>
+      <div class="slm-links">
+        ${pending.map(a=>`<div class="slm-link-row">
+          <div class="slr-name">${a.icon} ${a.name}</div>
+          <span class="slr-status slr-pending">Pending</span>
+          <button class="slr-send" onclick="sendLink_('${mem.id}','${mem.name}','${a.file}','${a.name}')">📤 Send</button>
+        </div>`).join('')}
+        ${done.length?`<div style="font-size:10px;color:var(--lighter);margin-top:4px;font-weight:600">Completed: ${done.map(a=>a.icon+' '+a.name).join(' · ')}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sendLink_(memberId, memberName, file, assessName){
+  const url = BASE_URL+file+'?id='+memberId+'&name='+encodeURIComponent(memberName);
+  const msg = encodeURIComponent(`Hi ${memberName.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang ${assessName} assessment?\n\n${url}\n\nI-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— ${currentLeader?.name||'Your LC Leader'}`);
+  window.open('https://wa.me/?text='+msg,'_blank');
+  toast('WhatsApp opened for '+memberName.split(' ')[0],'success');
+}
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function initials(name){return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
+function avColor(level){const colors={1:'#374151',2:'#1e3a5f',3:'#1a3d2b',4:'#4a2060',5:'#7a3010'};return colors[level]||'#374151';}
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast '+(type||'');
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800);
+}
+document.getElementById('loginSearch').addEventListener('keydown',e=>{ if(e.key==='Escape') document.getElementById('loginDropdown').style.display='none'; });
+document.addEventListener('click',e=>{ if(!e.target.closest('#loginSearch')&&!e.target.closest('#loginDropdown')) document.getElementById('loginDropdown').style.display='none'; });
+</script>
+</body>
+</html>
