@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strengths Save Debugger · MULTIPLY</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#0f0f13;--sur:#1a1a24;--sur2:#22222f;--brd:#2e2e42;
+  --ink:#e8e8f4;--muted:#888899;--green:#34d399;--red:#f87171;
+  --gold:#f0b429;--blue:#60a5fa;--r:10px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif;
+  font-size:13px;padding:20px;}
+h1{font-size:16px;font-weight:800;margin-bottom:4px;}
+.sub{font-size:11px;color:var(--muted);margin-bottom:20px;}
+.card{background:var(--sur);border:1px solid var(--brd);border-radius:var(--r);
+  padding:16px;margin-bottom:12px;}
+.card-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:10px;}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+label{font-size:11px;font-weight:700;color:var(--muted);min-width:120px;}
+input,select{background:var(--sur2);border:1px solid var(--brd);border-radius:6px;
+  padding:6px 10px;color:var(--ink);font-size:12px;font-family:inherit;outline:none;flex:1;min-width:200px;}
+input:focus,select:focus{border-color:var(--gold);}
+.btn{padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;
+  border:none;font-family:inherit;}
+.btn-run{background:var(--gold);color:#0f0f13;}
+.btn-run:hover{opacity:.9;}
+.btn-sim{background:rgba(96,165,250,.15);color:var(--blue);border:1px solid rgba(96,165,250,.3);}
+.btn-sim:hover{background:var(--blue);color:#0f0f13;}
+.log{background:var(--sur2);border:1px solid var(--brd);border-radius:8px;
+  padding:12px;font-family:'DM Mono',monospace;font-size:11px;line-height:1.7;
+  max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+.ok{color:var(--green);}
+.err{color:var(--red);}
+.warn{color:var(--gold);}
+.info{color:var(--blue);}
+.step{color:var(--muted);border-bottom:1px solid var(--brd);padding-bottom:4px;margin-bottom:4px;
+  font-weight:700;}
+.status{font-size:13px;font-weight:700;padding:8px 14px;border-radius:7px;margin-bottom:10px;}
+.status.ok{background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.2);}
+.status.err{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);}
+.status.idle{background:var(--sur2);color:var(--muted);}
+</style>
+</head>
+<body>
+
+<h1>🔬 Strengths Profile — Save Debugger</h1>
+<div class="sub">Diagnoses why saving to the dashboard fails. Runs each step separately and shows the exact error.</div>
+
+<div class="card">
+  <div class="card-title">Configuration</div>
+  <div class="row">
+    <label>Member ID (UUID)</label>
+    <input id="memberId" placeholder="Paste the member's UUID from the URL or dashboard">
+  </div>
+  <div class="row">
+    <label>Member Name</label>
+    <input id="memberName" placeholder="For matching / display">
+  </div>
+  <div class="row">
+    <label>LC Group</label>
+    <input id="lcGroup" placeholder="e.g. Rosehill Alpha">
+  </div>
+  <div class="row">
+    <label>Simulate save?</label>
+    <input type="checkbox" id="doWrite" style="flex:unset;width:auto"> 
+    <span style="font-size:11px;color:var(--muted);margin-left:6px">
+      Check this to actually attempt the INSERT/UPSERT (safe — uses test data)
+    </span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Simulated Strengths Payload</div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+    This mirrors what the Strengths assessment sends when "Save to Dashboard" is clicked.
+  </div>
+  <div class="row">
+    <label>Top Result (theme 1)</label>
+    <input id="top1" value="Achiever">
+  </div>
+  <div class="row">
+    <label>Second Result</label>
+    <input id="top2" value="Learner">
+  </div>
+  <div class="row">
+    <label>Third Result</label>
+    <input id="top3" value="Responsibility">
+  </div>
+  <div class="row">
+    <label>Domain</label>
+    <select id="domain">
+      <option value="Executing">Executing</option>
+      <option value="Influencing">Influencing</option>
+      <option value="Relationship Building">Relationship Building</option>
+      <option value="Strategic Thinking">Strategic Thinking</option>
+    </select>
+  </div>
+</div>
+
+<div style="display:flex;gap:8px;margin-bottom:12px">
+  <button class="btn btn-run" onclick="runDiag()">▶ Run Diagnostics</button>
+  <button class="btn btn-sim" onclick="simSave()">💾 Simulate Save Only</button>
+</div>
+
+<div class="status idle" id="status">Ready — fill in Member ID and click Run Diagnostics</div>
+
+<div class="card">
+  <div class="card-title">Diagnostic Log</div>
+  <div class="log" id="log">Waiting to run...</div>
+</div>
+
+<script>
+const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+let logEl, statusEl;
+let logLines = [];
+
+function log(msg, cls = '') {
+  logLines.push(cls ? `<span class="${cls}">${msg}</span>` : msg);
+  logEl.innerHTML = logLines.join('\n');
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function step(msg) { log('── ' + msg + ' ──', 'step'); }
+function ok(msg)   { log('✅ ' + msg, 'ok'); }
+function err(msg)  { log('❌ ' + msg, 'err'); }
+function warn(msg) { log('⚠️  ' + msg, 'warn'); }
+function info(msg) { log('ℹ️  ' + msg, 'info'); }
+
+function setStatus(msg, type = 'idle') {
+  statusEl.textContent = msg;
+  statusEl.className = 'status ' + type;
+}
+
+function getPayload() {
+  const id   = document.getElementById('memberId').value.trim();
+  const name = document.getElementById('memberName').value.trim();
+  const lc   = document.getElementById('lcGroup').value.trim();
+  const t1   = document.getElementById('top1').value.trim();
+  const t2   = document.getElementById('top2').value.trim();
+  const t3   = document.getElementById('top3').value.trim();
+  const dom  = document.getElementById('domain').value;
+
+  return {
+    member_id:    id   || null,
+    member_name:  name || 'Test Member',
+    lc_group:     lc   || '',
+    profile_type: 'strengths',
+    date_taken:   new Date().toISOString().split('T')[0],
+    top_result:   t1,
+    second_result: t2,
+    third_result:  t3,
+    summary:      `Top themes: ${t1}, ${t2}, ${t3}. Domain: ${dom}.`,
+    results: {
+      top5:   [t1, t2, t3],
+      domain: dom,
+      all:    {}
+    }
+  };
+}
+
+async function runDiag() {
+  logEl    = document.getElementById('log');
+  statusEl = document.getElementById('status');
+  logLines = [];
+  logEl.innerHTML = '';
+  setStatus('Running...', 'idle');
+
+  const payload = getPayload();
+
+  // ── STEP 1: Check member exists ──────────────────────────────────
+  step('Step 1 — Verify member exists in members table');
+  if (!payload.member_id) {
+    warn('No member_id provided — skipping member lookup. This is a common cause of save failure!');
+    warn('The Strengths tool may be failing to pass the member_id to the save function.');
+  } else {
+    try {
+      const { data, error } = await db
+        .from('members')
+        .select('id,name,pipeline_level,lc_group')
+        .eq('id', payload.member_id)
+        .maybeSingle();
+      if (error) { err('members query failed: ' + error.message + ' (code: ' + (error.code||'?') + ')'); }
+      else if (!data) { warn('Member ID not found in members table. UUID may be wrong.'); }
+      else { ok('Member found: ' + data.name + ' · L' + (data.pipeline_level||0) + ' · ' + (data.lc_group||'no group')); }
+    } catch (e) { err('Exception: ' + e.message); }
+  }
+
+  // ── STEP 2: Check member_profiles table access ───────────────────
+  step('Step 2 — Check member_profiles table (read)');
+  try {
+    const { count, error } = await db
+      .from('member_profiles')
+      .select('id', { count: 'exact', head: true });
+    if (error) { err('Cannot read member_profiles: ' + error.message + ' (code: ' + (error.code||'?') + ')'); }
+    else { ok('member_profiles accessible. Total rows: ' + count); }
+  } catch (e) { err('Exception: ' + e.message); }
+
+  // ── STEP 3: Check existing strengths rows for this member ────────
+  step('Step 3 — Existing strengths rows for this member');
+  if (payload.member_id) {
+    try {
+      const { data, error } = await db
+        .from('member_profiles')
+        .select('id,top_result,date_taken,member_name')
+        .eq('member_id', payload.member_id)
+        .eq('profile_type', 'strengths')
+        .order('date_taken', { ascending: false })
+        .limit(5);
+      if (error) { err('Query failed: ' + error.message); }
+      else if (!data?.length) { info('No prior strengths rows for this member. First save.'); }
+      else {
+        ok('Found ' + data.length + ' existing row(s):');
+        data.forEach(r => info('  → ' + r.date_taken + ' · ' + r.top_result + ' · id=' + r.id));
+      }
+    } catch (e) { err('Exception: ' + e.message); }
+  } else {
+    warn('Skipped — no member_id');
+  }
+
+  // ── STEP 4: Check RLS — can we INSERT? ──────────────────────────
+  step('Step 4 — RLS / INSERT permission check');
+  const doWrite = document.getElementById('doWrite').checked;
+  if (!doWrite) {
+    info('Simulate save not checked. Skipping actual INSERT.');
+    info('Check the box above and click again to test the actual write path.');
+  } else {
+    await attemptSave(payload);
+  }
+
+  // ── STEP 5: Check what saveStrengths() looks like ───────────────
+  step('Step 5 — Payload that would be sent');
+  log(JSON.stringify(payload, null, 2));
+
+  // ── STEP 6: Common failure patterns ─────────────────────────────
+  step('Step 6 — Common failure pattern checklist');
+  if (!payload.member_id) {
+    err('LIKELY CAUSE: member_id is null/empty. The Strengths tool is not receiving or storing the member ID before calling save.');
+    info('FIX: Check how the Strengths assessment gets the member_id. Look for ?id= in the URL, or localStorage.getItem("member_id").');
+  }
+  if (!payload.top_result) {
+    warn('top_result is empty. Make sure the user completes the assessment before saving.');
+  }
+  info('Other common causes:');
+  info('  • RLS policy blocks anon INSERT on member_profiles');
+  info('  • Unique constraint violation (duplicate profile_type + member_id + date)');
+  info('  • Column name mismatch in the INSERT payload');
+  info('  • Network error (check DevTools → Network tab for 4xx/5xx)');
+
+  const allOk = !logLines.some(l => l.includes('class="err"'));
+  setStatus(allOk ? '✅ Diagnostics complete — no errors detected' : '❌ Errors found — see log above', allOk ? 'ok' : 'err');
+}
+
+async function simSave() {
+  logEl    = document.getElementById('log');
+  statusEl = document.getElementById('status');
+  logLines = [];
+  logEl.innerHTML = '';
+  setStatus('Simulating save...', 'idle');
+
+  const payload = getPayload();
+  step('Simulate Save — attempting INSERT into member_profiles');
+  await attemptSave(payload);
+}
+
+async function attemptSave(payload) {
+  info('Payload: ' + JSON.stringify(payload));
+  try {
+    // Try INSERT first
+    const { data: ins, error: insErr } = await db
+      .from('member_profiles')
+      .insert([payload])
+      .select();
+
+    if (insErr) {
+      err('INSERT failed: ' + insErr.message);
+      err('Code: ' + (insErr.code || '?') + ' | Hint: ' + (insErr.hint || '—'));
+
+      if (insErr.code === '23505') {
+        warn('Duplicate key — row already exists. Trying UPSERT...');
+        const { data: ups, error: upsErr } = await db
+          .from('member_profiles')
+          .upsert([payload], { onConflict: 'member_id,profile_type,date_taken' })
+          .select();
+        if (upsErr) {
+          err('UPSERT also failed: ' + upsErr.message + ' (code: ' + (upsErr.code||'?') + ')');
+          err('Hint: ' + (upsErr.hint || 'none'));
+          err('DIAGNOSIS: Your member_profiles table may not have a unique constraint on (member_id, profile_type, date_taken).');
+          err('Without it, onConflict UPSERT will fail. Add the constraint in Supabase or use INSERT without upsert.');
+        } else {
+          ok('UPSERT succeeded! Row saved: ' + JSON.stringify(ups?.[0]?.id || 'no id returned'));
+        }
+      } else if (insErr.code === '42501') {
+        err('DIAGNOSIS: RLS (Row Level Security) is blocking INSERT for the anon role.');
+        err('FIX: In Supabase → Authentication → Policies → member_profiles, add an INSERT policy for anon.');
+        err('Example policy: (true) — allows all inserts. Tighten if needed.');
+      } else if (insErr.code === '42P01') {
+        err('DIAGNOSIS: Table member_profiles does not exist or is misspelled.');
+      } else {
+        err('Unknown error. Full error object:');
+        log(JSON.stringify(insErr, null, 2));
+      }
+    } else {
+      ok('INSERT succeeded! ✨');
+      ok('Saved row ID: ' + (ins?.[0]?.id || 'no id returned'));
+      ok('The save function works correctly. The issue may be in the Strengths UI calling the wrong function or no function at all.');
+      info('Check: does your Strengths assessment HTML actually call a save function on button click?');
+      info('Add a console.log at the top of your saveStrengths() function to confirm it fires.');
+    }
+  } catch (e) {
+    err('Exception thrown: ' + e.message);
+    err('Stack: ' + (e.stack || '—'));
+  }
+}
+
+// Auto-fill date
+document.addEventListener('DOMContentLoaded', () => {
+  logEl = document.getElementById('log');
+  statusEl = document.getElementById('status');
+});
+</script>
+</body>
+</html>

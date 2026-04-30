@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transfer Management · MULTIPLY Pastor Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ── Design tokens (match multiply_dashboard) ── */
+:root{
+  --bg:#0f0f13;--surface:#1a1a24;--surface2:#22222f;--surface3:#2a2a3a;
+  --border:#2e2e42;--ink:#e8e8f4;--muted:#888899;--lighter:#555566;
+  --green:#34d399;--blue:#60a5fa;--gold:#f0b429;--gold2:#fbbf24;
+  --red:#f87171;--orange:#fb923c;--purple:#a78bfa;
+  --z1:#34d399;--z2:#60a5fa;--z3:#fb923c;--z4:#f87171;
+  --z1t:rgba(52,211,153,.15);--z2t:rgba(96,165,250,.12);
+  --z3t:rgba(251,146,60,.12);--z4t:rgba(248,113,113,.12);
+  --r:10px;--r-sm:7px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:'DM Sans',sans-serif;
+  font-size:14px;line-height:1.5;min-height:100vh;}
+
+/* ── Header ── */
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:14px 20px;display:flex;align-items:center;gap:12px;}
+.hdr-back{width:32px;height:32px;border-radius:8px;background:var(--surface2);
+  border:1px solid var(--border);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:16px;color:var(--muted);}
+.hdr-back:hover{background:var(--surface3);color:var(--ink);}
+.hdr-title{font-size:16px;font-weight:800;letter-spacing:-.01em;}
+.hdr-sub{font-size:11px;color:var(--muted);margin-left:auto;}
+
+/* ── Layout ── */
+.wrap{padding:20px;max-width:900px;margin:0 auto;}
+
+/* ── Stats row ── */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 16px;text-align:center;}
+.stat-num{font-size:26px;font-weight:800;line-height:1;}
+.stat-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-top:3px;}
+
+/* ── Filter bar ── */
+.fbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+.fbar-input{flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:20px;padding:7px 14px;color:var(--ink);font-family:'DM Sans',sans-serif;
+  font-size:13px;outline:none;}
+.fbar-input:focus{border-color:var(--gold2);}
+.fchip{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;
+  border:1px solid var(--border);background:var(--surface2);color:var(--muted);
+  cursor:pointer;transition:all .15s;}
+.fchip.on{background:var(--gold2);border-color:var(--gold2);color:#0f0f13;}
+.fchip:hover:not(.on){background:var(--surface3);color:var(--ink);}
+
+/* ── Kanban columns ── */
+.kanban{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.kb-col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;}
+.kb-head{padding:12px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;}
+.kb-icon{font-size:15px;}
+.kb-title{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.kb-count{margin-left:auto;font-size:11px;font-weight:700;
+  padding:2px 8px;border-radius:20px;}
+.kb-body{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px;}
+
+/* ── Transfer card ── */
+.tc{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:12px 14px;cursor:pointer;transition:all .15s;position:relative;}
+.tc:hover{border-color:var(--gold2);background:var(--surface3);}
+.tc-name{font-size:13px;font-weight:700;margin-bottom:4px;}
+.tc-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:3px;}
+.tc-chip{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;}
+.tc-from{background:var(--surface3);color:var(--muted);}
+.tc-arrow{color:var(--muted);font-size:10px;}
+.tc-to{background:rgba(251,191,36,.15);color:var(--gold2);}
+.tc-date{font-size:10px;color:var(--muted);}
+.tc-level{position:absolute;top:10px;right:10px;
+  font-size:9px;font-weight:800;letter-spacing:.05em;
+  padding:2px 6px;border-radius:4px;}
+
+/* ── Action buttons ── */
+.tc-actions{display:flex;gap:6px;margin-top:8px;}
+.tc-btn{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
+  cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.tc-approve{background:rgba(52,211,153,.15);color:var(--green);border:1px solid rgba(52,211,153,.3);}
+.tc-approve:hover{background:var(--green);color:#0f0f13;}
+.tc-reject{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25);}
+.tc-reject:hover{background:var(--red);color:#fff;}
+.tc-hold{background:var(--surface3);color:var(--muted);border:1px solid var(--border);}
+.tc-hold:hover{background:var(--surface2);}
+
+/* ── List view ── */
+.list-view{display:none;}
+.ltable{width:100%;border-collapse:collapse;}
+.ltable th{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);}
+.ltable td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;}
+.ltable tr:hover td{background:var(--surface2);}
+.ltable tr:last-child td{border-bottom:none;}
+
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;
+  z-index:100;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  width:90%;max-width:480px;padding:22px;position:relative;}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:16px;}
+.modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;
+  background:var(--surface2);border:none;border-radius:6px;cursor:pointer;
+  color:var(--muted);font-size:14px;display:flex;align-items:center;justify-content:center;}
+.modal-close:hover{color:var(--ink);}
+.field-row{margin-bottom:12px;}
+.field-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:5px;}
+.field-val{font-size:14px;font-weight:600;}
+.field-sub{font-size:11px;color:var(--muted);}
+.field-input{width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:8px 11px;color:var(--ink);
+  font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
+.field-input:focus{border-color:var(--gold2);}
+.modal-btns{display:flex;gap:8px;margin-top:18px;}
+.mbtn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;
+  cursor:pointer;border:none;font-family:'DM Sans',sans-serif;}
+.mbtn-primary{background:var(--green);color:#0f0f13;}
+.mbtn-primary:hover{opacity:.9;}
+.mbtn-danger{background:var(--red);color:#fff;}
+.mbtn-danger:hover{opacity:.9;}
+.mbtn-cancel{background:var(--surface2);border:1px solid var(--border);color:var(--muted);}
+.mbtn-cancel:hover{color:var(--ink);}
+
+/* ── New transfer form ── */
+.ntf-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:18px;margin-bottom:16px;}
+.ntf-title{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--gold2);margin-bottom:12px;}
+.ntf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ntf-full{grid-column:1/-1;}
+select.field-input option{background:var(--surface2);}
+
+/* ── Toggle view ── */
+.view-toggle{display:flex;gap:4px;margin-left:auto;}
+.vt-btn{width:30px;height:30px;border-radius:6px;background:var(--surface2);
+  border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;color:var(--muted);font-size:14px;}
+.vt-btn.on{background:var(--surface3);border-color:var(--gold2);color:var(--gold2);}
+
+/* ── Level colors ── */
+.lv1{background:rgba(52,211,153,.12);color:var(--green);}
+.lv2{background:rgba(96,165,250,.12);color:var(--blue);}
+.lv3{background:rgba(251,146,60,.12);color:var(--orange);}
+.lv4{background:rgba(248,113,113,.12);color:var(--red);}
+.lv5{background:rgba(167,139,250,.12);color:var(--purple);}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:10px 18px;font-size:13px;font-weight:600;display:none;
+  z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.toast.show{display:flex;gap:8px;align-items:center;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:32px 16px;color:var(--muted);}
+.empty-icon{font-size:28px;margin-bottom:8px;}
+.empty-title{font-size:13px;font-weight:700;}
+.empty-sub{font-size:11px;margin-top:3px;}
+
+/* ── Loading ── */
+.loading{text-align:center;padding:32px;color:var(--muted);font-size:13px;}
+
+/* ── Responsive ── */
+@media(max-width:700px){
+  .kanban{grid-template-columns:1fr;}
+  .stat-row{grid-template-columns:repeat(2,1fr);}
+  .ntf-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-back" onclick="history.back()">←</div>
+  <div>
+    <div class="hdr-title">🔀 Transfer Management</div>
+  </div>
+  <div class="hdr-sub">MULTIPLY Pastor Dashboard</div>
+</div>
+
+<div class="wrap">
+
+  <!-- Stats -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <div class="stat-num" id="statPending" style="color:var(--gold2)">—</div>
+      <div class="stat-label">Pending</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statApprovedToday" style="color:var(--green)">—</div>
+      <div class="stat-label">Approved Today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statOverdue" style="color:var(--red)">—</div>
+      <div class="stat-label">Overdue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statTotal" style="color:var(--blue)">—</div>
+      <div class="stat-label">All Transfers</div>
+    </div>
+  </div>
+
+  <!-- New Transfer Form -->
+  <div class="ntf-wrap" id="ntfWrap" style="display:none">
+    <div class="ntf-title">+ Initiate New Transfer</div>
+    <div class="ntf-grid">
+      <div class="field-row">
+        <div class="field-label">Member</div>
+        <select class="field-input" id="ntfMember">
+          <option value="">— Select member —</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field-label">Current LC Group</div>
+        <input class="field-input" id="ntfFrom" placeholder="Auto-filled" readonly>
+      </div>
+      <div class="field-row">
+        <div class="field-label">Transfer To (LC Group)</div>
+        <input class="field-input" id="ntfTo" placeholder="Destination LC group name">
+      </div>
+      <div class="field-row">
+        <div class="field-label">Effective Date</div>
+        <input class="field-input" type="date" id="ntfDate">
+      </div>
+      <div class="field-row ntf-full">
+        <div class="field-label">Reason / Notes</div>
+        <input class="field-input" id="ntfReason" placeholder="Geographic move, growth track, ministry fit...">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="mbtn mbtn-primary" onclick="submitTransfer()">Submit Transfer Request</button>
+      <button class="mbtn mbtn-cancel" onclick="toggleNTF()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Filter + actions bar -->
+  <div class="fbar">
+    <input class="fbar-input" id="searchQ" placeholder="Search member or LC group..." oninput="applyFilter()">
+    <div class="fchip on" data-f="pending" onclick="setFilter(this)">Pending</div>
+    <div class="fchip" data-f="overdue" onclick="setFilter(this)">Overdue</div>
+    <div class="fchip" data-f="all" onclick="setFilter(this)">All Members</div>
+    <div class="view-toggle">
+      <div class="vt-btn on" id="vt-kanban" onclick="setView('kanban')" title="Kanban">⊞</div>
+      <div class="vt-btn" id="vt-list" onclick="setView('list')" title="List">☰</div>
+    </div>
+    <button class="mbtn mbtn-primary" style="padding:6px 14px;font-size:12px" onclick="toggleNTF()">+ New Transfer</button>
+    <button class="mbtn mbtn-cancel" style="padding:6px 14px;font-size:12px" onclick="loadData()">↻ Refresh</button>
+  </div>
+
+  <!-- Kanban View -->
+  <div id="kanbanView">
+    <div class="kanban">
+      <div class="kb-col">
+        <div class="kb-head" style="border-top:3px solid var(--gold2)">
+          <div class="kb-icon">🟡</div>
+          <div class="kb-title" style="color:var(--gold2)">Pending</div>
+          <div class="kb-count" style="background:rgba(251,191,36,.15);color:var(--gold2)" id="cnt-pending">0</div>
+        </div>
+        <div class="kb-body" id="col-pending">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+      <div class="kb-col">
+        <div class="kb-head" style="border-top:3px solid var(--red)">
+          <div class="kb-icon">🔴</div>
+          <div class="kb-title" style="color:var(--red)">Overdue</div>
+          <div class="kb-count" style="background:rgba(248,113,113,.12);color:var(--red)" id="cnt-overdue">0</div>
+        </div>
+        <div class="kb-body" id="col-overdue">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+      <div class="kb-col">
+        <div class="kb-head" style="border-top:3px solid var(--green)">
+          <div class="kb-icon">✅</div>
+          <div class="kb-title" style="color:var(--green)">Approved (This Month)</div>
+          <div class="kb-count" style="background:rgba(52,211,153,.12);color:var(--green)" id="cnt-approved">0</div>
+        </div>
+        <div class="kb-body" id="col-approved">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- List View -->
+  <div id="listView" class="list-view">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+      <table class="ltable">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Level</th>
+            <th>From Group</th>
+            <th>To Group</th>
+            <th>Effective Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="listTbody">
+          <tr><td colspan="7" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: member detail / confirm action -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modalTitle">Transfer Details</div>
+    <div id="modalBody"></div>
+    <div class="modal-btns" id="modalBtns"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <span id="toastIco">✓</span>
+  <span id="toastMsg">Done</span>
+</div>
+
+<script>
+// ── Supabase ──────────────────────────────────────────────────────────
+const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+const LN = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Exec. Leader'];
+const LC_CLS = ['','lv1','lv2','lv3','lv4','lv5'];
+
+let allMembers = [];   // all members with pending_lc_group
+let memberMap  = {};   // id → member for quick lookup
+let currentFilter = 'pending';
+let currentView   = 'kanban';
+let ntfVisible    = false;
+let modalMember   = null;
+
+// ── Init ──────────────────────────────────────────────────────────────
+async function init() {
+  await loadData();
+  await populateMemberDropdown();
+}
+
+async function loadData() {
+  try {
+    // Fetch ALL members that have ever had a pending transfer OR have one now
+    const { data, error } = await db
+      .from('members')
+      .select('id,name,pipeline_level,lc_group,pending_lc_group,pending_discipler,transfer_date,diagnostic_zone,discipler_name')
+      .order('name');
+
+    if (error) throw error;
+    allMembers = data || [];
+    memberMap  = Object.fromEntries(allMembers.map(m => [m.id, m]));
+
+    render();
+    updateStats();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+async function populateMemberDropdown() {
+  const sel = document.getElementById('ntfMember');
+  const { data } = await db.from('members').select('id,name,lc_group').order('name');
+  (data || []).forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.dataset.group = m.lc_group || '';
+    o.textContent = m.name + (m.lc_group ? ' · ' + m.lc_group : '');
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', () => {
+    const opt = sel.options[sel.selectedIndex];
+    document.getElementById('ntfFrom').value = opt.dataset.group || '';
+  });
+}
+
+// ── Data helpers ──────────────────────────────────────────────────────
+const today = new Date().toISOString().split('T')[0];
+const thisMonthStart = today.slice(0,7) + '-01';
+
+function isPending(m)  { return m.pending_lc_group && m.pending_lc_group !== m.lc_group; }
+function isOverdue(m)  { return isPending(m) && m.transfer_date && m.transfer_date < today; }
+function isApprovedThisMonth(m) {
+  // Approved = pending was cleared this month. We approximate by checking
+  // transfer_date in this month and pending_lc_group === lc_group
+  // (i.e., the transfer was processed).
+  return m.transfer_date >= thisMonthStart && m.transfer_date <= today
+      && (!m.pending_lc_group || m.pending_lc_group === m.lc_group)
+      && m.transfer_date; // has a transfer_date
+}
+
+// ── Filter & search ───────────────────────────────────────────────────
+function setFilter(el) {
+  document.querySelectorAll('.fchip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  currentFilter = el.dataset.f;
+  render();
+}
+
+function applyFilter() { render(); }
+
+function getFiltered() {
+  const q = document.getElementById('searchQ').value.toLowerCase();
+  let list = allMembers;
+
+  if (currentFilter === 'pending') list = list.filter(isPending);
+  else if (currentFilter === 'overdue') list = list.filter(isOverdue);
+  // 'all' = all members
+
+  if (q) list = list.filter(m =>
+    m.name.toLowerCase().includes(q) ||
+    (m.lc_group||'').toLowerCase().includes(q) ||
+    (m.pending_lc_group||'').toLowerCase().includes(q)
+  );
+  return list;
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────
+function updateStats() {
+  const pending  = allMembers.filter(isPending).length;
+  const overdue  = allMembers.filter(isOverdue).length;
+  const approved = allMembers.filter(isApprovedThisMonth).length;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statOverdue').textContent = overdue;
+  document.getElementById('statApprovedToday').textContent = approved;
+  document.getElementById('statTotal').textContent = allMembers.filter(m => m.transfer_date).length;
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function render() {
+  if (currentView === 'kanban') renderKanban();
+  else renderList();
+}
+
+function setView(v) {
+  currentView = v;
+  document.getElementById('kanbanView').style.display = v === 'kanban' ? 'block' : 'none';
+  document.getElementById('listView').style.display   = v === 'list'   ? 'block' : 'none';
+  document.getElementById('vt-kanban').classList.toggle('on', v === 'kanban');
+  document.getElementById('vt-list').classList.toggle('on', v === 'list');
+  render();
+}
+
+function renderKanban() {
+  const all = allMembers;
+  const q   = document.getElementById('searchQ').value.toLowerCase();
+  const flt = m => !q || m.name.toLowerCase().includes(q)
+    || (m.lc_group||'').toLowerCase().includes(q)
+    || (m.pending_lc_group||'').toLowerCase().includes(q);
+
+  const pending  = all.filter(m => isPending(m) && !isOverdue(m) && flt(m));
+  const overdue  = all.filter(m => isOverdue(m) && flt(m));
+  const approved = all.filter(m => isApprovedThisMonth(m) && flt(m));
+
+  document.getElementById('cnt-pending').textContent  = pending.length;
+  document.getElementById('cnt-overdue').textContent  = overdue.length;
+  document.getElementById('cnt-approved').textContent = approved.length;
+
+  document.getElementById('col-pending').innerHTML  = pending.length  ? pending.map(cardHTML).join('') : emptyHTML('No pending transfers');
+  document.getElementById('col-overdue').innerHTML  = overdue.length  ? overdue.map(cardHTML).join('') : emptyHTML('None overdue 🎉');
+  document.getElementById('col-approved').innerHTML = approved.length ? approved.map(m => cardHTML(m, true)).join('') : emptyHTML('None this month');
+}
+
+function renderList() {
+  const filtered = getFiltered();
+  const tbody = document.getElementById('listTbody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🔀</div><div class="empty-title">No transfers match this filter</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(m => {
+    const lvl = m.pipeline_level || 0;
+    const pending = isPending(m);
+    const overdueFlag = isOverdue(m);
+    const status = overdueFlag ? '🔴 Overdue' : pending ? '🟡 Pending' : '✅ Done';
+    return `
+      <tr onclick="openModal('${m.id}')">
+        <td><strong>${m.name}</strong></td>
+        <td><span class="tc-chip ${LC_CLS[lvl]}" style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:800">${LN[lvl]||'—'}</span></td>
+        <td>${m.lc_group || '—'}</td>
+        <td>${m.pending_lc_group || m.lc_group || '—'}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${m.transfer_date || '—'}</td>
+        <td>${status}</td>
+        <td>
+          ${pending ? `
+            <button class="tc-btn tc-approve" onclick="event.stopPropagation();approveTransfer('${m.id}')">✓ Approve</button>
+            <button class="tc-btn tc-reject" onclick="event.stopPropagation();rejectTransfer('${m.id}')">✕</button>
+          ` : ''}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function cardHTML(m, approved = false) {
+  const lvl = m.pipeline_level || 0;
+  const overdue = isOverdue(m);
+  return `
+    <div class="tc" onclick="openModal('${m.id}')">
+      <div class="tc-level ${LC_CLS[lvl]}">${LN[lvl]||'—'}</div>
+      <div class="tc-name">${m.name}</div>
+      <div class="tc-row">
+        <span class="tc-chip tc-from">${m.lc_group || '(none)'}</span>
+        <span class="tc-arrow">→</span>
+        <span class="tc-chip tc-to">${m.pending_lc_group || m.lc_group || '—'}</span>
+      </div>
+      ${m.transfer_date ? `<div class="tc-date">${overdue ? '⚠️' : '📅'} ${m.transfer_date}${overdue ? ' · OVERDUE' : ''}</div>` : ''}
+      ${!approved ? `
+        <div class="tc-actions" onclick="event.stopPropagation()">
+          <button class="tc-btn tc-approve" onclick="approveTransfer('${m.id}')">✓ Approve</button>
+          <button class="tc-btn tc-reject" onclick="rejectTransfer('${m.id}')">✕ Reject</button>
+          <button class="tc-btn tc-hold" onclick="openModal('${m.id}')">⋯ Details</button>
+        </div>` : `
+        <div class="tc-actions">
+          <span style="font-size:10px;color:var(--green);font-weight:700">✅ Transfer completed</span>
+        </div>`}
+    </div>`;
+}
+
+function emptyHTML(msg) {
+  return `<div class="empty"><div class="empty-icon">🔀</div><div class="empty-title">${msg}</div></div>`;
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────
+function openModal(memberId) {
+  const m = memberMap[memberId];
+  if (!m) return;
+  modalMember = m;
+  const pending = isPending(m);
+  const overdue = isOverdue(m);
+  const lvl = m.pipeline_level || 0;
+
+  document.getElementById('modalTitle').textContent = m.name + ' — Transfer';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="field-row">
+      <div class="field-label">Pipeline Level</div>
+      <div class="field-val">${LN[lvl]}</div>
+    </div>
+    <div class="field-row">
+      <div class="field-label">Current LC Group</div>
+      <div class="field-val">${m.lc_group || '—'}</div>
+    </div>
+    <div class="field-row">
+      <div class="field-label">Pending Transfer To</div>
+      <div class="field-val" style="color:var(--gold2)">${m.pending_lc_group || '(none)'}</div>
+    </div>
+    <div class="field-row">
+      <div class="field-label">Effective Date</div>
+      <div class="field-val" style="${overdue ? 'color:var(--red)' : ''}">${m.transfer_date || '—'}${overdue ? ' ⚠️ Overdue' : ''}</div>
+    </div>
+    <div class="field-row">
+      <div class="field-label">Current Discipler</div>
+      <div class="field-val">${m.discipler_name || '—'}</div>
+    </div>
+    ${pending ? `
+    <div class="field-row" style="margin-top:12px">
+      <div class="field-label">Update Transfer Date</div>
+      <input class="field-input" type="date" id="modalNewDate" value="${m.transfer_date || today}">
+    </div>
+    <div class="field-row">
+      <div class="field-label">Update Destination Group</div>
+      <input class="field-input" type="text" id="modalNewGroup" value="${m.pending_lc_group || ''}">
+    </div>` : ''}
+  `;
+  document.getElementById('modalBtns').innerHTML = pending ? `
+    <button class="mbtn mbtn-primary" onclick="approveTransfer('${m.id}',true)">✓ Approve Transfer</button>
+    <button class="mbtn mbtn-danger" onclick="rejectTransfer('${m.id}',true)">✕ Reject</button>
+    <button class="mbtn mbtn-cancel" onclick="updateTransfer('${m.id}')">Save Changes</button>
+    <button class="mbtn mbtn-cancel" onclick="closeModal()">Close</button>
+  ` : `<button class="mbtn mbtn-cancel" onclick="closeModal()">Close</button>`;
+
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+  modalMember = null;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────
+async function approveTransfer(memberId, fromModal = false) {
+  const m = memberMap[memberId];
+  if (!m) return;
+  const newGroup = fromModal
+    ? document.getElementById('modalNewGroup')?.value || m.pending_lc_group
+    : m.pending_lc_group;
+
+  if (!newGroup) { showToast('No destination group set', true); return; }
+
+  try {
+    const { error } = await db.from('members').update({
+      lc_group:        newGroup,
+      pending_lc_group: null,
+      transfer_date:   today,
+      updated_at:      new Date().toISOString()
+    }).eq('id', memberId);
+
+    if (error) throw error;
+    showToast(`✅ ${m.name} transferred to ${newGroup}`);
+    if (fromModal) closeModal();
+    await loadData();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+async function rejectTransfer(memberId, fromModal = false) {
+  const m = memberMap[memberId];
+  if (!m) return;
+
+  try {
+    const { error } = await db.from('members').update({
+      pending_lc_group: null,
+      transfer_date:    null,
+      updated_at:       new Date().toISOString()
+    }).eq('id', memberId);
+
+    if (error) throw error;
+    showToast(`↩ Transfer for ${m.name} cancelled`);
+    if (fromModal) closeModal();
+    await loadData();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+async function updateTransfer(memberId) {
+  const m = memberMap[memberId];
+  const newDate  = document.getElementById('modalNewDate')?.value;
+  const newGroup = document.getElementById('modalNewGroup')?.value;
+  if (!m) return;
+
+  try {
+    const { error } = await db.from('members').update({
+      pending_lc_group: newGroup || m.pending_lc_group,
+      transfer_date:    newDate  || m.transfer_date,
+      updated_at:       new Date().toISOString()
+    }).eq('id', memberId);
+
+    if (error) throw error;
+    showToast('✏️ Transfer updated');
+    closeModal();
+    await loadData();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+// ── New transfer form ─────────────────────────────────────────────────
+function toggleNTF() {
+  ntfVisible = !ntfVisible;
+  document.getElementById('ntfWrap').style.display = ntfVisible ? 'block' : 'none';
+}
+
+async function submitTransfer() {
+  const memberId = document.getElementById('ntfMember').value;
+  const toGroup  = document.getElementById('ntfTo').value.trim();
+  const date     = document.getElementById('ntfDate').value;
+
+  if (!memberId) { showToast('Select a member', true); return; }
+  if (!toGroup)  { showToast('Enter destination LC group', true); return; }
+  if (!date)     { showToast('Set an effective date', true); return; }
+
+  try {
+    const { error } = await db.from('members').update({
+      pending_lc_group: toGroup,
+      transfer_date:    date,
+      updated_at:       new Date().toISOString()
+    }).eq('id', memberId);
+
+    if (error) throw error;
+    showToast('🔀 Transfer request submitted');
+    document.getElementById('ntfMember').value = '';
+    document.getElementById('ntfFrom').value   = '';
+    document.getElementById('ntfTo').value     = '';
+    document.getElementById('ntfDate').value   = '';
+    document.getElementById('ntfReason').value = '';
+    toggleNTF();
+    await loadData();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, isErr = false) {
+  const el = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  el.style.borderColor = isErr ? 'var(--red)' : 'var(--green)';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
