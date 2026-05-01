@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendance Schema Debugger</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#0f0f13;--sur:#1a1a24;--sur2:#22222f;--brd:#2e2e42;
+  --ink:#e8e8f4;--muted:#888899;--green:#34d399;--red:#f87171;
+  --gold:#f0b429;--blue:#60a5fa;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,sans-serif;font-size:13px;padding:20px;line-height:1.6;}
+h1{font-size:18px;margin-bottom:6px;}
+.sub{color:var(--muted);margin-bottom:18px;font-size:12px;}
+.card{background:var(--sur);border:1px solid var(--brd);border-radius:10px;padding:16px;margin-bottom:12px;}
+.btn{padding:9px 18px;border-radius:7px;background:var(--gold);color:#0f0f13;border:none;font-weight:700;cursor:pointer;font-size:13px;margin-right:8px;}
+.btn:hover{opacity:.9;}
+.log{background:#000;border:1px solid var(--brd);border-radius:8px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;
+  white-space:pre-wrap;word-break:break-all;max-height:600px;overflow-y:auto;line-height:1.7;}
+.ok{color:var(--green);}
+.err{color:var(--red);}
+.warn{color:var(--gold);}
+.info{color:var(--blue);}
+.step{color:var(--muted);border-bottom:1px solid var(--brd);padding-top:10px;padding-bottom:4px;margin-bottom:6px;font-weight:700;}
+.fix-block{background:#1a2c1a;border:1px solid var(--green);border-radius:8px;padding:14px;margin-top:12px;}
+.fix-block h3{color:var(--green);margin-bottom:8px;font-size:13px;}
+pre{background:#000;padding:10px;border-radius:6px;color:var(--gold);font-size:11px;
+  font-family:'DM Mono',monospace;overflow-x:auto;margin-top:6px;}
+</style>
+</head>
+<body>
+
+<h1>🔧 Attendance Schema Debugger</h1>
+<div class="sub">Tests minimal insert variations to reveal whether the issue is in the table schema, a trigger, or an RLS policy.</div>
+
+<div class="card">
+  <button class="btn" onclick="runAll()">▶ Run All Tests</button>
+  <button class="btn" style="background:var(--blue);color:white" onclick="document.getElementById('log').innerHTML=''">Clear Log</button>
+</div>
+
+<div class="card">
+  <div class="log" id="log">Click "Run All Tests" to start...</div>
+</div>
+
+<div class="fix-block" id="fixBlock" style="display:none">
+  <h3>🔨 Likely Fix — run in Supabase SQL Editor</h3>
+  <div id="fixContent"></div>
+</div>
+
+<script>
+const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+const logEl = document.getElementById('log');
+function log(msg, cls=''){
+  logEl.innerHTML += (cls?`<span class="${cls}">${msg}</span>`:msg) + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function step(s){ log('\n── '+s+' ──', 'step'); }
+function ok(s){ log('✅ '+s, 'ok'); }
+function err(s){ log('❌ '+s, 'err'); }
+function warn(s){ log('⚠️ '+s, 'warn'); }
+function info(s){ log('ℹ️ '+s, 'info'); }
+
+async function runAll(){
+  logEl.innerHTML = '';
+  document.getElementById('fixBlock').style.display = 'none';
+
+  // Get a real member_id to use for inserts
+  step('Step 0 — Get a sample member_id');
+  const {data:mems, error:memErr} = await db.from('members').select('id,name').limit(1);
+  if(memErr || !mems?.length){ err('Cannot fetch members: '+(memErr?.message||'no rows')); return; }
+  const sampleId = mems[0].id;
+  const sampleName = mems[0].name;
+  ok('Sample member: '+sampleName+' (id='+sampleId+')');
+
+  const today = new Date().toISOString().split('T')[0];
+  let triggerError = null;
+  let columnError = null;
+
+  // ── Test A: Minimal insert with event_date/event_type ──
+  step('Test A — Insert with event_date/event_type only');
+  const minimalRow = {
+    member_id: sampleId,
+    member_name: sampleName,
+    event_date: today,
+    event_type: '__SCHEMA_TEST__',
+    present: false
+  };
+  info('Sending: '+JSON.stringify(minimalRow));
+  const tA = await db.from('attendance').insert(minimalRow);
+  if(tA.error){
+    err('Failed: '+tA.error.message);
+    info('Code: '+(tA.error.code||'?')+' | Hint: '+(tA.error.hint||'—')+' | Details: '+(tA.error.details||'—'));
+    if(tA.error.message.includes('attendance.date')){
+      triggerError = tA.error.message;
+      warn('CONFIRMED: A database trigger or generated column references "attendance.date" but that column doesn\'t exist.');
+    } else if(tA.error.message.includes('does not exist')){
+      columnError = tA.error.message;
+    }
+  } else {
+    ok('Insert succeeded with event_date/event_type! ✨');
+    // Cleanup
+    await db.from('attendance').delete().eq('event_type', '__SCHEMA_TEST__');
+    info('Cleaned up test row.');
+  }
+
+  // ── Test B: Try with old 'date'/'type' column names ──
+  step('Test B — Insert with date/type column names (legacy)');
+  const legacyRow = {
+    member_id: sampleId,
+    member_name: sampleName,
+    date: today,
+    type: '__SCHEMA_TEST__',
+    present: false
+  };
+  info('Sending: '+JSON.stringify(legacyRow));
+  const tB = await db.from('attendance').insert(legacyRow);
+  if(tB.error){
+    err('Failed: '+tB.error.message);
+    info('Code: '+(tB.error.code||'?'));
+  } else {
+    warn('Insert succeeded with legacy date/type — your DB still uses old column names!');
+    await db.from('attendance').delete().eq('type', '__SCHEMA_TEST__');
+  }
+
+  // ── Test C: List attendance columns by selecting ──
+  step('Test C — Discover actual columns by selecting *');
+  const tC = await db.from('attendance').select('*').limit(1);
+  if(tC.error){ err('Cannot select from attendance: '+tC.error.message); }
+  else if(!tC.data?.length){
+    warn('Table is empty — cannot infer columns from data. Trying explicit selects...');
+    const probes = ['date','event_date','type','event_type','member_zone','member_level','event_lc_group','logged_by_id'];
+    for(const col of probes){
+      const r = await db.from('attendance').select(col).limit(1);
+      if(r.error) err('  ✗ '+col+' — '+(r.error.code||'')+' '+r.error.message.slice(0,80));
+      else ok('  ✓ '+col+' exists');
+    }
+  } else {
+    ok('Sample row keys: '+Object.keys(tC.data[0]).join(', '));
+  }
+
+  // ── Diagnose & propose fix ──
+  step('Diagnosis');
+  if(triggerError){
+    err('A database trigger references the missing column "date".');
+    info('When you renamed date→event_date, the trigger function was not updated.');
+
+    document.getElementById('fixBlock').style.display = 'block';
+    document.getElementById('fixContent').innerHTML = `
+      <p style="color:#e8e8f4">Run this in your Supabase SQL editor (Database → SQL Editor) to find and fix the trigger:</p>
+      <p style="color:#e8e8f4;margin-top:10px"><strong>1. Find triggers on the attendance table:</strong></p>
+      <pre>SELECT trigger_name, action_statement
+FROM information_schema.triggers
+WHERE event_object_table = 'attendance';</pre>
+
+      <p style="color:#e8e8f4;margin-top:10px"><strong>2. Find functions referencing "date":</strong></p>
+      <pre>SELECT routine_name, routine_definition
+FROM information_schema.routines
+WHERE routine_definition ILIKE '%attendance%date%'
+  AND routine_type = 'FUNCTION';</pre>
+
+      <p style="color:#e8e8f4;margin-top:10px"><strong>3. Quick fix — disable trigger temporarily:</strong></p>
+      <pre>-- Replace TRIGGER_NAME with what you found in step 1
+ALTER TABLE attendance DISABLE TRIGGER TRIGGER_NAME;</pre>
+
+      <p style="color:#e8e8f4;margin-top:10px"><strong>4. Better fix — update the trigger function:</strong></p>
+      <pre>-- Edit the function from step 2 to use event_date instead of date
+-- Or drop and recreate it</pre>
+
+      <p style="color:#e8e8f4;margin-top:10px"><strong>Or — easiest path:</strong> rename the column back so the trigger works:</p>
+      <pre>ALTER TABLE attendance RENAME COLUMN event_date TO date;
+ALTER TABLE attendance RENAME COLUMN event_type TO type;</pre>
+      <p style="color:#888899;margin-top:6px;font-size:11px">⚠️ But then we need to update the LC tool code back to date/type. Tell me which approach you want.</p>
+    `;
+  } else if(columnError){
+    err('A column referenced in the insert does not exist: '+columnError);
+    info('Likely one of the new columns (member_zone, member_level, etc.) was never added to your live DB.');
+    document.getElementById('fixBlock').style.display = 'block';
+    document.getElementById('fixContent').innerHTML = `
+      <p style="color:#e8e8f4">Add the missing columns by running this in Supabase SQL editor:</p>
+      <pre>ALTER TABLE attendance
+  ADD COLUMN IF NOT EXISTS member_lc_group text,
+  ADD COLUMN IF NOT EXISTS member_zone     int4,
+  ADD COLUMN IF NOT EXISTS member_level    int4,
+  ADD COLUMN IF NOT EXISTS event_lc_group  text,
+  ADD COLUMN IF NOT EXISTS logged_by_id    uuid;</pre>
+    `;
+  } else {
+    ok('No errors detected — the insert path works!');
+  }
+}
+</script>
+</body>
+</html>
