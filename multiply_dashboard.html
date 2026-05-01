@@ -346,6 +346,7 @@ tbody tr:hover{background:var(--green-light);}
     <button class="nb" onclick="showPanel('interventions',this)">Interventions</button>
     <button class="nb" onclick="showPanel('eolo',this)">EOLO</button>
     <button class="nb" onclick="showPanel('alerts',this)">Alerts</button>
+    <button class="nb" onclick="openTransfers()">🔄 Transfers <span id="navTxBadge" style="display:none;background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="showPanel('reports',this)">Reports</button>
     <button class="nb" onclick="showPanel('settings',this)">Settings</button>
   </div>
@@ -975,8 +976,31 @@ function rAlerts(){
   checkUnmatchedDiagnostics(al);
 
   const el=document.getElementById('al');
-  if(!al.length){el.innerHTML='<div class="empty"><div class="ei">✅</div><div class="et">No alerts — the pipeline looks healthy!</div></div>';return;}
-  el.innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:1rem;font-weight:600">${al.length} alerts requiring attention</div>`+
+
+  // Pending transfer banner — always shown above alerts
+  const pendingTx = members.filter(m => m.pending_lc_group && m.pending_lc_group !== m.lc_group);
+  const txBanner = `<div onclick="openTransfers()" style="cursor:pointer;display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;margin-bottom:1rem;background:${pendingTx.length?'linear-gradient(90deg,rgba(184,136,42,.12),rgba(184,136,42,.04))':'var(--surface2)'};border:1px solid ${pendingTx.length?'rgba(184,136,42,.4)':'var(--border)'};border-radius:10px;transition:all .15s" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='var(--shadow)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+    <div style="font-size:22px">🔄</div>
+    <div style="flex:1">
+      <div style="font-weight:700;color:var(--ink);font-size:13.5px">LC Group Transfers</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${pendingTx.length?`<strong style="color:var(--gold)">${pendingTx.length} pending</strong> — review and approve/reject member transfers`:'No pending transfers right now — open to manage history'}</div>
+    </div>
+    <div style="background:${pendingTx.length?'var(--gold)':'var(--muted)'};color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600">Manage →</div>
+  </div>`;
+
+  // Update nav badge
+  const navBadge = document.getElementById('navTxBadge');
+  if(navBadge){
+    if(pendingTx.length){
+      navBadge.style.display='inline-block';
+      navBadge.textContent = pendingTx.length;
+    } else {
+      navBadge.style.display='none';
+    }
+  }
+
+  if(!al.length){el.innerHTML=txBanner+'<div class="empty"><div class="ei">✅</div><div class="et">No alerts — the pipeline looks healthy!</div></div>';return;}
+  el.innerHTML=txBanner+`<div style="font-size:11px;color:var(--muted);margin-bottom:1rem;font-weight:600">${al.length} alerts requiring attention</div>`+
     al.map(a=>`<div class="ai">
       <div class="aico">${a.i}</div>
       <div class="act2">
@@ -1541,6 +1565,10 @@ function getRecommenderUrl(memberId) {
 }
 function openRecommender(memberId){
   window.open(getRecommenderUrl(memberId), '_blank');
+}
+
+function openTransfers(){
+  window.open('https://gejable1.github.io/multiply/transfer_management.html', '_blank');
 }
 
 function copyProfileLink(type, memberId) {
