@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="shortcut icon" href="favicon.svg">
 <title>Transfer Management · MULTIPLY Pastor Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -183,7 +185,7 @@ select.field-input option{background:var(--surface2);}
 
 <!-- Header -->
 <div class="hdr">
-  <div class="hdr-back" onclick="history.back()">←</div>
+  <div class="hdr-back" onclick="goBackOrClose()" title="Back / Close">←</div>
   <div>
     <div class="hdr-title">🔀 Transfer Management</div>
   </div>
@@ -336,6 +338,31 @@ select.field-input option{background:var(--surface2);}
 </div>
 
 <script>
+// Smart back: if opened via target=_blank, no history exists, so close the tab.
+// Otherwise go back to the previous page.
+function goBackOrClose(){
+  // history.length is 1 when the tab was opened fresh (target=_blank or direct link)
+  if(window.history.length > 1){
+    window.history.back();
+    // Safety net: if back() didn't actually navigate within 250ms, try closing
+    setTimeout(()=>{
+      try{ window.close(); }catch(e){}
+    }, 250);
+  } else {
+    // Try to close — works only if the tab was opened by a script (window.open).
+    // If browser blocks it, fall back to redirecting to the dashboard.
+    const closed = (function(){
+      try{ window.close(); return true; }catch(e){ return false; }
+    })();
+    // After 200ms, if still here, redirect
+    setTimeout(()=>{
+      if(!window.closed){
+        window.location.href = 'https://gejable1.github.io/multiply/multiply_dashboard.html';
+      }
+    }, 200);
+  }
+}
+
 // ── Supabase ──────────────────────────────────────────────────────────
 const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
