@@ -453,6 +453,7 @@ tbody tr:hover{background:var(--green-light);}
   <div class="ss"><div class="st">Data Management</div>
     <div class="sr"><span class="sl">Export all members to CSV</span><button class="sbtn" style="margin-top:0" onclick="exportCSV()">Export CSV</button></div>
     <div class="sr"><span class="sl">Load 12 demo members</span><button class="sbtn" style="margin-top:0" onclick="loadSample()">Load Sample</button></div>
+    <div class="sr"><span class="sl">Delete only the 12 sample members (keeps real ones)</span><button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="clearSample()">Clear Sample Only</button></div>
     <div class="sr"><span class="sl">Delete ALL members (permanent)</span><button class="sbtn" style="margin-top:0;background:var(--red)" onclick="clearAll()">Clear All</button></div>
   </div>
 </div></div>
@@ -1506,6 +1507,11 @@ function exportCSV(){
 // ═══════════════════════════════════════
 // SAMPLE DATA
 // ═══════════════════════════════════════
+// Names of the 12 demo members loaded by loadSample() — used to selectively delete them
+const SAMPLE_NAMES = ['Maria Santos','Jose Reyes','Ana Cruz','Pedro Garcia','Rosa Dela Cruz',
+  'Juan Mendoza','Liza Bautista','Carlo Villanueva','Maricel Lim','Antonio Ramos',
+  'Cynthia Torres','Roberto Flores'];
+
 async function loadSample(){
   if(!confirm('Add 12 sample members to Supabase?'))return;
   const names=[['Maria Santos',1,1,75],['Jose Reyes',1,1,80],['Ana Cruz',1,2,62],
@@ -1532,6 +1538,22 @@ async function loadSample(){
   }
   members.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   renderAll();toast(`${added} members added ✓`);
+}
+
+async function clearSample(){
+  // Find sample members by exact name match
+  const samples = members.filter(m => SAMPLE_NAMES.includes(m.name));
+  if(!samples.length){ toast('No sample members found','ℹ️'); return; }
+  if(!confirm(`Delete ${samples.length} sample member${samples.length>1?'s':''}? Real members will be kept.`)) return;
+  sync('ing');
+  try{
+    const ids = samples.map(m=>m.id);
+    const {error} = await db.from('members').delete().in('id', ids);
+    if(error) throw error;
+    members = members.filter(m=>!ids.includes(m.id));
+    sync('ok');renderAll();
+    toast(`${samples.length} sample member${samples.length>1?'s':''} cleared ✓`);
+  }catch(e){sync('err');toast('Error: '+e.message,'❌');}
 }
 
 async function clearAll(){
