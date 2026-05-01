@@ -303,35 +303,56 @@ tbody tr:hover{background:var(--green-light);}
 </head>
 <body>
 
-<!-- ── PIN LOCK ── -->
-<div class="pin-overlay" id="pinOverlay">
-  <div class="pin-card">
-    <div class="pin-logo">MULTIPLY</div>
-    <div class="pin-sub">Dashboard · LC Leaders & Staff Only</div>
-    <div class="pin-dots" id="pinDots">
-      <div class="pin-dot" id="pd1"></div>
-      <div class="pin-dot" id="pd2"></div>
-      <div class="pin-dot" id="pd3"></div>
-      <div class="pin-dot" id="pd4"></div>
-    </div>
-    <div class="pin-keypad">
-      <button class="pin-key" onclick="pinKey('1')">1</button>
-      <button class="pin-key" onclick="pinKey('2')">2</button>
-      <button class="pin-key" onclick="pinKey('3')">3</button>
-      <button class="pin-key" onclick="pinKey('4')">4</button>
-      <button class="pin-key" onclick="pinKey('5')">5</button>
-      <button class="pin-key" onclick="pinKey('6')">6</button>
-      <button class="pin-key" onclick="pinKey('7')">7</button>
-      <button class="pin-key" onclick="pinKey('8')">8</button>
-      <button class="pin-key" onclick="pinKey('9')">9</button>
-      <button class="pin-key del" onclick="pinDel()">⌫</button>
-      <button class="pin-key" onclick="pinKey('0')">0</button>
-      <button class="pin-key del" onclick="pinClear()">C</button>
-    </div>
-    <div class="pin-error" id="pinError"></div>
-  </div>
-  <div class="pin-church">Rosehill Christian Church · MULTIPLY Pipeline</div>
-</div>
+<!-- ── LEADER SESSION GATE (REDIRECT-BASED) ────────────────────
+     The old PIN overlay was a single shared password. Now access
+     is per-leader, set up at leader_login.html and stored in
+     sessionStorage for 8 hours. If no valid session exists, we
+     redirect to the login page. Until that redirect happens we
+     hide the dashboard chrome behind a black gate so no data ever
+     flashes for an unauthenticated viewer.
+─────────────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+<style id="leader-gate-style">
+  body { visibility: hidden; }
+  body.leader-authenticated { visibility: visible; }
+  #leaderGateBlackout {
+    position:fixed; inset:0; background:#0d2118; z-index:99999;
+    display:flex; align-items:center; justify-content:center;
+    color:#d4b87a; font-family:'DM Sans',sans-serif; font-size:14px;
+    letter-spacing:.04em;
+  }
+</style>
+<div id="leaderGateBlackout">Verifying leader session…</div>
+<script>
+// Run BEFORE anything else loads to prevent data flash.
+(function leaderGateBoot(){
+  const LOGIN_URL = 'leader_login.html';
+  let sess = null;
+  try {
+    const raw = sessionStorage.getItem('multiply_leader_session');
+    if (raw) sess = JSON.parse(raw);
+  } catch(e) { sess = null; }
+
+  const valid = sess
+    && sess.leaderId
+    && sess.expiresAt
+    && Date.parse(sess.expiresAt) > Date.now()
+    && (sess.leaderLevel || 0) >= 2;
+
+  if (!valid) {
+    sessionStorage.removeItem('multiply_leader_session');
+    location.replace(LOGIN_URL);
+    return;
+  }
+
+  // Session is valid. Expose it globally for the rest of the dashboard.
+  window.LEADER_SESSION = sess;
+  // Reveal the dashboard.
+  document.body.classList.add('leader-authenticated');
+  const blackout = document.getElementById('leaderGateBlackout');
+  if (blackout) blackout.remove();
+})();
+</script>
 
 <!-- ── TOPBAR ── -->
 <div class="topbar">
@@ -352,6 +373,13 @@ tbody tr:hover{background:var(--green-light);}
   </div>
   <div class="tact">
     <div class="sync"><div class="sdot" id="sdot"></div><span id="slbl">Loading...</span></div>
+    <div id="leaderBadge" style="display:flex;align-items:center;gap:8px;background:var(--green-bg);padding:5px 10px 5px 5px;border-radius:20px;border:1px solid rgba(42,92,64,.2);cursor:pointer;" onclick="leaderMenu()" title="Click for menu">
+      <div id="leaderBadgeAv" style="width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;">?</div>
+      <div style="font-size:11.5px;line-height:1.2">
+        <div id="leaderBadgeName" style="font-weight:600;color:var(--ink)"></div>
+        <div id="leaderBadgeRole" style="font-size:9.5px;letter-spacing:.05em;color:var(--green);font-weight:600;text-transform:uppercase"></div>
+      </div>
+    </div>
     <button class="bico" onclick="exportCSV()" title="Export CSV">⬇</button>
     <button class="badd" onclick="openAdd()">+ Add Member</button>
   </div>
@@ -369,7 +397,28 @@ tbody tr:hover{background:var(--green-light);}
 
 <!-- MEMBERS -->
 <div id="panel-members" class="panel"><div class="pw">
-  <div class="fbar">
+  <!-- ── SCOPE TABS (Phase 1 access control) ───────────────────
+       These tabs scope which members are shown to each leader.
+       Pastor (Level 5) sees an extra "All Members" tab.
+  ──────────────────────────────────────────────────────────── -->
+  <div class="scope-tabs" id="scopeTabs" style="display:flex;flex-wrap:wrap;gap:8px;background:linear-gradient(135deg,#2a5c40 0%,#1f4530 100%);padding:.85rem 1rem;border-radius:10px 10px 0 0;margin-bottom:0;align-items:center;">
+    <div style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#d4b87a;font-weight:700;margin-right:.4rem;">View:</div>
+    <button class="st-btn active" onclick="LeaderScope.setView('disciples');setActiveScopeTab(this)" style="background:#fff;color:#1f4530;border:none;padding:8px 14px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+      👥 My Disciples <span class="sc-count" id="scopeCountDisciples" style="background:rgba(31,69,48,.15);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">—</span>
+    </button>
+    <button class="st-btn" onclick="LeaderScope.setView('tree');setActiveScopeTab(this)" style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.3);padding:8px 14px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+      🌳 My Tree <span class="sc-count" id="scopeCountTree" style="background:rgba(255,255,255,.15);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">—</span>
+    </button>
+    <button class="st-btn" onclick="LeaderScope.setView('ministry');setActiveScopeTab(this)" style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.3);padding:8px 14px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+      ⛪ My Ministry <span class="sc-count" id="scopeCountMinistry" style="background:rgba(255,255,255,.15);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">—</span>
+    </button>
+    <button class="st-btn" id="scopeBtnAll" onclick="LeaderScope.setView('all');setActiveScopeTab(this)" style="display:none;background:transparent;color:#fff;border:1.5px solid #d4b87a;padding:8px 14px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:none;align-items:center;gap:6px;">
+      🔓 All Members <span class="sc-count" id="scopeCountAll" style="background:rgba(212,184,122,.25);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">—</span>
+    </button>
+    <div style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.7);" id="scopeHint">Showing only members directly under your care</div>
+  </div>
+
+  <div class="fbar" style="border-radius:0 0 10px 10px;">
     <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..."
       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
       data-lpignore="true" data-form-type="other" data-1p-ignore="true" name="sq_search_box_no_autofill"
@@ -610,44 +659,208 @@ const ZL=['','✅ Zone 1','🟡 Zone 2','🟠 Zone 3','🔴 Zone 4'];
 const ZONE_COLORS_CSS=['','var(--green)','#d4a010','var(--orange)','var(--red)'];
 
 // ═══════════════════════════════════════
-// PIN SYSTEM
+// LEADER SESSION (gate already verified, this just exposes it
+// to dashboard logic + provides logout). The gate at the top of
+// <body> handles the actual auth check before this runs.
 // ═══════════════════════════════════════
-let pinEntry='';
-let pinCorrect=DEFAULT_PIN; // Always reset to default — change DEFAULT_PIN above to update
+const LEADER = (window.LEADER_SESSION || {});
 
-function pinKey(k){
-  if(pinEntry.length>=4)return;
-  pinEntry+=k;
-  updatePinDots();
-  if(pinEntry.length===4)setTimeout(checkPin,150);
+// Pipeline level → human label
+const _LEVEL_NAMES = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Executive Leader'];
+
+// Boot: render the leader badge in the topbar
+(function paintLeaderBadge(){
+  const el = (id) => document.getElementById(id);
+  if(!LEADER || !LEADER.leaderId) return;
+  const initials = (LEADER.leaderName||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  if(el('leaderBadgeAv'))   el('leaderBadgeAv').textContent   = initials;
+  if(el('leaderBadgeName')) el('leaderBadgeName').textContent = LEADER.leaderName || '?';
+  if(el('leaderBadgeRole')) el('leaderBadgeRole').textContent = LEADER.leaderRole || _LEVEL_NAMES[LEADER.leaderLevel||0];
+})();
+
+// Logout — clear session, redirect to login
+async function logoutLeader(){
+  try{
+    await db.from('leader_sessions').update({
+      ended_at: new Date().toISOString(), ended_reason: 'logout'
+    }).eq('leader_id', LEADER.leaderId).is('ended_at', null);
+  }catch(e){ /* non-fatal */ }
+  sessionStorage.removeItem('multiply_leader_session');
+  location.replace('leader_login.html');
 }
-function pinDel(){pinEntry=pinEntry.slice(0,-1);updatePinDots();}
-function pinClear(){pinEntry='';updatePinDots();}
-function updatePinDots(){
-  for(let i=1;i<=4;i++){
-    document.getElementById('pd'+i).classList.toggle('filled',i<=pinEntry.length);
+
+// Click on the leader badge → simple menu
+function leaderMenu(){
+  const choice = prompt(
+    `Logged in as: ${LEADER.leaderName} (${LEADER.leaderRole})\n` +
+    `Session expires: ${new Date(LEADER.expiresAt).toLocaleString('en-PH')}\n\n` +
+    `Type:\n  L = Logout\n  C = Cancel`
+  );
+  if(choice && choice.trim().toUpperCase() === 'L') logoutLeader();
+}
+
+// Backwards-compat shim: old code calls lockDashboard() — make it logout
+function lockDashboard(){ logoutLeader(); }
+
+// ═══════════════════════════════════════════════════════════════
+// LEADER SCOPE — the heart of access control (Phase 1, client-side)
+// ═══════════════════════════════════════════════════════════════
+// Three views available to leaders below pastor level:
+//   'disciples' — direct reports (m.discipler_id === LEADER.leaderId)
+//   'tree'      — direct + everyone below their disciplers, recursively
+//   'ministry'  — same primary ministry as the leader (cross-cuts the tree)
+// Pastor (Level 5) bypasses scoping and gets an 'all' view.
+//
+// IMPORTANT: This is UI scoping only. A determined user with DevTools
+// can still see raw data in the network tab. The proper fix is RLS
+// at the database — see RLS_PHASE_2.md.
+// ═══════════════════════════════════════════════════════════════
+const LeaderScope = (function(){
+  let current = 'disciples'; // default for non-pastor leaders
+
+  // Pastor bypass
+  function isPastor(){ return (LEADER.leaderLevel||0) >= 5; }
+
+  // Direct disciples — m.discipler_id matches the leader
+  function getDirect(){
+    return members.filter(m => m.discipler_id === LEADER.leaderId);
   }
-}
-function checkPin(){
-  if(pinEntry===pinCorrect){
-    document.getElementById('pinOverlay').style.display='none';
-    loadMembers();
-  } else {
-    document.getElementById('pinError').textContent='Incorrect PIN. Try again.';
-    pinEntry='';updatePinDots();
-    setTimeout(()=>document.getElementById('pinError').textContent='',2000);
+
+  // Recursive tree: BFS down the discipler graph, with cycle protection
+  function getTree(){
+    const byDiscipler = new Map(); // discipler_id → [members]
+    members.forEach(m => {
+      if(!m.discipler_id) return;
+      if(!byDiscipler.has(m.discipler_id)) byDiscipler.set(m.discipler_id, []);
+      byDiscipler.get(m.discipler_id).push(m);
+    });
+    const visited = new Set();
+    const result = [];
+    const queue = [LEADER.leaderId];
+    while(queue.length){
+      const node = queue.shift();
+      const children = byDiscipler.get(node) || [];
+      children.forEach(child => {
+        if(visited.has(child.id)) return; // cycle guard
+        visited.add(child.id);
+        result.push(child);
+        queue.push(child.id);
+      });
+    }
+    return result;
   }
+
+  // Ministry: same primary ministry as the leader
+  function getMinistry(){
+    const me = members.find(m => m.id === LEADER.leaderId);
+    if(!me) return [];
+    const myMins = [me.ministry, me.ministry2, me.ministry3].filter(Boolean);
+    if(!myMins.length) return [];
+    return members.filter(m => {
+      if(m.id === LEADER.leaderId) return false; // exclude self
+      return [m.ministry, m.ministry2, m.ministry3].filter(Boolean).some(min => myMins.includes(min));
+    });
+  }
+
+  // Apply current view as a filter to the full member list
+  function apply(memberList){
+    if(isPastor() && current === 'all') return memberList;
+    if(current === 'disciples') return getDirect();
+    if(current === 'tree')      return getTree();
+    if(current === 'ministry')  return getMinistry();
+    if(current === 'all' && isPastor()) return memberList;
+    return getDirect(); // safe fallback
+  }
+
+  function setView(v){
+    if(!isPastor() && v === 'all') v = 'tree'; // non-pastors can't go to all
+    current = v;
+    if(typeof renderTable === 'function') renderTable();
+    if(typeof rKPI === 'function') rKPI();
+    if(typeof updateScopeCounts === 'function') updateScopeCounts();
+  }
+
+  function getCurrent(){ return current; }
+
+  // Permission checks for sensitive fields:
+  //
+  //   tier 'public'    — everyone in scope sees this
+  //   tier 'pastoral'  — direct discipler + above (anyone where target ∈ leader's tree)
+  //   tier 'sensitive' — direct discipler + pastor only (level 5)
+  //   tier 'pastor'    — pastor only
+  //
+  // Pastor sees everything. The "direct discipler" check runs against
+  // the actual member.discipler_id so coaches above the discipler don't
+  // accidentally inherit visibility unless they're the pastor.
+  function canSee(tier, member){
+    if(isPastor()) return true;
+    if(!member) return tier === 'public';
+    if(tier === 'public') return true;
+    if(tier === 'pastoral'){
+      // Anyone in this leader's tree (direct or indirect)
+      return getTree().some(x => x.id === member.id) || member.discipler_id === LEADER.leaderId;
+    }
+    if(tier === 'sensitive'){
+      // Direct discipler only (apart from pastor handled above)
+      return member.discipler_id === LEADER.leaderId;
+    }
+    if(tier === 'pastor') return false; // pastor handled above; non-pastor never
+    return false;
+  }
+
+  return { setView, getCurrent, isPastor, getDirect, getTree, getMinistry, apply, canSee };
+})();
+
+// Update the count badges in the view-tabs UI.
+function updateScopeCounts(){
+  const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
+  set('scopeCountDisciples', LeaderScope.getDirect().length);
+  set('scopeCountTree',      LeaderScope.getTree().length);
+  set('scopeCountMinistry',  LeaderScope.getMinistry().length);
+  if(LeaderScope.isPastor()) set('scopeCountAll', members.length);
 }
-function changePin(){
-  const np=document.getElementById('newPin').value;
-  if(np.length<4){toast('PIN must be at least 4 digits','⚠');return;}
-  pinCorrect=np; // Note: resets to DEFAULT_PIN on next page load — edit DEFAULT_PIN in code to make permanent
-  document.getElementById('newPin').value='';
-  toast('PIN updated successfully');
+
+// Visual: highlight the active scope tab + update the hint line.
+function setActiveScopeTab(btn){
+  document.querySelectorAll('.st-btn').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = '#fff';
+    b.style.border = '1.5px solid rgba(255,255,255,.3)';
+    b.classList.remove('active');
+  });
+  if(btn){
+    btn.style.background = '#fff';
+    btn.style.color = '#1f4530';
+    btn.style.border = 'none';
+    btn.classList.add('active');
+  }
+  const hints = {
+    disciples: 'Showing only members directly under your care',
+    tree:      'Showing your direct disciples + everyone under their disciplers',
+    ministry:  'Showing members in the same ministry as you',
+    all:       '🔓 Pastor view — all members in the church',
+  };
+  const el = document.getElementById('scopeHint');
+  if(el) el.textContent = hints[LeaderScope.getCurrent()] || '';
 }
-function lockDashboard(){
-  document.getElementById('pinOverlay').style.display='flex';
-  pinEntry='';updatePinDots();
+
+// On boot, reveal the "All Members" tab for pastors.
+(function revealPastorTab(){
+  if(LeaderScope.isPastor()){
+    const b = document.getElementById('scopeBtnAll');
+    if(b){ b.style.display = 'flex'; }
+  }
+})();
+
+// Audit log helper — non-fatal, fire-and-forget.
+function logView(viewedMemberId, context){
+  try{
+    db.from('view_log').insert({
+      viewer_id: LEADER.leaderId,
+      viewed_member_id: viewedMemberId,
+      context: context || 'profile_open',
+    }).then(()=>{}, ()=>{}); // swallow errors silently
+  }catch(e){ /* ignore */ }
 }
 
 // ═══════════════════════════════════════
@@ -753,6 +966,7 @@ function buildSettingsMinistries(){
 // ═══════════════════════════════════════
 function renderAll(){
   rKPI();rPV();renderTable();rPipe();rInterventions();rEolo();rAlerts();rReports();rOvExtras();
+  if(typeof updateScopeCounts === 'function') updateScopeCounts();
   document.getElementById('dbc').textContent=members.length+' members';
   // Show facilitator role row if checked
   document.getElementById('fIsFac')?.addEventListener('change',e=>{
@@ -764,15 +978,18 @@ function renderAll(){
 // KPIs
 // ═══════════════════════════════════════
 function rKPI(){
+  // KPIs respect scope. Pastor-level "all" view sees everything; other
+  // leaders see counts of their disciples / tree / ministry only.
+  const view = (typeof LeaderScope === 'object') ? LeaderScope.apply(members) : members;
   const bl=[0,0,0,0,0,0];let ea=0,dd=0,needInt=0;
-  members.forEach(m=>{
+  view.forEach(m=>{
     bl[m.level||0]++;
     if(m.eolo&&m.eolo.some(e=>e.name))ea++;
     if(m.diagnostic_zone)dd++;
     if(m.diagnostic_zone>=2)needInt++;
   });
   document.getElementById('ks').innerHTML=[
-    {l:'Total Members',v:members.length,c:'a'},
+    {l:'Total in View',v:view.length,c:'a'},
     {l:'Level 1',v:bl[1],c:'b'},{l:'Level 2',v:bl[2],c:'c'},
     {l:'Level 3',v:bl[3],c:'d'},{l:'L4–5',v:bl[4]+bl[5],c:'e'},
     {l:'Pre-Pipeline',v:bl[0],c:'f'},
@@ -807,7 +1024,9 @@ function setF(f,el){
 
 function renderTable(){
   const q=(document.getElementById('sq')?.value||'').toLowerCase();
-  let fl=members.filter(m=>{
+  // ── Apply leader-scope first; then the existing zone/level filters ──
+  const scopedMembers = LeaderScope.apply(members);
+  let fl=scopedMembers.filter(m=>{
     const ok=!q||(m.name||'').toLowerCase().includes(q)||(m.group||'').toLowerCase().includes(q)||(m.gifts||'').toLowerCase().includes(q)||(m.ministry||'').toLowerCase().includes(q)||(m.discipler||'').toLowerCase().includes(q);
     if(!ok)return false;
     if(filt==='all')return true;
@@ -823,7 +1042,18 @@ function renderTable(){
   });
   const tb=document.getElementById('tb');
   if(!fl.length){
-    tb.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="ei">👥</div><div class="et">${members.length===0?'No members yet. Click + Add Member to start.':'No members match this filter.'}</div></div></td></tr>`;
+    const scopeMsgs = {
+      disciples: 'No one is directly discipled by you yet. Ask Pastor Gerry to assign you a discipler.',
+      tree:      'No one in your discipleship tree matches the filters.',
+      ministry:  'No one in your ministry matches the filters.',
+      all:       'No members match the filters.',
+    };
+    const baseMsg = members.length===0
+      ? 'No members yet. Click + Add Member to start.'
+      : (scopedMembers.length===0
+          ? (scopeMsgs[LeaderScope.getCurrent()] || 'No members in your current view.')
+          : 'No members match this filter within your view.');
+    tb.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="ei">👥</div><div class="et">${baseMsg}</div></div></td></tr>`;
     return;
   }
   tb.innerHTML=fl.map(m=>{
@@ -1195,6 +1425,18 @@ function openAdd(){
 }
 function openEdit(id){
   const m=members.find(x=>x.id===id);if(!m)return;
+  // Scope guard — prevent leaders opening members outside their view.
+  // Pastor bypasses; for others we check the current scope.
+  if(!LeaderScope.isPastor()){
+    const allowed = LeaderScope.apply(members);
+    const inScope = allowed.some(x => x.id === m.id);
+    if(!inScope){
+      toast('That member is outside your current view.','🔒');
+      return;
+    }
+  }
+  // Audit log — fire-and-forget
+  logView(m.id, 'profile_open');
   eid=id;fillF(m);
   const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('mav').textContent=ini;
@@ -1261,8 +1503,28 @@ function fillF(m){
 }
 
 // ── DIAGNOSTICS TAB ──
+// Sensitivity: detailed salvation diagnostic results are 'sensitive' tier —
+// only direct discipler and pastor see the actual score, zone, and
+// intervention notes. Leaders higher in the tree get a redacted view
+// that confirms work is in progress without exposing the specifics.
 function rDiagTab(m){
   const wrap=document.getElementById('diagTab');
+  // Sensitivity gate: leaders who are not the direct discipler (and not pastor)
+  // get a redacted view if the member has a diagnostic on file.
+  if(m && m.diagnostic_zone && !LeaderScope.canSee('sensitive', m)){
+    const status = m.intervention_status || 'not_started';
+    const statusLabel = {not_started:'Not yet started',in_progress:'In progress',completed:'Completed',extended:'Extended'}[status] || status;
+    wrap.innerHTML = `
+      <div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:8px;padding:1.25rem 1rem;text-align:center;margin-bottom:1rem;">
+        <div style="font-size:24px;margin-bottom:.4rem;">🔒</div>
+        <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:.3rem;">Diagnostic Details Hidden</div>
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.55;max-width:340px;margin:0 auto;">Salvation assurance diagnostic results are visible only to the member's direct discipler and pastoral staff. You can see that diagnostic work is ${statusLabel.toLowerCase()}.</div>
+      </div>
+      <div style="background:var(--green-bg);border-radius:8px;padding:.85rem 1rem;font-size:12.5px;color:var(--green-deep);text-align:center;">
+        <strong>Status:</strong> ${statusLabel}${m.diagnostic_date?' · taken '+m.diagnostic_date:''}
+      </div>`;
+    return;
+  }
   if(!m||!m.diagnostic_zone){
     // No member yet (Add New) or no diagnostic taken
     if(!m||!m.id){
@@ -1371,7 +1633,27 @@ function uEolo(pi,key,val){
 }
 
 // ── NOTES TAB ──
+// Sensitivity: 'sensitive' tier — only the direct discipler and the pastor
+// can see pastoral notes. Notes often contain prayer items, struggles, and
+// observations that are not for general circulation among other leaders.
 function rNT(m){
+  if(!LeaderScope.canSee('sensitive', m)){
+    document.getElementById('ntl').innerHTML =
+      `<div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:8px;padding:1.25rem 1rem;text-align:center;">
+        <div style="font-size:24px;margin-bottom:.4rem;">🔒</div>
+        <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:.3rem;">Pastoral Notes Hidden</div>
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.55;">Notes contain pastoral observations and prayer items. They are visible only to the direct discipler and pastoral staff.</div>
+      </div>`;
+    // Hide the add-note input too
+    const nn = document.getElementById('nn');
+    const btn = nn?.parentElement?.parentElement?.querySelector('button.bsv');
+    if(nn) nn.parentElement.style.display = 'none';
+    if(btn) btn.style.display = 'none';
+    return;
+  }
+  // Make sure add-note input is visible for those who can see notes
+  const nn = document.getElementById('nn');
+  if(nn) nn.parentElement.style.display = '';
   const n=m?.notes||[];
   document.getElementById('ntl').innerHTML=!n.length?
     '<div style="color:var(--muted);font-size:12px;margin-bottom:1rem">No notes yet.</div>':
@@ -1619,6 +1901,21 @@ function copyProfileLink(type, memberId) {
 async function rProfileTab(m) {
   const wrap = document.getElementById('profileTab');
   if(!wrap) return;
+  // Sensitivity: 'pastoral' tier — visible to anyone in the leader's tree.
+  // Personality profiles (DISC, Enneagram, love language) inform discipling
+  // and ministry placement, so anyone responsible for the member should see
+  // them, but not church members at large.
+  if(!LeaderScope.canSee('pastoral', m)){
+    wrap.innerHTML = `
+      <div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:8px;padding:1.5rem 1rem;text-align:center;">
+        <div style="font-size:28px;margin-bottom:.5rem;">🔒</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.4rem;">Profile Details Hidden</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;max-width:340px;margin:0 auto;">Personality and gift profiles are visible to leaders within the member's discipleship tree. You can still see basic information on the Info tab.</div>
+      </div>`;
+    return;
+  }
+  // Audit log — viewing personality data is worth tracking
+  logView(m.id, 'profile_view');
   wrap.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px">⏳ Loading profile data...</div>';
 
   // Load from member_profiles table — get most recent per type
@@ -1875,6 +2172,17 @@ function openGiftsDirect(memberId) {
 async function rGiftsTab(m) {
   const wrap = document.getElementById('giftsTab');
   if (!wrap) return;
+  // Sensitivity: 'pastoral' tier — same logic as profile tab.
+  if(!LeaderScope.canSee('pastoral', m)){
+    wrap.innerHTML = `
+      <div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:8px;padding:1.5rem 1rem;text-align:center;">
+        <div style="font-size:28px;margin-bottom:.5rem;">🔒</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.4rem;">Gift Profile Hidden</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;max-width:340px;margin:0 auto;">Spiritual gift diagnostic results are visible to leaders within the member's discipleship tree.</div>
+      </div>`;
+    return;
+  }
+  logView(m.id, 'gifts_view');
 
   // Try to load gifts diagnostic results from Supabase
   let giftsData = null;
@@ -2284,6 +2592,13 @@ window.showPanel = function(id, btn){
     if(sq){ sq.value = ''; window._sqUserTyped = false; }
   }
 };
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// The leader-session gate at the top of <body> already ran.
+// If we're here, LEADER is valid and we can load member data.
+// ═══════════════════════════════════════════════════════════════
+loadMembers();
 </script>
 </body>
 </html>

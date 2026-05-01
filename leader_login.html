@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MULTIPLY — Leader Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+<style>
+:root{
+  --green:#2a5c40; --green-bg:#e8f1ec; --green-deep:#1f4530;
+  --gold:#b8882a; --gold-bg:#f5ebd6;
+  --ink:#1a1612; --muted:#6b5f4f; --lighter:#9b8e7e;
+  --surface:#fdfbf6; --surface2:#f5efe3; --border:#e2d8cc;
+  --red:#b03a2e; --red-bg:#fdecea;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  font-family:'DM Sans',sans-serif; background:linear-gradient(135deg,#1f4530 0%,#0d2118 100%);
+  color:var(--ink); display:flex; align-items:center; justify-content:center; padding:1rem;
+}
+.login-card{
+  background:var(--surface); border-radius:14px; box-shadow:0 30px 80px rgba(0,0,0,.4);
+  width:100%; max-width:420px; padding:2.25rem 1.75rem 2rem; text-align:center;
+}
+.brand{
+  font-family:'Playfair Display',serif; font-size:2rem; font-weight:700; color:var(--green);
+  letter-spacing:.04em; line-height:1;
+}
+.brand-sub{
+  font-size:11px; color:var(--muted); letter-spacing:.18em; text-transform:uppercase;
+  margin-top:.45rem; font-weight:600;
+}
+.divider{height:1px; background:var(--border); margin:1.5rem 0 1.25rem;}
+.step-title{
+  font-family:'Playfair Display',serif; font-size:1.25rem; color:var(--ink);
+  margin-bottom:.4rem; font-weight:600;
+}
+.step-sub{font-size:13px; color:var(--muted); margin-bottom:1.25rem; line-height:1.5;}
+
+/* search box */
+.search-wrap{position:relative; text-align:left;}
+.search-input{
+  width:100%; padding:13px 14px; font-family:inherit; font-size:14.5px;
+  border:1.5px solid var(--border); border-radius:9px; background:#fff; color:var(--ink);
+  outline:none; transition:border-color .15s;
+}
+.search-input:focus{border-color:var(--green);}
+.search-dropdown{
+  position:absolute; top:calc(100% + 4px); left:0; right:0;
+  background:#fff; border:1.5px solid var(--border); border-radius:9px;
+  max-height:240px; overflow-y:auto; z-index:10; display:none;
+  box-shadow:0 12px 30px rgba(0,0,0,.12);
+}
+.search-dropdown.show{display:block;}
+.search-item{
+  padding:.7rem .9rem; font-size:13.5px; color:var(--ink); cursor:pointer;
+  border-bottom:1px solid var(--border); transition:background .12s; text-align:left;
+}
+.search-item:last-child{border-bottom:none;}
+.search-item:hover{background:var(--green-bg);}
+.search-item .si-name{font-weight:600;}
+.search-item .si-meta{font-size:11.5px; color:var(--muted); margin-top:1px;}
+.search-empty{padding:1rem; text-align:center; color:var(--muted); font-size:12.5px; font-style:italic;}
+
+/* selected leader card */
+.leader-card{
+  background:var(--green-bg); border:1.5px solid rgba(42,92,64,.3);
+  border-radius:10px; padding:.9rem 1rem; display:flex; align-items:center; gap:14px;
+  text-align:left; margin-bottom:1.25rem;
+}
+.leader-av{
+  width:46px; height:46px; border-radius:50%;
+  background:var(--green); color:#fff; font-weight:700; font-size:15px;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.leader-name{font-size:14.5px; font-weight:600; color:var(--ink);}
+.leader-role{
+  font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--green); font-weight:700; margin-top:1px;
+}
+.leader-lc{font-size:11.5px; color:var(--muted); margin-top:1px;}
+.change-leader{
+  background:transparent; border:none; color:var(--green); font-size:11px;
+  font-family:inherit; cursor:pointer; text-decoration:underline; padding:0; margin-left:auto;
+}
+
+/* PIN dots */
+.pin-dots{display:flex; justify-content:center; gap:14px; margin:1rem 0 1.25rem;}
+.pin-dot{width:14px; height:14px; border-radius:50%; background:var(--border); transition:all .15s;}
+.pin-dot.filled{background:var(--green); transform:scale(1.15);}
+
+/* Numpad */
+.pin-keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:.75rem;}
+.pin-key{
+  font-family:inherit; font-size:18px; font-weight:600; padding:14px 0;
+  background:var(--surface2); border:1.5px solid var(--border); border-radius:9px;
+  color:var(--ink); cursor:pointer; transition:all .12s;
+}
+.pin-key:hover{background:var(--green-bg); border-color:var(--green);}
+.pin-key:active{transform:scale(.95);}
+.pin-key.del{font-size:15px; color:var(--muted);}
+
+/* misc */
+.error-msg{
+  font-size:12.5px; color:var(--red); background:var(--red-bg); border:1px solid #f5c6c2;
+  padding:.6rem .85rem; border-radius:7px; margin-top:.75rem; display:none;
+}
+.error-msg.show{display:block;}
+.info-msg{
+  font-size:12.5px; color:var(--green-deep); background:var(--green-bg);
+  border:1px solid rgba(42,92,64,.2); padding:.6rem .85rem; border-radius:7px;
+  margin:.75rem 0; line-height:1.5;
+}
+.btn-primary{
+  width:100%; padding:13px; font-family:inherit; font-size:14px; font-weight:600;
+  background:var(--green); color:#fff; border:none; border-radius:9px;
+  cursor:pointer; transition:background .15s;
+}
+.btn-primary:hover{background:var(--green-deep);}
+.btn-primary:disabled{background:var(--lighter); cursor:not-allowed;}
+.btn-text{
+  background:transparent; border:none; color:var(--muted); font-size:11.5px;
+  font-family:inherit; cursor:pointer; text-decoration:underline; padding:.5rem;
+  margin-top:.5rem;
+}
+.footer-note{
+  font-size:11px; color:var(--muted); margin-top:1.5rem; line-height:1.55;
+}
+
+.hidden{display:none !important;}
+
+/* loading */
+.loading-bar{
+  height:3px; background:var(--surface2); border-radius:2px; overflow:hidden;
+  margin:.75rem 0; display:none;
+}
+.loading-bar.show{display:block;}
+.loading-fill{
+  height:100%; background:var(--green); width:30%;
+  animation:loadbar 1s ease-in-out infinite;
+}
+@keyframes loadbar{
+  0%{margin-left:-30%;} 100%{margin-left:100%;}
+}
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <div class="brand">MULTIPLY</div>
+  <div class="brand-sub">Leader Login</div>
+  <div class="divider"></div>
+
+  <!-- ─────────── STEP 1: Find your name ─────────── -->
+  <div id="step1">
+    <div class="step-title">Welcome, kapatid</div>
+    <div class="step-sub">Type your name to begin. Only those at Leader level (Level 2) and above can log in here.</div>
+    <div class="search-wrap">
+      <input type="text" id="nameSearch" class="search-input" placeholder="Type your name..." autocomplete="off" spellcheck="false">
+      <div class="search-dropdown" id="searchDropdown"></div>
+    </div>
+    <div class="loading-bar" id="loadBar1"><div class="loading-fill"></div></div>
+    <div class="error-msg" id="err1"></div>
+  </div>
+
+  <!-- ─────────── STEP 2: Set or enter PIN ─────────── -->
+  <div id="step2" class="hidden">
+    <div class="leader-card">
+      <div class="leader-av" id="lAv">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="leader-name" id="lName"></div>
+        <div class="leader-role" id="lRole"></div>
+        <div class="leader-lc" id="lLc"></div>
+      </div>
+      <button class="change-leader" onclick="goBack()">Not me</button>
+    </div>
+
+    <div id="pinExisting" class="hidden">
+      <div class="step-title">Enter your PIN</div>
+      <div class="step-sub">4-digit PIN you set up before.</div>
+    </div>
+
+    <div id="pinNew" class="hidden">
+      <div class="step-title">Set up your PIN</div>
+      <div class="step-sub">First time logging in. Choose a 4-digit PIN you'll remember.</div>
+      <div class="info-msg">
+        <strong>📌 Important:</strong> Don't share this PIN. Treat it like a phone unlock — it lets you see members' personal information.
+      </div>
+    </div>
+
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+      <div class="pin-dot" id="pd4"></div>
+    </div>
+
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinClear()">C</button>
+    </div>
+
+    <div class="loading-bar" id="loadBar2"><div class="loading-fill"></div></div>
+    <div class="error-msg" id="err2"></div>
+  </div>
+
+  <!-- ─────────── STEP 3: Confirm new PIN ─────────── -->
+  <div id="step3" class="hidden">
+    <div class="leader-card">
+      <div class="leader-av" id="lAv2">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="leader-name" id="lName2"></div>
+        <div class="leader-role" id="lRole2"></div>
+      </div>
+    </div>
+
+    <div class="step-title">Confirm your PIN</div>
+    <div class="step-sub">Type the same PIN one more time.</div>
+
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd1c"></div>
+      <div class="pin-dot" id="pd2c"></div>
+      <div class="pin-dot" id="pd3c"></div>
+      <div class="pin-dot" id="pd4c"></div>
+    </div>
+
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinKeyC('1')">1</button>
+      <button class="pin-key" onclick="pinKeyC('2')">2</button>
+      <button class="pin-key" onclick="pinKeyC('3')">3</button>
+      <button class="pin-key" onclick="pinKeyC('4')">4</button>
+      <button class="pin-key" onclick="pinKeyC('5')">5</button>
+      <button class="pin-key" onclick="pinKeyC('6')">6</button>
+      <button class="pin-key" onclick="pinKeyC('7')">7</button>
+      <button class="pin-key" onclick="pinKeyC('8')">8</button>
+      <button class="pin-key" onclick="pinKeyC('9')">9</button>
+      <button class="pin-key del" onclick="pinDelC()">⌫</button>
+      <button class="pin-key" onclick="pinKeyC('0')">0</button>
+      <button class="pin-key del" onclick="pinClearC()">C</button>
+    </div>
+
+    <div class="loading-bar" id="loadBar3"><div class="loading-fill"></div></div>
+    <div class="error-msg" id="err3"></div>
+  </div>
+
+  <div class="footer-note">
+    Forgot your PIN? Ask Pastor Gerry to reset it.<br>
+    <span style="font-size:10px">Rosehill Christian Church · MULTIPLY Pipeline</span>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════════════════════════
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+const db = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const LN = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Executive Leader'];
+const SESSION_HOURS = 8;
+const DASHBOARD_URL = 'multiply_dashboard.html'; // change if hosted elsewhere
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let allLeaders = [];      // members where pipeline_level >= 2
+let selectedLeader = null;
+let pinEntry = '';
+let pinFirstEntry = '';   // for first-time setup, the first entered PIN before confirm
+let pinConfirm = '';
+let mode = 'verify';      // 'verify' (existing PIN) or 'setup' (new PIN)
+
+// ═══════════════════════════════════════════════════════════
+// IF ALREADY LOGGED IN, BOUNCE STRAIGHT TO DASHBOARD
+// ═══════════════════════════════════════════════════════════
+(function checkExistingSession(){
+  try{
+    const raw = sessionStorage.getItem('multiply_leader_session');
+    if(!raw) return;
+    const sess = JSON.parse(raw);
+    if(sess && sess.expiresAt && Date.parse(sess.expiresAt) > Date.now()){
+      // Already valid — go to dashboard
+      location.replace(DASHBOARD_URL);
+    } else {
+      sessionStorage.removeItem('multiply_leader_session');
+    }
+  }catch(e){ /* ignore */ }
+})();
+
+// ═══════════════════════════════════════════════════════════
+// LOAD LEADERS LIST
+// ═══════════════════════════════════════════════════════════
+async function loadLeaders(){
+  try{
+    const {data, error} = await db.from('members')
+      .select('id,name,pipeline_level,facilitator_role,lc_group,leader_pin_hash')
+      .gte('pipeline_level', 2)
+      .order('name');
+    if(error) throw error;
+    allLeaders = data || [];
+  }catch(e){
+    showError('err1', 'Could not load leader list. Check your connection. ('+e.message+')');
+  }
+}
+loadLeaders();
+
+// ═══════════════════════════════════════════════════════════
+// STEP 1 — NAME SEARCH
+// ═══════════════════════════════════════════════════════════
+const nameInput = document.getElementById('nameSearch');
+const dropdown = document.getElementById('searchDropdown');
+nameInput.addEventListener('input', ()=>{
+  const q = nameInput.value.trim().toLowerCase();
+  if(!q){ dropdown.classList.remove('show'); return; }
+  const matches = allLeaders.filter(m => (m.name||'').toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){
+    dropdown.innerHTML = '<div class="search-empty">No leader matches that name.<br>Only Leader / Coach / Director / Pastor can log in here.</div>';
+  } else {
+    dropdown.innerHTML = matches.map(m=>{
+      const initials = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      const role = m.facilitator_role || LN[m.pipeline_level||0];
+      return `<div class="search-item" onclick="pickLeader('${m.id}')">
+        <div class="si-name">${escapeHTML(m.name)}</div>
+        <div class="si-meta">${escapeHTML(role)}${m.lc_group?' · '+escapeHTML(m.lc_group):''}</div>
+      </div>`;
+    }).join('');
+  }
+  dropdown.classList.add('show');
+});
+nameInput.addEventListener('blur', ()=>{
+  setTimeout(()=>dropdown.classList.remove('show'), 200);
+});
+nameInput.addEventListener('focus', ()=>{
+  if(nameInput.value && dropdown.innerHTML) dropdown.classList.add('show');
+});
+
+function pickLeader(id){
+  selectedLeader = allLeaders.find(m => m.id === id);
+  if(!selectedLeader) return;
+  document.getElementById('step1').classList.add('hidden');
+  document.getElementById('step2').classList.remove('hidden');
+
+  const initials = (selectedLeader.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('lAv').textContent = initials;
+  document.getElementById('lName').textContent = selectedLeader.name;
+  const role = selectedLeader.facilitator_role || LN[selectedLeader.pipeline_level||0];
+  document.getElementById('lRole').textContent = role;
+  document.getElementById('lLc').textContent = selectedLeader.lc_group || '';
+
+  // Has a PIN already set?
+  if(selectedLeader.leader_pin_hash){
+    mode = 'verify';
+    document.getElementById('pinExisting').classList.remove('hidden');
+    document.getElementById('pinNew').classList.add('hidden');
+  } else {
+    mode = 'setup';
+    document.getElementById('pinExisting').classList.add('hidden');
+    document.getElementById('pinNew').classList.remove('hidden');
+  }
+  pinEntry = ''; updatePinDots();
+}
+
+function goBack(){
+  selectedLeader = null;
+  pinEntry = ''; pinFirstEntry = ''; pinConfirm = '';
+  document.getElementById('step1').classList.remove('hidden');
+  document.getElementById('step2').classList.add('hidden');
+  document.getElementById('step3').classList.add('hidden');
+  hideError('err1'); hideError('err2'); hideError('err3');
+  nameInput.value = '';
+  nameInput.focus();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 2 — PIN ENTRY
+// ═══════════════════════════════════════════════════════════
+function pinKey(k){
+  if(pinEntry.length >= 4) return;
+  pinEntry += k;
+  updatePinDots();
+  hideError('err2');
+  if(pinEntry.length === 4) setTimeout(handlePinSubmit, 180);
+}
+function pinDel(){ pinEntry = pinEntry.slice(0,-1); updatePinDots(); }
+function pinClear(){ pinEntry = ''; updatePinDots(); }
+function updatePinDots(){
+  for(let i=1; i<=4; i++){
+    document.getElementById('pd'+i).classList.toggle('filled', i <= pinEntry.length);
+  }
+}
+
+async function handlePinSubmit(){
+  if(mode === 'verify'){
+    // Existing PIN — verify against hash
+    showLoading('loadBar2', true);
+    try{
+      const ok = await verifyPin(pinEntry, selectedLeader.leader_pin_hash);
+      if(!ok){
+        showLoading('loadBar2', false);
+        showError('err2', 'Incorrect PIN. Try again or ask Pastor Gerry to reset.');
+        pinEntry = ''; updatePinDots();
+        return;
+      }
+      await loginSuccess();
+    }catch(e){
+      showLoading('loadBar2', false);
+      showError('err2', 'Login error: '+e.message);
+    }
+  } else {
+    // Setup mode — capture this entry, ask to confirm
+    pinFirstEntry = pinEntry;
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.remove('hidden');
+    // Mirror the leader card
+    document.getElementById('lAv2').textContent = document.getElementById('lAv').textContent;
+    document.getElementById('lName2').textContent = selectedLeader.name;
+    document.getElementById('lRole2').textContent = document.getElementById('lRole').textContent;
+    pinConfirm = ''; updatePinDotsC();
+    pinEntry = ''; updatePinDots();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 3 — PIN CONFIRM (setup only)
+// ═══════════════════════════════════════════════════════════
+function pinKeyC(k){
+  if(pinConfirm.length >= 4) return;
+  pinConfirm += k;
+  updatePinDotsC();
+  hideError('err3');
+  if(pinConfirm.length === 4) setTimeout(handlePinConfirmSubmit, 180);
+}
+function pinDelC(){ pinConfirm = pinConfirm.slice(0,-1); updatePinDotsC(); }
+function pinClearC(){ pinConfirm = ''; updatePinDotsC(); }
+function updatePinDotsC(){
+  for(let i=1; i<=4; i++){
+    document.getElementById('pd'+i+'c').classList.toggle('filled', i <= pinConfirm.length);
+  }
+}
+
+async function handlePinConfirmSubmit(){
+  if(pinConfirm !== pinFirstEntry){
+    showError('err3', 'PINs don\'t match. Let\'s try setting it up again.');
+    pinConfirm = ''; updatePinDotsC();
+    setTimeout(()=>{
+      // Restart setup
+      pinFirstEntry = ''; pinConfirm = '';
+      document.getElementById('step2').classList.remove('hidden');
+      document.getElementById('step3').classList.add('hidden');
+      hideError('err3');
+    }, 1800);
+    return;
+  }
+
+  // Save the new hashed PIN
+  showLoading('loadBar3', true);
+  try{
+    const hash = await hashPin(pinFirstEntry);
+    const {error} = await db.from('members').update({
+      leader_pin_hash: hash,
+      leader_pin_set_at: new Date().toISOString(),
+    }).eq('id', selectedLeader.id);
+    if(error) throw error;
+    selectedLeader.leader_pin_hash = hash;
+    pinEntry = pinFirstEntry; // for the loginSuccess path
+    await loginSuccess();
+  }catch(e){
+    showLoading('loadBar3', false);
+    showError('err3', 'Could not save PIN: '+e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOGIN SUCCESS — write session, log, redirect
+// ═══════════════════════════════════════════════════════════
+async function loginSuccess(){
+  const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+  const session = {
+    leaderId:    selectedLeader.id,
+    leaderName:  selectedLeader.name,
+    leaderLevel: selectedLeader.pipeline_level || 0,
+    leaderRole:  selectedLeader.facilitator_role || LN[selectedLeader.pipeline_level||0],
+    leaderLcGroup: selectedLeader.lc_group || null,
+    expiresAt,
+    sessionStart: new Date().toISOString(),
+  };
+  sessionStorage.setItem('multiply_leader_session', JSON.stringify(session));
+
+  // Update last-login timestamp & insert session log (best-effort, non-fatal)
+  try{
+    await db.from('members').update({
+      leader_last_login: new Date().toISOString()
+    }).eq('id', selectedLeader.id);
+  }catch(e){ console.warn('last-login update failed (non-fatal):', e); }
+
+  try{
+    await db.from('leader_sessions').insert({
+      leader_id: selectedLeader.id,
+      expires_at: expiresAt,
+      user_agent_hint: (navigator.userAgent || '').slice(0,180),
+    });
+  }catch(e){ console.warn('session log failed (non-fatal):', e); }
+
+  location.replace(DASHBOARD_URL);
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function hashPin(pin){
+  return new Promise((resolve, reject)=>{
+    bcrypt.hash(pin, 10, (err, hash) => err ? reject(err) : resolve(hash));
+  });
+}
+function verifyPin(pin, hash){
+  return new Promise((resolve, reject)=>{
+    bcrypt.compare(pin, hash, (err, ok) => err ? reject(err) : resolve(!!ok));
+  });
+}
+
+function showError(id, msg){
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function hideError(id){ document.getElementById(id).classList.remove('show'); }
+function showLoading(id, on){
+  document.getElementById(id).classList.toggle('show', !!on);
+}
+function escapeHTML(s){
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+
+</body>
+</html>
