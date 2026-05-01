@@ -928,13 +928,18 @@ function rInterventions(){
 const GH_BASE = 'https://gejable1.github.io/multiply/';
 function openDebrief(id){
   const m=members.find(x=>x.id===id);
-  if(!m)return;
-  toast(`Opening debrief for ${m.name}`,'📋');
-  window.open(GH_BASE+'facilitator_debrief_guide.html?id='+id,'_blank');
+  if(!m){ console.warn('openDebrief: member not found for id', id); toast('Member not found','⚠️'); return; }
+  // Open the window FIRST so the browser keeps the user-gesture context (popup blockers)
+  const url = GH_BASE+'facilitator_debrief_guide.html?id='+encodeURIComponent(id);
+  const w = window.open(url, '_blank');
+  if(!w) toast('Popup blocked — allow popups for this site','⚠️');
+  else toast(`Opening debrief for ${m.name}`,'📋');
 }
 function openTrack(id){
-  window.open(GH_BASE+'intervention_tracker.html?id='+id,'_blank');
-  toast('Opening intervention tracker','📖');
+  const url = GH_BASE+'intervention_tracker.html?id='+encodeURIComponent(id);
+  const w = window.open(url, '_blank');
+  if(!w) toast('Popup blocked — allow popups for this site','⚠️');
+  else toast('Opening intervention tracker','📖');
 }
 async function markIntComplete(id){
   const m=members.find(x=>x.id===id);
