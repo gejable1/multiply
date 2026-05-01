@@ -2099,13 +2099,17 @@ function renderSendLinks(){
     const done    = ASSESSMENTS.filter(a=>!!mem[a.field]);
     // Use encodeURIComponent on name for inline onclick safety
     const safeName = encodeURIComponent(mem.name);
+    const hasPhone = !!normalizePHPhone(mem.contact);
+    const phoneBadge = hasPhone
+      ? '<span style="font-size:10px;color:var(--green);font-weight:700;margin-left:6px">📱</span>'
+      : '<span style="font-size:10px;color:var(--red);font-weight:700;margin-left:6px" title="No phone on file">⚠️ no phone</span>';
     return `<div class="sl-member">
-      <div class="slm-name">${mem.name}</div>
+      <div class="slm-name">${mem.name}${phoneBadge}</div>
       <div class="slm-links">
         ${pending.map(a=>`<div class="slm-link-row">
           <div class="slr-name">${a.icon} ${a.name}</div>
           <span class="slr-status slr-pending">Pending</span>
-          <button class="slr-send" onclick="sendLink_('${mem.id}',decodeURIComponent('${safeName}'),'${a.file}','${a.name}')">📤 Send</button>
+          <button class="slr-send" onclick="sendLink_('${mem.id}',decodeURIComponent('${safeName}'),'${a.file}','${a.name}','${mem.contact||''}')">📤 Send</button>
         </div>`).join('')}
         ${done.length?`<div style="font-size:10px;color:var(--lighter);margin-top:4px;font-weight:600">Completed: ${done.map(a=>a.icon+' '+a.name).join(' · ')}</div>`:''}
       </div>
@@ -2113,11 +2117,37 @@ function renderSendLinks(){
   }).join('');
 }
 
-function sendLink_(memberId, memberName, file, assessName){
+// Convert PH phone number to WhatsApp international format (no + or dashes)
+// Accepts: 09171234567, +639171234567, 0917-123-4567, etc. → 639171234567
+function normalizePHPhone(raw){
+  if(!raw) return '';
+  let p = String(raw).replace(/\D/g, ''); // strip non-digits
+  if(!p) return '';
+  // Already in international format starting with 63
+  if(p.startsWith('63') && p.length === 12) return p;
+  // Local format starting with 09 → drop the leading 0, add 63
+  if(p.startsWith('09') && p.length === 11) return '63' + p.substring(1);
+  // Bare 10-digit mobile (9171234567) → add 63
+  if(p.startsWith('9') && p.length === 10) return '63' + p;
+  // International number with another country code → return as-is if reasonable
+  if(p.length >= 10 && p.length <= 15) return p;
+  return '';
+}
+
+function sendLink_(memberId, memberName, file, assessName, contact){
   const url = BASE_URL+file+'?id='+memberId+'&name='+encodeURIComponent(memberName);
+  const phone = normalizePHPhone(contact);
   const msg = encodeURIComponent(`Hi ${memberName.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang ${assessName} assessment?\n\n${url}\n\nI-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— ${currentLeader?.name||'Your LC Leader'}`);
-  window.open('https://wa.me/?text='+msg,'_blank');
-  toast('WhatsApp opened for '+memberName.split(' ')[0],'success');
+
+  if(phone){
+    // Direct WhatsApp link with member's number — no contact picker needed
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    toast(`WhatsApp ready for ${memberName.split(' ')[0]} — just tap Send`, 'success');
+  } else {
+    // No phone on file — fall back to generic share (leader picks contact)
+    window.open(`https://wa.me/?text=${msg}`, '_blank');
+    toast(`⚠️ No phone on file for ${memberName.split(' ')[0]} — pick from contacts`, 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════
