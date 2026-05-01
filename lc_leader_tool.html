@@ -447,10 +447,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="tb-title" id="attTitle">Log Attendance</div>
   </div>
   <div class="att-meta">
-    <div class="att-date-row" style="margin-bottom:8px">
-      <input type="date" class="att-date-input" id="attDate">
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">← Date of meeting</div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">📅 Date of Meeting (tap to change)</div>
+      <input type="date" class="att-date-input" id="attDate" style="font-size:15px;padding:11px 14px;font-weight:600;width:auto;min-width:180px">
     </div>
+    <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Event Type</div>
     <div class="att-date-row" id="attTypeRow">
       <div class="att-type-pill selected" data-type="LC Meeting" onclick="selectAttType(this)">LC Meeting</div>
       <div class="att-type-pill" data-type="Sunday Service" onclick="selectAttType(this)">Sunday Service</div>
@@ -1194,6 +1195,43 @@ async function renderReports(){
   const frequentAbsent = memberRanked.filter(m => m.absent >= 2);
   const pendingTransfers = getPendingTransfers();
 
+  // ── Build chart data: one entry per (event_date + event_type) ──
+  const eventMap = {};
+  attRows.forEach(r => {
+    const key = r.event_date + '|' + r.event_type;
+    if(!eventMap[key]){
+      eventMap[key] = { date: r.event_date, type: r.event_type, present: 0, total: 0 };
+    }
+    eventMap[key].total++;
+    if(r.present) eventMap[key].present++;
+  });
+  const events = Object.values(eventMap)
+    .map(e => ({ ...e, rate: e.total ? Math.round(e.present/e.total*100) : 0 }))
+    .sort((a,b) => a.date === b.date
+      ? a.type.localeCompare(b.type)
+      : a.date.localeCompare(b.date));
+
+  // Group by date so we can show same-day events side-by-side
+  const eventsByDate = {};
+  events.forEach(e => {
+    if(!eventsByDate[e.date]) eventsByDate[e.date] = [];
+    eventsByDate[e.date].push(e);
+  });
+  const sortedDates = Object.keys(eventsByDate).sort();
+
+  // Color per event type
+  const TYPE_COLORS = {
+    'LC Meeting':     '#34d399',  // green
+    'Sunday Service': '#60a5fa',  // blue
+    'Prayer Meeting': '#a78bfa',  // purple
+    'Team Building':  '#fb923c',  // orange
+    'Outing':         '#f5d78e',  // gold
+    'Other':          '#888899',  // muted
+  };
+  const colorFor = t => TYPE_COLORS[t] || '#888899';
+
+  window._lastEvents = events;
+
   // Period label for display
   const periodLabel = (() => {
     switch(attReportPeriod){
@@ -1320,6 +1358,82 @@ async function renderReports(){
       `}
     </div>
 
+    <!-- ─── ATTENDANCE BAR CHART ─── -->
+    ${events.length ? `
+    <div class="report-card">
+      <div class="rc-title">📊 Attendance Rate per Event</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Tap any bar to see event details. Each color is a different event type.
+      </div>
+
+      <!-- Color legend -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+        ${[...new Set(events.map(e=>e.type))].map(t=>`
+          <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+            <div style="width:10px;height:10px;border-radius:2px;background:${colorFor(t)}"></div>
+            <span style="color:var(--muted);font-weight:600">${t}</span>
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- Chart area -->
+      <div style="position:relative;background:var(--surface2);border-radius:8px;padding:14px 10px 8px 36px;overflow-x:auto">
+
+        <!-- Y axis labels (0/25/50/75/100) -->
+        ${[100,75,50,25,0].map((v,i)=>`
+          <div style="position:absolute;left:4px;top:${14+i*((180-14)/4)}px;
+            font-size:9px;color:var(--muted);font-family:'DM Mono',monospace">${v}%</div>
+        `).join('')}
+
+        <!-- Horizontal grid lines -->
+        ${[0,25,50,75,100].map((v,i)=>`
+          <div style="position:absolute;left:30px;right:8px;top:${14+(4-i)*((180-14)/4)}px;
+            height:1px;background:rgba(255,255,255,.05);pointer-events:none"></div>
+        `).join('')}
+
+        <!-- Bars -->
+        <div style="display:flex;align-items:flex-end;gap:14px;min-height:200px;
+          padding-bottom:36px;position:relative;z-index:1">
+          ${sortedDates.map(date => {
+            const dateEvents = eventsByDate[date];
+            // Format date as MMM-DD
+            const d = new Date(date);
+            const lbl = d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+            return `
+              <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:${Math.max(28*dateEvents.length, 40)}px">
+                <!-- Bar group for this date -->
+                <div style="display:flex;gap:3px;align-items:flex-end;height:170px">
+                  ${dateEvents.map((ev,i) => {
+                    const h = ev.rate * 1.6; // 100% = 160px
+                    const c = colorFor(ev.type);
+                    return `<div
+                      onclick="showEventTip(${events.indexOf(ev)})"
+                      style="width:24px;height:${Math.max(h,2)}px;background:${c};
+                        border-radius:4px 4px 0 0;cursor:pointer;
+                        position:relative;transition:filter .15s;
+                        box-shadow:0 -1px 0 rgba(255,255,255,.2) inset"
+                      title="${ev.type} on ${ev.date} — ${ev.rate}%"
+                    >
+                      <div style="position:absolute;bottom:calc(100% + 2px);left:50%;
+                        transform:translateX(-50%);font-size:9px;font-weight:800;
+                        color:${c};white-space:nowrap">${ev.rate}%</div>
+                    </div>`;
+                  }).join('')}
+                </div>
+                <!-- Date label below -->
+                <div style="font-size:9px;color:var(--muted);margin-top:6px;
+                  font-family:'DM Mono',monospace;white-space:nowrap">${lbl}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Tap-to-view popup target -->
+      <div id="evTip" style="display:none;margin-top:10px;background:var(--surface3);
+        border-radius:8px;padding:10px 12px;border-left:3px solid var(--gold)">
+      </div>
+    </div>` : ''}
+
     <div class="report-card">
       <div class="rc-title">Pending Assessments</div>
       <div class="pending-grid">
@@ -1390,6 +1504,29 @@ function exportAttendanceCSV(){
   a.click();
   URL.revokeObjectURL(url);
   toast('CSV downloaded ✓','success');
+}
+
+// Click handler for chart bars — show event details
+function showEventTip(idx){
+  const events = window._lastEvents || [];
+  const ev = events[idx];
+  if(!ev) return;
+  const tip = document.getElementById('evTip');
+  if(!tip) return;
+  const d = new Date(ev.date);
+  const dateStr = d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  tip.innerHTML = `
+    <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin-bottom:4px">Event Details</div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:3px">${ev.type}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${dateStr}</div>
+    <div style="display:flex;gap:14px;font-size:12px">
+      <div><span style="color:var(--muted)">Present:</span> <strong style="color:var(--green)">${ev.present}</strong></div>
+      <div><span style="color:var(--muted)">Absent:</span> <strong style="color:var(--red)">${ev.total - ev.present}</strong></div>
+      <div><span style="color:var(--muted)">Rate:</span> <strong>${ev.rate}%</strong></div>
+    </div>
+  `;
+  tip.style.display = 'block';
+  tip.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 // ═══════════════════════════════════════════════════════
