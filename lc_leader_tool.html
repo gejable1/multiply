@@ -17,6 +17,7 @@
   --r:14px;--r-sm:8px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html, body{overscroll-behavior-y:contain;overflow-x:hidden;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior:none;}
 
@@ -455,7 +456,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="att-date-row" id="attTypeRow">
       <div class="att-type-pill selected" data-type="LC Meeting" onclick="selectAttType(this)">LC Meeting</div>
       <div class="att-type-pill" data-type="Sunday Service" onclick="selectAttType(this)">Sunday Service</div>
+      <div class="att-type-pill" data-type="Sunday School" onclick="selectAttType(this)">Sunday School</div>
       <div class="att-type-pill" data-type="Prayer Meeting" onclick="selectAttType(this)">Prayer Meeting</div>
+      <div class="att-type-pill" data-type="BTLI" onclick="selectAttType(this)">BTLI</div>
+      <div class="att-type-pill" data-type="Youth Gathering" onclick="selectAttType(this)">Youth Gathering</div>
       <div class="att-type-pill" data-type="Team Building" onclick="selectAttType(this)">Team Building</div>
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
       <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
@@ -648,6 +652,26 @@ window.addEventListener('beforeunload', function(e){
 // Initial history entry so the very first back-press doesn't exit
 history.replaceState({screen:'screenLogin', t:Date.now()}, '', '');
 
+// ── Auto-restore leader session on page load (handles accidental refresh) ──
+async function restoreSession(){
+  let savedId = null;
+  try { savedId = localStorage.getItem('lc_leader_id'); } catch(e){}
+  if(!savedId) return;
+
+  try {
+    // Fetch leader by id
+    const {data, error} = await db.from('members')
+      .select('id,name,pipeline_level,lc_group,discipler_name')
+      .eq('id', savedId).maybeSingle();
+    if(error || !data) return;
+
+    // Reuse the same logic as selectLeader by stuffing into leaderResults
+    leaderResults = [data];
+    await selectLeader(0);
+  } catch(e){ console.warn('Session restore failed:', e); }
+}
+restoreSession();
+
 // ═══════════════════════════════════════════════════════
 // LOGIN — LEADER SEARCH
 // ═══════════════════════════════════════════════════════
@@ -689,6 +713,8 @@ async function selectLeader(idx){
   document.getElementById('loginDropdown').style.display='none';
   document.getElementById('loginSearch').value = m.name;
   currentLeader = m;
+  // Persist so refresh doesn't lose us
+  try { localStorage.setItem('lc_leader_id', m.id); } catch(e){}
 
   let mentees = [];
   // Strategy 1: by discipler_name
@@ -1171,6 +1197,21 @@ async function saveAttendance(){
 let attReportPeriod = 'month'; // month | lastmonth | last30 | last90 | custom
 let attReportFrom = '';
 let attReportTo = '';
+let reportView = 'group';   // 'group' | 'member'
+let reportMemberId = null;
+
+function setReportView(v){
+  reportView = v;
+  if(v === 'member' && !reportMemberId && myMembers.length){
+    reportMemberId = myMembers[0].id;
+  }
+  renderReports();
+}
+
+function setReportMember(id){
+  reportMemberId = id;
+  renderReports();
+}
 
 function getReportRange(){
   const today = new Date();
@@ -1291,12 +1332,15 @@ async function renderReports(){
 
   // Color per event type
   const TYPE_COLORS = {
-    'LC Meeting':     '#34d399',  // green
-    'Sunday Service': '#60a5fa',  // blue
-    'Prayer Meeting': '#a78bfa',  // purple
-    'Team Building':  '#fb923c',  // orange
-    'Outing':         '#f5d78e',  // gold
-    'Other':          '#888899',  // muted
+    'LC Meeting':      '#34d399',  // green
+    'Sunday Service':  '#60a5fa',  // blue
+    'Sunday School':   '#22d3ee',  // cyan
+    'Prayer Meeting':  '#a78bfa',  // purple
+    'BTLI':            '#f472b6',  // pink
+    'Youth Gathering': '#facc15',  // yellow
+    'Team Building':   '#fb923c',  // orange
+    'Outing':          '#f5d78e',  // gold
+    'Other':           '#888899',  // muted
   };
   const colorFor = t => TYPE_COLORS[t] || '#888899';
 
@@ -1313,6 +1357,41 @@ async function renderReports(){
     }
   })();
 
+  // ── PER-MEMBER VIEW DATA ──
+  let memberView = null;
+  if(reportView === 'member' && reportMemberId){
+    const m = myMembers.find(x => x.id === reportMemberId);
+    if(m){
+      const memberAttRows = attRows.filter(r => r.member_id === m.id);
+      const presentRows = memberAttRows.filter(r => r.present);
+      const absentRows  = memberAttRows.filter(r => !r.present);
+      const totalEvts   = memberAttRows.length;
+      const rate = totalEvts ? Math.round(presentRows.length/totalEvts*100) : null;
+
+      // Build a sorted timeline (newest first)
+      const timeline = memberAttRows
+        .map(r => ({ date: r.event_date, type: r.event_type, present: r.present }))
+        .sort((a,b) => b.date.localeCompare(a.date));
+
+      // Last attended date
+      const lastPresent = presentRows.sort((a,b)=>b.event_date.localeCompare(a.event_date))[0];
+      const daysSince = lastPresent
+        ? Math.floor((Date.now() - new Date(lastPresent.event_date).getTime())/864e5)
+        : null;
+
+      // Per-event-type breakdown for this member
+      const byType = {};
+      memberAttRows.forEach(r => {
+        if(!byType[r.event_type]) byType[r.event_type] = { present:0, total:0 };
+        byType[r.event_type].total++;
+        if(r.present) byType[r.event_type].present++;
+      });
+
+      memberView = { member:m, totalEvts, presentCount:presentRows.length, absentCount:absentRows.length, rate, timeline, lastPresent, daysSince, byType };
+      window._lastMemberTimeline = [...timeline].reverse(); // chronological for chart
+    }
+  }
+
   // Click handler for member rows
   document.getElementById('reportsContent').onclick = function(e){
     const item = e.target.closest('[data-mid]');
@@ -1320,6 +1399,25 @@ async function renderReports(){
   };
 
   el.innerHTML = `
+    <!-- ─── REPORT VIEW TOGGLE ─── -->
+    <div class="report-card" style="margin-top:12px;padding:12px 14px">
+      <div style="display:flex;gap:6px;margin-bottom:${reportView==='member'?'10px':'0'}">
+        <button class="ftab ${reportView==='group'?'active':''}"
+          onclick="setReportView('group')" style="flex:1">👥 Group View</button>
+        <button class="ftab ${reportView==='member'?'active':''}"
+          onclick="setReportView('member')" style="flex:1">👤 Per-Member</button>
+      </div>
+      ${reportView === 'member' ? `
+        <select onchange="setReportMember(this.value)" style="
+          width:100%;background:var(--surface2);border:1px solid var(--border);
+          border-radius:var(--r-sm);padding:9px 12px;color:var(--text);
+          font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          ${myMembers.map(m => `<option value="${m.id}" ${m.id===reportMemberId?'selected':''}>${m.name}</option>`).join('')}
+        </select>
+      ` : ''}
+    </div>
+
+    ${reportView === 'group' ? `
     <div class="report-card" style="margin-top:12px">
       <div class="rc-title">Zone Distribution</div>
       ${[1,2,3,4].map(z=>{
@@ -1542,7 +1640,183 @@ async function renderReports(){
         <div class="pg-card"><div class="pg-num" style="color:var(--muted)">${zones[0]||0}</div><div class="pg-label">Not Assessed</div></div>
         <div class="pg-card"><div class="pg-num" style="color:var(--orange)">${frequentAbsent.length}</div><div class="pg-label">Frequent Absent</div></div>
       </div>
-    </div>`;
+    </div>` : ''}
+
+    ${reportView === 'member' && memberView ? `
+      <!-- ─── PER-MEMBER REPORT ─── -->
+      <div class="report-card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="width:48px;height:48px;border-radius:14px;
+            background:rgba(232,184,75,.15);color:var(--gold);
+            display:flex;align-items:center;justify-content:center;
+            font-family:'Syne',serif;font-size:18px;font-weight:800">
+            ${initials(memberView.member.name)}
+          </div>
+          <div style="flex:1">
+            <div style="font-family:'Syne',serif;font-size:17px;font-weight:700">${memberView.member.name}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              ${LEVEL_NAMES[memberView.member.pipeline_level]||'Pre-Pipeline'}
+              ${memberView.member.lc_group?' · '+memberView.member.lc_group:''}
+            </div>
+          </div>
+        </div>
+
+        <!-- Stat cards -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+          <div class="pg-card">
+            <div class="pg-num" style="color:${memberView.rate===null?'var(--muted)':memberView.rate>=80?'var(--green)':memberView.rate>=50?'var(--gold)':'var(--red)'}">
+              ${memberView.rate===null?'—':memberView.rate+'%'}
+            </div>
+            <div class="pg-label">Attendance</div>
+          </div>
+          <div class="pg-card">
+            <div class="pg-num" style="color:var(--green)">${memberView.presentCount}</div>
+            <div class="pg-label">Present</div>
+          </div>
+          <div class="pg-card">
+            <div class="pg-num" style="color:var(--red)">${memberView.absentCount}</div>
+            <div class="pg-label">Absent</div>
+          </div>
+        </div>
+
+        ${memberView.daysSince !== null ? `
+          <div style="background:${memberView.daysSince>14?'rgba(248,113,113,.1)':memberView.daysSince>7?'rgba(251,146,60,.1)':'rgba(52,211,153,.1)'};
+            border:1px solid ${memberView.daysSince>14?'rgba(248,113,113,.3)':memberView.daysSince>7?'rgba(251,146,60,.3)':'rgba(52,211,153,.3)'};
+            border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">
+            <strong>Last attended:</strong>
+            ${memberView.daysSince === 0 ? 'today' :
+              memberView.daysSince === 1 ? 'yesterday' :
+              memberView.daysSince + ' days ago'}
+            (${memberView.lastPresent.event_type}, ${memberView.lastPresent.event_date})
+            ${memberView.daysSince > 14 ? '<br><strong style="color:var(--red)">⚠️ Consider follow-up</strong>' : ''}
+          </div>
+        ` : `
+          <div style="background:var(--surface3);border-radius:8px;padding:10px 12px;
+            margin-bottom:12px;font-size:12px;color:var(--muted)">
+            No attendance recorded in this period.
+          </div>
+        `}
+      </div>
+
+      ${memberView.totalEvts ? `
+      <!-- Per-event-type breakdown -->
+      <div class="report-card">
+        <div class="rc-title">By Event Type</div>
+        ${Object.entries(memberView.byType).map(([type, stats]) => {
+          const r = Math.round(stats.present/stats.total*100);
+          const c = colorFor(type);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+            <div style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></div>
+            <div style="flex:1;font-size:12px;font-weight:600">${type}</div>
+            <div style="font-size:11px;color:var(--muted)">${stats.present}/${stats.total}</div>
+            <div style="width:60px;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden">
+              <div style="width:${r}%;height:100%;background:${c}"></div>
+            </div>
+            <div style="font-size:11px;font-weight:800;width:36px;text-align:right;color:${c}">${r}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Per-member bar chart -->
+      <div class="report-card">
+        <div class="rc-title">📊 Personal Attendance Chart</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+          Each bar is one event. Green = present, red = absent. Tap any bar for details.
+        </div>
+
+        <div style="position:relative;background:var(--surface2);border-radius:8px;padding:14px 10px 8px 36px;overflow-x:auto">
+          <!-- Y axis labels -->
+          ${['Present','—','Absent'].map((v,i)=>`
+            <div style="position:absolute;left:4px;top:${14 + i*60}px;
+              font-size:9px;color:var(--muted);font-family:'DM Mono',monospace">${v}</div>
+          `).join('')}
+
+          <!-- Centerline -->
+          <div style="position:absolute;left:30px;right:8px;top:74px;
+            height:1px;background:rgba(255,255,255,.15);pointer-events:none"></div>
+
+          <!-- Bars: oldest first (chronological), each colored by present/absent -->
+          <div style="display:flex;align-items:center;gap:6px;min-height:140px;
+            padding:0;position:relative;z-index:1">
+            ${[...memberView.timeline].reverse().map((t, idx) => {
+              const c = t.present ? 'var(--green)' : 'var(--red)';
+              const h = 50; // fixed height per bar
+              const d = new Date(t.date);
+              const lbl = d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+              return `<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+                <div onclick="showMemberEventTip(${idx})" style="
+                  width:22px;height:${h}px;background:${c};
+                  border-radius:${t.present?'4px 4px 0 0':'0 0 4px 4px'};
+                  cursor:pointer;transition:filter .15s;
+                  margin-top:${t.present?(70-h)+'px':'70px'};
+                  box-shadow:0 -1px 0 rgba(255,255,255,.2) inset;
+                  border:2px solid ${colorFor(t.type)}">
+                </div>
+                <div style="font-size:8px;color:var(--muted);margin-top:6px;
+                  font-family:'DM Mono',monospace;white-space:nowrap;
+                  transform:rotate(-45deg);transform-origin:top left;
+                  width:30px;height:30px">${lbl}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;margin-top:14px;font-size:11px;color:var(--muted)">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;background:var(--green);border-radius:2px"></div>
+            <span>Present (above line)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;background:var(--red);border-radius:2px"></div>
+            <span>Absent (below line)</span>
+          </div>
+        </div>
+
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">
+          Bar border color = event type. See legend below.
+        </div>
+
+        <!-- Event type legend (only types that appear) -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+          ${[...new Set(memberView.timeline.map(t=>t.type))].map(t=>`
+            <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+              <div style="width:10px;height:10px;border-radius:2px;border:2px solid ${colorFor(t)};box-sizing:border-box"></div>
+              <span style="color:var(--muted);font-weight:600">${t}</span>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Tap-to-view popup -->
+        <div id="memberEvTip" style="display:none;margin-top:10px;background:var(--surface3);
+          border-radius:8px;padding:10px 12px;border-left:3px solid var(--gold)"></div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="report-card" style="margin-bottom:24px">
+        <div class="rc-title">Attendance Timeline</div>
+        <div style="display:flex;flex-direction:column;gap:5px;max-height:400px;overflow-y:auto">
+          ${memberView.timeline.map(t => {
+            const d = new Date(t.date);
+            const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+              background:${t.present?'rgba(52,211,153,.06)':'rgba(248,113,113,.05)'};
+              border-radius:7px;border-left:3px solid ${t.present?'var(--green)':'var(--red)'}">
+              <div style="font-size:14px;width:18px">${t.present?'✓':'✗'}</div>
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:600">${t.type}</div>
+                <div style="font-size:10px;color:var(--muted)">${dateStr}</div>
+              </div>
+              <div style="font-size:9px;font-weight:800;letter-spacing:.05em;
+                color:${t.present?'var(--green)':'var(--red)'}">
+                ${t.present?'PRESENT':'ABSENT'}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
+    ` : ''}
+  `;
 
   // Stash the ranked data for CSV export
   window._lastAttRanked = memberRanked;
@@ -1594,6 +1868,27 @@ function showEventTip(idx){
       <div><span style="color:var(--muted)">Absent:</span> <strong style="color:var(--red)">${ev.total - ev.present}</strong></div>
       <div><span style="color:var(--muted)">Rate:</span> <strong>${ev.rate}%</strong></div>
     </div>
+  `;
+  tip.style.display = 'block';
+  tip.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// Click handler for per-member chart bars
+function showMemberEventTip(idx){
+  const timeline = window._lastMemberTimeline || [];
+  const ev = timeline[idx];
+  if(!ev) return;
+  const tip = document.getElementById('memberEvTip');
+  if(!tip) return;
+  const d = new Date(ev.date);
+  const dateStr = d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const status = ev.present ? 'PRESENT' : 'ABSENT';
+  const statusColor = ev.present ? 'var(--green)' : 'var(--red)';
+  tip.innerHTML = `
+    <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin-bottom:4px">Event Details</div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:3px">${ev.type}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${dateStr}</div>
+    <div style="font-size:13px;font-weight:800;color:${statusColor}">${ev.present?'✓':'✗'} ${status}</div>
   `;
   tip.style.display = 'block';
   tip.scrollIntoView({behavior:'smooth', block:'nearest'});
