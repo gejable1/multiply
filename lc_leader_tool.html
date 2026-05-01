@@ -573,6 +573,11 @@ const NEXT_STEPS = {
 // ═══════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════
+// Screen history stack for back-button handling
+let screenStack = [];
+let suppressPopstate = false;
+let attendanceDirty = false; // tracks if user has unsaved attendance changes
+
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -580,7 +585,68 @@ function showScreen(id){
   if(id==='screenReports') renderReports();
   if(id==='screenSendLinks') renderSendLinks();
   window.scrollTo(0,0);
+
+  // Push to screen history (skip if same as current)
+  if(screenStack[screenStack.length-1] !== id){
+    screenStack.push(id);
+    // Push a history state so the browser back button comes here first
+    history.pushState({screen:id, t:Date.now()}, '', '');
+  }
 }
+
+// Handle browser back button / swipe-back gesture
+window.addEventListener('popstate', function(e){
+  if(suppressPopstate){ suppressPopstate = false; return; }
+
+  // If there's an unsaved attendance log, warn first
+  if(attendanceDirty){
+    const confirmed = confirm('You have unsaved attendance entries. Leave without saving?');
+    if(!confirmed){
+      // Re-push state so back button stays on this screen
+      suppressPopstate = true;
+      history.pushState({screen:screenStack[screenStack.length-1], t:Date.now()}, '', '');
+      return;
+    }
+    attendanceDirty = false;
+  }
+
+  // If we have screen history, go to previous screen instead of exiting
+  if(screenStack.length > 1){
+    screenStack.pop(); // remove current
+    const prev = screenStack[screenStack.length-1];
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(prev).classList.add('active');
+    if(prev==='screenMembers') renderMemberList();
+    if(prev==='screenReports') renderReports();
+    if(prev==='screenSendLinks') renderSendLinks();
+    window.scrollTo(0,0);
+    // Push state again so the next back-press also gets caught
+    history.pushState({screen:prev, t:Date.now()}, '', '');
+    return;
+  }
+
+  // We're at the root (login or home) — confirm exit
+  const reallyLeave = confirm('Leave the LC Leader Tool?');
+  if(!reallyLeave){
+    suppressPopstate = true;
+    history.pushState({screen:screenStack[0]||'screenLogin', t:Date.now()}, '', '');
+  } else {
+    // User confirmed — let the browser handle it
+    history.back();
+  }
+});
+
+// Warn on tab close / refresh if there's unsaved data
+window.addEventListener('beforeunload', function(e){
+  if(attendanceDirty){
+    e.preventDefault();
+    e.returnValue = ''; // Required for Chrome — shows native browser dialog
+    return '';
+  }
+});
+
+// Initial history entry so the very first back-press doesn't exit
+history.replaceState({screen:'screenLogin', t:Date.now()}, '', '');
 
 // ═══════════════════════════════════════════════════════
 // LOGIN — LEADER SEARCH
@@ -960,6 +1026,7 @@ function showAttendance(){
   attendanceState = {};
   myMembers.forEach(m=>{ attendanceState[m.id]=false; });
   allSelected = false;
+  attendanceDirty = false;
   renderAttList();
   showScreen('screenAttendance');
 }
@@ -998,6 +1065,7 @@ function renderAttList(){
 
 function toggleAtt(id){
   attendanceState[id] = !attendanceState[id];
+  attendanceDirty = true;
   const present = attendanceState[id];
   // Find the row by data-mid (works regardless of UUID format)
   const el = document.querySelector('.att-member[data-mid="'+id+'"]');
@@ -1017,6 +1085,7 @@ function toggleAtt(id){
 function toggleSelectAll(){
   allSelected = !allSelected;
   myMembers.forEach(m=>{ attendanceState[m.id]=allSelected; });
+  attendanceDirty = true;
   renderAttList();
 }
 
@@ -1090,6 +1159,7 @@ async function saveAttendance(){
     return;
   }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
+  attendanceDirty = false;
   toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
   setTimeout(()=>showScreen('screenHome'),1500);
 }
