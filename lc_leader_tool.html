@@ -2297,17 +2297,21 @@ async function _shareVia(method, btn){
 
 function sendLink_(memberId, memberName, file, assessName, contact){
   const url = BASE_URL+file+'?id='+memberId+'&name='+encodeURIComponent(memberName);
+  const firstName = (memberName||'').split(' ')[0] || 'kapatid';
+  const messageText =
+    `Hi ${firstName}! 😊\n\n` +
+    `Bilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang ${assessName} assessment?\n\n` +
+    `${url}\n\n` +
+    `I-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— ${currentLeader?.name||'Your LC Leader'}`;
   const phone = normalizePHPhone(contact);
-  const msg = encodeURIComponent(`Hi ${memberName.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang ${assessName} assessment?\n\n${url}\n\nI-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— ${currentLeader?.name||'Your LC Leader'}`);
 
   if(phone){
     // Direct WhatsApp link with member's number — no contact picker needed
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
-    toast(`WhatsApp ready for ${memberName.split(' ')[0]} — just tap Send`, 'success');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+    toast(`WhatsApp ready for ${firstName} — just tap Send`, 'success');
   } else {
-    // No phone on file — fall back to generic share (leader picks contact)
-    window.open(`https://wa.me/?text=${msg}`, '_blank');
-    toast(`⚠️ No phone on file for ${memberName.split(' ')[0]} — pick from contacts`, 'error');
+    // No phone on file — open the share picker (same as Profile Edit Link)
+    _showShareModal(firstName, url, messageText);
   }
 }
 
