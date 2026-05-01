@@ -593,6 +593,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </div>
   <div class="mf">
     <button class="bdl" id="delbtn" onclick="doDelete()" style="display:none">Delete</button>
+    <button class="bdl" id="resetPinBtn" onclick="doResetPin()" style="display:none;background:var(--gold-bg);border-color:rgba(184,136,42,.3);color:var(--gold)">🔑 Reset PIN</button>
     <button class="bcn" onclick="closeMD()">Cancel</button>
     <button class="bsv" onclick="saveMember()">Save Member</button>
   </div>
@@ -806,7 +807,12 @@ function r2l(r){
     facilitator_role:r.facilitator_role||'',diagnostic_score:r.diagnostic_score||null,
     diagnostic_zone:r.diagnostic_zone||null,diagnostic_date:r.diagnostic_date||'',
     intervention_track:r.intervention_track||'',intervention_status:r.intervention_status||'',
-    facilitator_name:r.facilitator_name||'',updated:r.updated_at||r.created_at
+    facilitator_name:r.facilitator_name||'',updated:r.updated_at||r.created_at,
+    // Leader-access metadata (read-only here; written only by leader_login.html
+    // and the doResetPin function below). Used to decide whether the
+    // pastor's "Reset PIN" button should appear.
+    leader_pin_hash:r.leader_pin_hash||null,
+    leader_pin_set_at:r.leader_pin_set_at||null,
   };
 }
 
@@ -1299,6 +1305,7 @@ function openAdd(){
   document.getElementById('mav').textContent='?';document.getElementById('mav').style.background='var(--muted)';
   document.getElementById('mti').textContent='Add New Member';document.getElementById('mme').textContent='';
   document.getElementById('delbtn').style.display='none';
+  const rpb=document.getElementById('resetPinBtn'); if(rpb) rpb.style.display='none';
   showMT('info',document.querySelector('.mtb'));
   rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
@@ -1325,6 +1332,12 @@ function openEdit(id){
   document.getElementById('mti').textContent=m.name;
   document.getElementById('mme').textContent=`${LN[m.level||0]} · ${m.group||'No group'}${m.is_facilitator?' · ⭐ Facilitator':''}`;
   document.getElementById('delbtn').style.display='block';
+  // Reset PIN button — pastor-only, and only meaningful for leaders (Level 2+)
+  const rpb = document.getElementById('resetPinBtn');
+  if(rpb){
+    const showResetPin = LeaderScope.isPastor() && (m.level||0) >= 2;
+    rpb.style.display = showResetPin ? 'block' : 'none';
+  }
   showMT('info',document.querySelector('.mtb'));
   buildMinistrySelect();populateDisciplerSelect(m.discipler_name||m.discipler||'');
   rPCL(m);rET(m);rNT(m);rDiagTab(m);
@@ -1606,6 +1619,62 @@ async function doDelete(){
   if(!confirm(`Delete ${m?.name}? Permanent.`))return;
   try{await del(eid);members=members.filter(x=>x.id!==eid);closeMD();renderAll();toast('Deleted');}
   catch(e){toast('Error: '+e.message,'❌');}
+}
+
+// ═══════════════════════════════════════
+// RESET LEADER PIN — pastor-only
+// Clears the leader's PIN hash and ends any active session, so on
+// their next visit to leader_login.html they're prompted to set a
+// fresh PIN. Used when a leader forgets their PIN, loses a phone,
+// or is being removed from leadership.
+// ═══════════════════════════════════════
+async function doResetPin(){
+  if(!eid) return;
+  if(!LeaderScope.isPastor()){
+    toast('Only the pastor can reset PINs','🔒');
+    return;
+  }
+  const m = members.find(x => x.id === eid);
+  if(!m) return;
+
+  const hadPin = !!m.leader_pin_hash; // for messaging only
+  const msg = hadPin
+    ? `Reset PIN for ${m.name}?\n\n` +
+      `• Their current PIN will stop working immediately.\n` +
+      `• Any active session on their phone will be ended.\n` +
+      `• On their next visit to the login page they'll be prompted to set a new PIN.\n\n` +
+      `Tell them to log in again after you click OK.`
+    : `${m.name} has no PIN set yet — nothing to reset.\n\n` +
+      `They'll set their own PIN on their first login. Open the login page on their device when ready.`;
+
+  if(!confirm(msg)) return;
+  if(!hadPin){ return; } // nothing to do
+
+  try {
+    // Clear the hash + timestamp
+    const {error: upErr} = await db.from('members').update({
+      leader_pin_hash: null,
+      leader_pin_set_at: null,
+    }).eq('id', m.id);
+    if(upErr) throw upErr;
+
+    // End any active sessions for this leader
+    try {
+      await db.from('leader_sessions').update({
+        ended_at: new Date().toISOString(),
+        ended_reason: 'pin_reset'
+      }).eq('leader_id', m.id).is('ended_at', null);
+    } catch(e) { console.warn('session end non-fatal:', e); }
+
+    // Update local cache so the button vanishes on re-open
+    m.leader_pin_hash = null;
+    m.leader_pin_set_at = null;
+
+    toast(`PIN reset for ${m.name} ✓`, '🔑');
+    closeMD();
+  } catch(e) {
+    toast('Reset failed: ' + e.message, '❌');
+  }
 }
 
 // ═══════════════════════════════════════
@@ -1981,18 +2050,50 @@ async function rProfileTab(m) {
       const label = TYPE_LABEL[type] || type;
       const color = TYPE_COLOR[type] || 'var(--muted)';
 
-      // Extract top 5 from results object
-      let topN = [];
+      // ── Compute display denominator per assessment type ──
+      //
+      // The Strengths assessment has had two versions:
+      //   • 170-pair (legacy): each theme appears in 10 pairs, max=10
+      //   • 102-pair (current): each theme appears in 6 pairs,  max=6
+      //
+      // Showing raw scores side-by-side made a "10" look stronger than a
+      // "6" even though both are perfect maxes. We normalize to a percent
+      // of the assessment's actual max so cross-version comparison is fair.
+      //
+      // For Strengths, sum-of-all-scores equals (pairs), and each theme
+      // appears in (pairs × 2 / 34 themes) pairs, so max-per-theme equals
+      // sum/17. (Verified: 170/17=10, 102/17=6.)
+      //
+      // For Love Language / DISC / Enneagram, scores form a fixed-sum
+      // distribution across categories. The fairest display is share-of-total
+      // (score / sum × 100), which describes what fraction of the person's
+      // signal lives in each category.
+      let scoreEntries = [];
+      let theoreticalMax = null; // Strengths: max per theme. Others: null = use sum.
+      let sumOfScores = 0;
       if(r.results && typeof r.results === 'object'){
-        topN = Object.entries(r.results)
-          .sort((a,b)=>(b[1]||0)-(a[1]||0))
-          .slice(0,5)
-          .map(([k,v])=>({name: prettyKey(type,k), score: v}));
+        scoreEntries = Object.entries(r.results).filter(([,v]) => typeof v === 'number');
+        sumOfScores = scoreEntries.reduce((a, [,v]) => a + v, 0);
+        if(type === 'strengths' && sumOfScores >= 17){
+          // sum/17 is the per-theme max for either pair-comparison version
+          theoreticalMax = Math.round(sumOfScores / 17);
+        }
       }
+
+      // Extract top 5 from results object
+      let topN = scoreEntries
+        .sort((a,b)=>(b[1]||0)-(a[1]||0))
+        .slice(0,5)
+        .map(([k,v])=>({name: prettyKey(type,k), score: v}));
+
       // Fallback to summary if no scores object
       const fallback = !topN.length;
 
-      const maxScore = topN[0]?.score || 1;
+      // Denominator for bar widths AND percentage labels.
+      // - Strengths: theoreticalMax (max per theme: 6 or 10)
+      // - Others: sumOfScores (share-of-total)
+      const denom = theoreticalMax || sumOfScores || (topN[0]?.score || 1);
+      const showAsPercent = denom > 0;
       const medals = ['🥇','🥈','🥉','','',''];
 
       html += `<div style="padding:.6rem 0;border-bottom:1px solid var(--border)">
@@ -2005,15 +2106,18 @@ async function rProfileTab(m) {
         html += `<div style="font-size:12px;color:var(--muted);padding-left:88px">${r.summary || r.top_result || '—'}</div>`;
       } else {
         topN.forEach((item, i) => {
-          const pct = Math.round((item.score/maxScore) * 100);
+          // Bar width: percent of the denominator, clamped at 100.
+          const pct = Math.min(100, Math.round((item.score / denom) * 100));
+          // Label shown to the right: percent for normalized assessments.
+          const labelTxt = showAsPercent ? (pct + '%') : String(item.score);
           const isTop = i === 0;
           html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0 3px 88px">
             <span style="font-size:11px;width:14px">${medals[i]||''}</span>
             <span style="font-size:11.5px;font-weight:${isTop?'700':'500'};color:${isTop?color:'var(--ink)'};min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</span>
-            <div style="flex:1;background:var(--surface3);border-radius:4px;height:8px;overflow:hidden;max-width:120px">
+            <div style="flex:1;background:var(--surface3);border-radius:4px;height:8px;overflow:hidden;max-width:120px" title="Raw score: ${item.score}">
               <div style="width:${pct}%;height:100%;background:${color};border-radius:4px"></div>
             </div>
-            <span style="font-size:11px;font-weight:700;color:${isTop?color:'var(--muted)'};min-width:24px;text-align:right">${item.score}</span>
+            <span style="font-size:11px;font-weight:700;color:${isTop?color:'var(--muted)'};min-width:36px;text-align:right" title="Raw score: ${item.score}">${labelTxt}</span>
           </div>`;
         });
       }
