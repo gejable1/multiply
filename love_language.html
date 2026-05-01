@@ -109,6 +109,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 /* Show/hide by lang */
 body[data-lang="en"] .tl-text{display:none!important;}
 body[data-lang="tl"] .en-text{display:none!important;}
+body[data-lang="en"] .choice-tl{display:none!important;}
+body[data-lang="tl"] .choice-en{display:none!important;}
 /* Questions: both classes use same font/size */
 .q-tl,.q-en,.choice-tl,.choice-en{font-size:13.5px;font-weight:600;color:var(--ink,#1a1612);line-height:1.6;display:block;}
 
@@ -270,14 +272,23 @@ const QUESTIONS=[
 let answers={};
 function buildQuestions(){
   const wrap=document.getElementById('questionsWrap');
-  const rounds=[{num:1,title:'Round 1 — Mga Sitwasyon 1–5',start:0},{num:2,title:'Round 2 — Mga Sitwasyon 6–10',start:5},{num:3,title:'Round 3 — Mga Sitwasyon 11–15',start:10},{num:4,title:'Round 4 — Mga Sitwasyon 16–20',start:15},{num:5,title:'Round 5 — Mga Sitwasyon 21–25',start:20},{num:6,title:'Round 6 — Mga Sitwasyon 26–30',start:25}];
+  const rounds=[
+    {num:1, en:'Round 1 — Situations 1–5',  tl:'Round 1 — Mga Sitwasyon 1–5',  start:0},
+    {num:2, en:'Round 2 — Situations 6–10', tl:'Round 2 — Mga Sitwasyon 6–10', start:5},
+    {num:3, en:'Round 3 — Situations 11–15',tl:'Round 3 — Mga Sitwasyon 11–15',start:10},
+    {num:4, en:'Round 4 — Situations 16–20',tl:'Round 4 — Mga Sitwasyon 16–20',start:15},
+    {num:5, en:'Round 5 — Situations 21–25',tl:'Round 5 — Mga Sitwasyon 21–25',start:20},
+    {num:6, en:'Round 6 — Situations 26–30',tl:'Round 6 — Mga Sitwasyon 26–30',start:25}
+  ];
   rounds.forEach(r=>{
     const rh=document.createElement('div');rh.className='round-head';
-    rh.innerHTML=`<div class="rh-num">${r.num}</div><div class="rh-title">${r.title}</div><span class="rh-count">5 questions</span>`;
+    rh.innerHTML=`<div class="rh-num">${r.num}</div>
+      <div class="rh-title"><span class="en-text">${r.en}</span><span class="tl-text">${r.tl}</span></div>
+      <span class="rh-count"><span class="en-text">5 questions</span><span class="tl-text">5 tanong</span></span>`;
     wrap.appendChild(rh);
     for(let i=r.start;i<r.start+5;i++){
       const q=QUESTIONS[i];const card=document.createElement('div');card.className='q-card';card.id=`qcard-${i}`;
-      card.innerHTML=`<div class="q-num-bar">Q${i+1} of 30</div><div class="choice-wrap">
+      card.innerHTML=`<div class="q-num-bar"><span class="en-text">Q${i+1} of 30</span><span class="tl-text">Q${i+1} sa 30</span></div><div class="choice-wrap">
         <label class="choice" id="ca-${i}" onclick="answer(${i},'${q.a.lang}','a')"><input type="radio" name="q${i}"><div class="choice-letter">A</div><div class="choice-en">${q.a.en}</div><div class="choice-tl">${q.a.tl}</div><div class="choice-check">✓</div></label>
         <label class="choice" id="cb-${i}" onclick="answer(${i},'${q.b.lang}','b')"><input type="radio" name="q${i}"><div class="choice-letter">B</div><div class="choice-en">${q.b.en}</div><div class="choice-tl">${q.b.tl}</div><div class="choice-check">✓</div></label>
       </div>`;wrap.appendChild(card);
