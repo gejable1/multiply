@@ -116,6 +116,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 /* Show/hide by lang */
 body[data-lang="en"] .tl-text{display:none!important;}
 body[data-lang="tl"] .en-text{display:none!important;}
+body[data-lang="en"] .q-tl,body[data-lang="en"] .choice-tl{display:none!important;}
+body[data-lang="tl"] .q-en,body[data-lang="tl"] .choice-en{display:none!important;}
 /* Questions: both classes use same font/size */
 .q-tl,.q-en,.choice-tl,.choice-en{font-size:13.5px;font-weight:600;color:var(--ink,#1a1612);line-height:1.6;display:block;}
 
@@ -308,15 +310,17 @@ let answered=0;
 function buildQuestions(){
   const wrap=document.getElementById('questionsWrap');
   const sections=[
-    {letter:'D',color:'var(--d)',titleEn:'Section D — Dominance',titleTl:'Seksiyon D — Pamumuno at Desisyon',items:QUESTIONS.filter(q=>q.dim==='D')},
-    {letter:'I',color:'var(--i)',title:'Section I — Influence · Impluwensya at Relasyon',items:QUESTIONS.filter(q=>q.dim==='I')},
-    {letter:'S',color:'var(--s)',titleEn:'Section S — Steadiness',titleTl:'Seksiyon S — Katatagan at Katapatan',items:QUESTIONS.filter(q=>q.dim==='S')},
-    {letter:'C',color:'var(--c)',title:'Section C — Conscientiousness · Katumpakan at Kalidad',items:QUESTIONS.filter(q=>q.dim==='C')}
+    {letter:'D',color:'var(--d)',titleEn:'Section D — Dominance',     titleTl:'Seksiyon D — Pamumuno at Desisyon',   items:QUESTIONS.filter(q=>q.dim==='D')},
+    {letter:'I',color:'var(--i)',titleEn:'Section I — Influence',     titleTl:'Seksiyon I — Impluwensya at Relasyon',items:QUESTIONS.filter(q=>q.dim==='I')},
+    {letter:'S',color:'var(--s)',titleEn:'Section S — Steadiness',    titleTl:'Seksiyon S — Katatagan at Katapatan', items:QUESTIONS.filter(q=>q.dim==='S')},
+    {letter:'C',color:'var(--c)',titleEn:'Section C — Conscientiousness',titleTl:'Seksiyon C — Katumpakan at Kalidad',  items:QUESTIONS.filter(q=>q.dim==='C')}
   ];
   let qNum=0;
   sections.forEach((sec,si)=>{
     const sh=document.createElement('div');sh.className='sec-head';
-    sh.innerHTML=`<div class="sh-num" style="background:${sec.color}">${sec.letter}</div><div class="sh-title">${sec.title}</div><span class="sh-count">10 statements</span>`;
+    sh.innerHTML=`<div class="sh-num" style="background:${sec.color}">${sec.letter}</div>
+      <div class="sh-title"><span class="en-text">${sec.titleEn}</span><span class="tl-text">${sec.titleTl}</span></div>
+      <span class="sh-count"><span class="en-text">10 statements</span><span class="tl-text">10 pahayag</span></span>`;
     wrap.appendChild(sh);
     sec.items.forEach((q,qi)=>{
       qNum++;
@@ -324,7 +328,11 @@ function buildQuestions(){
       let scaleHtml='';
       for(let v=1;v<=5;v++)scaleHtml+=`<label class="sopt"><input type="radio" name="q${si}-${qi}" value="${v}" onchange="onAnswer(${si},${qi},${v})"><div class="d">${v}</div></label>`;
       card.innerHTML=`<div class="q-top"><span class="q-num">Q${qNum}</span><div><div class="q-en">${q.en}</div><div class="q-tl">${q.tl}</div></div></div>
-        <div class="scale-row"><div class="s-label">Hindi talaga</div><div class="s-opts">${scaleHtml}</div><div class="s-label">Ako talaga ito</div></div>`;
+        <div class="scale-row">
+          <div class="s-label"><span class="en-text">Not at all</span><span class="tl-text">Hindi talaga</span></div>
+          <div class="s-opts">${scaleHtml}</div>
+          <div class="s-label"><span class="en-text">Very much me</span><span class="tl-text">Ako talaga ito</span></div>
+        </div>`;
       wrap.appendChild(card);
     });
   });
@@ -333,7 +341,9 @@ function onAnswer(si,qi,v){
   const card=document.getElementById(`qcard-${si}-${qi}`);
   if(!card.classList.contains('answered')){answered++;card.classList.add('answered');}
   document.getElementById('progFill').style.width=(answered/40*100)+'%';
-  document.getElementById('progLabel').textContent=answered+' of 40 answered';
+  // Bilingual progress label
+  const pl=document.getElementById('progLabel');
+  pl.innerHTML = `<span class="en-text">${answered} of 40 answered</span><span class="tl-text">${answered} sa 40 nasagutan</span>`;
 }
 let _scores={},_sorted=[];
 function calculate(){
