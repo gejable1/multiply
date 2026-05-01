@@ -937,8 +937,8 @@ async function logQuickAttendance(){
   const { error } = await db.from('attendance').insert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
-    date:            today,
-    type:            'LC Meeting',
+    event_date:      today,
+    event_type:      'LC Meeting',
     present:         true,
     member_lc_group: currentMember.lc_group || '',
     member_zone:     currentMember.diagnostic_zone ?? null,
@@ -973,25 +973,42 @@ function renderAttList(){
   const list = document.getElementById('attList');
   const presentCount = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = presentCount+' present';
-  list.innerHTML = myMembers.map(mem=>{
+  list.innerHTML = myMembers.map((mem, idx)=>{
     const present = attendanceState[mem.id];
-    return `<div class="att-member ${present?'present':''}" id="att_${mem.id}" onclick="toggleAtt('${mem.id}')">
-      <div class="att-check" style="pointer-events:none">${present?'✓':''}</div>
-      <div class="att-av" style="pointer-events:none;background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
-      <div class="att-name" style="pointer-events:none">${mem.name}</div>
-      <div class="att-streak" style="pointer-events:none" id="streak_${mem.id}"></div>
+    return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
+      <div class="att-check">${present?'✓':''}</div>
+      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
+      <div class="att-name">${mem.name}</div>
+      <div class="att-streak"></div>
     </div>`;
   }).join('');
+
+  // Attach click + touchstart on each row so tap works on mobile + desktop
+  list.querySelectorAll('.att-member').forEach(row => {
+    const handler = function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      const mid = row.dataset.mid;
+      toggleAtt(mid);
+    };
+    row.addEventListener('click', handler);
+  });
 }
 
 function toggleAtt(id){
   attendanceState[id] = !attendanceState[id];
-  const el = document.getElementById('att_'+id);
   const present = attendanceState[id];
+  // Find the row by data-mid (works regardless of UUID format)
+  const el = document.querySelector('.att-member[data-mid="'+id+'"]');
+  if(!el){ console.warn('Could not find att-member for id', id); return; }
   el.classList.toggle('present', present);
-  el.querySelector('.att-check').textContent = present?'✓':'';
-  el.querySelector('.att-av').style.background = present?'rgba(52,211,153,.15)':'var(--surface2)';
-  el.querySelector('.att-av').style.color = present?'var(--z1)':'var(--muted)';
+  const check = el.querySelector('.att-check');
+  const av    = el.querySelector('.att-av');
+  if(check) check.textContent = present?'✓':'';
+  if(av){
+    av.style.background = present?'rgba(52,211,153,.15)':'var(--surface2)';
+    av.style.color      = present?'var(--z1)':'var(--muted)';
+  }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = cnt+' present';
 }
@@ -1017,10 +1034,10 @@ async function saveAttendance(){
   const rows = myMembers.map(m => ({
     member_id:       m.id,
     member_name:     m.name,
-    date:            date,        // actual DB column name
-    type:            selectedAttType, // actual DB column name
+    event_date:      date,
+    event_type:      selectedAttType,
     present:         !!attendanceState[m.id],
-    // ── enriched columns (added in schema v2) ─────────
+    // ── enriched columns ──────────────────────────────
     member_lc_group: m.lc_group || '',
     member_zone:     m.diagnostic_zone ?? null,
     member_level:    m.pipeline_level  ?? null,
@@ -1029,17 +1046,48 @@ async function saveAttendance(){
     logged_by_id:    loggedById,
   }));
 
-  // Delete existing rows for this session, then re-insert (avoids needing a unique constraint)
-  const memberIds = myMembers.map(m => m.id);
-  const {error: delErr} = await db.from('attendance')
-    .delete()
-    .in('member_id', memberIds)
-    .eq('date', date)
-    .eq('type', selectedAttType);
-  if(delErr){ toast('Save error: '+delErr.message,'error'); return; }
+  // Process each row: check if it exists, then update or insert.
+  // This avoids DELETE entirely (which was failing due to a stale RLS policy).
+  let okCount = 0, failCount = 0, lastErr = null;
 
-  const {error} = await db.from('attendance').insert(rows);
-  if(error){ toast('Error: '+error.message,'error'); return; }
+  for (const row of rows) {
+    // Check if a row already exists for this member + date + type
+    const { data: existing, error: selErr } = await db
+      .from('attendance')
+      .select('id')
+      .eq('member_id', row.member_id)
+      .eq('event_date', row.event_date)
+      .eq('event_type', row.event_type)
+      .maybeSingle();
+
+    if (selErr) {
+      console.error('SELECT failed for', row.member_name, selErr);
+      lastErr = selErr; failCount++; continue;
+    }
+
+    let writeErr = null;
+    if (existing) {
+      // Update the existing row
+      const { error } = await db.from('attendance').update(row).eq('id', existing.id);
+      writeErr = error;
+    } else {
+      // Insert a new row
+      const { error } = await db.from('attendance').insert(row);
+      writeErr = error;
+    }
+
+    if (writeErr) {
+      console.error('WRITE failed for', row.member_name, writeErr);
+      lastErr = writeErr; failCount++;
+    } else {
+      okCount++;
+    }
+  }
+
+  if (failCount > 0) {
+    toast('Saved '+okCount+', failed '+failCount+': '+(lastErr?.message||'unknown'), 'error');
+    return;
+  }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
   setTimeout(()=>showScreen('screenHome'),1500);
@@ -1058,9 +1106,9 @@ async function renderReports(){
 
   const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
   const {data:attData} = await db.from('attendance')
-    .select('member_id,present,date,type')
+    .select('member_id,present,event_date,event_type')
     .in('member_id', myMembers.map(m=>m.id))
-    .gte('date',thirtyAgo).eq('present',false);
+    .gte('event_date',thirtyAgo).eq('present',false);
 
   const absentCounts = {};
   (attData||[]).forEach(r=>{ absentCounts[r.member_id]=(absentCounts[r.member_id]||0)+1; });
