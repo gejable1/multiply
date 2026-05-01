@@ -2175,24 +2175,123 @@ async function sendProfileEditLink(memberId, memberName, contact){
   try{
     const url = await createSelfEditToken(memberId);
     const firstName = (memberName||'').split(' ')[0] || 'kapatid';
-    const msg = encodeURIComponent(
+    const messageText =
       `Hi ${firstName}! 🙏\n\n` +
       `Para sa ating church records, paki-update lang po ang inyong personal info ` +
       `(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n` +
       `${url}\n\n` +
-      `Valid for ${TOKEN_VALIDITY_DAYS} days. Salamat po! 💚\n— ${currentLeader?.name||'Your LC Leader'}`
-    );
+      `Valid for ${TOKEN_VALIDITY_DAYS} days. Salamat po! 💚\n— ${currentLeader?.name||'Your LC Leader'}`;
     const phone = normalizePHPhone(contact);
+
     if(phone){
-      window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+      // Has phone — direct WhatsApp delivery
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
       toast(`📝 Edit link ready for ${firstName} — just tap Send`, 'success');
     } else {
-      window.open(`https://wa.me/?text=${msg}`, '_blank');
-      toast(`⚠️ No phone for ${firstName} — pick from contacts`, 'error');
+      // No phone on file — let the leader pick how to deliver
+      _showShareModal(firstName, url, messageText);
     }
   } catch(e){
     console.error('Self-edit link error:', e);
     toast('Could not create link: '+e.message, 'error');
+  }
+}
+
+function _showShareModal(firstName, url, messageText){
+  // Remove any existing modal
+  document.querySelectorAll('.share-link-modal').forEach(m=>m.remove());
+
+  const modal = document.createElement('div');
+  modal.className = 'share-link-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">📤 Share Profile Edit Link</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
+        No phone on file for <strong>${firstName}</strong>. Choose how to send the link:
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
+        <button onclick="_shareVia('copy', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          📋 <span>Copy link to clipboard</span>
+        </button>
+        <button onclick="_shareVia('copyMsg', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          📝 <span>Copy full message (with greeting)</span>
+        </button>
+        <button onclick="_shareVia('sms', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          💬 <span>Send via SMS app</span>
+        </button>
+        <button onclick="_shareVia('email', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          ✉️ <span>Send via email app</span>
+        </button>
+        <button onclick="_shareVia('whatsapp', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          🟢 <span>Open WhatsApp & pick contact</span>
+        </button>
+        ${navigator.share ? `<button onclick="_shareVia('native', this)"
+          style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          📲 <span>Share to any app (Messenger, Viber, etc.)</span>
+        </button>` : ''}
+      </div>
+
+      <div style="background:var(--surface3);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);word-break:break-all;margin-bottom:.75rem;font-family:monospace">${url}</div>
+
+      <button onclick="this.closest('.share-link-modal').remove()"
+        style="width:100%;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>`;
+
+  // Stash data for the action handlers
+  window._shareLinkData = {url, messageText, firstName};
+
+  document.body.appendChild(modal);
+  modal.onclick = (e)=>{ if(e.target===modal) modal.remove(); };
+}
+
+async function _shareVia(method, btn){
+  const data = window._shareLinkData;
+  if(!data) return;
+  const {url, messageText, firstName} = data;
+
+  try{
+    if(method === 'copy'){
+      await navigator.clipboard.writeText(url);
+      toast('🔗 Link copied — paste it anywhere', 'success');
+    }
+    else if(method === 'copyMsg'){
+      await navigator.clipboard.writeText(messageText);
+      toast('📝 Full message copied — paste it anywhere', 'success');
+    }
+    else if(method === 'sms'){
+      // sms: link works on iOS and most Android (with ?body= or &body=)
+      window.location.href = 'sms:?body=' + encodeURIComponent(messageText);
+    }
+    else if(method === 'email'){
+      const subject = encodeURIComponent('Update your profile — Rosehill Christian Church');
+      window.location.href = `mailto:?subject=${subject}&body=` + encodeURIComponent(messageText);
+    }
+    else if(method === 'whatsapp'){
+      window.open('https://wa.me/?text=' + encodeURIComponent(messageText), '_blank');
+    }
+    else if(method === 'native' && navigator.share){
+      await navigator.share({
+        title: 'Update your profile',
+        text: messageText
+      });
+      toast('✓ Shared', 'success');
+    }
+    // Close modal after action
+    btn.closest('.share-link-modal')?.remove();
+  } catch(e){
+    if(e.name !== 'AbortError'){  // user cancelled native share — don't toast
+      console.error('Share error:', e);
+      toast('Could not share: ' + e.message, 'error');
+    }
   }
 }
 
