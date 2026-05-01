@@ -1712,17 +1712,67 @@ async function rProfileTab(m) {
     </div>`;
   });
 
-  // History log
+  // History log — show top 5 per assessment
   if(profileRows.length > 0) {
+    // Pretty-name maps for the four assessment types
+    const LL_LABELS = {words:'Words of Affirmation',acts:'Acts of Service',gifts:'Receiving Gifts',time:'Quality Time',touch:'Physical Touch'};
+    const DISC_LABELS = {D:'Dominance',I:'Influence',S:'Steadiness',C:'Conscientiousness'};
+    const prettyKey = (type, k) => {
+      if(type==='love_language') return LL_LABELS[k] || k;
+      if(type==='disc') return (DISC_LABELS[k] || k) + ' ('+k+')';
+      if(type==='enneagram') return 'Type ' + k + (ENNEA_KB[String(k)] ? ' — ' + ENNEA_KB[String(k)].name : '');
+      if(type==='strengths') return k.charAt(0).toUpperCase() + k.slice(1).replace(/[-_]/g,' ');
+      return k;
+    };
+    // Color per type to match the section headers above
+    const TYPE_COLOR = {love_language:'#8a2040', disc:'#1a4a6b', enneagram:'#b8882a', strengths:'#2a5c40'};
+    const TYPE_LABEL = {love_language:'Love Language', disc:'DISC', enneagram:'Enneagram', strengths:'Strengths'};
+
     html += `<div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;box-shadow:var(--shadow)">
-      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.5rem">Assessment History</div>`;
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.6rem">Assessment History — Top 5</div>`;
+
     profileRows.slice(0,8).forEach(r => {
-      const typeLabel = {love_language:'Love Language',disc:'DISC',enneagram:'Enneagram',strengths:'Strengths'}[r.profile_type]||r.profile_type;
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <span style="color:var(--muted);min-width:80px">${r.date_taken||'—'}</span>
-        <span style="font-weight:600;color:var(--ink)">${typeLabel}</span>
-        <span style="color:var(--muted);flex:1">${r.summary||r.top_result||'—'}</span>
-      </div>`;
+      const type = r.profile_type;
+      const label = TYPE_LABEL[type] || type;
+      const color = TYPE_COLOR[type] || 'var(--muted)';
+
+      // Extract top 5 from results object
+      let topN = [];
+      if(r.results && typeof r.results === 'object'){
+        topN = Object.entries(r.results)
+          .sort((a,b)=>(b[1]||0)-(a[1]||0))
+          .slice(0,5)
+          .map(([k,v])=>({name: prettyKey(type,k), score: v}));
+      }
+      // Fallback to summary if no scores object
+      const fallback = !topN.length;
+
+      const maxScore = topN[0]?.score || 1;
+      const medals = ['🥇','🥈','🥉','','',''];
+
+      html += `<div style="padding:.6rem 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="color:var(--muted);font-size:11px;min-width:80px">${r.date_taken||'—'}</span>
+          <span style="font-weight:700;color:${color};font-size:12.5px">${label}</span>
+        </div>`;
+
+      if(fallback){
+        html += `<div style="font-size:12px;color:var(--muted);padding-left:88px">${r.summary || r.top_result || '—'}</div>`;
+      } else {
+        topN.forEach((item, i) => {
+          const pct = Math.round((item.score/maxScore) * 100);
+          const isTop = i === 0;
+          html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0 3px 88px">
+            <span style="font-size:11px;width:14px">${medals[i]||''}</span>
+            <span style="font-size:11.5px;font-weight:${isTop?'700':'500'};color:${isTop?color:'var(--ink)'};min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</span>
+            <div style="flex:1;background:var(--surface3);border-radius:4px;height:8px;overflow:hidden;max-width:120px">
+              <div style="width:${pct}%;height:100%;background:${color};border-radius:4px"></div>
+            </div>
+            <span style="font-size:11px;font-weight:700;color:${isTop?color:'var(--muted)'};min-width:24px;text-align:right">${item.score}</span>
+          </div>`;
+        });
+      }
+      html += `</div>`;
     });
     html += `</div>`;
   }
