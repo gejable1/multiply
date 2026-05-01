@@ -7,6 +7,7 @@
 <title>Strengths Profile — MULTIPLY Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{
   --bg:#f8f5ef;--paper:#fff;--ink:#1a1612;--muted:#6b5f50;--lighter:#a09080;
@@ -356,10 +357,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
       </div>
 
       <div class="save-wrap">
-        <button class="save-btn" id="saveBtn" onclick="saveResults()">
-          <span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span>
-          <span class="en-text">💾 Save to MULTIPLY Dashboard</span>
-        </button>
+        <div style="display:flex;gap:8px;margin-bottom:.6rem">
+          <button class="save-btn" id="pdfBtn" onclick="downloadPDFReport(false)"
+            style="background:var(--navy);flex:1">
+            <span class="tl-text">📄 I-download na PDF</span>
+            <span class="en-text">📄 Download PDF</span>
+          </button>
+          <button class="save-btn" id="saveBtn" onclick="confirmSave()" style="flex:1">
+            <span class="tl-text">💾 I-save sa Dashboard</span>
+            <span class="en-text">💾 Save to Dashboard</span>
+          </button>
+        </div>
         <div class="msg" id="saveMsg"></div>
       </div>
 
@@ -998,6 +1006,263 @@ function showResults(name){
 }
 
 // ═══════════════════════════════════════════════════════
+// PDF REPORT (jsPDF) + SAVE CONFIRMATION
+// ═══════════════════════════════════════════════════════
+function confirmSave(){
+  // If results not calculated or no name, just route to saveResults so it shows the proper warning
+  const name=(document.getElementById('pName')?.value||'').trim();
+  if(!name || !_sortedThemes.length){ saveResults(); return; }
+
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:var(--ink);margin-bottom:.5rem">📋 Before saving…</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mawawala ang iyong mga sagot pagkatapos ma-save. Kunin muna ang PDF copy ng lahat ng iyong sagot at resulta?</span>
+        <span class="en-text">Saving will clear your saved progress. Want a PDF copy of all your answers and results first?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="csPdf" style="padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          📄 <span class="tl-text">Oo — i-download muna ang PDF</span><span class="en-text">Yes — Download PDF first</span>
+        </button>
+        <button id="csSave" style="padding:11px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          💾 <span class="tl-text">I-save na lang (skip PDF)</span><span class="en-text">Just save (skip PDF)</span>
+        </button>
+        <button id="csCancel" style="padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">
+          ✕ <span class="tl-text">Kanselahin</span><span class="en-text">Cancel</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.querySelector('#csPdf').onclick=()=>{ close(); downloadPDFReport(true); };
+  modal.querySelector('#csSave').onclick=()=>{ close(); saveResults(); };
+  modal.querySelector('#csCancel').onclick=close;
+  modal.onclick=(e)=>{ if(e.target===modal) close(); };
+}
+
+async function downloadPDFReport(saveAfter){
+  if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){
+    alert('PDF library not loaded — check your internet connection and refresh.');
+    return;
+  }
+  if(!_sortedThemes||!_sortedThemes.length){
+    alert(_lang==='tl'?'⚠️ I-calculate muna ang resulta.':'⚠️ Please calculate results first.');
+    return;
+  }
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});
+  const pageW=doc.internal.pageSize.getWidth();
+  const pageH=doc.internal.pageSize.getHeight();
+  const margin=50;
+  let y=margin;
+
+  const name=(document.getElementById('pName')?.value||'Member').trim();
+  const lcGroup=(document.getElementById('pGroup')?.value||'—').trim()||'—';
+  const today=new Date().toISOString().split('T')[0];
+
+  const checkPage=(need)=>{
+    if(y+(need||20) > pageH-margin){ doc.addPage(); y=margin; }
+  };
+
+  // ── HEADER BANNER ──────────────────────────────
+  doc.setFillColor(26,10,10);
+  doc.rect(0,0,pageW,90,'F');
+  doc.setTextColor(245,237,216);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.text('Strengths Profile Report',margin,38);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.setTextColor(184,136,42);
+  doc.text('Rosehill Christian Church · MULTIPLY Pipeline',margin,56);
+  doc.setTextColor(200,200,200);
+  doc.setFontSize(9);
+  doc.text(`Name: ${name}   |   LC Group: ${lcGroup}   |   Date: ${today}`,margin,76);
+  y=110;
+
+  // ── TOP 5 THEMES ───────────────────────────────
+  doc.setTextColor(26,22,18);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(13);
+  doc.text('Top 5 Strengths',margin,y);
+  y+=8;
+  doc.setDrawColor(184,136,42);
+  doc.setLineWidth(1);
+  doc.line(margin,y,margin+110,y);
+  y+=18;
+
+  const top5=_sortedThemes.slice(0,5);
+  top5.forEach((tk,i)=>{
+    checkPage(20);
+    const t=THEMES[tk]||{name:tk,domain:'—'};
+    const score=_scores[tk]||0;
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(26,22,18);
+    doc.setFontSize(11);
+    doc.text(`${i+1}. ${t.name||tk}`,margin,y);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(107,95,80);
+    doc.setFontSize(9);
+    doc.text(`${t.domain||'—'}  ·  Score: ${score}/6`,margin+170,y);
+    y+=16;
+  });
+
+  y+=10;
+
+  // ── DOMAIN BREAKDOWN ───────────────────────────
+  checkPage(70);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(26,22,18);
+  doc.setFontSize(13);
+  doc.text('Domain Breakdown (Top 5)',margin,y);
+  y+=8;
+  doc.line(margin,y,margin+170,y);
+  y+=18;
+
+  const domCount={Executing:0,Influencing:0,'Relationship Building':0,'Strategic Thinking':0};
+  top5.forEach(tk=>{
+    const d=(THEMES[tk]||{}).domain;
+    if(d && domCount[d]!==undefined) domCount[d]++;
+  });
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  Object.entries(domCount).forEach(([d,c])=>{
+    checkPage(15);
+    doc.setTextColor(26,22,18);
+    doc.text(`${d}:`,margin,y);
+    doc.setFont('helvetica','bold');
+    doc.text(`${c} of 5`,margin+170,y);
+    doc.setFont('helvetica','normal');
+    y+=14;
+  });
+
+  y+=12;
+
+  // ── ALL 34 THEMES RANKED ───────────────────────
+  checkPage(40);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(26,22,18);
+  doc.setFontSize(13);
+  doc.text('All 34 Themes — Ranked by Score',margin,y);
+  y+=8;
+  doc.line(margin,y,margin+220,y);
+  y+=18;
+
+  doc.setFontSize(10);
+  _sortedThemes.forEach((tk,i)=>{
+    checkPage(13);
+    const t=THEMES[tk]||{name:tk,domain:'—'};
+    const score=_scores[tk]||0;
+    if(i<5){ doc.setFont('helvetica','bold'); doc.setTextColor(184,136,42); }
+    else   { doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80); }
+    doc.text(`${(i+1).toString().padStart(2,' ')}. ${t.name||tk}`,margin,y);
+    doc.text(`${score}/6`,margin+220,y);
+    doc.text(`(${t.domain||'—'})`,margin+260,y);
+    y+=13;
+  });
+
+  doc.setTextColor(26,22,18);
+
+  // ── ALL 102 ANSWERS ────────────────────────────
+  doc.addPage();
+  y=margin;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14);
+  doc.text('Your 102 Answers',margin,y);
+  y+=8;
+  doc.setDrawColor(184,136,42);
+  doc.line(margin,y,margin+200,y);
+  y+=18;
+  doc.setFont('helvetica','italic');
+  doc.setFontSize(9);
+  doc.setTextColor(107,95,80);
+  doc.text('✓ in green = your choice. (A=top option, B=bottom option)',margin,y);
+  y+=18;
+
+  PAIRS.forEach((p,i)=>{
+    const ans=responses[i];
+    const aStmt=p.a||'(missing)';
+    const bStmt=p.b||'(missing)';
+    const aLines=doc.splitTextToSize(aStmt,pageW-margin*2-30);
+    const bLines=doc.splitTextToSize(bStmt,pageW-margin*2-30);
+    const need=14 + aLines.length*11 + bLines.length*11 + 10;
+    checkPage(need);
+
+    // Question number
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.setTextColor(184,136,42);
+    doc.text(`Q${i+1}`,margin,y);
+    y+=13;
+
+    // A statement
+    if(ans==='a'){
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(42,92,64);
+      doc.text('✓ A:',margin+10,y);
+    } else {
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(150,150,150);
+      doc.text('  A:',margin+10,y);
+    }
+    doc.text(aLines,margin+34,y);
+    y+=aLines.length*11+2;
+
+    // B statement
+    if(ans==='b'){
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(42,92,64);
+      doc.text('✓ B:',margin+10,y);
+    } else {
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(150,150,150);
+      doc.text('  B:',margin+10,y);
+    }
+    doc.text(bLines,margin+34,y);
+    y+=bLines.length*11+10;
+
+    doc.setTextColor(26,22,18);
+  });
+
+  // ── FOOTER ─────────────────────────────────────
+  y+=10;
+  checkPage(50);
+  doc.setDrawColor(220,210,190);
+  doc.line(margin,y,pageW-margin,y);
+  y+=14;
+  doc.setFont('helvetica','italic');
+  doc.setFontSize(9);
+  doc.setTextColor(107,95,80);
+  const footer=doc.splitTextToSize(
+    'This is your personal strengths assessment record. Keep it for your reference. May the Lord guide you in stewarding these gifts for His glory and the good of His Church.',
+    pageW-margin*2
+  );
+  doc.text(footer,margin,y);
+
+  // Save the PDF
+  const safeName=name.replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  const fname=`strengths_${safeName}_${today}.pdf`;
+  doc.save(fname);
+
+  // Toast
+  try{
+    const t=document.createElement('div');
+    t.style.cssText='position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1a1612;color:#fff;padding:.7rem 1.1rem;border-radius:9px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+    t.textContent='📄 PDF downloaded — check your Downloads folder';
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(),3500);
+  }catch(e){}
+
+  // If saveAfter, fire saveResults shortly after PDF starts downloading
+  if(saveAfter){
+    setTimeout(()=>saveResults(),900);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 // SAVE TO DASHBOARD
 // ═══════════════════════════════════════════════════════
 async function saveResults(){
@@ -1013,6 +1278,14 @@ async function saveResults(){
   const top5=_sortedThemes.slice(0,5);
   const top5Names=top5.map(t=>THEMES[t].name);
 
+  // FIX: Normalize theme keys for dashboard compatibility.
+  // Dashboard + profile_results_viewer expect 'self-assurance' (hyphen),
+  // but PAIRS data uses 'self_assurance' (underscore). Remap on save only.
+  const resultsForDB={};
+  Object.entries(_scores).forEach(([k,v])=>{
+    resultsForDB[k==='self_assurance'?'self-assurance':k]=v;
+  });
+
   try{
     const sb=getDB();
     if(!sb) throw new Error('Supabase not loaded.');
@@ -1022,7 +1295,7 @@ async function saveResults(){
       member_name:name,
       lc_group:document.getElementById('pGroup').value||null,
       profile_type:'strengths',
-      results:_scores,
+      results:resultsForDB,
       top_result:top5Names[0]||null,
       second_result:top5Names[1]||null,
       third_result:top5Names[2]||null,
