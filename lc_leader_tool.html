@@ -1096,6 +1096,51 @@ async function saveAttendance(){
 // ═══════════════════════════════════════════════════════
 // REPORTS
 // ═══════════════════════════════════════════════════════
+// Period state for attendance report
+let attReportPeriod = 'month'; // month | lastmonth | last30 | last90 | custom
+let attReportFrom = '';
+let attReportTo = '';
+
+function getReportRange(){
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  let from, to = fmt(today);
+  switch(attReportPeriod){
+    case 'month': {
+      const d = new Date(today.getFullYear(), today.getMonth(), 1);
+      from = fmt(d);
+      break;
+    }
+    case 'lastmonth': {
+      const start = new Date(today.getFullYear(), today.getMonth()-1, 1);
+      const end   = new Date(today.getFullYear(), today.getMonth(), 0);
+      from = fmt(start); to = fmt(end);
+      break;
+    }
+    case 'last30':  from = fmt(new Date(Date.now()-30*864e5)); break;
+    case 'last90':  from = fmt(new Date(Date.now()-90*864e5)); break;
+    case 'custom':  from = attReportFrom; to = attReportTo; break;
+    default:        from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+  }
+  return { from, to };
+}
+
+function setAttPeriod(p){
+  attReportPeriod = p;
+  if(p === 'custom'){
+    // Default custom range to this month if not set
+    if(!attReportFrom){
+      const d = new Date(); d.setDate(1);
+      attReportFrom = d.toISOString().split('T')[0];
+    }
+    if(!attReportTo) attReportTo = new Date().toISOString().split('T')[0];
+  }
+  renderReports();
+}
+
+function setCustomFrom(v){ attReportFrom = v; if(attReportPeriod === 'custom') renderReports(); }
+function setCustomTo(v){ attReportTo = v; if(attReportPeriod === 'custom') renderReports(); }
+
 async function renderReports(){
   const el = document.getElementById('reportsContent');
   const total = myMembers.length||1;
@@ -1104,19 +1149,63 @@ async function renderReports(){
   const pendingByAssess = {};
   ASSESSMENTS.forEach(a=>{ pendingByAssess[a.name] = myMembers.filter(m=>!m[a.field]).length; });
 
-  const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
-  const {data:attData} = await db.from('attendance')
-    .select('member_id,present,event_date,event_type')
-    .in('member_id', myMembers.map(m=>m.id))
-    .gte('event_date',thirtyAgo).eq('present',false);
+  // ── Attendance: pull all rows in the selected range ──
+  const range = getReportRange();
+  let attRows = [];
+  if(range.from && range.to && myMembers.length){
+    const {data, error} = await db.from('attendance')
+      .select('member_id,present,event_date,event_type')
+      .in('member_id', myMembers.map(m=>m.id))
+      .gte('event_date', range.from)
+      .lte('event_date', range.to);
+    if(!error) attRows = data || [];
+  }
 
-  const absentCounts = {};
-  (attData||[]).forEach(r=>{ absentCounts[r.member_id]=(absentCounts[r.member_id]||0)+1; });
-  const frequentAbsent = myMembers.filter(m=>absentCounts[m.id]>=2).sort((a,b)=>(absentCounts[b.id]||0)-(absentCounts[a.id]||0));
+  // Per-member attendance stats
+  const memberStats = {};
+  myMembers.forEach(m => {
+    memberStats[m.id] = { present: 0, absent: 0, total: 0, name: m.name };
+  });
+  attRows.forEach(r => {
+    if(!memberStats[r.member_id]) return;
+    memberStats[r.member_id].total++;
+    if(r.present) memberStats[r.member_id].present++;
+    else memberStats[r.member_id].absent++;
+  });
 
+  // Unique meetings in this period (by event_date + event_type)
+  const meetingKeys = new Set();
+  attRows.forEach(r => meetingKeys.add(r.event_date + '|' + r.event_type));
+  const totalMeetings = meetingKeys.size;
+
+  // Sort members by attendance rate (descending) for the report table
+  const memberRanked = myMembers.map(m => {
+    const s = memberStats[m.id];
+    const rate = s.total ? Math.round(s.present / s.total * 100) : null;
+    return { ...m, ...s, rate };
+  }).sort((a,b) => {
+    // Members with no attendance data go to the bottom
+    if(a.rate === null && b.rate === null) return a.name.localeCompare(b.name);
+    if(a.rate === null) return 1;
+    if(b.rate === null) return -1;
+    return b.rate - a.rate;
+  });
+
+  const frequentAbsent = memberRanked.filter(m => m.absent >= 2);
   const pendingTransfers = getPendingTransfers();
 
-  // Delegated listener for absent-item clicks (added before innerHTML to avoid rebinding)
+  // Period label for display
+  const periodLabel = (() => {
+    switch(attReportPeriod){
+      case 'month':     return 'This Month';
+      case 'lastmonth': return 'Last Month';
+      case 'last30':    return 'Last 30 Days';
+      case 'last90':    return 'Last 90 Days';
+      case 'custom':    return range.from + ' → ' + range.to;
+    }
+  })();
+
+  // Click handler for member rows
   document.getElementById('reportsContent').onclick = function(e){
     const item = e.target.closest('[data-mid]');
     if(item) openMember(item.dataset.mid);
@@ -1142,6 +1231,95 @@ async function renderReports(){
       </div>`:''}
     </div>
 
+    <!-- ─── ATTENDANCE REPORT ─── -->
+    <div class="report-card">
+      <div class="rc-title">📅 Attendance Report — ${periodLabel}</div>
+
+      <!-- Period selector chips -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        ${[
+          ['month','This Month'],
+          ['lastmonth','Last Month'],
+          ['last30','Last 30 Days'],
+          ['last90','Last 90 Days'],
+          ['custom','Custom'],
+        ].map(([key,label])=>`<button
+          class="ftab ${attReportPeriod===key?'active':''}"
+          onclick="setAttPeriod('${key}')">${label}</button>`).join('')}
+      </div>
+
+      ${attReportPeriod==='custom'?`
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--muted)">From:</span>
+          <input type="date" class="att-date-input" value="${attReportFrom}" onchange="setCustomFrom(this.value)">
+          <span style="font-size:11px;color:var(--muted)">To:</span>
+          <input type="date" class="att-date-input" value="${attReportTo}" onchange="setCustomTo(this.value)">
+        </div>
+      `:''}
+
+      <!-- Summary stats -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+        <div class="pg-card">
+          <div class="pg-num" style="color:var(--gold)">${totalMeetings}</div>
+          <div class="pg-label">Meetings</div>
+        </div>
+        <div class="pg-card">
+          <div class="pg-num" style="color:var(--green)">${attRows.filter(r=>r.present).length}</div>
+          <div class="pg-label">Total Present</div>
+        </div>
+        <div class="pg-card">
+          <div class="pg-num" style="color:var(--red)">${attRows.filter(r=>!r.present).length}</div>
+          <div class="pg-label">Total Absent</div>
+        </div>
+      </div>
+
+      ${totalMeetings === 0 ? `
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">
+          No attendance records in this period.<br>Log a meeting to see data here.
+        </div>
+      ` : `
+        <!-- Per-member table -->
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);
+             text-transform:uppercase;margin-bottom:6px">Per-Member Attendance</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${memberRanked.map(m => {
+            const rate = m.rate;
+            const rateColor = rate === null ? 'var(--muted)'
+              : rate >= 80 ? 'var(--green)'
+              : rate >= 50 ? 'var(--gold)'
+              : 'var(--red)';
+            const trackBg = rate === null ? 'var(--surface3)' : rateColor;
+            return `<div data-mid="${m.id}" style="
+              background:var(--surface2);border-radius:8px;padding:9px 12px;
+              display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;
+              cursor:pointer;border:1px solid var(--border)">
+              <div>
+                <div style="font-size:13px;font-weight:600">${m.name}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                  ${m.total === 0 ? 'No attendance logged'
+                    : m.present + ' present · ' + m.absent + ' absent · ' + m.total + ' total'}
+                </div>
+              </div>
+              <div style="width:80px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+                <div style="width:${rate||0}%;height:100%;background:${trackBg};transition:width .4s"></div>
+              </div>
+              <div style="font-size:13px;font-weight:800;color:${rateColor};min-width:42px;text-align:right">
+                ${rate === null ? '—' : rate + '%'}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <!-- Export -->
+        <button onclick="exportAttendanceCSV()" style="
+          margin-top:12px;width:100%;padding:9px;background:var(--surface3);
+          border:1px solid var(--border);border-radius:8px;color:var(--text);
+          font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+          📥 Export to CSV
+        </button>
+      `}
+    </div>
+
     <div class="report-card">
       <div class="rc-title">Pending Assessments</div>
       <div class="pending-grid">
@@ -1162,12 +1340,12 @@ async function renderReports(){
     </div>`:''}
 
     ${frequentAbsent.length?`<div class="report-card">
-      <div class="rc-title">Frequent Absences (30 days)</div>
+      <div class="rc-title">⚠️ Frequent Absences (${periodLabel})</div>
       <div class="absent-list">
         ${frequentAbsent.map(m=>`<div class="absent-item" data-mid="${m.id}">
           <div class="ai-av" style="background:rgba(248,113,113,.15);color:var(--red)">${initials(m.name)}</div>
           <div class="ai-name">${m.name}</div>
-          <div class="ai-streak">${absentCounts[m.id]} absences</div>
+          <div class="ai-streak">${m.absent} absence${m.absent>1?'s':''}</div>
         </div>`).join('')}
       </div>
     </div>`:''}
@@ -1181,6 +1359,37 @@ async function renderReports(){
         <div class="pg-card"><div class="pg-num" style="color:var(--orange)">${frequentAbsent.length}</div><div class="pg-label">Frequent Absent</div></div>
       </div>
     </div>`;
+
+  // Stash the ranked data for CSV export
+  window._lastAttRanked = memberRanked;
+  window._lastAttPeriod = periodLabel;
+}
+
+// CSV export
+function exportAttendanceCSV(){
+  const ranked = window._lastAttRanked || [];
+  const period = window._lastAttPeriod || 'Report';
+  if(!ranked.length){ toast('No data to export','error'); return; }
+
+  const lines = ['Name,Present,Absent,Total Meetings,Attendance Rate'];
+  ranked.forEach(m => {
+    const rate = m.rate === null ? '' : m.rate + '%';
+    lines.push([
+      '"' + m.name.replace(/"/g,'""') + '"',
+      m.present, m.absent, m.total, rate
+    ].join(','));
+  });
+
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'attendance_' + period.replace(/[^a-z0-9]+/gi,'_').toLowerCase() + '_' +
+               new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV downloaded ✓','success');
 }
 
 // ═══════════════════════════════════════════════════════
