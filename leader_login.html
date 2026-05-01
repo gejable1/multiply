@@ -136,6 +136,20 @@ body{
   font-size:11px; color:var(--muted); margin-top:1.5rem; line-height:1.55;
 }
 
+/* destination chooser */
+.dest-btn{
+  background:var(--surface2); border:1.5px solid var(--border); border-radius:11px;
+  padding:1.25rem .85rem; cursor:pointer; transition:all .15s; text-align:center;
+  font-family:inherit; color:var(--ink);
+}
+.dest-btn:hover{
+  background:var(--green-bg); border-color:var(--green);
+  transform:translateY(-2px); box-shadow:0 6px 18px rgba(42,92,64,.12);
+}
+.dest-icon{font-size:32px; line-height:1; margin-bottom:.5rem;}
+.dest-label{font-size:13px; font-weight:700; color:var(--ink); margin-bottom:.2rem;}
+.dest-sub{font-size:10.5px; color:var(--muted); line-height:1.35;}
+
 .hidden{display:none !important;}
 
 /* loading */
@@ -262,6 +276,34 @@ body{
     <div class="error-msg" id="err3"></div>
   </div>
 
+  <!-- ─────────── STEP 4: Choose destination ─────────── -->
+  <div id="step4" class="hidden">
+    <div class="leader-card">
+      <div class="leader-av" id="lAv3">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="leader-name" id="lName3"></div>
+        <div class="leader-role" id="lRole3"></div>
+      </div>
+      <button class="change-leader" onclick="logoutAndRestart()">Logout</button>
+    </div>
+
+    <div class="step-title">Where to next?</div>
+    <div class="step-sub">Pick how you want to use MULTIPLY today. You can switch later — both work the same data.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.5rem;">
+      <button class="dest-btn" onclick="goToDestination('desktop')">
+        <div class="dest-icon">💻</div>
+        <div class="dest-label">Desktop Dashboard</div>
+        <div class="dest-sub">Full features · Best on laptop</div>
+      </button>
+      <button class="dest-btn" onclick="goToDestination('mobile')">
+        <div class="dest-icon">📱</div>
+        <div class="dest-label">Mobile Tool</div>
+        <div class="dest-sub">Phone-friendly · Quick actions</div>
+      </button>
+    </div>
+  </div>
+
   <div class="footer-note">
     Forgot your PIN? Ask Pastor Gerry to reset it.<br>
     <span style="font-size:10px">Rosehill Christian Church · MULTIPLY Pipeline</span>
@@ -281,7 +323,8 @@ const db = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false,aut
 // ═══════════════════════════════════════════════════════════
 const LN = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Executive Leader'];
 const SESSION_HOURS = 8;
-const DASHBOARD_URL = 'multiply_dashboard.html'; // change if hosted elsewhere
+const DASHBOARD_URL = 'multiply_dashboard.html';
+const MOBILE_URL    = 'lc_leader_tool.html';
 
 // ═══════════════════════════════════════════════════════════
 // STATE
@@ -294,7 +337,8 @@ let pinConfirm = '';
 let mode = 'verify';      // 'verify' (existing PIN) or 'setup' (new PIN)
 
 // ═══════════════════════════════════════════════════════════
-// IF ALREADY LOGGED IN, BOUNCE STRAIGHT TO DASHBOARD
+// IF ALREADY LOGGED IN, SKIP STRAIGHT TO DESTINATION CHOOSER
+// (lets a returning leader switch between desktop/mobile easily)
 // ═══════════════════════════════════════════════════════════
 (function checkExistingSession(){
   try{
@@ -302,8 +346,16 @@ let mode = 'verify';      // 'verify' (existing PIN) or 'setup' (new PIN)
     if(!raw) return;
     const sess = JSON.parse(raw);
     if(sess && sess.expiresAt && Date.parse(sess.expiresAt) > Date.now()){
-      // Already valid — go to dashboard
-      location.replace(DASHBOARD_URL);
+      // Still valid — populate and jump to step 4 (chooser)
+      selectedLeader = {
+        id: sess.leaderId,
+        name: sess.leaderName,
+        pipeline_level: sess.leaderLevel,
+        facilitator_role: sess.leaderRole,
+        lc_group: sess.leaderLcGroup
+      };
+      // Defer until DOM is ready since this runs early
+      document.addEventListener('DOMContentLoaded', () => showDestinationChooser());
     } else {
       sessionStorage.removeItem('multiply_leader_session');
     }
@@ -494,7 +546,7 @@ async function handlePinConfirmSubmit(){
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOGIN SUCCESS — write session, log, redirect
+// LOGIN SUCCESS — write session, log, show destination chooser
 // ═══════════════════════════════════════════════════════════
 async function loginSuccess(){
   const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
@@ -524,7 +576,55 @@ async function loginSuccess(){
     });
   }catch(e){ console.warn('session log failed (non-fatal):', e); }
 
-  location.replace(DASHBOARD_URL);
+  // Show destination chooser instead of jumping straight to a page.
+  showDestinationChooser();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 4 — DESTINATION CHOOSER
+// ═══════════════════════════════════════════════════════════
+function showDestinationChooser(){
+  // Hide all earlier steps
+  ['step1','step2','step3'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.classList.add('hidden');
+  });
+  document.getElementById('step4').classList.remove('hidden');
+
+  if(!selectedLeader) return;
+  const initials = (selectedLeader.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('lAv3').textContent = initials;
+  document.getElementById('lName3').textContent = selectedLeader.name;
+  document.getElementById('lRole3').textContent =
+    selectedLeader.facilitator_role || LN[selectedLeader.pipeline_level||0];
+}
+
+function goToDestination(which){
+  if(which === 'mobile')  location.replace(MOBILE_URL);
+  else                    location.replace(DASHBOARD_URL);
+}
+
+// "Logout" link from the destination chooser — clears session and
+// returns to the name search step.
+async function logoutAndRestart(){
+  try{
+    const raw = sessionStorage.getItem('multiply_leader_session');
+    if(raw){
+      const sess = JSON.parse(raw);
+      if(sess && sess.leaderId){
+        await db.from('leader_sessions').update({
+          ended_at: new Date().toISOString(), ended_reason: 'logout'
+        }).eq('leader_id', sess.leaderId).is('ended_at', null);
+      }
+    }
+  }catch(e){ /* non-fatal */ }
+  sessionStorage.removeItem('multiply_leader_session');
+  selectedLeader = null;
+  pinEntry = ''; pinFirstEntry = ''; pinConfirm = '';
+  document.getElementById('step4').classList.add('hidden');
+  document.getElementById('step1').classList.remove('hidden');
+  const inp = document.getElementById('nameSearch');
+  if(inp){ inp.value = ''; inp.focus(); }
 }
 
 // ═══════════════════════════════════════════════════════════
