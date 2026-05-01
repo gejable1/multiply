@@ -493,6 +493,7 @@ tbody tr:hover{background:var(--green-light);}
       </div>
       <div class="fi full"><label>Spiritual Gifts (top 2)</label><input id="fgi" placeholder="e.g. Teaching, Shepherding"></div>
       <div class="fi"><label>Contact</label><input id="fco" placeholder="+63..."></div>
+      <div class="fi full" style="grid-column:1/-1"><label>Address</label><textarea id="faddr" placeholder="House #, street, barangay, city, province" rows="2" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:100%;resize:vertical;font-family:inherit"></textarea></div>
 
       <!-- MINISTRY SLOTS -->
       <div class="fi full" style="grid-column:1/-1">
@@ -684,6 +685,7 @@ function l2r(m){
     ministry2:m.ministry2||null,ministry2_role:m.ministry2_role||null,
     ministry3:m.ministry3||null,ministry3_role:m.ministry3_role||null,
     contact:m.contact||null,family_members:m.family_members||[],
+    address:m.address||null,
     checks:m.checks||{},eolo:m.eolo||[],notes:m.notes||[],
     is_facilitator:m.is_facilitator||false,facilitator_role:m.facilitator_role||null,
     diagnostic_score:m.diagnostic_score||null,diagnostic_zone:m.diagnostic_zone||null,
@@ -703,6 +705,7 @@ function r2l(r){
     ministry2:r.ministry2||'',ministry2_role:r.ministry2_role||'',
     ministry3:r.ministry3||'',ministry3_role:r.ministry3_role||'',
     contact:r.contact||'',
+    address:r.address||'',
     family_members:r.family_members||[],
     checks:r.checks||{},
     eolo:r.eolo||[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}],
@@ -1213,7 +1216,7 @@ function showMT(t,btn){
 }
 
 function clearF(){
-  ['fn','fb','fbp','fen','fd','fd_id','fgi','fco','fmr','fmr2','fmr3'].forEach(i=>{
+  ['fn','fb','fbp','fen','fd','fd_id','fgi','fco','faddr','fmr','fmr2','fmr3'].forEach(i=>{
     const e=document.getElementById(i);if(e)e.value='';
   });
   ['fcs','fmi','fmi2','fmi3','fl'].forEach(i=>{
@@ -1244,6 +1247,7 @@ function fillF(m){
   document.getElementById('fmr3').value=m.ministry3_role||'';
   document.getElementById('fgi').value=m.gifts||'';
   document.getElementById('fco').value=m.contact||'';
+  document.getElementById('faddr').value=m.address||'';
   // Family members
   buildFamilySlots(m.family_members||[]);
   document.getElementById('fIsFac').checked=m.is_facilitator||false;
@@ -1404,6 +1408,7 @@ async function saveMember(){
     ministry3:document.getElementById('fmi3').value||null,
     ministry3_role:document.getElementById('fmr3').value||null,
     contact:document.getElementById('fco').value,
+    address:document.getElementById('faddr').value||null,
     family_members:famData,
     is_facilitator:isFac,
     facilitator_role:isFac?document.getElementById('fFacRole').value:null,
@@ -1493,10 +1498,10 @@ function drillDown(filter){
 // EXPORT
 // ═══════════════════════════════════════
 function exportCSV(){
-  const h=['Name','Birthday','Civil','Baptism','Enrolled','Group','Discipler','Zone','Score','Level','Gifts','Ministry','Role','Contact','Family','Facilitator','Intervention','Updated'];
+  const h=['Name','Birthday','Civil','Baptism','Enrolled','Group','Discipler','Zone','Score','Level','Gifts','Ministry','Role','Contact','Address','Family','Facilitator','Intervention','Updated'];
   const rows=members.map(m=>[m.name,m.bday,m.civil,m.baptism,m.enrolled,m.group,m.discipler,
     ZL[m.diagnostic_zone]||'',m.diagnostic_score||'',LN[m.level||0],m.gifts,m.ministry,
-    m.ministry_role,m.contact,m.family,m.is_facilitator?'Yes':'No',m.intervention_status||'',
+    m.ministry_role,m.contact,m.address,m.family,m.is_facilitator?'Yes':'No',m.intervention_status||'',
     m.updated?new Date(m.updated).toLocaleDateString():''
   ].map(v=>`"${(v||'').replace(/"/g,'""')}"`));
   const csv=[h.join(','),...rows.map(r=>r.join(','))].join('\n');
