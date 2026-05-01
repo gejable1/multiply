@@ -41,6 +41,101 @@ body{
   line-height:1.7;
 }
 
+/* ── BILINGUAL VISIBILITY ── */
+body[data-lang="en"] .tl-text{display:none !important;}
+body[data-lang="tl"] .en-text{display:none !important;}
+body[data-lang="en"] .tl-block{display:none !important;}
+body[data-lang="tl"] .en-block{display:none !important;}
+
+/* ── LANGUAGE TOGGLE (bottom-right floating pill) ── */
+.lang-toggle{
+  position:fixed;bottom:18px;right:18px;
+  background:var(--paper);border:1.5px solid var(--border);
+  border-radius:30px;padding:3px;display:flex;gap:2px;z-index:1000;
+  box-shadow:0 4px 16px rgba(0,0,0,.15);
+}
+.lt-btn{
+  padding:7px 14px;border:none;background:transparent;
+  font-family:'Karla',sans-serif;font-size:11px;font-weight:700;
+  cursor:pointer;border-radius:25px;color:var(--lighter);
+  transition:all .15s;letter-spacing:.02em;
+}
+.lt-btn.active{background:var(--gold);color:white;}
+
+/* ── PAUSE / RESUME ── */
+.resume-banner{
+  background:linear-gradient(135deg,#1a4a6b,#2a5c40);color:white;
+  padding:1rem 1.25rem;border-radius:12px;margin-bottom:1.25rem;
+  display:none;align-items:center;gap:14px;flex-wrap:wrap;
+  box-shadow:0 4px 16px rgba(0,0,0,.15);
+}
+.resume-banner.show{display:flex;}
+.rb-icon{font-size:1.65rem;}
+.rb-info{flex:1;min-width:200px;}
+.rb-title{font-size:13px;font-weight:700;margin-bottom:2px;}
+.rb-sub{font-size:11px;color:rgba(255,255,255,.75);}
+.rb-btns{display:flex;gap:8px;}
+.rb-btn{
+  padding:8px 14px;border-radius:7px;border:none;
+  font-family:'Karla',sans-serif;font-size:12px;font-weight:700;cursor:pointer;
+}
+.rb-btn-yes{background:var(--gold);color:white;}
+.rb-btn-no{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.25);}
+
+.pause-btn{
+  background:transparent;border:1.5px solid var(--border);
+  color:var(--muted);font-size:11px;font-weight:700;
+  padding:5px 12px;border-radius:18px;cursor:pointer;
+  font-family:'Karla',sans-serif;display:none;transition:all .15s;
+  margin-left:8px;
+}
+.pause-btn.show{display:inline-flex;align-items:center;gap:4px;}
+.pause-btn:hover{border-color:var(--gold);color:var(--gold);}
+
+.pause-modal{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;
+  align-items:center;justify-content:center;padding:1.25rem;
+}
+.pause-modal.open{display:flex;}
+.pm-card{
+  background:var(--paper);border-radius:14px;padding:1.5rem;
+  max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);text-align:center;
+}
+.pm-icon{font-size:2.25rem;margin-bottom:.5rem;}
+.pm-title{
+  font-family:'Spectral',Georgia,serif;font-size:1.15rem;
+  font-weight:700;color:var(--ink);margin-bottom:.25rem;
+}
+.pm-sub{font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:.85rem;}
+.pm-saved-badge{font-size:11px;color:var(--forest);font-weight:700;margin-bottom:.65rem;}
+.pm-url-label{
+  font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--lighter);font-weight:700;text-align:left;margin-bottom:4px;
+}
+.pm-url{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+  padding:.55rem .75rem;font-size:11px;color:var(--ink);
+  word-break:break-all;margin-bottom:.85rem;text-align:left;
+  font-family:monospace;line-height:1.4;
+}
+.pm-btns{display:flex;gap:8px;flex-direction:column;}
+.pm-btn{
+  padding:11px;border-radius:9px;border:none;
+  font-family:'Karla',sans-serif;font-size:13px;font-weight:700;
+  cursor:pointer;transition:filter .15s;
+}
+.pm-btn-primary{background:var(--forest);color:white;}
+.pm-btn-copy{background:var(--gold);color:white;}
+.pm-btn:hover{filter:brightness(1.1);}
+
+.toast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:var(--ink);color:white;padding:10px 18px;border-radius:8px;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;
+  transition:opacity .25s;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.25);
+}
+.toast.show{opacity:1;}
+
 /* ── COVER ── */
 .cover{
   background:var(--ink);
@@ -393,7 +488,7 @@ body{
 
 /* ── PRINT ── */
 @media print{
-  .sticky-bar,.action-bar,.calc-btn{display:none!important;}
+  .sticky-bar,.action-bar,.calc-btn,.lang-toggle,.pause-btn,.resume-banner,.pause-modal,.toast{display:none!important;}
   .results-panel{display:block!important;}
   body{background:white;}
   .cover{background:#1c1710!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -413,14 +508,27 @@ body{
   .container{padding:1.25rem 1rem 4rem;}
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body>
+<body data-lang="en">
+
+<!-- LANGUAGE TOGGLE -->
+<div class="lang-toggle">
+  <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+</div>
 
 <!-- COVER -->
 <div class="cover">
   <p class="cover-eyebrow">MULTIPLY Pipeline · BTLI 101 · Lesson 2B</p>
-  <h1 class="cover-title"><strong>Spiritual Gifts</strong><br>Diagnostic</h1>
-  <p class="cover-sub">Discover how God has uniquely wired you for His Kingdom</p>
+  <h1 class="cover-title">
+    <span class="en-text"><strong>Spiritual Gifts</strong><br>Diagnostic</span>
+    <span class="tl-text"><strong>Mga Kaloob</strong><br>na Espirituwal</span>
+  </h1>
+  <p class="cover-sub">
+    <span class="en-text">Discover how God has uniquely wired you for His Kingdom</span>
+    <span class="tl-text">Tuklasin kung paano ka natatanging nilikha ng Diyos para sa Kanyang Kaharian</span>
+  </p>
   <div class="cover-refs">
     <span class="ref-chip">Romans 12:6–8</span>
     <span class="ref-chip">1 Corinthians 12:8–10, 28–30</span>
@@ -431,41 +539,94 @@ body{
 
 <!-- STICKY PROGRESS -->
 <div class="sticky-bar">
-  <span class="prog-text" id="progText">0 of 80 answered</span>
+  <span class="prog-text" id="progText">
+    <span class="en-text">0 of 80 answered</span>
+    <span class="tl-text">0 sa 80 ang nasagot</span>
+  </span>
   <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
-  <button class="calc-btn" onclick="calculate()">See My Gifts</button>
+  <button class="calc-btn" onclick="calculate()">
+    <span class="en-text">See My Gifts</span>
+    <span class="tl-text">Tingnan ang Aking mga Kaloob</span>
+  </button>
+  <button class="pause-btn" id="pauseBtn" onclick="showPauseModal()">⏸ <span class="en-text">Pause</span><span class="tl-text">I-pause</span></button>
 </div>
 
 <div class="container">
 
+  <!-- RESUME BANNER -->
+  <div class="resume-banner" id="resumeBanner">
+    <div class="rb-icon">⏸</div>
+    <div class="rb-info">
+      <div class="rb-title">
+        <span class="en-text">You have an unfinished test</span>
+        <span class="tl-text">May hindi pa tapos na test ka</span>
+      </div>
+      <div class="rb-sub" id="rbSub">
+        <span class="en-text">Would you like to continue where you left off?</span>
+        <span class="tl-text">Gusto mo bang ipagpatuloy kung saan ka huminto?</span>
+      </div>
+    </div>
+    <div class="rb-btns">
+      <button class="rb-btn rb-btn-yes" onclick="resumeTest()">
+        <span class="en-text">Continue</span><span class="tl-text">Ituloy</span>
+      </button>
+      <button class="rb-btn rb-btn-no" onclick="discardProgress()">
+        <span class="en-text">Start over</span><span class="tl-text">Magsimula ulit</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MEMBER LINK -->
+  <div id="autoLinked" style="display:none;background:linear-gradient(135deg,#e8f1ec 0%,#f5ebd6 100%);border:1.5px solid rgba(42,92,64,.3);border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem;">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div id="autoAv" style="width:42px;height:42px;border-radius:50%;background:#2a5c40;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;">?</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;color:#2a5c40;margin-bottom:2px;">
+          <span class="en-text">✅ Linked to Dashboard</span><span class="tl-text">✅ Naka-link sa Dashboard</span>
+        </div>
+        <div id="autoName" style="font-size:14px;font-weight:600;color:#1a1a1a;"></div>
+        <div id="autoMeta" style="font-size:11.5px;color:#666;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- INTRO -->
   <div class="intro-card">
-    <h3>How to Use This Diagnostic</h3>
-    <p>A spiritual gift is a special quality given by the Holy Spirit to every believer for the benefit of the whole church (1 Corinthians 12:4–7). This diagnostic helps you discover how God has wired you — not so you know what to avoid, but so you know where to begin.</p>
-    <p>Answer each statement honestly based on how you <em>actually are</em> — not how you wish you were or how you think a good Christian should answer. The most useful results come from the most honest responses.</p>
+    <h3>
+      <span class="en-text">How to Use This Diagnostic</span>
+      <span class="tl-text">Paano Gamitin ang Diagnostic na Ito</span>
+    </h3>
+    <p>
+      <span class="en-text">A spiritual gift is a special quality given by the Holy Spirit to every believer for the benefit of the whole church (1 Corinthians 12:4–7). This diagnostic helps you discover how God has wired you — not so you know what to avoid, but so you know where to begin.</span>
+      <span class="tl-text">Ang kaloob na espirituwal ay isang natatanging kakayahang ibinigay ng Banal na Espiritu sa bawat mananampalataya para sa ikabubuti ng buong simbahan (1 Corinto 12:4–7). Ang diagnostic na ito ay tumutulong sa iyo na tuklasin kung paano ka nilikha ng Diyos — hindi para malaman mo kung ano ang dapat iwasan, kundi para malaman mo kung saan magsisimula.</span>
+    </p>
+    <p>
+      <span class="en-text">Answer each statement honestly based on how you <em>actually are</em> — not how you wish you were or how you think a good Christian should answer. The most useful results come from the most honest responses.</span>
+      <span class="tl-text">Sagutin ang bawat pahayag nang tapat batay sa kung ano <em>talaga</em> ikaw — hindi sa kung ano ang gusto mo sana, o sa kung ano sa tingin mo ang dapat na sagutin ng isang mabuting Kristiyano. Ang pinakatamang resulta ay nagmumula sa pinakatapat na mga sagot.</span>
+    </p>
     <div class="scale-guide">
-      <span class="sg sg1">1 — Not at all like me</span>
-      <span class="sg sg2">2 — Rarely like me</span>
-      <span class="sg sg3">3 — Sometimes like me</span>
-      <span class="sg sg4">4 — Often like me</span>
-      <span class="sg sg5">5 — Very much like me</span>
+      <span class="sg sg1"><span class="en-text">1 — Not at all like me</span><span class="tl-text">1 — Hindi talaga ako</span></span>
+      <span class="sg sg2"><span class="en-text">2 — Rarely like me</span><span class="tl-text">2 — Bihira sa akin</span></span>
+      <span class="sg sg3"><span class="en-text">3 — Sometimes like me</span><span class="tl-text">3 — Minsan ay ako</span></span>
+      <span class="sg sg4"><span class="en-text">4 — Often like me</span><span class="tl-text">4 — Madalas akong ganito</span></span>
+      <span class="sg sg5"><span class="en-text">5 — Very much like me</span><span class="tl-text">5 — Akong-ako talaga</span></span>
     </div>
   </div>
 
   <!-- PROFILE -->
   <div class="profile-row">
-    <div class="pf full"><label>Full Name</label><input type="text" id="pName" placeholder="Your name"></div>
-    <div class="pf"><label>Date</label><input type="date" id="pDate"></div>
-    <div class="pf"><label>How long following Jesus?</label>
+    <div class="pf full"><label><span class="en-text">Full Name</span><span class="tl-text">Buong Pangalan</span></label><input type="text" id="pName" data-en="Your name" data-tl="Iyong pangalan" placeholder="Your name"></div>
+    <div class="pf"><label><span class="en-text">Date</span><span class="tl-text">Petsa</span></label><input type="date" id="pDate"></div>
+    <div class="pf"><label><span class="en-text">How long following Jesus?</span><span class="tl-text">Gaano katagal sumusunod kay Hesus?</span></label>
       <select id="pYears">
-        <option value="">Select...</option>
-        <option>Less than 1 year</option>
-        <option>1–3 years</option>
-        <option>3–5 years</option>
-        <option>More than 5 years</option>
+        <option value="" data-en="Select..." data-tl="Pumili...">Select...</option>
+        <option data-en="Less than 1 year" data-tl="Mas mababa sa 1 taon">Less than 1 year</option>
+        <option data-en="1–3 years" data-tl="1–3 taon">1–3 years</option>
+        <option data-en="3–5 years" data-tl="3–5 taon">3–5 years</option>
+        <option data-en="More than 5 years" data-tl="Mahigit 5 taon">More than 5 years</option>
       </select>
     </div>
-    <div class="pf"><label>LC Group</label><input type="text" id="pGroup" placeholder="Your Life Connect group name"></div>
+    <div class="pf"><label><span class="en-text">LC Group</span><span class="tl-text">LC Group</span></label><input type="text" id="pGroup" data-en="Your Life Connect group name" data-tl="Pangalan ng iyong Life Connect group" placeholder="Your Life Connect group name"></div>
   </div>
 
 <!-- ═══════════ QUESTIONS ═══════════ -->
@@ -473,237 +634,368 @@ body{
 
 <!-- ACTION -->
 <div class="action-bar">
-  <button class="btn-primary" onclick="calculate()">Calculate My Spiritual Gifts</button>
-  <button class="btn-outline" onclick="window.print()">Print / Save as PDF</button>
-  <button class="btn-outline" onclick="clearAll()">Clear All</button>
+  <button class="btn-primary" onclick="calculate()">
+    <span class="en-text">Calculate My Spiritual Gifts</span>
+    <span class="tl-text">Kalkulahin ang Aking mga Kaloob</span>
+  </button>
+  <button class="btn-outline" onclick="window.print()">
+    <span class="en-text">Print / Save as PDF</span>
+    <span class="tl-text">I-print / I-save bilang PDF</span>
+  </button>
+  <button class="btn-outline" onclick="clearAll()">
+    <span class="en-text">Clear All</span>
+    <span class="tl-text">Burahin Lahat</span>
+  </button>
 </div>
 
 <!-- RESULTS -->
 <div class="results-panel" id="resultsPanel">
 
-  <div class="results-title" id="resultsName">Your Spiritual Gifts Profile</div>
-  <p class="results-sub">Based on 80 questions · Results reflect patterns across all 16 gift categories · This is a starting point, not a final verdict</p>
+  <div class="results-title" id="resultsName">
+    <span class="en-text">Your Spiritual Gifts Profile</span>
+    <span class="tl-text">Ang Iyong Spiritual Gifts Profile</span>
+  </div>
+  <p class="results-sub">
+    <span class="en-text">Based on 80 questions · Results reflect patterns across all 16 gift categories · This is a starting point, not a final verdict</span>
+    <span class="tl-text">Batay sa 80 tanong · Ang mga resulta ay nagpapakita ng pattern sa lahat ng 16 na kategorya ng kaloob · Isang panimula ito, hindi pinal na hatol</span>
+  </p>
 
   <!-- BAR CHART -->
   <div class="chart-wrap">
-    <div class="chart-title">All 16 Gifts — Scored out of 25</div>
+    <div class="chart-title">
+      <span class="en-text">All 16 Gifts — Scored out of 25</span>
+      <span class="tl-text">Lahat ng 16 na Kaloob — Iskor mula sa 25</span>
+    </div>
     <div id="chartRows"></div>
   </div>
 
   <!-- TOP 3 -->
-  <div class="chart-title" style="margin-bottom:.75rem">Your Top 3 Spiritual Gifts</div>
+  <div class="chart-title" style="margin-bottom:.75rem">
+    <span class="en-text">Your Top 3 Spiritual Gifts</span>
+    <span class="tl-text">Iyong Tatlong Pangunahing Kaloob</span>
+  </div>
   <div class="top3-grid" id="top3Grid"></div>
 
   <!-- GIFT PROFILES (top 3 expanded) -->
-  <div class="chart-title" style="margin-bottom:.75rem">Gift Profiles — What Your Top Gifts Mean</div>
+  <div class="chart-title" style="margin-bottom:.75rem">
+    <span class="en-text">Gift Profiles — What Your Top Gifts Mean</span>
+    <span class="tl-text">Mga Profile ng Kaloob — Ano ang Kahulugan ng Iyong Pangunahing mga Kaloob</span>
+  </div>
   <div class="gift-profiles" id="giftProfiles"></div>
 
   <!-- MINISTRY MATCH -->
   <div class="ministry-match">
-    <div class="mm-title">Ministry Match Menu</div>
-    <div class="mm-sub">Based on your top gifts, these ministries are a natural fit. Circle 1–2 to explore. Your LC leader will connect you with the ministry leader within 2 weeks.</div>
+    <div class="mm-title">
+      <span class="en-text">Ministry Match Menu</span>
+      <span class="tl-text">Mga Ministry na Bagay sa Iyo</span>
+    </div>
+    <div class="mm-sub">
+      <span class="en-text">Based on your top gifts, these ministries are a natural fit. Circle 1–2 to explore. Your LC leader will connect you with the ministry leader within 2 weeks.</span>
+      <span class="tl-text">Batay sa iyong mga pangunahing kaloob, ang mga ministry na ito ay natural na bagay sa iyo. Pumili ng 1–2 na nais mong tuklasin. Iko-konekta ka ng iyong LC leader sa ministry leader sa loob ng 2 linggo.</span>
+    </div>
     <div class="mm-grid" id="mmGrid"></div>
   </div>
 
   <!-- APPLICATION -->
   <div class="application-box">
-    <div class="app-title">Personal Application — Before You Leave This Session</div>
+    <div class="app-title">
+      <span class="en-text">Personal Application — Before You Leave This Session</span>
+      <span class="tl-text">Personal na Aplikasyon — Bago Ka Umalis sa Session na Ito</span>
+    </div>
     <div class="app-grid">
       <div>
-        <div class="app-q">My top 2 spiritual gifts are:</div>
-        <input class="app-input" style="min-height:44px" placeholder="Write them here..." id="appGifts">
+        <div class="app-q">
+          <span class="en-text">My top 2 spiritual gifts are:</span>
+          <span class="tl-text">Ang aking 2 pangunahing kaloob ay:</span>
+        </div>
+        <input class="app-input" style="min-height:44px" data-en="Write them here..." data-tl="Isulat dito..." placeholder="Write them here..." id="appGifts">
       </div>
       <div>
-        <div class="app-q">The ministry I want to explore joining is:</div>
-        <input class="app-input" style="min-height:44px" placeholder="Name of ministry..." id="appMinistry">
+        <div class="app-q">
+          <span class="en-text">The ministry I want to explore joining is:</span>
+          <span class="tl-text">Ang ministry na nais kong sumalihan ay:</span>
+        </div>
+        <input class="app-input" style="min-height:44px" data-en="Name of ministry..." data-tl="Pangalan ng ministry..." placeholder="Name of ministry..." id="appMinistry">
       </div>
       <div>
-        <div class="app-q">One way I can start using my gifts this week — even informally:</div>
-        <textarea class="app-input" placeholder="A specific, small first step..."></textarea>
+        <div class="app-q">
+          <span class="en-text">One way I can start using my gifts this week — even informally:</span>
+          <span class="tl-text">Isang paraan kung paano ko magagamit ang aking mga kaloob ngayong linggong ito — kahit hindi pa pormal:</span>
+        </div>
+        <textarea class="app-input" data-en="A specific, small first step..." data-tl="Isang konkreto at maliit na unang hakbang..." placeholder="A specific, small first step..."></textarea>
       </div>
       <div>
-        <div class="app-q">My prayer to God about my gifts:</div>
-        <textarea class="app-input" placeholder="Write a personal prayer based on what you discovered today..."></textarea>
+        <div class="app-q">
+          <span class="en-text">My prayer to God about my gifts:</span>
+          <span class="tl-text">Aking panalangin sa Diyos tungkol sa aking mga kaloob:</span>
+        </div>
+        <textarea class="app-input" data-en="Write a personal prayer based on what you discovered today..." data-tl="Sumulat ng personal na panalangin batay sa iyong natuklasan ngayon..." placeholder="Write a personal prayer based on what you discovered today..."></textarea>
       </div>
     </div>
   </div>
 
   <!-- FACILITATOR -->
   <div class="facilitator-note">
-    <div class="fn-label">🔑 Note for Facilitator / Discipler</div>
-    <div class="fn-text">Before the participant leaves today, confirm: (1) their top 2 gifts are written on their BTLI 101 card, (2) they have chosen a ministry to explore, and (3) you have scheduled the warm handoff to that ministry's leader within 2 weeks. A gift discovered but not deployed stays theoretical. The handoff is the most important action item of this session.</div>
+    <div class="fn-label">
+      <span class="en-text">🔑 Note for Facilitator / Discipler</span>
+      <span class="tl-text">🔑 Paalala sa Facilitator / Discipler</span>
+    </div>
+    <div class="fn-text">
+      <span class="en-text">Before the participant leaves today, confirm: (1) their top 2 gifts are written on their BTLI 101 card, (2) they have chosen a ministry to explore, and (3) you have scheduled the warm handoff to that ministry's leader within 2 weeks. A gift discovered but not deployed stays theoretical. The handoff is the most important action item of this session.</span>
+      <span class="tl-text">Bago umalis ang participant ngayon, kumpirmahin: (1) nakasulat ang kanyang 2 pangunahing kaloob sa kanyang BTLI 101 card, (2) may napiling ministry na tutuklasin, at (3) naka-iskedyul ang warm handoff sa leader ng ministry na iyon sa loob ng 2 linggo. Ang kaloob na natuklasan ngunit hindi nagamit ay nananatiling theoretical lamang. Ang handoff ang pinakamahalagang action item ng session na ito.</span>
+    </div>
   </div>
 
   <div class="action-bar">
-    <button class="btn-primary" onclick="window.print()">Print My Gift Profile</button>
-    <button class="btn-outline" onclick="document.getElementById('resultsPanel').scrollIntoView()">Back to Results</button>
+    <button class="btn-primary" id="saveBtn" onclick="saveToDashboard()" style="background:linear-gradient(135deg,#2a5c40 0%,#1f4530 100%);color:#fff;">
+      <span class="en-text">💾 Save to Dashboard</span>
+      <span class="tl-text">💾 I-save sa Dashboard</span>
+    </button>
+    <button class="btn-primary" onclick="window.print()">
+      <span class="en-text">Print My Gift Profile</span>
+      <span class="tl-text">I-print ang Aking Gift Profile</span>
+    </button>
+    <button class="btn-outline" onclick="document.getElementById('resultsPanel').scrollIntoView()">
+      <span class="en-text">Back to Results</span>
+      <span class="tl-text">Bumalik sa Resulta</span>
+    </button>
   </div>
+  <div id="saveMsg" style="display:none;margin-top:.75rem;padding:.75rem 1rem;border-radius:8px;font-size:13px;text-align:center;"></div>
 
 </div><!-- /results -->
 
 </div><!-- /container -->
 
+<!-- PAUSE MODAL -->
+<div class="pause-modal" id="pauseModal">
+  <div class="pm-card">
+    <div class="pm-icon" id="pmIcon">⏸</div>
+    <div class="pm-title" id="pmTitle">
+      <span class="en-text">Your Progress is Saved</span>
+      <span class="tl-text">Na-save ang Iyong Progreso</span>
+    </div>
+    <div class="pm-sub" id="pmSub">
+      <span class="en-text">You can continue this test later on the same device. Bookmark or copy the link below to return anytime.</span>
+      <span class="tl-text">Maaari mong ituloy ang test mamaya sa parehong device. I-bookmark o i-copy ang link sa ibaba para makabalik ka kahit kailan.</span>
+    </div>
+    <div class="pm-saved-badge" id="pmSavedCount"></div>
+    <div class="pm-url-label">
+      <span class="en-text">🔗 Resume Link</span>
+      <span class="tl-text">🔗 Resume Link</span>
+    </div>
+    <div class="pm-url" id="pmUrl"></div>
+    <div class="pm-btns">
+      <button class="pm-btn pm-btn-copy" onclick="copyPauseUrl()">📋 <span class="en-text">Copy Link</span><span class="tl-text">I-copy ang Link</span></button>
+      <button class="pm-btn pm-btn-primary" onclick="closePauseModal()">▶ <span class="en-text">Continue Test</span><span class="tl-text">Ituloy ang Test</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- UNANSWERED MODAL -->
+<div class="pause-modal" id="unansweredModal">
+  <div class="pm-card">
+    <div class="pm-icon" style="color:#b8882a">⚠️</div>
+    <div class="pm-title">
+      <span class="en-text">You Have Unanswered Items</span>
+      <span class="tl-text">May Hindi Ka Pang Nasasagutan</span>
+    </div>
+    <div class="pm-sub" id="unansweredSub"></div>
+    <div class="pm-btns">
+      <button class="pm-btn pm-btn-copy" onclick="closeUnansweredModal()">↩ <span class="en-text">Go Back &amp; Answer</span><span class="tl-text">Bumalik at Sagutan</span></button>
+      <button class="pm-btn pm-btn-primary" onclick="proceedAnyway()">▶ <span class="en-text">Calculate Anyway</span><span class="tl-text">Ituloy Pa Rin</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
+// ═══════════════════════════════════════════════════════════
+// SUPABASE CLIENT — for saving results to MULTIPLY Dashboard
+// ═══════════════════════════════════════════════════════════
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+let db=null;
+function getDB(){if(!db){try{db=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});}catch(e){console.error(e);}}return db;}
+let _memberId=null;
+let _calculatedScores=null; // populated by _doCalculate; used by saveToDashboard
+
 // ═══════════════════════════════════════════════════════════
 // GIFT DATA — 16 gifts, each with 5 question items
 // Based on Usad survey structure
 // ═══════════════════════════════════════════════════════════
 const GIFTS = [
   {
-    id:'leadership', name:'Leadership', emoji:'⚡',
+    id:'leadership', name:'Leadership', nameTl:'Pamumuno', emoji:'⚡',
     greek:'proistemi — to lead, to care for, to stand before',
     cluster:'word',
     desc:'God has given you the ability to motivate and guide others toward a unified goal. You can see where a group needs to go and inspire people to get there together. You are people-oriented in your approach — you build team unity and push others toward completing God\'s work. Leadership differs from Administration in that you focus on the people, not just the task.',
+    descTl:'Ipinagkaloob sa iyo ng Diyos ang kakayahang udyukan at gabayan ang iba tungo sa iisang layunin. Nakikita mo kung saan dapat patungo ang grupo at napapakilos mo silang sabay-sabay. Nakatuon ka sa mga tao — nagtatayo ka ng pagkakaisa ng team at nagtutulak sa iba na tapusin ang gawain ng Diyos. Naiiba ang Pamumuno sa Pamamahala dahil ang focus mo ay sa mga tao, hindi lamang sa gawain.',
     scripture:'Romans 12:8 · 1 Timothy 5:17 · Hebrews 13:17',
     examples:'Moses, Joshua',
     ministries:['Life Connect Group Leader','Ministry Team Leader','EOLO Campaign Captain','Sunday School Coordinator','Youth Leadership'],
     items:[6,16,27,43,65]
   },
   {
-    id:'administration', name:'Administration', emoji:'📋',
+    id:'administration', name:'Administration', nameTl:'Pamamahala', emoji:'📋',
     greek:'kubernesis — to steer, to pilot, to organize',
     cluster:'word',
     desc:'You have the ability to organize people, resources, and systems to accomplish long-term ministry goals. Like a ship\'s pilot, you keep the team on course and moving forward. You have a strong sense of team purpose and are always looking ahead at what will be most beneficial to the church. Administration partners naturally with Leadership but is more task-oriented.',
+    descTl:'May kakayahan kang ayusin ang mga tao, resources, at sistema para makamit ang mga pangmatagalang layunin ng ministry. Tulad ng piloto ng barko, pinapanatili mong nasa tamang ruta at sumusulong ang team. May malakas kang sense ng team purpose at lagi kang tumitingin sa hinaharap kung ano ang pinakamakakabuti sa simbahan. Natural na nakikipag-partner ang Pamamahala sa Pamumuno ngunit mas nakatuon sa gawain.',
     scripture:'1 Corinthians 12:28 · Titus 1:5',
     examples:'Joseph, Nehemiah',
     ministries:['Events Coordination','Church Administration','Ministry Planning Team','Finance Committee','Database & Records'],
     items:[1,17,31,47,59]
   },
   {
-    id:'teaching', name:'Teaching', emoji:'📖',
+    id:'teaching', name:'Teaching', nameTl:'Pagtuturo', emoji:'📖',
     greek:'didasko — to teach, to instruct, to explain doctrine',
     cluster:'word',
     desc:'You have a special ability to communicate biblical truths in ways that strengthen, deepen, and grow the church. Teachers carry a heavy responsibility (James 3:1) to accurately explain what the Bible says, what it means, and how to apply it. You love long hours of Bible study and feel deep satisfaction when you see others grasp and live out God\'s Word.',
+    descTl:'May natatanging kakayahan ka na ihatid ang mga katotohanan ng Bibliya sa paraang nagpapatibay, nagpapalalim, at nagpapalago sa simbahan. Mabigat ang responsibilidad ng tagapagturo (Santiago 3:1) na tumpak na ipaliwanag ang sinasabi ng Bibliya, ang kahulugan nito, at kung paano ito ipinapamuhay. Mahilig kang mag-aral ng mahabang oras at malalim ang iyong kasiyahan kapag nakikita mong naiintindihan at isinasabuhay ng iba ang Salita ng Diyos.',
     scripture:'1 Corinthians 12:28 · Romans 12:7 · Ephesians 4:11',
     examples:'Apollos, Paul',
     ministries:['Sunday School Teacher','BTLI Lecturer','Life Connect Facilitator','Children\'s Ministry Teacher','Bible Study Leader'],
     items:[2,18,33,61,73]
   },
   {
-    id:'knowledge', name:'Knowledge', emoji:'🔍',
+    id:'knowledge', name:'Knowledge', nameTl:'Kaalaman', emoji:'🔍',
     greek:'gnosis — knowledge, understanding',
     cluster:'know',
     desc:'God has given you a special ability to discover, understand, and clearly explain great truths from Scripture. Your purpose is to inform and help the church understand God\'s will from His Word. You tend to be well-versed in the Bible and often partner naturally with those who have the gift of Teaching.',
+    descTl:'Ipinagkaloob sa iyo ng Diyos ang natatanging kakayahang tumuklas, umunawa, at malinaw na ipaliwanag ang mga dakilang katotohanan mula sa Kasulatan. Ang iyong layunin ay magbigay-kaalaman at tulungan ang simbahan na maunawaan ang kalooban ng Diyos mula sa Kanyang Salita. Karaniwang malalim ka sa Bibliya at natural na nakikipag-partner sa mga may kaloob ng Pagtuturo.',
     scripture:'1 Corinthians 12:28 · Romans 15:14',
     examples:'Ezra, Paul',
     ministries:['Bible Research Team','Theology Study Group','Sermon Preparation Support','Resource Development','Library Ministry'],
     items:[9,24,39,68,79]
   },
   {
-    id:'wisdom', name:'Wisdom', emoji:'💡',
+    id:'wisdom', name:'Wisdom', nameTl:'Karunungan', emoji:'💡',
     greek:'sophia — deep understanding, practical insight',
     cluster:'know',
     desc:'Wisdom is not just knowing truth — it is knowing how to apply truth to specific people and situations in ways that lead to holiness and worship. Those with this gift can see where a decision or action is heading, making their warnings and counsel extremely valuable. When situations are unclear, it is wise to listen to someone with this gift.',
+    descTl:'Ang Karunungan ay hindi lamang pag-alam ng katotohanan — ito ay ang pagkakaroon ng kakayahang ilapat ang katotohanan sa mga tiyak na tao at sitwasyon sa paraang humahantong sa kabanalan at pagsamba. Ang mga may ganitong kaloob ay nakikita kung saan papunta ang isang desisyon o aksyon, kaya napakahalaga ng kanilang babala at payo. Sa hindi malinaw na sitwasyon, matalino na makinig sa may ganitong kaloob.',
     scripture:'1 Corinthians 12:8 · Colossians 1:9–10 · James 3:13–18',
     examples:'Solomon, Daniel',
     ministries:['Pastoral Care Team','Elder / Advisory Role','Pre-marital Counseling Support','Conflict Mediation','Strategic Planning'],
     items:[3,19,48,62,74]
   },
   {
-    id:'prophecy', name:'Prophecy', emoji:'🔥',
+    id:'prophecy', name:'Prophecy', nameTl:'Pagpopropesiya', emoji:'🔥',
     greek:'propheteia — to proclaim, to declare God\'s message',
     cluster:'word',
     desc:'You have the ability to receive a message from God and declare it clearly to others — through preaching, teaching, or direct communication. This is not the same as Old Testament prophecy (writing Scripture), but a fervent declaration of God\'s Word through encouragement, correction, and revealing hidden sin. Everything shared must be tested against Scripture.',
+    descTl:'May kakayahan kang tumanggap ng mensahe mula sa Diyos at malinaw na ipahayag ito sa iba — sa pamamagitan ng pangangaral, pagtuturo, o tuwirang pakikipag-usap. Hindi ito katulad ng propesiya sa Lumang Tipan (pagsulat ng Kasulatan), kundi masigasig na pagpapahayag ng Salita ng Diyos sa pamamagitan ng pagpapalakas-loob, pagtutuwid, at paghahayag ng mga lihim na kasalanan. Ang lahat ng ibinabahagi ay dapat suriin sa Kasulatan.',
     scripture:'1 Corinthians 14:29–33 · 1 Thessalonians 5:20–21',
     examples:'Agabus, Philip\'s daughters',
     ministries:['Devotional Preacher','Evangelism Team','Prayer Intercessor','Worship Sharing','Small Group Lead Devotion'],
     items:[10,25,40,54,69]
   },
   {
-    id:'discernment', name:'Discernment', emoji:'🛡',
+    id:'discernment', name:'Discernment', nameTl:'Pagkilala / Diskresyon', emoji:'🛡',
     greek:'diakrisis — to evaluate, to distinguish, to judge',
     cluster:'know',
     desc:'You have the ability to judge whether something is from God, from human flesh, or from the enemy. You can recognize inconsistency, false teaching, and spiritual deception that others might miss. This gift protects the church from dangerous influences and is especially important in an era of misinformation and false teaching.',
+    descTl:'May kakayahan kang humatol kung ang isang bagay ay galing sa Diyos, sa tao, o sa kaaway. Nakikilala mo ang inconsistency, maling turo, at espirituwal na panlilinlang na maaaring hindi mapansin ng iba. Ang kaloob na ito ay nagpoprotekta sa simbahan mula sa mga mapanganib na impluwensya at lalo nang mahalaga sa panahon ng misinformation at maling turo.',
     scripture:'1 Corinthians 12:10 · Acts 5:3–6 · 1 John 4:1',
     examples:'Peter (with Ananias), Berean believers',
     ministries:['Theology Review Team','Counseling Support','Worship Screening','Guest Speaker Evaluation','Prayer Ministry'],
     items:[11,26,41,55,70]
   },
   {
-    id:'exhortation', name:'Encouragement', emoji:'🤝',
+    id:'exhortation', name:'Encouragement', nameTl:'Pagpapalakas-loob', emoji:'🤝',
     greek:'parakaleo — to call alongside, to strengthen',
     cluster:'care',
     desc:'You are the person who naturally stands beside those who are discouraged and lifts them up. You are gifted at motivating, affirming, and challenging other believers to take action and keep growing. Your goal is to see the church continually strengthen and deepen — and you do it through specific, personal encouragement that moves people forward.',
+    descTl:'Ikaw ang taong natural na tumatabi sa mga nasisiraan ng loob at nagpapaangat sa kanila. May kaloob ka sa pag-uudyok, pagpapatibay, at paghamon sa kapwa mananampalataya na kumilos at patuloy na lumago. Ang iyong layunin ay makitang patuloy na nagiging matatag at malalim ang simbahan — at ginagawa mo ito sa pamamagitan ng tiyak at personal na pagpapalakas-loob na nagpapakilos sa mga tao.',
     scripture:'Romans 12:8 · Acts 11:23–24 · Acts 14:21–22',
     examples:'Barnabas, Paul',
     ministries:['Pastoral Care Ministry','Visitation Team','New Member Follow-up','Crisis Support','Mentoring Program'],
     items:[20,34,49,63,75]
   },
   {
-    id:'shepherding', name:'Shepherding', emoji:'🐑',
+    id:'shepherding', name:'Shepherding', nameTl:'Pagpapastol', emoji:'🐑',
     greek:'poimen — shepherd, pastor, caretaker',
     cluster:'care',
     desc:'You carry a deep sense of responsibility for the spiritual welfare of others. Like a shepherd, you protect people from false teaching and harmful influences, feed them through faithful proclamation of Scripture, care for the spiritually sick, and guide those who are wandering. The shepherd\'s role is anchored in humility and sacrificial service.',
+    descTl:'May malalim kang pakiramdam ng responsibilidad para sa espirituwal na kapakanan ng iba. Tulad ng pastol, pinoprotektahan mo ang mga tao mula sa mga maling turo at nakakapinsalang impluwensya, pinapakain mo sila sa pamamagitan ng tapat na pangangaral ng Kasulatan, inaalagaan mo ang mga may sakit sa espiritu, at ginagabayan mo ang mga naliligaw. Ang papel ng pastol ay nakaugat sa kababaang-loob at sakripisyong paglilingkod.',
     scripture:'Ephesians 4:11 · Jeremiah 3:15 · John 10:11–18',
     examples:'David, Timothy',
     ministries:['Life Connect Group Leadership','Pastoral Care Team','Follow-up Ministry','Hospital / Prison Visitation','Mentoring / Discipleship'],
     items:[4,21,35,50,76]
   },
   {
-    id:'faith', name:'Faith', emoji:'⛰',
+    id:'faith', name:'Faith', nameTl:'Pananampalataya', emoji:'⛰',
     greek:'pistis — confidence, trust, assurance',
     cluster:'deed',
     desc:'This is not saving faith — every believer has that. This is a special God-given ability to trust God beyond what seems possible, to believe that God will act even when circumstances say otherwise. The Holy Spirit uses people with this gift to build the church\'s confidence in God. They expect God to show up and are never surprised when He does something extraordinary.',
+    descTl:'Hindi ito ang nagliligtas na pananampalataya — taglay ito ng bawat mananampalataya. Ito ay natatanging kakayahang ibinigay ng Diyos para magtiwala sa Kanya nang higit sa tila posible, na maniwalang kikilos ang Diyos kahit ang sitwasyon ay nagsasabi ng iba. Ginagamit ng Banal na Espiritu ang mga may kaloob na ito para palakasin ang tiwala ng simbahan sa Diyos. Inaasahan nilang gagawa ang Diyos at hindi sila nagugulat kapag may ginagawa Siyang pambihira.',
     scripture:'1 Corinthians 12:9 · Hebrews 11:1–40',
     examples:'Abraham, George Müller',
     ministries:['Prayer Ministry','Mission Team','Church Planting Support','Vision Casting Team','Intercession Ministry'],
     items:[12,28,42,56,80]
   },
   {
-    id:'evangelism', name:'Evangelism', emoji:'🌏',
+    id:'evangelism', name:'Evangelism', nameTl:'Pag-eebanghelyo', emoji:'🌏',
     greek:'euaggelistes — bringer of Good News',
     cluster:'deed',
     desc:'While all believers are called to share the gospel, some have a special measure of faith and effectiveness in this area. You have a unique ability to communicate the gospel clearly, you feel a deep burden for those who don\'t know Jesus, you are not easily discouraged by rejection, and you naturally connect with people from all walks of life.',
+    descTl:'Bagama\'t ang lahat ng mananampalataya ay tinawag para ibahagi ang ebanghelyo, may iilan na may natatanging sukat ng pananampalataya at pagiging epektibo sa bahaging ito. May kakayahan kang malinaw na ibahagi ang ebanghelyo, may malalim kang pasanin para sa mga hindi pa kilala si Hesus, hindi ka madaling masisiraan ng loob sa pagtanggi, at natural kang nakakakonekta sa mga taong galing iba\'t ibang antas ng buhay.',
     scripture:'Ephesians 4:11 · Acts 8:5–12 · Matthew 28:18–20',
     examples:'Philip, Billy Graham',
     ministries:['EOLO Campaign Leadership','EGR Evangelism Retreat Team','Outreach Ministry','Campus Ministry','Street Evangelism'],
     items:[5,36,51,64,77]
   },
   {
-    id:'apostleship', name:'Apostleship', emoji:'🚀',
+    id:'apostleship', name:'Apostleship', nameTl:'Pagiging Apostol', emoji:'🚀',
     greek:'apostolos — one sent out, a pioneer',
     cluster:'deed',
     desc:'The office of Apostle ended with the original twelve, but the gift continues in a different way. Those with this gift are called to pioneer new ministries, reach unreached places, develop church leaders, and take the gospel where it has not yet gone. They are leaders of leaders — entrepreneurial, risk-taking, and able to hold many responsibilities at once.',
+    descTl:'Natapos na ang opisyo ng Apostol sa orihinal na labindalawa, ngunit nagpapatuloy ang kaloob sa ibang paraan. Ang mga may ganitong kaloob ay tinawag para magpasimula ng mga bagong ministry, abutin ang mga lugar na hindi pa naaabot, magpaunlad ng mga lider ng simbahan, at dalhin ang ebanghelyo kung saan hindi pa ito nakakarating. Sila ay mga lider ng mga lider — entrepreneurial, mapangahas, at may kakayahang humawak ng maraming responsibilidad nang sabay-sabay.',
     scripture:'Ephesians 4:11 · 1 Corinthians 12:28 · Acts 1:21–22',
     examples:'Paul, Barnabas',
     ministries:['Church Planting Team','Missions Ministry','New Ministry Launch','Cross-Cultural Outreach','Leadership Development'],
     items:[13,29,44,57,71]
   },
   {
-    id:'service', name:'Service / Helps', emoji:'🛠',
+    id:'service', name:'Service / Helps', nameTl:'Paglilingkod / Pagtulong', emoji:'🛠',
     greek:'diakonia / antilepsis — to serve, to assist, to help',
     cluster:'deed',
     desc:'This gift has the broadest application of all. You energize the church by making sure everything gets done so that others can use their gifts fully. You serve out of genuine love — not for recognition. You are the backbone of ministry. Without people with this gift, every ministry would struggle. Service is the heart and foundation of all spiritual gifts.',
+    descTl:'Ang kaloob na ito ay may pinakamalawak na aplikasyon sa lahat. Nakakapagpalakas ka sa simbahan dahil sa pagtitiyak na natatapos ang lahat ng bagay para magamit ng iba ang kanilang mga kaloob nang lubusan. Naglilingkod ka mula sa tunay na pag-ibig — hindi para sa pagkilala. Ikaw ang gulugod ng ministry. Kung wala ang mga taong may ganitong kaloob, ang bawat ministry ay magkakaproblema. Ang Paglilingkod ang puso at pundasyon ng lahat ng mga kaloob na espirituwal.',
     scripture:'Romans 12:7 · Acts 6:1–7 · Mark 10:42–45',
     examples:'Martha, Timothy, the seven deacons',
     ministries:['Events Crew','Media & Tech Support','Facility Team','Worship Support','Children\'s Ministry Volunteer'],
     items:[14,30,46,58,72]
   },
   {
-    id:'mercy', name:'Mercy', emoji:'💙',
+    id:'mercy', name:'Mercy', nameTl:'Awa / Habag', emoji:'💙',
     greek:'eleos — compassion, pity, kindness',
     cluster:'care',
     desc:'Everyone should be merciful, but you have an extraordinary patience and compassion for those who are suffering. You can support people through long-term trials without burning out. You become the hands and feet of Jesus for those who are burdened. You are highly sensitive to others\' needs — you know when someone is not okay even before they say it.',
+    descTl:'Lahat ay dapat maawain, ngunit may pambihira kang pasensya at habag para sa mga nagdurusa. Kaya mong samahan ang mga tao sa pangmatagalang pagsubok nang hindi natatabunan. Nagiging kamay at paa ka ni Hesus para sa mga pinapasanan. Sensitibo ka sa pangangailangan ng iba — alam mo kapag hindi okay ang isang tao kahit hindi pa nila sinasabi.',
     scripture:'Romans 12:8 · Matthew 5:7 · Luke 10:30–37',
     examples:'John the Beloved, the Good Samaritan',
     ministries:['Pastoral Care Ministry','Hospital / Prison Visitation','Crisis Counseling Support','Special Needs Ministry','Grief Care Team'],
     items:[7,22,37,52,66]
   },
   {
-    id:'giving', name:'Giving', emoji:'🎁',
+    id:'giving', name:'Giving', nameTl:'Pagbibigay', emoji:'🎁',
     greek:'metadidomi / haplotes — to share generously, with pure motives',
     cluster:'deed',
     desc:'Your giving is not just financial — it is wholehearted, openhanded, and pure in motivation. God uses you to meet the needs of churches, ministries, missionaries, and individuals who cannot fully provide for themselves. You are an excellent steward. You find deep joy when someone shares a need with you because you get to be a channel of God\'s blessing.',
+    descTl:'Ang iyong pagbibigay ay hindi lamang pinansyal — buong-puso, bukas-palad, at dalisay ang motibasyon. Ginagamit ka ng Diyos para tugunan ang mga pangangailangan ng mga simbahan, ministry, missionary, at mga taong hindi lubusang makapagbibigay para sa kanilang sarili. Mahusay kang katiwala. Malalim ang iyong kagalakan kapag may nagbabahagi sa iyo ng pangangailangan dahil nagiging daluyan ka ng pagpapala ng Diyos.',
     scripture:'Romans 12:8,13 · 2 Corinthians 8:1–5 · Acts 4:32–37',
     examples:'Matthew, Barnabas, Lydia',
     ministries:['Stewardship Ministry','Missions Giving Team','Benevolence Fund','Resource Coordination','Financial Counseling Support'],
     items:[8,23,38,53,67]
   },
   {
-    id:'hospitality', name:'Hospitality', emoji:'🏠',
+    id:'hospitality', name:'Hospitality', nameTl:'Mapagpatuloy', emoji:'🏠',
     greek:'philoxenos — love of strangers, welcoming the guest',
     cluster:'care',
     desc:'You have a special ability to make anyone feel welcome, comfortable, and at home. You open your house, your table, and your heart without hesitation. You ensure that every visitor to the church feels like they belong. When there is tension in a room, you often become the peacemaker. You are not afraid to care for strangers.',
+    descTl:'May natatanging kakayahan kang ipadama sa kahit sino na sila ay tinatanggap, komportable, at nasa kanilang tahanan. Bukas mong binubuksan ang iyong bahay, iyong mesa, at iyong puso nang walang pag-aalinlangan. Sinisigurado mong ang bawat bisita sa simbahan ay nakakaramdam na sila ay kabilang. Kapag may tensyon sa isang silid, ikaw madalas ang nagiging tagapamayapa. Hindi ka natatakot sa pag-aalaga ng mga estranghero.',
     scripture:'Romans 12:9–13 · Romans 16:23 · 1 Peter 4:9 · Hebrews 13:1–2',
     examples:'Lydia, Martha, Phoebe',
     ministries:['Welcome / Greeter Team','Church Events Hosting','Small Group Hosting','New Member Reception','Merienda / Meal Ministry'],
@@ -801,6 +1093,90 @@ const QUESTIONS = [
   "I have a deep, unwavering confidence that God is able to do far more than I can ask or imagine."
 ];
 
+// 80 questions in Tagalog (parallel array, same order/mapping)
+const QUESTIONS_TL = [
+  "Madali para sa akin na ayusin ang mga gawain, resources, at iskedyul para makamit ang isang ministry goal.",
+  "Kapag nagpapaliwanag ako ng Kasulatan, madalas sinasabi ng mga tao na naging madali itong maintindihan dahil sa akin.",
+  "Natural sa akin na magbigay ng praktikal at angkop na payo kapag may mga taong gumagawa ng mahalagang desisyon.",
+  "May malalim akong pakiramdam ng responsibilidad sa espirituwal na kalusugan ng mga taong kilala ko.",
+  "May tunay akong pasanin at urgency na ibahagi ang ebanghelyo sa mga taong hindi pa kilala si Hesus.",
+  "Kaya kong magbigay ng kapani-paniwalang vision na nag-uudyok sa isang grupo na sabay-sabay kumilos sa iisang direksyon.",
+  "Madalas kong nararamdaman kapag may nasasaktan o nahihirapang tao, kahit hindi pa nila sinasabi.",
+  "May malalim akong kagalakan sa pagtugon sa pinansyal o praktikal na pangangailangan ng iba — bukas-palad akong nagbibigay nang malaya.",
+  "Mahilig akong magsaliksik at tumuklas ng mga katotohanan sa Bibliya na maaaring hindi napansin ng iba.",
+  "Naaaramdaman ko kapag hindi totoo ang sinasabi ng isang tao tungkol sa kanyang espirituwal na karanasan.",
+  "Karaniwang nakikita ko kung ang isang turo o ideya ay galing sa Diyos, opinyon lamang ng tao, o mapanganib sa espirituwal.",
+  "Kahit sa imposibleng sitwasyon, may malalim akong tiwala na kikilos ang Diyos sa tamang panahon.",
+  "Pakiramdam ko ay tinatawag ako sa mga lugar o grupo na hindi pa naaabot ng ebanghelyo.",
+  "Tunay akong nasisiyahan sa paggawa ng mga behind-the-scenes na trabaho na tumutulong sa iba na mas mahusay na magampanan ang kanilang ministry.",
+  "Mahilig akong magbukas ng aking tahanan at ipadama sa mga panauhin na sila ay tinatanggap at komportable.",
+  "Ako madalas ang nag-aasikaso at nagbibigay ng direksyon kapag hindi alam ng grupo ang susunod na gagawin.",
+  "Mas gusto kong may detalyadong plano, malinaw na roles, at maayos na sistema sa anumang ministry na sinasalihan ko.",
+  "Mahilig akong maghanda ng mga aralin sa Bibliya at tulungan ang iba na maintindihan ang mahihirap na bahagi.",
+  "Naiintindihan ko ang mga kumplikadong sitwasyon at alam ko kung anong payo ang ibibigay — kahit nalilito ang iba.",
+  "Madalas kong napapansin kapag may taong unti-unting nawawala sa daan ng Diyos, at pakiramdam ko ay sapilitan akong tumulong na ibalik siya.",
+  "Maraming oras akong namumuhunan sa personal na paglago at espirituwal na kalusugan ng ilang piling tao.",
+  "Hindi ako naiinis na manatili sa tabi ng isang tao sa mahaba at masakit na panahon — hindi ko basta-basta sinusuko ang mga tao.",
+  "Regular akong nagbibigay nang higit sa inaasahan — sa pera at iba pang paraan — dahil tunay kong gusto.",
+  "May malalim akong gutom na malaman at maintindihan ang Bibliya nang malalim.",
+  "Karaniwang nakikita ko kung saan papunta ang isang desisyon — at pakiramdam ko ay responsibilidad kong balaan ang mga tao kapag may nakikita akong panganib.",
+  "Pakiramdam ko ay sapilitan akong harapin ang kasalanan at tawagin ang mga tao na bumalik sa katotohanan ng Diyos kapag nakikita kong nalalayo sila.",
+  "May tila pakiramdam ako kapag ang isang tagapagsalita o turo ay hindi naaayon sa Kasulatan — kahit hindi ito napapansin ng iba.",
+  "Nagtitiwala ako sa Diyos para gumawa ng mga bagay na parang imposible, at hindi madaling natitinag ang tiwalang ito kahit may mga balakid.",
+  "May malakas akong pagnanais na pasimulan ang mga bagong bagay — bagong ministry, bagong outreach, bagong paraan.",
+  "Mas madali sa akin kaysa karamihan na panatilihing maayos ang takbo ng isang sistema at siguraduhing walang nakakaligtaan.",
+  "Mas gusto ko ang pagtatrabaho sa mga sistema, iskedyul, at proseso kaysa direktang pamamahala ng mga tao.",
+  "Kapag may mga panauhin ako, sinisikap kong tunay na maramdaman nilang inaalagaan sila.",
+  "Kaya kong ipaliwanag ang mga theological na konsepto sa malinaw, may kabuluhan, at kawili-wiling paraan.",
+  "Kapag may nasisiraan ng loob, instinctively alam ko kung ano ang dapat sabihin para mapaangat sila at mapatuloy.",
+  "Kaya kong tukuyin ang potensyal ng isang tao at tulungan siyang umunlad tungo sa kung ano ang itinawag ng Diyos sa kanya.",
+  "Kapag nakakausap ko ang isang taong hindi kilala si Hesus, natural akong naghahanap ng pagkakataong ibahagi ang ebanghelyo.",
+  "May tunay akong habag — hindi pagmamaktol — para sa mga taong dumadanas ng matagal na pagdurusa.",
+  "Mahilig akong magbigay nang may sakripisyo at maghanap ng malikhaing paraan para tugunan ang mga pangangailangan na maaaring hindi mapansin ng iba.",
+  "Kaya kong pag-aralan ang isang bahagi ng Kasulatan nang matagal at patuloy pa ring makahanap ng mga bagong layer ng kahulugan at aplikasyon.",
+  "May malakas akong pakiramdam kung ang isang turo ay totoo, bahagyang totoo, o mali.",
+  "Madalas kong nararamdaman kapag may espirituwal na pang-aapi o panlilinlang na nakakaapekto sa isang sitwasyon o tao.",
+  "Nananalangin ako nang may malaking inaasahan dahil tunay akong naniniwala na sumasagot ang Diyos sa panalangin sa supernatural na paraan.",
+  "Naniniwala akong tinawag ako para abutin ang mga tao sa mga lugar o kultura na hindi pinupuntahan ng iba.",
+  "Nabubuhayan ako sa paggawa ng mga praktikal na gawain na sumusuporta sa ministry — pagse-set up, paglilinis, behind the scenes.",
+  "Regular akong nag-iimbita ng mga tao sa aking tahanan o nagbibigay ng pagkain at pakikisama bilang paraan ng ministry.",
+  "Madali sa akin na pakilusin ang mga tao patungo sa iisang direksyon, kahit sila ay hindi sang-ayon noong simula.",
+  "Nagre-record ako ng detalyado at natatandaan ko ang mga mahahalagang detalye kung paano inayos ang mga bagay-bagay noon.",
+  "Mahilig akong gawing praktikal ang katotohanan — pinakamahusay akong magturo kapag matutulungan ko ang mga tao na makita kung paano dumadapat ang Kasulatan sa kanilang tunay na buhay.",
+  "May banal na urgency akong nararamdaman kapag nakikita kong namumuhay ang mga anak ng Diyos sa antas na mas mababa sa kanyang itinawag sa kanila.",
+  "Natural kong inaalagaan ang espirituwal na paglago ng mga tao at pakiramdam ko ay personal kong responsibilidad kapag may naliligaw.",
+  "Natural kong ibinabahagi ang ebanghelyo sa pang-araw-araw na pag-uusap — hindi pilit o awkward.",
+  "Kayang-kaya kong samahan ang mga tao sa mahaba at madilim na panahon nang hindi nawawalan ng pag-asa o lumalayo.",
+  "Patuloy at masaya akong nagbibigay, kahit nangangailangan ito ng personal na sakripisyo.",
+  "Madalas akong unang lapitan ng iba kapag kailangan nila ng gabay o perspective sa isang mahirap na sitwasyon.",
+  "Hindi ako madaling malinlang — agad kong napapansin kapag may mali sa isang tao, turo, o sitwasyon.",
+  "Nananalangin ako nang may pananampalataya — nakita ko na ang Diyos na gumawa ng mga pambihirang bagay bilang tuwirang resulta ng panalangin.",
+  "Pakiramdam ko ay tinatawag ako ng Diyos sa mga lugar o komunidad na hindi pa naaabot ng ebanghelyo.",
+  "Tunay akong nasisiyahan sa paggawa ng mga trabahong ayaw gawin ng iba — basta't makikinabang ang ministry.",
+  "Bukas-palad akong nagbabahagi ng aking oras, lakas, tahanan, at resources sa mga taong nangangailangan.",
+  "Regular akong nakakaranas ng panloob na katiyakan na may bagay na galing o hindi galing sa Diyos.",
+  "Alam ko kung paano hatiin ang mga kumplikadong ideya para maintindihan ito ng kahit sino.",
+  "Kaya kong makita kung paano dapat ipakat sa mga praktikal at konkretong sitwasyon ng buhay ang mga abstract na biblikal na prinsipyo.",
+  "Pinagmamasdan kong mabuti ang body language at emosyonal na kalagayan ng nagsasalita — naaaramdaman ko ang tunay nilang ibig sabihin.",
+  "Nagsasabi ako ng mga salita ng pagpapalakas-loob na sapat ang detalye para tunay na baguhin kung ano ang nararamdaman o ginagawa ng isang tao.",
+  "Malalim akong namumuhunan sa espirituwal na kalusugan ng ilang piling tao — hindi sa karamihan.",
+  "Sineseryoso ko ang pinansyal na stewardship at pinangangasiwaan ko ang pera bilang kasangkapan para sa Kaharian ng Diyos, hindi para sa personal na kaginhawahan.",
+  "Halos kaagad kong namamalayan kapag ang isang tao ay hindi tunay sa kanyang sinasabing pananampalataya.",
+  "May pagnanasa akong magsanay, mag-equip, at magpadala ng mga lider para sa kapakanan ng ebanghelyo.",
+  "Nananatili akong tapat sa anumang gawaing ibinibigay sa akin, kahit gaano ito kaliit o hindi napapansin, dahil mahalaga ang katapatan.",
+  "Regular akong naaakit na manalangin para sa may sakit, sa nawawala, at sa mga tila imposible — nang may tunay na pananampalataya.",
+  "Hindi ako madaling matamaan ng pagtanggi kapag nagbabahagi ng aking pananampalataya — bumabangon ako at nagpapatuloy.",
+  "Pinagsisikapan kong siguraduhin na makaramdam ng pagtanggap, paggalang, at halaga ang sinumang pumapasok sa ating simbahan.",
+  "Mahilig akong magbasa, mag-aral, at matuto — at madali sa akin maghanap at gumamit ng mga magagandang resources para sa ministry.",
+  "May espesyal akong koneksyon sa mga taong dumadanas ng sakit at pagdurusa — gusto kong sumama sa kanila, hindi lamang ipanalangin sila mula sa malayo.",
+  "Malalim akong nasisiyahan sa pagbibigay — oras man, pera, o resources — at regular ko itong ginagawa.",
+  "Aware ako sa kung ano ang nangyayari sa espirituwal na bahagi ng isang silid o pag-uusap — napapansin ko ang hindi napapansin ng iba.",
+  "Mas gugustuhin ko pang maglingkod sa mahaba at mahirap na ministry kaysa sa madali at maikli.",
+  "Madalas akong nakakatanggap ng mga insight sa panalangin o pag-aaral na parang hindi ko maaaring naisip nang mag-isa.",
+  "Pakiramdam ko ay sapilitan akong pumunta kung saan ang pinakamatinding pangangailangan, kahit ibig sabihin nito ay pumunta sa lugar na ayaw puntahan ng iba.",
+  "May malalim at hindi natitinag akong tiwala na kaya ng Diyos na gumawa nang higit pa sa anumang aking maaaring hingin o maisip."
+];
+
 // Mapping: for each gift, which question indices (0-based) correspond to its 5 items
 // Items from Usad: Leadership=[6,16,27,43,65], Administration=[1,17,31,47,59], etc.
 // Convert to 0-based indices
@@ -827,22 +1203,41 @@ const CLUSTER_COLORS = {
   word:'bar-word', deed:'bar-deed', know:'bar-know', care:'bar-care'
 };
 
+// ── LANGUAGE TOGGLE ─────────────────────────────────────────────────────────
+let _lang = 'en';
+function setLang(lang){
+  _lang = lang;
+  document.body.setAttribute('data-lang', lang);
+  document.getElementById('lt-en').classList.toggle('active', lang==='en');
+  document.getElementById('lt-tl').classList.toggle('active', lang==='tl');
+  // Update placeholders for inputs that have data-en/data-tl
+  document.querySelectorAll('[data-en][data-tl]').forEach(el => {
+    if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'){
+      el.placeholder = lang==='tl' ? el.dataset.tl : el.dataset.en;
+    } else if(el.tagName === 'OPTION'){
+      el.textContent = lang==='tl' ? el.dataset.tl : el.dataset.en;
+    }
+  });
+  updateProgressLabel();
+}
+
 // ── BUILD QUESTIONS ──────────────────────────────────────────────────────────
 function buildQuestions() {
   const wrap = document.getElementById('questionsWrap');
   // Group into sections of 20
   const sections = [
-    {num:1, title:'Part 1', sub:'Questions 1–20', start:0, end:20},
-    {num:2, title:'Part 2', sub:'Questions 21–40', start:20, end:40},
-    {num:3, title:'Part 3', sub:'Questions 41–60', start:40, end:60},
-    {num:4, title:'Part 4', sub:'Questions 61–80', start:60, end:80},
+    {num:1, titleEn:'Part 1', titleTl:'Bahagi 1', subEn:'Questions 1–20', subTl:'Mga Tanong 1–20', start:0, end:20},
+    {num:2, titleEn:'Part 2', titleTl:'Bahagi 2', subEn:'Questions 21–40', subTl:'Mga Tanong 21–40', start:20, end:40},
+    {num:3, titleEn:'Part 3', titleTl:'Bahagi 3', subEn:'Questions 41–60', subTl:'Mga Tanong 41–60', start:40, end:60},
+    {num:4, titleEn:'Part 4', titleTl:'Bahagi 4', subEn:'Questions 61–80', subTl:'Mga Tanong 61–80', start:60, end:80},
   ];
-  const scaleLabels = ['Not at all','Rarely','Sometimes','Often','Very much'];
+  const scaleLabelsEn = ['Not at all','Rarely','Sometimes','Often','Very much'];
+  const scaleLabelsTl = ['Hindi talaga','Bihira','Minsan','Madalas','Akong-ako'];
 
   sections.forEach(sec => {
     const sh = document.createElement('div');
     sh.className = 'section-head';
-    sh.innerHTML = `<div class="section-num">${sec.num}</div><div><div class="section-title">${sec.title}</div><div class="section-sub">${sec.sub}</div></div><span class="section-count">20 statements</span>`;
+    sh.innerHTML = `<div class="section-num">${sec.num}</div><div><div class="section-title"><span class="en-text">${sec.titleEn}</span><span class="tl-text">${sec.titleTl}</span></div><div class="section-sub"><span class="en-text">${sec.subEn}</span><span class="tl-text">${sec.subTl}</span></div></div><span class="section-count"><span class="en-text">20 statements</span><span class="tl-text">20 pahayag</span></span>`;
     wrap.appendChild(sh);
 
     for (let i = sec.start; i < sec.end; i++) {
@@ -852,28 +1247,38 @@ function buildQuestions() {
 
       let scaleHTML = '';
       for (let v = 1; v <= 5; v++) {
-        scaleHTML += `<label class="sopt"><input type="radio" name="q${i}" value="${v}" onchange="onAnswer(${i})"><div class="d">${v}</div><div class="dl">${scaleLabels[v-1]}</div></label>`;
+        scaleHTML += `<label class="sopt"><input type="radio" name="q${i}" value="${v}" onchange="onAnswer(${i})"><div class="d">${v}</div><div class="dl"><span class="en-text">${scaleLabelsEn[v-1]}</span><span class="tl-text">${scaleLabelsTl[v-1]}</span></div></label>`;
       }
 
       card.innerHTML = `
         <div class="q-top">
           <span class="q-num">Q${i+1}</span>
-          <div class="q-text">${QUESTIONS[i]}</div>
+          <div class="q-text"><span class="en-text">${escapeHTML(QUESTIONS[i])}</span><span class="tl-text">${escapeHTML(QUESTIONS_TL[i])}</span></div>
         </div>
         <div class="scale-row">
-          <div class="s-label">Not at all</div>
+          <div class="s-label"><span class="en-text">Not at all</span><span class="tl-text">Hindi talaga</span></div>
           <div class="s-opts">${scaleHTML}</div>
-          <div class="s-label r">Very much</div>
+          <div class="s-label r"><span class="en-text">Very much</span><span class="tl-text">Akong-ako</span></div>
         </div>`;
       wrap.appendChild(card);
     }
   });
 }
 
+function escapeHTML(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
 // ── ANSWER HANDLER ──────────────────────────────────────────────────────────
+const SAVE_KEY = 'sgd80_progress';
+
 function onAnswer(idx) {
   document.getElementById(`qcard-${idx}`).classList.add('answered');
+  // Reveal pause button after first answer
+  const pb = document.getElementById('pauseBtn');
+  if(pb && !pb.classList.contains('show')) pb.classList.add('show');
   updateProgress();
+  saveProgress();
 }
 
 function updateProgress() {
@@ -882,12 +1287,226 @@ function updateProgress() {
     if (document.querySelector(`input[name="q${i}"]:checked`)) answered++;
   }
   const pct = Math.round(answered / 80 * 100);
-  document.getElementById('progText').textContent = `${answered} of 80 answered`;
   document.getElementById('progFill').style.width = pct + '%';
+  updateProgressLabel(answered);
+}
+
+function updateProgressLabel(answered){
+  if(answered === undefined){
+    answered = 0;
+    for (let i = 0; i < 80; i++) {
+      if (document.querySelector(`input[name="q${i}"]:checked`)) answered++;
+    }
+  }
+  document.getElementById('progText').innerHTML =
+    `<span class="en-text">${answered} of 80 answered</span>` +
+    `<span class="tl-text">${answered} sa 80 ang nasagot</span>`;
+}
+
+// ── SAVE / LOAD PROGRESS (localStorage) ────────────────────────────────────
+function saveProgress(){
+  try{
+    const responses = {};
+    for (let i = 0; i < 80; i++) {
+      const el = document.querySelector(`input[name="q${i}"]:checked`);
+      if(el) responses[i] = parseInt(el.value);
+    }
+    const name = document.getElementById('pName')?.value || '';
+    const grp = document.getElementById('pGroup')?.value || '';
+    const date = document.getElementById('pDate')?.value || '';
+    const years = document.getElementById('pYears')?.value || '';
+    localStorage.setItem(SAVE_KEY, JSON.stringify({responses,name,grp,date,years,t:Date.now()}));
+  }catch(e){console.warn('Save progress failed:',e);}
+}
+
+function loadProgress(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    if(!data || !data.responses) return;
+    Object.entries(data.responses).forEach(([idx, val]) => {
+      const i = parseInt(idx);
+      const radio = document.querySelector(`input[name="q${i}"][value="${val}"]`);
+      if(radio){
+        radio.checked = true;
+        const card = document.getElementById(`qcard-${i}`);
+        if(card) card.classList.add('answered');
+      }
+    });
+    if(data.name) document.getElementById('pName').value = data.name;
+    if(data.grp) document.getElementById('pGroup').value = data.grp;
+    if(data.date) document.getElementById('pDate').value = data.date;
+    if(data.years) document.getElementById('pYears').value = data.years;
+    updateProgress();
+  }catch(e){console.warn('Load progress failed:',e);}
+}
+
+// ── RESUME BANNER (offered at page load if saved progress exists) ──────────
+function maybeShowResumeBanner(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    const ans = data?.responses ? Object.keys(data.responses).length : 0;
+    if(ans === 0) return;
+    if(ans >= 80) return; // already complete
+    const pct = Math.round(ans / 80 * 100);
+    const sub = document.getElementById('rbSub');
+    if(sub){
+      sub.innerHTML =
+        `<span class="en-text">${ans} of 80 answered (${pct}%). Would you like to continue where you left off?</span>` +
+        `<span class="tl-text">${ans} sa 80 ang nasagot na (${pct}%). Gusto mo bang ipagpatuloy?</span>`;
+    }
+    document.getElementById('resumeBanner').classList.add('show');
+  }catch(e){}
+}
+
+function resumeTest(){
+  document.getElementById('resumeBanner').classList.remove('show');
+  // Reveal pause button (they have answered before)
+  const pb = document.getElementById('pauseBtn');
+  if(pb) pb.classList.add('show');
+  // Scroll to first unanswered
+  const next = findNextUnanswered();
+  if(next !== -1){
+    setTimeout(() => {
+      const el = document.getElementById(`qcard-${next}`);
+      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 200);
+  }
+  toast(_lang==='tl' ? '✅ Ipinagpapatuloy ang test.' : '✅ Resuming where you left off.');
+}
+
+function discardProgress(){
+  const ok = confirm(_lang==='tl'
+    ? 'Sigurado ka? Mawawala lahat ng iyong nai-save na sagot.'
+    : 'Are you sure? All saved answers will be cleared.');
+  if(!ok) return;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
+  document.querySelectorAll('.q-card').forEach(c => c.classList.remove('answered'));
+  document.getElementById('pName').value = '';
+  document.getElementById('pGroup').value = '';
+  document.getElementById('pDate').value = '';
+  document.getElementById('pYears').value = '';
+  updateProgress();
+  document.getElementById('resumeBanner').classList.remove('show');
+  toast(_lang==='tl' ? '🔄 Nagsimula ulit.' : '🔄 Started fresh.');
+}
+
+function findNextUnanswered(){
+  for(let i = 0; i < 80; i++){
+    if(!document.querySelector(`input[name="q${i}"]:checked`)) return i;
+  }
+  return -1;
+}
+
+// ── PAUSE MODAL ────────────────────────────────────────────────────────────
+function showPauseModal(){
+  saveProgress();
+  let answered = 0;
+  for (let i = 0; i < 80; i++) {
+    if (document.querySelector(`input[name="q${i}"]:checked`)) answered++;
+  }
+  const pct = Math.round(answered / 80 * 100);
+  document.getElementById('pmSavedCount').textContent =
+    _lang==='tl'
+      ? `✅ ${answered} sa 80 nasagot na-save (${pct}%)`
+      : `✅ ${answered} of 80 answers saved (${pct}%)`;
+  document.getElementById('pmUrl').textContent = window.location.href.split('#')[0];
+  document.getElementById('pauseModal').classList.add('open');
+}
+
+function closePauseModal(){
+  document.getElementById('pauseModal').classList.remove('open');
+  const next = findNextUnanswered();
+  if(next !== -1){
+    setTimeout(() => {
+      const el = document.getElementById(`qcard-${next}`);
+      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 200);
+  }
+}
+
+// ── UNANSWERED MODAL ──
+let _unansweredList = [];
+function showUnansweredModal(unanswered){
+  _unansweredList = unanswered;
+  const n = unanswered.length;
+  const sub = document.getElementById('unansweredSub');
+  sub.innerHTML =
+    `<span class="en-text">You have <strong>${n}</strong> unanswered ${n===1?'item':'items'} out of 80. For accurate results, please answer all 80 questions. You can go back to the first unanswered item, or proceed and calculate with what's answered.</span>` +
+    `<span class="tl-text">May <strong>${n}</strong> hindi ${n===1?'pang nasasagutan':'pang nasasagutan'} sa 80. Para tama ang resulta, sagutan lahat ng 80. Maaari kang bumalik sa unang hindi nasasagot, o ituloy at i-calculate gamit ng nasagot na.</span>`;
+  document.getElementById('unansweredModal').classList.add('open');
+}
+
+function closeUnansweredModal(){
+  document.getElementById('unansweredModal').classList.remove('open');
+  // Scroll to first unanswered
+  if(_unansweredList.length > 0){
+    const first = _unansweredList[0];
+    setTimeout(() => {
+      const el = document.getElementById(`qcard-${first}`);
+      if(el){
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        // Visual nudge — briefly highlight
+        el.style.transition = 'box-shadow 0.4s';
+        el.style.boxShadow = '0 0 0 3px rgba(184,136,42,0.6)';
+        setTimeout(() => { el.style.boxShadow = ''; }, 1800);
+      }
+    }, 200);
+  }
+}
+
+function proceedAnyway(){
+  document.getElementById('unansweredModal').classList.remove('open');
+  _doCalculate();
+}
+
+function copyPauseUrl(){
+  const url = document.getElementById('pmUrl').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(() => {
+      toast(_lang==='tl' ? '📋 Na-copy ang link!' : '📋 Link copied!');
+    }).catch(() => fallbackCopy(url));
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(url){
+  const el = document.getElementById('pmUrl');
+  const range = document.createRange();
+  range.selectNode(el);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  toast(_lang==='tl' ? 'I-highlight at i-copy ang link.' : 'Highlight and copy the link above.');
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  if(!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
 }
 
 // ── CALCULATE ──────────────────────────────────────────────────────────────
 function calculate() {
+  // ── UNANSWERED CHECK ──
+  const unanswered = [];
+  for (let i = 0; i < 80; i++) {
+    if (!document.querySelector(`input[name="q${i}"]:checked`)) unanswered.push(i);
+  }
+  if (unanswered.length > 0) {
+    showUnansweredModal(unanswered);
+    return;
+  }
+  _doCalculate();
+}
+
+function _doCalculate() {
   // Collect scores
   const scores = {};
   GIFTS.forEach(g => {
@@ -903,9 +1522,21 @@ function calculate() {
   const sorted = [...GIFTS].sort((a,b) => scores[b.id] - scores[a.id]);
   const maxScore = 25;
 
-  // Name
-  const name = document.getElementById('pName').value || 'Your';
-  document.getElementById('resultsName').textContent = name + (name.endsWith('s') ? "'" : "'s") + ' Spiritual Gifts Profile';
+  // Stash for saveToDashboard
+  _calculatedScores = { scores, sorted };
+
+  // Name + bilingual title
+  const name = document.getElementById('pName').value || '';
+  const titleEl = document.getElementById('resultsName');
+  if(name){
+    titleEl.innerHTML =
+      `<span class="en-text">${escapeHTML(name)}${name.endsWith('s')?"'":"'s"} Spiritual Gifts Profile</span>` +
+      `<span class="tl-text">Spiritual Gifts Profile ni ${escapeHTML(name)}</span>`;
+  } else {
+    titleEl.innerHTML =
+      `<span class="en-text">Your Spiritual Gifts Profile</span>` +
+      `<span class="tl-text">Ang Iyong Spiritual Gifts Profile</span>`;
+  }
 
   // ── BAR CHART ──
   const chartWrap = document.getElementById('chartRows');
@@ -917,7 +1548,7 @@ function calculate() {
     const row = document.createElement('div');
     row.className = 'chart-row';
     row.innerHTML = `
-      <div class="chart-label">${g.emoji} ${g.name}</div>
+      <div class="chart-label">${g.emoji} <span class="en-text">${g.name}</span><span class="tl-text">${g.nameTl}</span></div>
       <div class="chart-bar-wrap">
         <div class="chart-bar ${colorClass}" style="width:${pct}%">
           ${s >= 18 ? `<span>${s}</span>` : ''}
@@ -925,8 +1556,6 @@ function calculate() {
       </div>
       <div class="chart-val">${s}</div>`;
     chartWrap.appendChild(row);
-    // Animate
-    setTimeout(() => {}, 50);
   });
 
   // ── TOP 3 ──
@@ -934,14 +1563,16 @@ function calculate() {
   const t3grid = document.getElementById('top3Grid');
   t3grid.innerHTML = '';
   const ranks = ['rank1','rank2','rank3'];
-  const rankLabels = ['🥇 Primary Gift','🥈 Secondary Gift','🥉 Supporting Gift'];
+  const rankLabelsEn = ['🥇 Primary Gift','🥈 Secondary Gift','🥉 Supporting Gift'];
+  const rankLabelsTl = ['🥇 Pangunahing Kaloob','🥈 Pangalawang Kaloob','🥉 Sumusuportang Kaloob'];
+  const ptsEn = 'points'; const ptsTl = 'puntos';
   top3.forEach((g,i) => {
     const card = document.createElement('div');
     card.className = `top3-card ${ranks[i]}`;
     card.innerHTML = `
-      <div class="top3-rank">${rankLabels[i]}</div>
-      <div class="top3-name">${g.name}</div>
-      <div class="top3-score">${scores[g.id]} / 25 points</div>
+      <div class="top3-rank"><span class="en-text">${rankLabelsEn[i]}</span><span class="tl-text">${rankLabelsTl[i]}</span></div>
+      <div class="top3-name"><span class="en-text">${g.name}</span><span class="tl-text">${g.nameTl}</span></div>
+      <div class="top3-score">${scores[g.id]} / 25 <span class="en-text">${ptsEn}</span><span class="tl-text">${ptsTl}</span></div>
       <div class="top3-badge">${g.emoji}</div>`;
     t3grid.appendChild(card);
   });
@@ -949,6 +1580,9 @@ function calculate() {
   // ── GIFT PROFILES (top 3) ──
   const profiles = document.getElementById('giftProfiles');
   profiles.innerHTML = '';
+  const rankBadgesEn = ['Primary','Secondary','Supporting'];
+  const rankBadgesTl = ['Pangunahin','Pangalawa','Sumusuporta'];
+  const giftSuffixEn = 'Gift'; const giftSuffixTl = 'na Kaloob';
   top3.forEach((g,i) => {
     const s = scores[g.id];
     const pct = Math.round(s / maxScore * 100);
@@ -957,36 +1591,40 @@ function calculate() {
     card.innerHTML = `
       <div class="gift-card-head" onclick="this.closest('.gift-card').classList.toggle('open')">
         <div class="gift-icon" style="background:rgba(184,136,42,.15)">${g.emoji}</div>
-        <div class="gift-name">${g.name}</div>
-        <span class="gift-rank-badge badge-${i+1}">${['Primary','Secondary','Supporting'][i]} Gift</span>
+        <div class="gift-name"><span class="en-text">${g.name}</span><span class="tl-text">${g.nameTl}</span></div>
+        <span class="gift-rank-badge badge-${i+1}">
+          <span class="en-text">${rankBadgesEn[i]} ${giftSuffixEn}</span>
+          <span class="tl-text">${rankBadgesTl[i]} ${giftSuffixTl}</span>
+        </span>
         <div class="gift-score-bar"><div class="gift-score-fill" style="width:${pct}%"></div></div>
         <div class="gift-chev">▼</div>
       </div>
       <div class="gift-card-body">
-        <div class="gift-greek">Greek root: ${g.greek}</div>
-        <div class="gift-desc">${g.desc}</div>
-        <div class="gift-example" style="margin-bottom:.5rem">📖 Key Scriptures: ${g.scripture}</div>
-        <div class="gift-example">✨ Biblical examples: ${g.examples}</div>
-        <div class="ministry-label" style="margin-top:.75rem">Ministry Placements that fit this gift:</div>
+        <div class="gift-greek"><span class="en-text">Greek root:</span><span class="tl-text">Salitang Griyego:</span> ${g.greek}</div>
+        <div class="gift-desc"><span class="en-text">${g.desc}</span><span class="tl-text">${g.descTl}</span></div>
+        <div class="gift-example" style="margin-bottom:.5rem">📖 <span class="en-text">Key Scriptures:</span><span class="tl-text">Mga Susing Kasulatan:</span> ${g.scripture}</div>
+        <div class="gift-example">✨ <span class="en-text">Biblical examples:</span><span class="tl-text">Mga halimbawa sa Bibliya:</span> ${g.examples}</div>
+        <div class="ministry-label" style="margin-top:.75rem">
+          <span class="en-text">Ministry Placements that fit this gift:</span>
+          <span class="tl-text">Mga Ministry na Bagay sa Kaloob na Ito:</span>
+        </div>
         <div class="ministry-chips">${g.ministries.map(m=>`<span class="m-chip">${m}</span>`).join('')}</div>
       </div>`;
     profiles.appendChild(card);
   });
 
   // ── MINISTRY MATCH ──
-  // Collect all ministries from top 3, deduplicated
   const mmSet = new Set();
-  top3.forEach(g => g.ministries.forEach(m => mmSet.add(JSON.stringify({name:m,gift:g.name}))));
-  // Also add next 2 gifts' ministries for variety
-  sorted.slice(3,5).forEach(g => g.ministries.slice(0,2).forEach(m => mmSet.add(JSON.stringify({name:m,gift:g.name}))));
-  
+  top3.forEach(g => g.ministries.forEach(m => mmSet.add(JSON.stringify({name:m, gift:g.name, giftTl:g.nameTl}))));
+  sorted.slice(3,5).forEach(g => g.ministries.slice(0,2).forEach(m => mmSet.add(JSON.stringify({name:m, gift:g.name, giftTl:g.nameTl}))));
+
   const mmGrid = document.getElementById('mmGrid');
   mmGrid.innerHTML = '';
   [...mmSet].slice(0,12).forEach(item => {
-    const {name:mName, gift:gName} = JSON.parse(item);
+    const {name:mName, gift:gName, giftTl:gTl} = JSON.parse(item);
     const div = document.createElement('label');
     div.className = 'mm-item';
-    div.innerHTML = `<input type="checkbox"><div><div class="mm-name">${mName}</div><div class="mm-gifts">Fits: ${gName}</div></div>`;
+    div.innerHTML = `<input type="checkbox"><div><div class="mm-name">${mName}</div><div class="mm-gifts"><span class="en-text">Fits: ${gName}</span><span class="tl-text">Bagay sa: ${gTl}</span></div></div>`;
     mmGrid.appendChild(div);
   });
 
@@ -998,15 +1636,186 @@ function calculate() {
 
 // ── CLEAR ──────────────────────────────────────────────────────────────────
 function clearAll() {
-  if (!confirm('Clear all answers? This cannot be undone.')) return;
+  const msg = _lang==='tl'
+    ? 'Burahin lahat ng sagot? Hindi na ito maibabalik.'
+    : 'Clear all answers? This cannot be undone.';
+  if (!confirm(msg)) return;
   document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
   document.querySelectorAll('.q-card').forEach(c => c.classList.remove('answered'));
   document.getElementById('resultsPanel').classList.remove('visible');
+  // Clear localStorage too
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+  // Hide pause button
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.classList.remove('show');
   updateProgress();
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-LINK FROM URL  (?id=memberId from MULTIPLY dashboard)
+// ═══════════════════════════════════════════════════════════
+async function autoLinkFromUrl(){
+  const id = new URLSearchParams(location.search).get('id');
+  if(!id) return;
+  try{
+    const sb = getDB();
+    if(!sb) return;
+    const {data} = await sb.from('members').select('id,name,pipeline_level,discipler_name,lc_group').eq('id',id).single();
+    if(!data) return;
+    _memberId = data.id;
+    document.getElementById('autoLinked').style.display = 'block';
+    document.getElementById('autoAv').textContent =
+      (data.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    document.getElementById('autoName').textContent = data.name;
+    const LN = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Executive Leader'];
+    const meta = [LN[data.pipeline_level||0]];
+    if(data.discipler_name) meta.push('Discipler: '+data.discipler_name);
+    document.getElementById('autoMeta').textContent = meta.join(' · ');
+    document.getElementById('pName').value = data.name;
+    if(data.lc_group) document.getElementById('pGroup').value = data.lc_group;
+    document.title = 'Spiritual Gifts — '+data.name;
+  }catch(e){console.warn('Auto-link failed:',e);}
+}
+
+// ═══════════════════════════════════════════════════════════
+// SAVE TO DASHBOARD  (writes to gifts_diagnostic table)
+// ═══════════════════════════════════════════════════════════
+async function saveToDashboard(){
+  const btn = document.getElementById('saveBtn');
+  const msg = document.getElementById('saveMsg');
+  const showMsg = (text, ok) => {
+    msg.style.display = 'block';
+    msg.style.background = ok ? '#d4edda' : '#fdecea';
+    msg.style.color     = ok ? '#1a5a30' : '#7a2020';
+    msg.innerHTML = text;
+  };
+
+  if(!_calculatedScores){
+    showMsg(_lang==='tl' ? '⚠️ I-calculate muna ang resulta.' : '⚠️ Calculate results first.', false);
+    return;
+  }
+  const name = (document.getElementById('pName').value || '').trim();
+  if(!name){
+    showMsg(_lang==='tl' ? '⚠️ Kailangan ang pangalan.' : '⚠️ Name required.', false);
+    return;
+  }
+
+  // STRICT: Block save if ANY item is unanswered.
+  // Unlike Calculate (which allows "proceed anyway"), saving commits the result
+  // to the dashboard — partial results would corrupt downstream signals
+  // (ministry_recommender, profile_results_viewer).
+  const unanswered = [];
+  for (let i = 0; i < 80; i++) {
+    if (!document.querySelector(`input[name="q${i}"]:checked`)) unanswered.push(i);
+  }
+  if (unanswered.length > 0) {
+    const n = unanswered.length;
+    showMsg(
+      (_lang==='tl'
+        ? `⚠️ Hindi pwedeng i-save: <strong>${n}</strong> tanong ang hindi pa nasasagutan. Sagutan lahat ng 80 bago i-save sa dashboard.`
+        : `⚠️ Cannot save: <strong>${n}</strong> ${n===1?'item is':'items are'} unanswered. All 80 questions must be answered before saving to the dashboard.`),
+      false
+    );
+    // Scroll to first unanswered with the same gold glow nudge
+    const first = unanswered[0];
+    setTimeout(() => {
+      const el = document.getElementById(`qcard-${first}`);
+      if(el){
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        el.style.transition = 'box-shadow 0.4s';
+        el.style.boxShadow = '0 0 0 3px rgba(184,136,42,0.6)';
+        setTimeout(() => { el.style.boxShadow = ''; }, 1800);
+      }
+    }, 300);
+    return;
+  }
+
+  btn.disabled = true;
+  const origLabel = btn.innerHTML;
+  btn.innerHTML = '⏳ ' + (_lang==='tl' ? 'Sini-save...' : 'Saving...');
+  msg.style.display = 'none';
+
+  try{
+    const sb = getDB();
+    if(!sb) throw new Error('Supabase not loaded.');
+
+    const { scores, sorted } = _calculatedScores;
+    const top3 = sorted.slice(0,3);
+
+    // ministry_recommender expects lowercase keys; gift IDs are already lowercase
+    // (e.g., 'leadership','administration','exhortation','service'…)
+    const all_scores = { ...scores };
+
+    // Top ministries from top-gift's ministry list (best 3 unique)
+    const ministrySet = new Set();
+    top3.forEach(g => (g.ministries || []).forEach(m => ministrySet.add(m)));
+    const ministries = Array.from(ministrySet).slice(0,3);
+
+    const payload = {
+      member_id:       _memberId || null,
+      member_name:     name,
+      lc_group:        document.getElementById('pGroup').value || null,
+      primary_gift:    top3[0]?.id || null,
+      secondary_gift:  top3[1]?.id || null,
+      supporting_gift: top3[2]?.id || null,
+      all_scores:      all_scores,
+      ministry_match_1: ministries[0] || null,
+      ministry_match_2: ministries[1] || null,
+      ministry_match_3: ministries[2] || null,
+      date_taken:      new Date().toISOString().split('T')[0],
+    };
+
+    const { error } = await sb.from('gifts_diagnostic').insert(payload);
+    if(error) throw new Error(error.message);
+
+    // Also update members.spiritual_gifts (denormalized snapshot for dashboard)
+    if(_memberId){
+      try{
+        await sb.from('members').update({
+          spiritual_gifts: top3.map(g => g.name).join(', '),
+          updated_at: new Date().toISOString(),
+        }).eq('id', _memberId);
+      }catch(e){ console.warn('members update non-fatal:', e); }
+    }
+
+    const top3Names = top3.map(g => _lang==='tl' ? g.nameTl : g.name).join(', ');
+    showMsg(
+      `✅ ${_lang==='tl' ? 'Na-save!' : 'Saved!'} <strong>${escapeHTML(name)}</strong> · ${_lang==='tl'?'Top 3:':'Top 3:'} ${escapeHTML(top3Names)}` +
+      (_memberId ? (_lang==='tl' ? ' · Naka-update sa dashboard.' : ' · Dashboard updated.') : ''),
+      true
+    );
+    btn.style.display = 'none';
+    // Saved successfully — clear progress so old answers don't restore on next visit
+    try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+  }catch(e){
+    console.error('Save error:', e);
+    btn.innerHTML = origLabel;
+    btn.disabled = false;
+    showMsg('❌ ' + e.message, false);
+  }
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 buildQuestions();
+loadProgress();
+maybeShowResumeBanner();
+autoLinkFromUrl();
+// If there's saved progress, reveal pause button
+{
+  let _hasAnswers = false;
+  for (let i = 0; i < 80; i++) {
+    if (document.querySelector(`input[name="q${i}"]:checked`)) { _hasAnswers = true; break; }
+  }
+  if (_hasAnswers) {
+    const pb = document.getElementById('pauseBtn');
+    if (pb) pb.classList.add('show');
+  }
+}
+// Auto-save when profile fields change too
+['pName','pDate','pYears','pGroup'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', saveProgress);
+});
 </script>
 </body>
 </html>
