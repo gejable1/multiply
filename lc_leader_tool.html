@@ -1143,7 +1143,12 @@ function buildDetailSections(mem){
       <div class="ds-title">Profile</div>
       <div class="ds-chevron">▼</div>
     </div>
-    <div class="ds-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="ds-body">
+      <button onclick="event.stopPropagation();sendProfileEditLink('${mem.id}',decodeURIComponent('${encodeURIComponent(mem.name)}'),'${(mem.contact||'').replace(/'/g,'')}')"
+        style="width:100%;padding:10px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px">
+        📝 Send Profile Edit Link to Member
+      </button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       ${[
         ['Pipeline', LEVEL_NAMES[mem.pipeline_level]||'—'],
         ['Baptism', mem.baptism_date||'—'],
@@ -1157,6 +1162,7 @@ function buildDetailSections(mem){
         <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">${l}</div>
         <div style="font-size:12px;font-weight:600">${v}</div>
       </div>`).join('')}
+      </div>
     </div>
   </div>`;
 
@@ -2106,6 +2112,11 @@ function renderSendLinks(){
     return `<div class="sl-member">
       <div class="slm-name">${mem.name}${phoneBadge}</div>
       <div class="slm-links">
+        <div class="slm-link-row" style="background:rgba(52,211,153,.08);border-radius:6px;padding:6px 8px;margin-bottom:4px">
+          <div class="slr-name">📝 Profile Edit (info update)</div>
+          <span class="slr-status" style="background:rgba(52,211,153,.2);color:var(--green);font-weight:700">Always</span>
+          <button class="slr-send" style="background:var(--green);color:#0f0f13" onclick="sendProfileEditLink('${mem.id}',decodeURIComponent('${safeName}'),'${(mem.contact||'').replace(/'/g,'')}')">📤 Send</button>
+        </div>
         ${pending.map(a=>`<div class="slm-link-row">
           <div class="slr-name">${a.icon} ${a.name}</div>
           <span class="slr-status slr-pending">Pending</span>
@@ -2132,6 +2143,58 @@ function normalizePHPhone(raw){
   // International number with another country code → return as-is if reasonable
   if(p.length >= 10 && p.length <= 15) return p;
   return '';
+}
+
+// ═══════════════════════════════════════════════════════
+// PROFILE SELF-EDIT LINK (token-based)
+// ═══════════════════════════════════════════════════════
+const SELF_EDIT_BASE = BASE_URL + 'member_self_edit.html';
+const TOKEN_VALIDITY_DAYS = 7;
+
+function _genSelfEditToken(){
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function createSelfEditToken(memberId){
+  if(!memberId) throw new Error('Member ID required');
+  const token = _genSelfEditToken();
+  const expiresAt = new Date(Date.now() + TOKEN_VALIDITY_DAYS * 86400000).toISOString();
+  const {error} = await db.from('profile_tokens').insert({
+    token,
+    member_id: memberId,
+    expires_at: expiresAt,
+    created_by: currentLeader?.name || 'LC Leader'
+  });
+  if(error) throw new Error(error.message);
+  return SELF_EDIT_BASE + '?token=' + token;
+}
+
+async function sendProfileEditLink(memberId, memberName, contact){
+  if(!memberId){ toast('Member not found', 'error'); return; }
+  try{
+    const url = await createSelfEditToken(memberId);
+    const firstName = (memberName||'').split(' ')[0] || 'kapatid';
+    const msg = encodeURIComponent(
+      `Hi ${firstName}! 🙏\n\n` +
+      `Para sa ating church records, paki-update lang po ang inyong personal info ` +
+      `(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n` +
+      `${url}\n\n` +
+      `Valid for ${TOKEN_VALIDITY_DAYS} days. Salamat po! 💚\n— ${currentLeader?.name||'Your LC Leader'}`
+    );
+    const phone = normalizePHPhone(contact);
+    if(phone){
+      window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+      toast(`📝 Edit link ready for ${firstName} — just tap Send`, 'success');
+    } else {
+      window.open(`https://wa.me/?text=${msg}`, '_blank');
+      toast(`⚠️ No phone for ${firstName} — pick from contacts`, 'error');
+    }
+  } catch(e){
+    console.error('Self-edit link error:', e);
+    toast('Could not create link: '+e.message, 'error');
+  }
 }
 
 function sendLink_(memberId, memberName, file, assessName, contact){
