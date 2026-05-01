@@ -6,7 +6,13 @@
 <title>MULTIPLY — Leader Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+<script>
+// bcryptjs v2.4.3 exposes itself as window.dcodeIO.bcrypt when neither
+// CommonJS nor AMD is available. Some hosts also expose plain `bcrypt`.
+// Normalize to a single global so the rest of the code is simple.
+window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
+</script>
 <style>
 :root{
   --green:#2a5c40; --green-bg:#e8f1ec; --green-deep:#1f4530;
@@ -525,11 +531,17 @@ async function loginSuccess(){
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 function hashPin(pin){
+  if(typeof bcrypt === 'undefined' || !bcrypt || !bcrypt.hash){
+    return Promise.reject(new Error('Security library failed to load. Check your internet connection and refresh the page.'));
+  }
   return new Promise((resolve, reject)=>{
     bcrypt.hash(pin, 10, (err, hash) => err ? reject(err) : resolve(hash));
   });
 }
 function verifyPin(pin, hash){
+  if(typeof bcrypt === 'undefined' || !bcrypt || !bcrypt.compare){
+    return Promise.reject(new Error('Security library failed to load. Check your internet connection and refresh the page.'));
+  }
   return new Promise((resolve, reject)=>{
     bcrypt.compare(pin, hash, (err, ok) => err ? reject(err) : resolve(!!ok));
   });
