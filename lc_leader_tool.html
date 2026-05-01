@@ -1716,12 +1716,19 @@ async function renderReports(){
           </div>`;
         }).join('')}
       </div>
+      ` : ''}
 
-      <!-- Per-member bar chart -->
+      <!-- Per-member bar chart — always show, with empty state if no data -->
       <div class="report-card">
         <div class="rc-title">📊 Personal Attendance Chart</div>
+        ${memberView.totalEvts === 0 ? `
+          <div style="text-align:center;padding:24px 16px;color:var(--muted);font-size:12px">
+            No attendance logged for ${memberView.member.name.split(' ')[0]} in this period.<br>
+            Try widening the period (Last 90 Days or Custom range).
+          </div>
+        ` : `
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
-          Each bar is one event. Green = present, red = absent. Tap any bar for details.
+          Each bar is one event. Green (above) = present, red (below) = absent. Tap any bar for details.
         </div>
 
         <div style="position:relative;background:var(--surface2);border-radius:8px;padding:14px 10px 8px 36px;overflow-x:auto">
@@ -1735,20 +1742,22 @@ async function renderReports(){
           <div style="position:absolute;left:30px;right:8px;top:74px;
             height:1px;background:rgba(255,255,255,.15);pointer-events:none"></div>
 
-          <!-- Bars: oldest first (chronological), each colored by present/absent -->
-          <div style="display:flex;align-items:center;gap:6px;min-height:140px;
+          <!-- Bars -->
+          <div style="display:flex;align-items:center;gap:6px;min-height:170px;
             padding:0;position:relative;z-index:1">
             ${[...memberView.timeline].reverse().map((t, idx) => {
               const c = t.present ? 'var(--green)' : 'var(--red)';
-              const h = 50; // fixed height per bar
+              const h = 50;
               const d = new Date(t.date);
               const lbl = d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+              const marginTop = t.present ? (70 - h) : 70;
+              const borderRadius = t.present ? '4px 4px 0 0' : '0 0 4px 4px';
               return `<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
                 <div onclick="showMemberEventTip(${idx})" style="
                   width:22px;height:${h}px;background:${c};
-                  border-radius:${t.present?'4px 4px 0 0':'0 0 4px 4px'};
+                  border-radius:${borderRadius};
                   cursor:pointer;transition:filter .15s;
-                  margin-top:${t.present?(70-h)+'px':'70px'};
+                  margin-top:${marginTop}px;
                   box-shadow:0 -1px 0 rgba(255,255,255,.2) inset;
                   border:2px solid ${colorFor(t.type)}">
                 </div>
@@ -1761,36 +1770,34 @@ async function renderReports(){
           </div>
         </div>
 
-        <div style="display:flex;gap:14px;margin-top:14px;font-size:11px;color:var(--muted)">
+        <div style="display:flex;gap:14px;margin-top:14px;font-size:11px;color:var(--muted);flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:5px">
             <div style="width:10px;height:10px;background:var(--green);border-radius:2px"></div>
-            <span>Present (above line)</span>
+            <span>Present</span>
           </div>
           <div style="display:flex;align-items:center;gap:5px">
             <div style="width:10px;height:10px;background:var(--red);border-radius:2px"></div>
-            <span>Absent (below line)</span>
+            <span>Absent</span>
           </div>
         </div>
 
-        <div style="font-size:10px;color:var(--muted);margin-top:6px">
-          Bar border color = event type. See legend below.
-        </div>
-
-        <!-- Event type legend (only types that appear) -->
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        <!-- Event type legend -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:10px">
+          <span style="color:var(--muted);font-weight:600">Border colors:</span>
           ${[...new Set(memberView.timeline.map(t=>t.type))].map(t=>`
-            <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+            <div style="display:flex;align-items:center;gap:4px">
               <div style="width:10px;height:10px;border-radius:2px;border:2px solid ${colorFor(t)};box-sizing:border-box"></div>
               <span style="color:var(--muted);font-weight:600">${t}</span>
             </div>
           `).join('')}
         </div>
 
-        <!-- Tap-to-view popup -->
         <div id="memberEvTip" style="display:none;margin-top:10px;background:var(--surface3);
           border-radius:8px;padding:10px 12px;border-left:3px solid var(--gold)"></div>
+        `}
       </div>
 
+      ${memberView.totalEvts ? `
       <!-- Timeline -->
       <div class="report-card" style="margin-bottom:24px">
         <div class="rc-title">Attendance Timeline</div>
