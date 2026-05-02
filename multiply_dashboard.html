@@ -517,26 +517,57 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div class="sr"><span class="sl">Send assessment links to multiple members at once</span><button class="sbtn" style="margin-top:0;background:var(--green)" onclick="openBulkSend()">📤 Bulk Send Links</button></div>
     <div class="sr"><span class="sl">Approve, reject, or initiate LC group transfers</span><button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="openTransfers()">🔄 Transfer Management</button></div>
   </div>
-  <!-- ─── PROFILE EDIT LINK GREETING (Pastor-configurable) ─── -->
-  <div class="ss" id="greetingSection"><div class="st">📝 Profile Edit Link Greeting</div>
+  <!-- ─── MESSAGE GREETINGS (Pastor-configurable) ─── -->
+  <div class="ss" id="greetingSection"><div class="st">📝 Message Greetings</div>
     <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
-      The message sent to members when you (or any LC Leader) shares a Profile Edit Link via WhatsApp, SMS, or email.
-      Use these placeholders — they get replaced automatically:
-      <span style="display:inline-block;margin-top:6px">
-        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px">{firstName}</code>
-        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px;margin-left:4px">{url}</code>
-        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px;margin-left:4px">{days}</code>
-        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px;margin-left:4px">{senderName}</code>
-      </span><br>
-      <span style="color:var(--lighter);font-size:10.5px">💡 Emojis welcome — type or paste them directly (🙏 💚 ❤️ ✨ 📖 etc.)</span>
+      Customize what members see when leaders share links via WhatsApp, SMS, or email.
+      Placeholders get replaced automatically — <span style="color:var(--lighter);font-size:10.5px">💡 emojis welcome (🙏 💚 ✨ 📖 etc.)</span>
     </div>
-    <textarea id="greetingTemplate" rows="9"
-      placeholder="Hi {firstName}! 🙏..."
-      style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+
+    <!-- Greeting type toggle -->
+    <div style="display:flex;gap:6px;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:12px">
+      <button class="grtab active" id="grtab-profile" onclick="switchGreetingTab('profile')"
+        style="flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:8px 12px;background:var(--gold);color:#fff;border:none;border-radius:6px;cursor:pointer">
+        📝 Profile Edit Link
+      </button>
+      <button class="grtab" id="grtab-assess" onclick="switchGreetingTab('assess')"
+        style="flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:8px 12px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
+        📊 Assessment Link
+      </button>
+    </div>
+
+    <!-- PROFILE EDIT GREETING -->
+    <div id="grpane-profile">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+        Sent when sharing a profile self-edit link. Placeholders:
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px">{firstName}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{url}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{days}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{senderName}</code>
+      </div>
+      <textarea id="greetingTemplate" rows="9"
+        placeholder="Hi {firstName}! 🙏..."
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+    </div>
+
+    <!-- ASSESSMENT GREETING -->
+    <div id="grpane-assess" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+        Sent when sharing a diagnostic, gifts, or profile assessment link. Placeholders:
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px">{firstName}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{url}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{assessName}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{senderName}</code>
+      </div>
+      <textarea id="assessTemplate" rows="9"
+        placeholder="Hi {firstName}! 😊..."
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:.65rem;flex-wrap:wrap">
-      <button class="sbtn" id="greetingSaveBtn" style="margin-top:0;background:var(--green)" onclick="saveGreetingTemplate()">💾 Save Greeting</button>
-      <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="resetGreetingTemplate()">↺ Reset to Default</button>
-      <button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="previewGreetingTemplate()">👁 Preview</button>
+      <button class="sbtn" id="greetingSaveBtn" style="margin-top:0;background:var(--green)" onclick="saveGreetingTemplates()">💾 Save Greetings</button>
+      <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="resetCurrentGreeting()">↺ Reset This Tab</button>
+      <button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="previewCurrentGreeting()">👁 Preview</button>
       <span id="greetingStatus" style="margin-left:auto;font-size:11px;color:var(--muted);align-self:center"></span>
     </div>
   </div>
@@ -1747,7 +1778,7 @@ function rDiagTab(m){
       <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.35rem">No diagnostic taken yet</div>
       <div style="font-size:12.5px;color:var(--muted);margin-bottom:1rem;line-height:1.6">Generate a personalized link and send to the member via Viber.<br>The diagnostic will be pre-linked to their dashboard record automatically.</div>
       <div style="background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:8px;padding:.85rem 1rem;margin-bottom:.75rem;font-size:12px;color:var(--green);word-break:break-all;text-align:left;">${diagUrl}</div>
-      <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 22px;background:var(--green);color:white;border:none;border-radius:7px;cursor:pointer;width:100%;margin-bottom:.5rem">📋 Copy Personalized Link</button>
+      <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 22px;background:var(--green);color:white;border:none;border-radius:7px;cursor:pointer;width:100%;margin-bottom:.5rem">📤 Send Personalized Link</button>
       <button onclick="openDiagDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 18px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;width:100%">🔗 Open Diagnostic for This Member</button>
     </div>`;
     return;
@@ -1782,7 +1813,7 @@ function rDiagTab(m){
       <button class="alert-link al-track" onclick="openTrack('${m.id}')">📖 Open Intervention Tracker</button>
     </div>`:'<div style="color:var(--green);font-size:13px;font-weight:500">✅ No intervention needed — ready for BTLI 101.</div>'}
     ${m&&m.id?`<div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📋 Copy New Diagnostic Link</button>
+      <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📤 Send New Diagnostic Link</button>
       <button onclick="openDiagDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;">🔗 Retake Diagnostic</button>
     </div>`:''}`;
 }
@@ -2156,8 +2187,15 @@ function openBulkSend(){
 }
 
 function copyProfileLink(type, memberId) {
-  const url = getProfileUrl(type, memberId);
-  navigator.clipboard.writeText(url).then(() => toast('Link copied — paste into Viber 📋'));
+  // Map internal type code to a friendly name shown in the WhatsApp/SMS message
+  const NAMES = {
+    love_language: 'Love Language Assessment',
+    disc:          'DISC Personality Assessment',
+    enneagram:     'Enneagram Profile',
+    strengths:     'Clifton Strengths Assessment',
+    gifts:         'Spiritual Gifts Diagnostic'
+  };
+  sendAssessmentLink(memberId, NAMES[type] || 'Assessment', getProfileUrl(type, memberId));
 }
 
 async function rProfileTab(m) {
@@ -2331,7 +2369,7 @@ async function rProfileTab(m) {
       <div style="display:flex;align-items:center;gap:10px;padding:.75rem 1rem;border-bottom:1px solid ${data?'var(--border)':'transparent'}">
         <div style="font-size:13px;font-weight:700;color:${sec.color};flex:1">${sec.label}</div>
         ${taken?`<div style="font-size:10px;color:var(--lighter)">Taken: ${taken}</div>`:'<div style="font-size:10px;background:#fff3cd;color:#856404;padding:2px 8px;border-radius:10px;font-weight:600">Not yet taken</div>'}
-        <button onclick="copyProfileLink('${sec.key}','${m.id}')" title="Copy link" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">📋 Link</button>
+        <button onclick="copyProfileLink('${sec.key}','${m.id}')" title="Send link to member" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">📤 Send</button>
         ${data ? `<button onclick="window.open(getResultsUrl('${sec.key}','${m.id}'),'_blank')" style="font-size:11px;padding:4px 10px;background:var(--green-bg);border:1.5px solid rgba(42,92,64,.3);border-radius:6px;cursor:pointer;color:var(--green);font-weight:600;font-family:'DM Sans',sans-serif">👁 View Results</button>` : ''}
         <button onclick="window.open(getProfileUrl('${sec.key}','${m.id}'),'_blank')" title="Retake assessment" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">${data ? '🔄 Retake' : '▶ Take'}</button>
       </div>
@@ -2454,12 +2492,7 @@ function toggleProfileResults(id) {
   if (btn) btn.textContent = isOpen ? '👁 View Results' : '🙈 Hide Results';
 }
 function copyGiftsLink(memberId) {
-  const url = getGiftsUrl(memberId);
-  navigator.clipboard.writeText(url).then(() => {
-    toast('Gifts diagnostic link copied — paste into Viber 🎁');
-  }).catch(() => {
-    prompt('Copy this link and send to the member via Viber:', url);
-  });
+  sendAssessmentLink(memberId, 'Spiritual Gifts Diagnostic', getGiftsUrl(memberId));
 }
 
 function openGiftsDirect(memberId) {
@@ -2501,13 +2534,9 @@ async function rGiftsTab(m) {
 }
 
 function copyDiagLink(memberId) {
-  const url = getDiagUrl(memberId);
-  navigator.clipboard.writeText(url).then(() => {
-    toast('Link copied — paste into Viber 📋');
-  }).catch(() => {
-    // Fallback for browsers that block clipboard
-    prompt('Copy this link and send to the member via Viber:', url);
-  });
+  // Now routes through the unified sender — WhatsApp direct if phone on file,
+  // share picker otherwise. Uses the configurable Assessment Link greeting.
+  sendAssessmentLink(memberId, 'Salvation Assurance Diagnostic', getDiagUrl(memberId));
 }
 
 function openDiagDirect(memberId) {
@@ -2520,7 +2549,7 @@ function addDiagLinkToExisting(memberId, wrap) {
   const linkDiv = document.createElement('div');
   linkDiv.style.cssText = 'margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;';
   linkDiv.innerHTML = `
-    <button onclick="copyDiagLink('${memberId}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📋 Copy Diagnostic Link</button>
+    <button onclick="copyDiagLink('${memberId}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📤 Send Diagnostic Link</button>
     <button onclick="openDiagDirect('${memberId}')" style="font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;">🔗 Retake Diagnostic</button>
   `;
   wrap.appendChild(linkDiv);
@@ -2808,113 +2837,174 @@ window.showPanel = function(id, btn){
 const _SELF_EDIT_BASE = 'https://gejable1.github.io/multiply/member_self_edit.html';
 const _TOKEN_VALIDITY_DAYS = 7;
 
-// ── Greeting template (Pastor-configurable via Settings tab) ─────────
-// Default mirrors what the leader tool used to hardcode. Loaded from
-// system_settings.meta.profile_edit_greeting on boot; falls back here.
-// Placeholders: {firstName} {url} {days} {senderName}
-const _DEFAULT_GREETING_TEMPLATE =
+// ── Greeting templates (Pastor-configurable via Settings tab) ────────
+// Stored in system_settings.meta.profile_edit_greeting and
+// system_settings.meta.assessment_link_greeting. Loaded on boot.
+// Both pages (dashboard + leader tool) share the same source of truth.
+const _DEFAULT_PROFILE_GREETING =
   'Hi {firstName}! 🙏\n\n' +
   'Para sa ating church records, paki-update lang po ang inyong personal info ' +
   '(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n' +
   '{url}\n\n' +
   'Valid for {days} days. Salamat po! 💚\n— {senderName}';
 
-// In-memory copy of the current template — populated by loadGreetingTemplate()
-let _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
+const _DEFAULT_ASSESS_GREETING =
+  'Hi {firstName}! 😊\n\n' +
+  'Bilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang {assessName} assessment?\n\n' +
+  '{url}\n\n' +
+  'I-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— {senderName}';
+
+// In-memory copies — populated by loadGreetingTemplates()
+let _greetingTemplate = _DEFAULT_PROFILE_GREETING;
+let _assessTemplate   = _DEFAULT_ASSESS_GREETING;
+// Tracks which tab is shown in Settings (for Reset/Preview buttons)
+let _currentGreetingTab = 'profile';
 
 function _buildGreeting(template, vars){
   // Replace {placeholder} with vars[placeholder]; missing vars become ''
-  return String(template || _DEFAULT_GREETING_TEMPLATE)
+  return String(template || '')
     .replace(/\{firstName\}/g,  vars.firstName  || '')
     .replace(/\{url\}/g,        vars.url        || '')
     .replace(/\{days\}/g,       String(vars.days != null ? vars.days : _TOKEN_VALIDITY_DAYS))
-    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader');
+    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader')
+    .replace(/\{assessName\}/g, vars.assessName || 'assessment');
 }
 
-async function loadGreetingTemplate(){
+// ── WhatsApp URL builder — uses api.whatsapp.com to avoid the wa.me
+//    redirect chain that triggers "Your connection is not private" on
+//    desktop browsers (Edge, Safari, Samsung Internet). Mobile still works.
+//    Reference: https://github.com/elementor/elementor/issues/33741
+function _buildWhatsAppUrl(phone, message){
+  const enc = encodeURIComponent(message || '');
+  if(phone){
+    return 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + enc;
+  }
+  // No phone — show contact picker
+  return 'https://api.whatsapp.com/send?text=' + enc;
+}
+
+async function loadGreetingTemplates(){
   try{
     const {data, error} = await db.from('system_settings')
       .select('meta').eq('id', 1).maybeSingle();
     if(error) throw error;
-    const tpl = data?.meta?.profile_edit_greeting;
-    if(typeof tpl === 'string' && tpl.trim()){
-      _greetingTemplate = tpl;
-    } else {
-      _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
-    }
+    const tplProf = data?.meta?.profile_edit_greeting;
+    const tplAss  = data?.meta?.assessment_link_greeting;
+    if(typeof tplProf === 'string' && tplProf.trim()) _greetingTemplate = tplProf;
+    else _greetingTemplate = _DEFAULT_PROFILE_GREETING;
+    if(typeof tplAss === 'string' && tplAss.trim())  _assessTemplate   = tplAss;
+    else _assessTemplate   = _DEFAULT_ASSESS_GREETING;
   } catch(e){
-    console.warn('Greeting template load failed — using default:', e.message);
-    _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
+    console.warn('Greeting template load failed — using defaults:', e.message);
+    _greetingTemplate = _DEFAULT_PROFILE_GREETING;
+    _assessTemplate   = _DEFAULT_ASSESS_GREETING;
   }
-  // Populate the textarea in Settings tab if it's already rendered
-  const ta = document.getElementById('greetingTemplate');
-  if(ta) ta.value = _greetingTemplate;
+  // Populate the textareas in Settings tab if rendered
+  const ta1 = document.getElementById('greetingTemplate');
+  if(ta1) ta1.value = _greetingTemplate;
+  const ta2 = document.getElementById('assessTemplate');
+  if(ta2) ta2.value = _assessTemplate;
 }
 
-async function saveGreetingTemplate(){
+function switchGreetingTab(which){
+  _currentGreetingTab = which;
+  const profPane = document.getElementById('grpane-profile');
+  const assPane  = document.getElementById('grpane-assess');
+  const profTab  = document.getElementById('grtab-profile');
+  const assTab   = document.getElementById('grtab-assess');
+  if(!profPane || !assPane) return;
+  if(which === 'profile'){
+    profPane.style.display = ''; assPane.style.display = 'none';
+    profTab.style.background = 'var(--gold)'; profTab.style.color = '#fff';
+    assTab.style.background  = 'transparent';  assTab.style.color  = 'var(--muted)';
+  } else {
+    profPane.style.display = 'none'; assPane.style.display = '';
+    assTab.style.background = 'var(--gold)'; assTab.style.color = '#fff';
+    profTab.style.background = 'transparent'; profTab.style.color = 'var(--muted)';
+  }
+  const status = document.getElementById('greetingStatus');
+  if(status) status.textContent = '';
+}
+
+async function saveGreetingTemplates(){
   if(!LeaderScope.isPastor()){
-    toast('Only the Pastor can edit the greeting template','🔒');
+    toast('Only the Pastor can edit greeting templates','🔒');
     return;
   }
-  const ta = document.getElementById('greetingTemplate');
+  const ta1 = document.getElementById('greetingTemplate');
+  const ta2 = document.getElementById('assessTemplate');
   const status = document.getElementById('greetingStatus');
-  if(!ta) return;
-  const tpl = ta.value;
-  if(!tpl.includes('{url}')){
-    if(!confirm('Your template does not include {url} — members will receive no link. Save anyway?')) return;
+  if(!ta1 || !ta2) return;
+  const profileTpl = ta1.value;
+  const assessTpl  = ta2.value;
+  if(!profileTpl.includes('{url}') || !assessTpl.includes('{url}')){
+    if(!confirm('One of your templates is missing {url} — members will receive no link in that message. Save anyway?')) return;
   }
   const btn = document.getElementById('greetingSaveBtn');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
   try{
-    // Read existing meta first so we don't clobber other meta fields
+    // Read existing meta first so we don't clobber other fields
     const {data: cur, error: rErr} = await db.from('system_settings')
       .select('meta').eq('id', 1).maybeSingle();
     if(rErr) throw rErr;
-    const newMeta = {...(cur?.meta || {}), profile_edit_greeting: tpl,
-                     greeting_updated_at: new Date().toISOString(),
-                     greeting_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'};
+    const newMeta = {
+      ...(cur?.meta || {}),
+      profile_edit_greeting:    profileTpl,
+      assessment_link_greeting: assessTpl,
+      greeting_updated_at:      new Date().toISOString(),
+      greeting_updated_by:      (LEADER && LEADER.leaderName) || 'Pastor'
+    };
     const {error: uErr} = await db.from('system_settings')
       .update({meta: newMeta}).eq('id', 1);
     if(uErr) throw uErr;
-    _greetingTemplate = tpl;
+    _greetingTemplate = profileTpl;
+    _assessTemplate   = assessTpl;
     if(status){ status.textContent = '✓ Saved'; status.style.color = 'var(--green)'; }
-    toast('Greeting template saved ✓');
+    toast('Greetings saved ✓');
     setTimeout(()=>{ if(status) status.textContent = ''; }, 3000);
   } catch(e){
-    console.error('Save greeting error:', e);
+    console.error('Save greetings error:', e);
     toast('Could not save: ' + e.message, '❌');
     if(status){ status.textContent = '✗ Failed'; status.style.color = 'var(--red)'; }
   } finally {
-    if(btn){ btn.disabled = false; btn.textContent = '💾 Save Greeting'; }
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Save Greetings'; }
   }
 }
 
-function resetGreetingTemplate(){
-  if(!confirm('Reset to the default Tagalog greeting? You still need to click Save.')) return;
-  const ta = document.getElementById('greetingTemplate');
-  if(ta) ta.value = _DEFAULT_GREETING_TEMPLATE;
+function resetCurrentGreeting(){
+  const isProfile = _currentGreetingTab === 'profile';
+  const label = isProfile ? 'Profile Edit Link greeting' : 'Assessment Link greeting';
+  if(!confirm('Reset the ' + label + ' to its default? You still need to click Save.')) return;
+  if(isProfile){
+    const ta = document.getElementById('greetingTemplate');
+    if(ta) ta.value = _DEFAULT_PROFILE_GREETING;
+  } else {
+    const ta = document.getElementById('assessTemplate');
+    if(ta) ta.value = _DEFAULT_ASSESS_GREETING;
+  }
   const status = document.getElementById('greetingStatus');
   if(status){ status.textContent = 'Reset — click Save to keep'; status.style.color = 'var(--gold)'; }
 }
 
-function previewGreetingTemplate(){
-  const ta = document.getElementById('greetingTemplate');
+function previewCurrentGreeting(){
+  const isProfile = _currentGreetingTab === 'profile';
+  const ta = document.getElementById(isProfile ? 'greetingTemplate' : 'assessTemplate');
   if(!ta) return;
   const senderName = (LEADER && LEADER.leaderName) || 'Pastor Gerry';
   const sample = _buildGreeting(ta.value, {
-    firstName: 'Maria',
-    url: 'https://gejable1.github.io/multiply/member_self_edit.html?token=abc123',
-    days: _TOKEN_VALIDITY_DAYS,
-    senderName
+    firstName:  'Maria',
+    url:        'https://gejable1.github.io/multiply/' + (isProfile ? 'member_self_edit.html?token=abc123' : 'salvation_assurance_diagnostic.html?id=xyz789'),
+    days:       _TOKEN_VALIDITY_DAYS,
+    senderName: senderName,
+    assessName: 'Salvation Assurance Diagnostic'
   });
-  // Simple preview overlay
   document.querySelectorAll('.greeting-preview-modal').forEach(m=>m.remove());
   const modal = document.createElement('div');
   modal.className = 'greeting-preview-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
   modal.innerHTML =
     '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit">' +
-      '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:.4rem">👁 Preview — sample message to <em>Maria</em></div>' +
+      '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:.4rem">👁 Preview — ' + (isProfile ? 'Profile Edit Link' : 'Assessment Link') + ' to <em>Maria</em></div>' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:.85rem">This is what the member will see when you share the link.</div>' +
       '<div style="background:#dcf8c6;border-radius:10px;padding:12px;font-size:13px;line-height:1.5;color:#1f1d2c;white-space:pre-wrap;font-family:\'DM Sans\',sans-serif;border-bottom-right-radius:2px;margin-bottom:1rem">' +
         escapeHTMLNotif(sample) +
@@ -2926,7 +3016,7 @@ function previewGreetingTemplate(){
 }
 
 // Boot the greeting template loader (fire-and-forget)
-loadGreetingTemplate();
+loadGreetingTemplates();
 
 // Hide greeting section entirely for non-pastors (defense in depth)
 (function gateGreetingSection(){
@@ -2937,7 +3027,6 @@ loadGreetingTemplate();
       sec.style.display = 'none';
     }
   };
-  // Run now and again after boot completes (LeaderScope may not be ready yet)
   tryGate();
   setTimeout(tryGate, 500);
   setTimeout(tryGate, 1500);
@@ -2983,17 +3072,17 @@ async function sendProfileEditLink(memberId){
     const url = await _createSelfEditToken(memberId);
     const firstName = (m.name||'').split(' ')[0] || 'kapatid';
     const senderName = (LEADER && LEADER.leaderName) || 'Your LC Leader';
-    // Build message from configurable template (loaded by loadGreetingTemplate)
     const messageText = _buildGreeting(_greetingTemplate, {
       firstName, url, days: _TOKEN_VALIDITY_DAYS, senderName
     });
     const phone = _normalizePHPhone(m.contact);
 
     if(phone){
-      window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(messageText), '_blank');
+      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
+      window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
       toast('📝 Edit link ready for ' + firstName + ' — tap Send in WhatsApp');
     } else {
-      _showSelfEditShareModal(firstName, url, messageText);
+      _showShareLinkModal(firstName, url, messageText, 'Profile Edit Link');
     }
   } catch(e){
     console.error('Self-edit link error:', e);
@@ -3003,14 +3092,41 @@ async function sendProfileEditLink(memberId){
   }
 }
 
-function _showSelfEditShareModal(firstName, url, messageText){
+// ═══════════════════════════════════════════════════════════════
+// ASSESSMENT LINK SENDER — mirrors leader tool's sendLink_() so
+// sharing diagnostic / gifts / personality assessments uses the same
+// WhatsApp-or-share-picker flow (was previously a dumb clipboard copy).
+// ═══════════════════════════════════════════════════════════════
+async function sendAssessmentLink(memberId, assessName, url){
+  if(!memberId){ toast('Member not found','⚠️'); return; }
+  const m = members.find(x => x.id === memberId);
+  if(!m){ toast('Member not in current view','⚠️'); return; }
+
+  const firstName = (m.name||'').split(' ')[0] || 'kapatid';
+  const senderName = (LEADER && LEADER.leaderName) || 'Your LC Leader';
+  const messageText = _buildGreeting(_assessTemplate, {
+    firstName, url, assessName: assessName || 'assessment',
+    senderName, days: _TOKEN_VALIDITY_DAYS
+  });
+  const phone = _normalizePHPhone(m.contact);
+
+  if(phone){
+    window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
+    toast('📤 ' + assessName + ' link ready for ' + firstName);
+  } else {
+    _showShareLinkModal(firstName, url, messageText, assessName);
+  }
+}
+
+function _showShareLinkModal(firstName, url, messageText, linkType){
   document.querySelectorAll('.share-link-modal').forEach(m => m.remove());
   const modal = document.createElement('div');
   modal.className = 'share-link-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  const title = linkType ? '📤 Share ' + escapeHTMLNotif(linkType) : '📤 Share Link';
   modal.innerHTML = `
     <div style="background:#fff;border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit">
-      <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:.4rem">📤 Share Profile Edit Link</div>
+      <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:.4rem">${title}</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
         No phone on file for <strong>${escapeHTMLNotif(firstName)}</strong>. Choose how to send:
       </div>
@@ -3030,6 +3146,10 @@ function _showSelfEditShareModal(firstName, url, messageText){
   modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
 }
 
+// Backwards-compat alias (callers from older code paths still use this name)
+const _showSelfEditShareModal = (firstName, url, messageText) =>
+  _showShareLinkModal(firstName, url, messageText, 'Profile Edit Link');
+
 async function _shareSelfEditVia(method, btn){
   const data = window._shareLinkData;
   if(!data) return;
@@ -3044,12 +3164,13 @@ async function _shareSelfEditVia(method, btn){
     } else if(method === 'sms'){
       window.location.href = 'sms:?body=' + encodeURIComponent(messageText);
     } else if(method === 'email'){
-      const subject = encodeURIComponent('Update your profile — Rosehill Christian Church');
+      const subject = encodeURIComponent('From your LC Leader — Rosehill Christian Church');
       window.location.href = 'mailto:?subject=' + subject + '&body=' + encodeURIComponent(messageText);
     } else if(method === 'whatsapp'){
-      window.open('https://wa.me/?text=' + encodeURIComponent(messageText), '_blank');
+      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
+      window.open(_buildWhatsAppUrl('', messageText), '_blank');
     } else if(method === 'native' && navigator.share){
-      await navigator.share({title:'Update your profile', text: messageText});
+      await navigator.share({title:'Link from your LC Leader', text: messageText});
       toast('✓ Shared');
     }
     btn.closest('.share-link-modal')?.remove();

@@ -1363,9 +1363,9 @@ function openAssessmentLink(){
 
 function sendAssessmentLink(file, name){
   if(!currentMember) return;
-  const url = BASE_URL+file+'?id='+currentMember.id+'&name='+encodeURIComponent(currentMember.name);
-  const msg = encodeURIComponent(`Hi ${currentMember.name.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey sa Rosehill, nakakagawa ka ng ${name} assessment.\n\nI-click lang ang link na ito at sagutan mo ito nang tapat:\n${url}\n\nGod bless! 🙏`);
-  window.open('https://wa.me/?text='+msg,'_blank');
+  // Delegate to sendLink_ so this single-button shortcut uses the same
+  // configurable greeting + WhatsApp/share-picker behavior as the bulk send.
+  sendLink_(currentMember.id, currentMember.name, file, name, currentMember.contact);
 }
 
 async function logQuickAttendance(){
@@ -2304,40 +2304,59 @@ function normalizePHPhone(raw){
 const SELF_EDIT_BASE = BASE_URL + 'member_self_edit.html';
 const TOKEN_VALIDITY_DAYS = 7;
 
-// ── Greeting template (Pastor-configurable from dashboard Settings) ──
-// Loaded from system_settings.meta.profile_edit_greeting on boot;
-// falls back to this default if fetch fails or row is empty. Placeholders:
-// {firstName} {url} {days} {senderName}
-const _DEFAULT_GREETING_TEMPLATE =
+// ── Greeting templates (Pastor-configurable from dashboard Settings) ──
+// Loaded from system_settings.meta on boot; falls back to these defaults
+// if fetch fails. Both pages (dashboard + leader tool) share the same
+// source of truth, so changes in Settings flow to leaders automatically.
+const _DEFAULT_PROFILE_GREETING =
   'Hi {firstName}! 🙏\n\n' +
   'Para sa ating church records, paki-update lang po ang inyong personal info ' +
   '(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n' +
   '{url}\n\n' +
   'Valid for {days} days. Salamat po! 💚\n— {senderName}';
 
-let _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
+const _DEFAULT_ASSESS_GREETING =
+  'Hi {firstName}! 😊\n\n' +
+  'Bilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang {assessName} assessment?\n\n' +
+  '{url}\n\n' +
+  'I-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— {senderName}';
+
+let _greetingTemplate = _DEFAULT_PROFILE_GREETING;
+let _assessTemplate   = _DEFAULT_ASSESS_GREETING;
 
 function _buildGreeting(template, vars){
-  return String(template || _DEFAULT_GREETING_TEMPLATE)
+  return String(template || '')
     .replace(/\{firstName\}/g,  vars.firstName  || '')
     .replace(/\{url\}/g,        vars.url        || '')
     .replace(/\{days\}/g,       String(vars.days != null ? vars.days : TOKEN_VALIDITY_DAYS))
-    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader');
+    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader')
+    .replace(/\{assessName\}/g, vars.assessName || 'assessment');
 }
 
-async function loadGreetingTemplate(){
+// ── WhatsApp URL builder — uses api.whatsapp.com to avoid the wa.me
+//    redirect chain that triggers "Your connection is not private" on
+//    desktop browsers (Edge, Safari, Samsung Internet).
+function _buildWhatsAppUrl(phone, message){
+  const enc = encodeURIComponent(message || '');
+  if(phone) return 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + enc;
+  return 'https://api.whatsapp.com/send?text=' + enc;
+}
+
+async function loadGreetingTemplates(){
   try{
     const {data, error} = await db.from('system_settings')
       .select('meta').eq('id', 1).maybeSingle();
     if(error) throw error;
-    const tpl = data?.meta?.profile_edit_greeting;
-    if(typeof tpl === 'string' && tpl.trim()) _greetingTemplate = tpl;
+    const tplProf = data?.meta?.profile_edit_greeting;
+    const tplAss  = data?.meta?.assessment_link_greeting;
+    if(typeof tplProf === 'string' && tplProf.trim()) _greetingTemplate = tplProf;
+    if(typeof tplAss  === 'string' && tplAss.trim())  _assessTemplate   = tplAss;
   } catch(e){
-    console.warn('Greeting template load failed — using default:', e.message);
+    console.warn('Greeting template load failed — using defaults:', e.message);
   }
 }
 // Fire-and-forget on boot — leaders never get blocked from sending if this fails
-loadGreetingTemplate();
+loadGreetingTemplates();
 
 function _genSelfEditToken(){
   const arr = new Uint8Array(16);
@@ -2364,15 +2383,14 @@ async function sendProfileEditLink(memberId, memberName, contact){
     const url = await createSelfEditToken(memberId);
     const firstName = (memberName||'').split(' ')[0] || 'kapatid';
     const senderName = currentLeader?.name || 'Your LC Leader';
-    // Build message from configurable template (loaded by loadGreetingTemplate)
     const messageText = _buildGreeting(_greetingTemplate, {
       firstName, url, days: TOKEN_VALIDITY_DAYS, senderName
     });
     const phone = normalizePHPhone(contact);
 
     if(phone){
-      // Has phone — direct WhatsApp delivery
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
+      window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
       toast(`📝 Edit link ready for ${firstName} — just tap Send`, 'success');
     } else {
       // No phone on file — let the leader pick how to deliver
@@ -2463,7 +2481,8 @@ async function _shareVia(method, btn){
       window.location.href = `mailto:?subject=${subject}&body=` + encodeURIComponent(messageText);
     }
     else if(method === 'whatsapp'){
-      window.open('https://wa.me/?text=' + encodeURIComponent(messageText), '_blank');
+      // Use api.whatsapp.com to avoid SSL warning on desktop browsers
+      window.open(_buildWhatsAppUrl('', messageText), '_blank');
     }
     else if(method === 'native' && navigator.share){
       await navigator.share({
@@ -2485,16 +2504,17 @@ async function _shareVia(method, btn){
 function sendLink_(memberId, memberName, file, assessName, contact){
   const url = BASE_URL+file+'?id='+memberId+'&name='+encodeURIComponent(memberName);
   const firstName = (memberName||'').split(' ')[0] || 'kapatid';
-  const messageText =
-    `Hi ${firstName}! 😊\n\n` +
-    `Bilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang ${assessName} assessment?\n\n` +
-    `${url}\n\n` +
-    `I-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— ${currentLeader?.name||'Your LC Leader'}`;
+  const senderName = currentLeader?.name || 'Your LC Leader';
+  // Build from the configurable assessment greeting (loaded from system_settings)
+  const messageText = _buildGreeting(_assessTemplate, {
+    firstName, url, assessName: assessName || 'assessment',
+    senderName, days: TOKEN_VALIDITY_DAYS
+  });
   const phone = normalizePHPhone(contact);
 
   if(phone){
-    // Direct WhatsApp link with member's number — no contact picker needed
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`, '_blank');
+    // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
+    window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
     toast(`WhatsApp ready for ${firstName} — just tap Send`, 'success');
   } else {
     // No phone on file — open the share picker (same as Profile Edit Link)
