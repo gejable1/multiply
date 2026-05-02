@@ -408,7 +408,20 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <button class="st-btn" id="scopeBtnAll" onclick="LeaderScope.setView('all');setActiveScopeTab(this)" style="display:none;background:transparent;color:#fff;border:1.5px solid #d4b87a;padding:8px 14px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:none;align-items:center;gap:6px;">
       🔓 All Members <span class="sc-count" id="scopeCountAll" style="background:rgba(212,184,122,.25);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">—</span>
     </button>
-    <div style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.7);" id="scopeHint">Showing only members directly under your care</div>
+    <!-- ── MY PROFILE button + hint, both right-aligned ───────────────
+         Lets the logged-in leader open their own member record in
+         self-edit mode. Pastor-managed fields (level, discipler,
+         diagnostic zone, facilitator status) are visually locked
+         and refused server-side. See openMyProfile().
+    ──────────────────────────────────────────────────────────── -->
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+      <button id="scopeBtnMyProfile" onclick="openMyProfile()"
+        style="background:rgba(212,184,122,.18);color:#fde68a;border:1.5px solid rgba(212,184,122,.45);padding:8px 14px;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"
+        title="Open and edit your own personal information">
+        ✏️ My Profile
+      </button>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);" id="scopeHint">Showing only members directly under your care</div>
+    </div>
   </div>
 
   <div class="fbar" style="border-radius:0 0 10px 10px;">
@@ -765,7 +778,12 @@ const LEADER = window.LEADER || {}; // populated by gateOrRedirect
 // Boot: render the leader badge in the topbar
 (function paintLeaderBadge(){
   const el = (id) => document.getElementById(id);
-  if(!LEADER || !LEADER.leaderId) return;
+  if(!LEADER || !LEADER.leaderId){
+    // No leader session — hide My Profile button (nothing to edit)
+    const myProfBtn = document.getElementById('scopeBtnMyProfile');
+    if(myProfBtn) myProfBtn.style.display = 'none';
+    return;
+  }
   const initials = (LEADER.leaderName||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   if(el('leaderBadgeAv'))   el('leaderBadgeAv').textContent   = initials;
   if(el('leaderBadgeName')) el('leaderBadgeName').textContent = LEADER.leaderName || '?';
@@ -1608,6 +1626,10 @@ function drillToMember(id){
 
 function openAdd(){
   eid=null;clearF();
+  // Self-edit mode never applies to Add (no existing record to protect).
+  // Clear defensively in case state leaked from a prior My Profile session.
+  _selfEditMode = false;
+  _clearSelfEditLock();
   document.getElementById('mav').textContent='?';document.getElementById('mav').style.background='var(--muted)';
   document.getElementById('mti').textContent='Add New Member';document.getElementById('mme').textContent='';
   document.getElementById('delbtn').style.display='none';
@@ -1622,11 +1644,60 @@ function openAdd(){
   rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
 }
+// ═══════════════════════════════════════════════════════════════
+// SELF-EDIT MODE — when a leader opens their OWN member record
+// via the "✏️ My Profile" button, this flag enables a UI lock
+// over fields that should be Pastor-managed only:
+//   - pipeline level (no self-promotion)
+//   - discipler (accountability chain)
+//   - diagnostic zone / interventions (pastoral oversight)
+//   - facilitator status & role (Pastor delegates this)
+// Defense in depth: the visual lock is convenience; saveMember()
+// also strips these fields server-side when in self-edit mode so
+// a hacked DOM cannot bypass it.
+// ═══════════════════════════════════════════════════════════════
+let _selfEditMode = false;
+
+// Field IDs that get locked in self-edit mode
+const _SELF_EDIT_LOCKED_FIELDS = [
+  'fl',         // pipeline level
+  'fd',         // discipler select
+  'fIsFac',     // is_facilitator checkbox
+  'fFacRole',   // facilitator role
+];
+
+function openMyProfile(){
+  if(!LEADER || !LEADER.leaderId){
+    toast('You need to be logged in to edit your profile','🔒');
+    return;
+  }
+  // Find the leader's own member row in the loaded list
+  const me = members.find(m => m.id === LEADER.leaderId);
+  if(!me){
+    // Leader's own record might not be in scope (LeaderScope.apply hides
+    // them in some views). Fetch it directly so the modal still opens.
+    db.from('members').select('*').eq('id', LEADER.leaderId).single()
+      .then(({data, error}) => {
+        if(error || !data){
+          toast('Could not load your profile: ' + (error?.message || 'not found'), '❌');
+          return;
+        }
+        const mapped = r2l(data);
+        members.unshift(mapped);  // make available for the modal
+        _selfEditMode = true;
+        openEdit(mapped.id);
+      });
+    return;
+  }
+  _selfEditMode = true;
+  openEdit(me.id);
+}
+
 function openEdit(id){
   const m=members.find(x=>x.id===id);if(!m)return;
   // Scope guard — prevent leaders opening members outside their view.
-  // Pastor bypasses; for others we check the current scope.
-  if(!LeaderScope.isPastor()){
+  // Pastor bypasses; leaders bypass when editing their OWN record.
+  if(!LeaderScope.isPastor() && !_selfEditMode){
     const allowed = LeaderScope.apply(members);
     const inScope = allowed.some(x => x.id === m.id);
     if(!inScope){
@@ -1665,9 +1736,85 @@ function openEdit(id){
   rPCL(m);rET(m);rNT(m);rDiagTab(m);
   // Gifts tab loads on demand when clicked (async Supabase call)
   document.getElementById('mo').classList.add('open');
+  // If in self-edit mode, apply visual lock to Pastor-managed fields
+  if(_selfEditMode) _applySelfEditLock();
 }
 function closeMO(e){if(e.target===document.getElementById('mo'))closeMD();}
-function closeMD(){document.getElementById('mo').classList.remove('open');}
+function closeMD(){
+  document.getElementById('mo').classList.remove('open');
+  // Clear self-edit mode so the next openEdit() opens normally
+  _selfEditMode = false;
+  _clearSelfEditLock();
+}
+
+// Apply visual lock to Pastor-managed fields when in self-edit mode.
+// Adds a banner at the top of the modal and disables the protected fields
+// with a lock icon + tooltip explaining who manages them.
+function _applySelfEditLock(){
+  // Banner
+  let banner = document.getElementById('selfEditBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'selfEditBanner';
+    banner.style.cssText = 'background:linear-gradient(135deg,rgba(212,184,122,.15),rgba(212,184,122,.05));border:1px solid rgba(212,184,122,.4);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;';
+    banner.innerHTML =
+      '<div style="font-size:22px">✏️</div>' +
+      '<div style="flex:1;font-size:12.5px;line-height:1.55;color:var(--ink)">' +
+        '<strong style="color:var(--gold)">You\'re editing your own record.</strong><br>' +
+        '<span style="color:var(--muted)">You can update your personal info, ministry placements, and family. Fields marked 🔒 are managed by your Pastor.</span>' +
+      '</div>';
+    const infoTab = document.getElementById('mt-info');
+    if(infoTab) infoTab.insertBefore(banner, infoTab.firstChild);
+  }
+  // Lock fields
+  _SELF_EDIT_LOCKED_FIELDS.forEach(fieldId => {
+    const el = document.getElementById(fieldId);
+    if(!el) return;
+    el.disabled = true;
+    el.style.opacity = '0.55';
+    el.style.cursor = 'not-allowed';
+    // Add lock icon to the field's label (find sibling label)
+    const wrapper = el.closest('.fi');
+    if(wrapper){
+      const label = wrapper.querySelector('label');
+      if(label && !label.dataset.lockedMarker){
+        label.dataset.lockedMarker = '1';
+        const orig = label.innerHTML;
+        label.innerHTML = orig + ' <span style="color:var(--gold);font-size:11px" title="Managed by your Pastor">🔒</span>';
+      }
+    }
+  });
+  // Hide footer buttons that don't apply to self-edit
+  const delBtn = document.getElementById('delbtn');
+  if(delBtn) delBtn.style.display = 'none';
+  const rpb = document.getElementById('resetPinBtn');
+  if(rpb) rpb.style.display = 'none';
+  // Profile Edit Link button is fine — leader can self-send to update offline
+}
+
+function _clearSelfEditLock(){
+  // Remove banner
+  const banner = document.getElementById('selfEditBanner');
+  if(banner) banner.remove();
+  // Re-enable fields
+  _SELF_EDIT_LOCKED_FIELDS.forEach(fieldId => {
+    const el = document.getElementById(fieldId);
+    if(!el) return;
+    el.disabled = false;
+    el.style.opacity = '';
+    el.style.cursor = '';
+    const wrapper = el.closest('.fi');
+    if(wrapper){
+      const label = wrapper.querySelector('label');
+      if(label && label.dataset.lockedMarker){
+        // Strip the lock span we added
+        const lockSpan = label.querySelector('span[title="Managed by your Pastor"]');
+        if(lockSpan) lockSpan.remove();
+        delete label.dataset.lockedMarker;
+      }
+    }
+  });
+}
 function showMT(t,btn){
   ['info','diag','profile','pipe','eolo','gifts','notes','disciples'].forEach(x=>{
     const el=document.getElementById('mt-'+x);if(el)el.style.display=x===t?'block':'none';
@@ -1937,6 +2084,23 @@ async function saveMember(){
     is_facilitator:isFac,
     facilitator_role:isFac?document.getElementById('fFacRole').value:null,
   };
+  // ─── DEFENSE IN DEPTH: Self-edit mode field protection ───
+  // Even if the user disabled the locks via DevTools, force these
+  // Pastor-managed fields back to their existing values before save.
+  // The visual lock is convenience; this is the actual security boundary.
+  if(_selfEditMode && eid){
+    const ex = members.find(x => x.id === eid);
+    if(ex){
+      data.level             = ex.level || 0;
+      data.discipler_id      = ex.discipler_id || null;
+      data.discipler         = ex.discipler || null;
+      data.discipler_name    = ex.discipler_name || null;
+      data.is_facilitator    = !!ex.is_facilitator;
+      data.facilitator_role  = ex.facilitator_role || null;
+      // diagnostic_zone, diagnostic_score, intervention_track, intervention_status
+      // are already preserved from `ex` in the block below — no extra work needed.
+    }
+  }
   if(eid){const ex=members.find(x=>x.id===eid);if(ex){data.checks=ex.checks||{};data.eolo=ex.eolo||[];data.notes=ex.notes||[];data.diagnostic_score=ex.diagnostic_score;data.diagnostic_zone=ex.diagnostic_zone;data.diagnostic_date=ex.diagnostic_date;data.intervention_track=ex.intervention_track;data.intervention_status=ex.intervention_status;data.facilitator_name=ex.facilitator_name;}}
   else{
     data.checks={};
