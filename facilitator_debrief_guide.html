@@ -780,12 +780,12 @@ body {
   <div class="ai-panel-header">
     <div>
       <h3>🤖 AI Pastoral Assist</h3>
-      <p>Analyzes open-ended answers · Suggests follow-up questions for your debrief conversation</p>
+      <p>Builds a careful, pastoral prompt from this member's written answers · Take it to ChatGPT, Claude, Gemini, or Grok for follow-up question suggestions</p>
     </div>
-    <button class="ai-run-btn" id="aiRunBtn" onclick="runAIAssist()">▶ Run Analysis</button>
+    <button class="ai-run-btn" id="aiRunBtn" onclick="buildAIPrompt()">📋 Build AI Prompt</button>
   </div>
   <div class="ai-body" id="aiBody">
-    <p class="ai-no-answers" id="aiIntro">Click "Run Analysis" to generate suggested follow-up questions based on this member's written answers. This may take 15–30 seconds.</p>
+    <p class="ai-no-answers" id="aiIntro">Click "Build AI Prompt" to assemble a copy-ready prompt from this member's open-ended answers. You'll be able to send it to your preferred AI tool with one tap.</p>
   </div>
 </div>
 
@@ -1728,20 +1728,27 @@ var Q_META = {
   },
 };
 
-window.runAIAssist = async function() {
+// ─────────────────────────────────────────────────────────────────
+// New copy-to-clipboard flow (replaces direct API call which only
+// works inside Claude.ai artifacts and breaks on public hosting).
+//
+// User flow:
+//   1. Click "Build AI Prompt"     → assemble the prompt, show it
+//   2. Click "Copy" or "Open in X" → take it to their chosen AI
+//   3. Paste the AI's reply back   → renders in the same nice format
+// ─────────────────────────────────────────────────────────────────
+
+// Stash the assembled prompt so the open-in buttons can reuse it.
+var _aiAssembledPrompt = '';
+
+window.buildAIPrompt = function() {
   if (!_memberOpenAnswers || Object.keys(_memberOpenAnswers).length === 0) {
     document.getElementById('aiBody').innerHTML =
       '<p class="ai-no-answers">No written answers found for this member\'s diagnostic. The member may not have completed the form yet, or their answers were submitted before this feature was added.</p>';
     return;
   }
 
-  var btn = document.getElementById('aiRunBtn');
-  var body = document.getElementById('aiBody');
-  btn.disabled = true;
-  btn.textContent = '⏳ Analyzing…';
-  body.innerHTML = '<div class="ai-loading">Generating pastoral follow-up questions — this takes 15–30 seconds…</div>';
-
-  // Build prompt
+  // Build the per-question blocks (same logic as before).
   var questionBlocks = [];
   Object.entries(_memberOpenAnswers).forEach(function([qid, answer]) {
     var meta = Q_META[qid];
@@ -1755,77 +1762,229 @@ window.runAIAssist = async function() {
   });
 
   if (!questionBlocks.length) {
-    body.innerHTML = '<p class="ai-no-answers">No analyzable written answers found.</p>';
-    btn.disabled = false;
-    btn.textContent = '▶ Run Analysis';
+    document.getElementById('aiBody').innerHTML =
+      '<p class="ai-no-answers">No analyzable written answers found.</p>';
     return;
   }
 
-  var systemPrompt = `You are assisting a Filipino church pastor or discipler preparing for a pastoral debrief session with a church member who completed a Salvation Assurance Diagnostic. Your role is to analyze the member's open-ended written answers and suggest 2–3 gentle, pastoral follow-up questions for each answer.
+  var systemPrompt = 'You are assisting a Filipino church pastor or discipler preparing for a pastoral debrief session with a church member who completed a Salvation Assurance Diagnostic. Your role is to analyze the member\'s open-ended written answers and suggest 2–3 gentle, pastoral follow-up questions for each answer.\n\n' +
+    'IMPORTANT GUIDELINES:\n' +
+    '- Do NOT make a verdict on the person\'s salvation — only God and the shepherd know that\n' +
+    '- Do NOT use clinical, cold, or judgmental language\n' +
+    '- Questions should feel warm, curious, and conversational — as a caring pastor would ask\n' +
+    '- Be sensitive to Filipino church culture (relational, communal, respectful of elders)\n' +
+    '- Flag theological concerns clearly but gently\n' +
+    '- You may flag: works-righteousness, false assurance, lack of assurance, bitterness/unforgiveness, isolation, unresolved sin patterns\n' +
+    '- For each question, provide: (1) a brief flag (CLEAR/NEEDS CLARIFICATION/CONCERN), and (2) 2–3 follow-up questions\n\n' +
+    'RESPONSE FORMAT — respond ONLY with valid JSON, no markdown:\n' +
+    '{\n' +
+    '  "analyses": [\n' +
+    '    {\n' +
+    '      "qid": "A1",\n' +
+    '      "flag": "CONCERN",\n' +
+    '      "flag_reason": "Brief explanation of why this was flagged",\n' +
+    '      "followup_questions": [\n' +
+    '        "Follow-up question 1",\n' +
+    '        "Follow-up question 2",\n' +
+    '        "Follow-up question 3"\n' +
+    '      ]\n' +
+    '    }\n' +
+    '  ],\n' +
+    '  "overall_note": "One paragraph of overall pastoral observations for the facilitator — what to prioritize in the conversation."\n' +
+    '}';
 
-IMPORTANT GUIDELINES:
-- Do NOT make a verdict on the person's salvation — only God and the shepherd know that
-- Do NOT use clinical, cold, or judgmental language
-- Questions should feel warm, curious, and conversational — as a caring pastor would ask
-- Be sensitive to Filipino church culture (relational, communal, respectful of elders)
-- Flag theological concerns clearly but gently
-- You may flag: works-righteousness, false assurance, lack of assurance, bitterness/unforgiveness, isolation, unresolved sin patterns
-- For each question, provide: (1) a brief flag (CLEAR/NEEDS CLARIFICATION/CONCERN), and (2) 2–3 follow-up questions
-
-RESPONSE FORMAT — respond ONLY with valid JSON, no markdown:
-{
-  "analyses": [
-    {
-      "qid": "A1",
-      "flag": "CONCERN",
-      "flag_reason": "Brief explanation of why this was flagged",
-      "followup_questions": [
-        "Follow-up question 1",
-        "Follow-up question 2",
-        "Follow-up question 3"
-      ]
-    }
-  ],
-  "overall_note": "One paragraph of overall pastoral observations for the facilitator — what to prioritize in the conversation."
-}`;
-
-  var userPrompt = 'Member name: ' + (_memberName || 'this member') + '\n\n' +
+  var dataBody = 'Member name: ' + (_memberName || 'this member') + '\n\n' +
     'Here are their written answers from the Salvation Assurance Diagnostic:\n\n' +
     questionBlocks.join('\n\n---\n\n');
 
+  // Single-shot prompt — both system instruction and data, since most
+  // chat UIs (ChatGPT, Gemini, Grok web UI) have no separate system slot.
+  _aiAssembledPrompt = systemPrompt + '\n\n' +
+    '═══════════════════════════════════════════════════════\n' +
+    'MEMBER DATA\n' +
+    '═══════════════════════════════════════════════════════\n\n' +
+    dataBody;
+
+  // Render the copy-and-go UI.
+  var body = document.getElementById('aiBody');
+  body.innerHTML =
+    '<div style="background:#fff8e5;border-left:4px solid #b8882a;padding:14px 18px;border-radius:6px;margin-bottom:16px;font-size:13px;line-height:1.6;color:#5c4615;">' +
+      '<strong style="display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;color:#9b7820;">📋 Prompt ready</strong>' +
+      'Copy the prompt below, paste into your preferred AI tool, then paste the response back here for a structured view (optional).' +
+    '</div>' +
+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
+      '<button class="ai-run-btn" onclick="copyAIPromptText()" style="background:#2a5c40">📋 Copy Prompt</button>' +
+      '<button onclick="openInAI(\'chatgpt\')" style="padding:10px 14px;border-radius:8px;border:1.5px solid #e2d8cc;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">💬 ChatGPT</button>' +
+      '<button onclick="openInAI(\'claude\')"  style="padding:10px 14px;border-radius:8px;border:1.5px solid #e2d8cc;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">🟧 Claude</button>' +
+      '<button onclick="openInAI(\'gemini\')"  style="padding:10px 14px;border-radius:8px;border:1.5px solid #e2d8cc;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">✨ Gemini</button>' +
+      '<button onclick="openInAI(\'grok\')"    style="padding:10px 14px;border-radius:8px;border:1.5px solid #e2d8cc;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">⚡ Grok</button>' +
+    '</div>' +
+
+    '<details style="margin-bottom:18px;">' +
+      '<summary style="cursor:pointer;font-size:12px;color:#6b5f4f;font-weight:600;padding:6px 0;">▼ Show full prompt</summary>' +
+      '<textarea id="aiPromptTextarea" readonly style="width:100%;min-height:280px;margin-top:8px;font-family:Consolas,monospace;font-size:11.5px;border:1px solid #e2d8cc;border-radius:6px;padding:10px;background:#fdfbf6;line-height:1.55;resize:vertical;" onclick="this.select()">' +
+        escapeHtml(_aiAssembledPrompt) +
+      '</textarea>' +
+    '</details>' +
+
+    '<div style="border-top:1px solid #e2d8cc;padding-top:18px;">' +
+      '<div style="font-size:13px;font-weight:600;color:#1a1612;margin-bottom:6px;">📥 Paste AI response (optional)</div>' +
+      '<div style="font-size:11.5px;color:#6b5f4f;line-height:1.55;margin-bottom:10px;">If you want the structured view, paste the JSON response from your AI tool here. If the AI returned plain text, you can read it directly in that tool — no need to paste back.</div>' +
+      '<textarea id="aiResponseInput" placeholder="Paste the AI\'s JSON response here..." style="width:100%;min-height:120px;font-family:Consolas,monospace;font-size:12px;border:1px solid #e2d8cc;border-radius:6px;padding:10px;line-height:1.55;resize:vertical;"></textarea>' +
+      '<div style="display:flex;gap:8px;margin-top:10px;">' +
+        '<button class="ai-run-btn" onclick="parseAIResponse()" style="background:#2a5c40">📥 Parse Response</button>' +
+        '<button onclick="document.getElementById(\'aiResponseInput\').value=\'\'" style="padding:10px 14px;border-radius:8px;border:1.5px solid #e2d8cc;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Clear</button>' +
+      '</div>' +
+      '<div id="aiParsedResults" style="margin-top:18px;"></div>' +
+    '</div>' +
+
+    '<div class="ai-disclaimer" style="margin-top:18px;">AI assistance only. Always use your own pastoral judgment. These questions are starting points — not scripts. The Holy Spirit is the primary guide in this conversation.</div>';
+
+  // Update the run button label since the panel is now showing the prompt.
+  var btn = document.getElementById('aiRunBtn');
+  if (btn) btn.textContent = '↺ Rebuild Prompt';
+};
+
+// Copy the assembled prompt to the clipboard. Falls back to a hidden
+// textarea + execCommand for older browsers.
+window.copyAIPromptText = async function() {
+  if (!_aiAssembledPrompt) return;
   try {
-    var response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }]
-      })
-    });
-
-    var data = await response.json();
-    var rawText = data.content && data.content[0] && data.content[0].text || '';
-
-    // Parse JSON response
-    var parsed;
-    try {
-      var cleaned = rawText.replace(/```json|```/g, '').trim();
-      parsed = JSON.parse(cleaned);
-    } catch(e) {
-      throw new Error('Could not parse AI response. Raw response: ' + rawText.slice(0, 300));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(_aiAssembledPrompt);
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = _aiAssembledPrompt;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
     }
-
-    renderAIResults(parsed);
-
-  } catch(e) {
-    body.innerHTML = '<p style="color:#7a2020;font-size:13px;">⚠ Analysis failed: ' + escapeHtml(e.message) + '</p>';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '↺ Re-run Analysis';
+    aiToast('✅ Prompt copied to clipboard');
+  } catch (e) {
+    aiToast('⚠ Copy failed — you can select the text below manually', true);
+    var ta = document.getElementById('aiPromptTextarea');
+    if (ta) { ta.focus(); ta.select(); }
   }
 };
+
+// Open the user's preferred AI tool in a new tab AND copy the prompt.
+// We can't pre-fill the chat input on most of these (ChatGPT, Claude
+// and Gemini don't accept a plain ?q= parameter that survives login),
+// so the pattern is: copy → open → user pastes (Cmd/Ctrl+V).
+window.openInAI = async function(which) {
+  await copyAIPromptText();
+  var url = ({
+    chatgpt: 'https://chat.openai.com/',
+    claude:  'https://claude.ai/new',
+    gemini:  'https://gemini.google.com/app',
+    grok:    'https://grok.com/',
+  })[which] || 'https://chat.openai.com/';
+  window.open(url, '_blank', 'noopener');
+  aiToast('📋 Prompt copied — paste it (Ctrl+V) in the new tab');
+};
+
+// Parse a pasted AI response. Tolerates markdown code fences and
+// extra prose around the JSON object.
+window.parseAIResponse = function() {
+  var input = document.getElementById('aiResponseInput');
+  var out   = document.getElementById('aiParsedResults');
+  if (!input || !out) return;
+  var raw = (input.value || '').trim();
+  if (!raw) {
+    out.innerHTML = '<div style="color:#7a2020;font-size:12.5px;">⚠ Paste a response first.</div>';
+    return;
+  }
+  // Strip ``` fences if present
+  var cleaned = raw.replace(/```json|```/g, '').trim();
+  // Try to isolate the JSON object if there's prose around it
+  var firstBrace = cleaned.indexOf('{');
+  var lastBrace  = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+  var parsed;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    out.innerHTML = '<div style="color:#7a2020;font-size:12.5px;line-height:1.55;">' +
+      '⚠ Could not parse as JSON. The AI may have responded with plain prose.<br><br>' +
+      'You can either:<br>' +
+      '• Read the response directly in the AI tool (no parsing needed), or<br>' +
+      '• Ask the AI: <em>"Please respond again as valid JSON only, no markdown."</em><br><br>' +
+      '<small style="color:#6b5f4f">Parser error: ' + escapeHtml(e.message) + '</small>' +
+      '</div>';
+    return;
+  }
+  // Hand off to the existing renderer, but route output to aiParsedResults
+  // (rather than aiBody, which now hosts the prompt-and-paste UI).
+  renderAIResultsInto(parsed, out);
+};
+
+// Tiny inline toast — shown at the top of the AI panel for ~2.5s.
+function aiToast(msg, isErr) {
+  var t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;left:50%;top:24px;transform:translateX(-50%);' +
+    'background:' + (isErr ? '#7a2020' : '#1f4530') + ';color:#fff;padding:10px 18px;' +
+    'border-radius:8px;font-family:DM Sans,sans-serif;font-size:13px;font-weight:600;' +
+    'box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:99999;opacity:0;transition:opacity .15s;';
+  document.body.appendChild(t);
+  requestAnimationFrame(function(){ t.style.opacity = '1'; });
+  setTimeout(function(){
+    t.style.opacity = '0';
+    setTimeout(function(){ t.remove(); }, 200);
+  }, 2500);
+}
+
+// Variant of renderAIResults that paints into an arbitrary container.
+function renderAIResultsInto(parsed, container) {
+  var html = '';
+
+  if (parsed.overall_note) {
+    html += '<div style="background:#fff8e5;border-left:4px solid #b8882a;padding:14px 18px;border-radius:6px;margin-bottom:20px;font-size:13px;line-height:1.6;color:#5c4615;">' +
+      '<strong style="display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;color:#9b7820;">📋 Overall Pastoral Notes</strong>' +
+      escapeHtml(parsed.overall_note) + '</div>';
+  }
+
+  var analyses = parsed.analyses || [];
+  if (!analyses.length) {
+    html += '<p class="ai-no-answers">No analyses returned.</p>';
+  } else {
+    analyses.forEach(function(a) {
+      var meta = Q_META[a.qid] || { label: a.qid, text: '' };
+      var flagClass = a.flag === 'CLEAR' ? 'green' : (a.flag === 'CONCERN' ? 'red' : 'yellow');
+      var flagIcon = a.flag === 'CLEAR' ? '✅' : (a.flag === 'CONCERN' ? '⚠️' : '🔍');
+      var memberAnswer = (_memberOpenAnswers && _memberOpenAnswers[a.qid]) || '';
+
+      html += '<div class="ai-q-block">';
+      html += '<div class="ai-q-label">' + escapeHtml(meta.label) + '</div>';
+      html += '<div class="ai-q-text">' + escapeHtml(meta.text) + '</div>';
+      if (memberAnswer) {
+        html += '<div class="ai-member-answer"><div class="label">Member\'s answer</div>' + escapeHtml(memberAnswer) + '</div>';
+      }
+      html += '<div class="ai-flag ' + flagClass + '">' + flagIcon + ' ' + escapeHtml(a.flag);
+      if (a.flag_reason) {
+        html += '<div class="ai-flag-reason">' + escapeHtml(a.flag_reason) + '</div>';
+      }
+      html += '</div>';
+      var qs = a.followup_questions || [];
+      if (qs.length) {
+        html += '<div class="ai-followups"><div class="label">Suggested follow-up questions</div><ul>';
+        qs.forEach(function(q){ html += '<li>' + escapeHtml(q) + '</li>'; });
+        html += '</ul></div>';
+      }
+      html += '</div>';
+    });
+  }
+  container.innerHTML = html;
+};
+
+// Backwards-compat: keep window.runAIAssist as an alias so any stale
+// HTML that still references it doesn't error.
+window.runAIAssist = window.buildAIPrompt;
 
 function renderAIResults(parsed) {
   var body = document.getElementById('aiBody');
