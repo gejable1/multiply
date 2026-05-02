@@ -372,6 +372,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      login page. This replaces the old open-name-search login.
 ─────────────────────────────────────────────────────────────── -->
 <script src="multiply_shared.js"></script>
+<script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
   body.leader-authenticated { visibility: visible; }
@@ -1258,6 +1259,20 @@ function buildDetailSections(mem){
     </div>`;
   }
 
+  // Spiritual Gifts — pastoral tier (uses MultiplyReports module)
+  if(canSeePastoral){
+    html += `<div class="ds-card" id="giftsCard_${mem.id}">
+      <div class="ds-header" onclick="toggleGiftsCard('${mem.id}')">
+        <div class="ds-icon">🎁</div>
+        <div class="ds-title">Spiritual Gifts</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body">
+        <div id="giftsBody_${mem.id}" style="font-size:12px;color:var(--muted);text-align:center;padding:.6rem 0">Tap to load gift profile</div>
+      </div>
+    </div>`;
+  }
+
   // Notes — sensitive tier (direct discipler + pastor only)
   if(!canSeeSensitive){
     html += `<div class="ds-card">
@@ -1291,6 +1306,40 @@ function saveNote(memberId){
   const val = document.getElementById('noteFor_'+memberId)?.value||'';
   localStorage.setItem('lc_note_'+memberId, val);
   toast('Note saved ✓','success');
+}
+
+// Spiritual gifts card — toggles the section open/closed and lazy-loads
+// the report on first open. Uses the shared MultiplyReports module so
+// the same content/format appears here and on the desktop dashboard.
+async function toggleGiftsCard(memberId){
+  const card = document.getElementById('giftsCard_'+memberId);
+  const body = document.getElementById('giftsBody_'+memberId);
+  if(!card || !body) return;
+  card.classList.toggle('open');
+  // Lazy-load: only fetch the first time the user opens the card
+  if(card.classList.contains('open') && !body.dataset.loaded){
+    body.dataset.loaded = '1';
+    body.innerHTML = '<div style="text-align:center;padding:.6rem 0;font-size:12px;color:var(--muted)">⏳ Loading gift profile…</div>';
+    if(typeof MultiplyReports === 'undefined' || !MultiplyReports.giftsProfile){
+      body.innerHTML = '<div style="padding:.6rem 0;color:var(--red);font-size:12px;text-align:center">⚠ Reports module not loaded.<br>Make sure multiply_reports.js is uploaded.</div>';
+      return;
+    }
+    const mem = (myMembers && myMembers.find(x => x.id === memberId)) || currentMember;
+    const tier = (typeof LeaderScope !== 'undefined' && LeaderScope.canSee('pastoral', mem)) ? 'pastoral' : 'public';
+    try {
+      const html = await MultiplyReports.giftsProfile(memberId, {
+        tier: tier,
+        context: 'inline',
+        showActions: true,
+        supabase: db,
+      });
+      body.innerHTML = html;
+    } catch(e){
+      console.error('giftsProfile (mobile) failed:', e);
+      body.innerHTML = '<div style="padding:.6rem 0;color:var(--red);font-size:12px;text-align:center">⚠ Could not render: '+(e.message||e)+'</div>';
+      delete body.dataset.loaded; // allow retry
+    }
+  }
 }
 
 function openSalvationDiag(){

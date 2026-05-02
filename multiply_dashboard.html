@@ -315,6 +315,7 @@ tbody tr:hover{background:var(--green-light);}
 window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 </script>
 <script src="multiply_shared.js"></script>
+<script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
   body.leader-authenticated { visibility: visible; }
@@ -2175,131 +2176,35 @@ function openGiftsDirect(memberId) {
 async function rGiftsTab(m) {
   const wrap = document.getElementById('giftsTab');
   if (!wrap) return;
-  // Sensitivity: 'pastoral' tier — same logic as profile tab.
-  if(!LeaderScope.canSee('pastoral', m)){
-    wrap.innerHTML = `
-      <div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:8px;padding:1.5rem 1rem;text-align:center;">
-        <div style="font-size:28px;margin-bottom:.5rem;">🔒</div>
-        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.4rem;">Gift Profile Hidden</div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.6;max-width:340px;margin:0 auto;">Spiritual gift diagnostic results are visible to leaders within the member's discipleship tree.</div>
-      </div>`;
-    return;
-  }
+  // Audit log — viewing gift content is worth tracking.
+  // Note: the report module also handles its own redaction by tier,
+  // but we still log the attempt regardless.
   logView(m.id, 'gifts_view');
 
-  // Try to load gifts diagnostic results from Supabase
-  let giftsData = null;
-  try {
-    const { data } = await db.from('gifts_diagnostic')
-      .select('*').eq('member_id', m.id)
-      .order('date_taken', {ascending: false}).limit(1).maybeSingle();
-    giftsData = data;
-  } catch(e) { console.warn('Gifts load error:', e); }
+  // Determine tier based on current viewer's relationship to this member.
+  // Pastor/direct discipler/tree members see full content; others get the
+  // redacted card from the report itself.
+  const tier = LeaderScope.canSee('pastoral', m) ? 'pastoral' : 'public';
 
-  const giftsUrl = getGiftsUrl(m.id);
-
-  if (!giftsData) {
-    // No gifts diagnostic taken yet
-    wrap.innerHTML = `<div style="text-align:center;padding:1.5rem">
-      <div style="font-size:2rem;margin-bottom:.5rem">🎁</div>
-      <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.35rem">No Gifts Diagnostic taken yet</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-bottom:1rem;line-height:1.6">Generate a personalized link and send to the member via Viber. The diagnostic has 80 gift questions and 14 natural talent questions.</div>
-      <div style="background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:8px;padding:.85rem 1rem;margin-bottom:.75rem;font-size:12px;color:var(--green);word-break:break-all;text-align:left;">${giftsUrl}</div>
-      <button onclick="copyGiftsLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 22px;background:var(--green);color:white;border:none;border-radius:7px;cursor:pointer;width:100%;margin-bottom:.5rem">🎁 Copy Gifts Diagnostic Link</button>
-      <button onclick="openGiftsDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 18px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;width:100%">🔗 Open Gifts Diagnostic</button>
-    </div>`;
+  if (typeof MultiplyReports === 'undefined' || !MultiplyReports.giftsProfile) {
+    wrap.innerHTML = '<div style="padding:1rem;color:var(--red);font-size:13px">⚠ Reports module not loaded. Make sure multiply_reports.js is uploaded alongside the dashboard.</div>';
     return;
   }
 
-  // Gifts diagnostic has been taken — show results
-  const scores = giftsData.all_scores || {};
-  const talents = giftsData.natural_talents || {};
-  const giftOrder = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
-  const maxScore = 25;
-
-  const talentClusters = [
-    {id:'sports',name:'Sports',icon:'🏀'},
-    {id:'creative',name:'Creative',icon:'🎨'},
-    {id:'technical',name:'Technical',icon:'💻'},
-    {id:'culinary',name:'Culinary',icon:'🍳'},
-    {id:'admin',name:'Admin',icon:'📁'},
-    {id:'comms',name:'Communication',icon:'✍️'},
-    {id:'physical',name:'Physical',icon:'🔧'},
-  ];
-
-  const giftEmojis = {leadership:'⚡',administration:'📋',teaching:'📖',knowledge:'🔍',wisdom:'💡',prophecy:'🔥',discernment:'🛡',exhortation:'🤝',shepherding:'🐑',faith:'⛰',evangelism:'🌏',apostleship:'🚀',service:'🛠',mercy:'💙',giving:'🎁',hospitality:'🏠'};
-
-  wrap.innerHTML = `
-    <!-- HEADER -->
-    <div style="background:var(--green-bg);border:1px solid rgba(42,92,64,.2);border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:14px;">
-      <div>
-        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--green);font-weight:600;margin-bottom:3px">Gifts Diagnostic Results</div>
-        <div style="font-size:14px;font-weight:600;color:var(--ink)">${giftsData.primary_gift||'—'} · ${giftsData.secondary_gift||'—'} · ${giftsData.supporting_gift||'—'}</div>
-        <div style="font-size:11px;color:var(--muted)">Taken: ${giftsData.date_taken||'—'} · Top Match: ${giftsData.ministry_match_1||'—'}</div>
-      </div>
-    </div>
-
-    <!-- TOP 3 -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1rem;">
-      ${[{gift:giftsData.primary_gift,label:'Primary',bg:'var(--gold-bg)',color:'var(--gold-dim)'},
-         {gift:giftsData.secondary_gift,label:'Secondary',bg:'var(--green-bg)',color:'var(--green)'},
-         {gift:giftsData.supporting_gift,label:'Supporting',bg:'var(--blue-bg)',color:'var(--blue)'}
-        ].map(r=>`<div style="background:${r.bg};border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:.65rem;text-align:center;">
-          <div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:${r.color};margin-bottom:3px">${r.label}</div>
-          <div style="font-size:20px;margin-bottom:2px">${giftEmojis[r.gift?.toLowerCase()]||'🎁'}</div>
-          <div style="font-size:12px;font-weight:600;color:var(--ink)">${r.gift||'—'}</div>
-        </div>`).join('')}
-    </div>
-
-    <!-- GIFT BARS -->
-    <div style="margin-bottom:1rem">
-      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">All 16 Gifts</div>
-      ${giftOrder.map(([gid,score])=>{
-        const pct=Math.round(score/maxScore*100);
-        const name=gid.charAt(0).toUpperCase()+gid.slice(1);
-        const emoji=giftEmojis[gid]||'🎁';
-        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <div style="font-size:12px;color:var(--ink);min-width:130px;font-weight:${score>=18?'600':'400'}">${emoji} ${name}</div>
-          <div style="flex:1;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)">
-            <div style="height:100%;width:${pct}%;background:${score>=18?'var(--green)':score>=12?'var(--gold)':'var(--lighter)'};border-radius:3px;transition:width .5s"></div>
-          </div>
-          <div style="font-size:11px;font-weight:600;color:var(--muted);min-width:24px;text-align:right">${score}</div>
-        </div>`;
-      }).join('')}
-    </div>
-
-    <!-- NATURAL TALENTS -->
-    ${Object.keys(talents).length ? `
-    <div style="margin-bottom:1rem">
-      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">Natural Talents</div>
-      ${talentClusters.map(c=>{
-        const s=talents[c.id]||0;const pct=Math.round(s/10*100);
-        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <div style="font-size:12px;color:var(--ink);min-width:130px">${c.icon} ${c.name}</div>
-          <div style="flex:1;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border)">
-            <div style="height:100%;width:${pct}%;background:${s>=8?'var(--red)':s>=5?'var(--gold)':'var(--lighter)'};border-radius:3px"></div>
-          </div>
-          <div style="font-size:11px;font-weight:600;color:var(--muted);min-width:24px;text-align:right">${s}/10</div>
-        </div>`;
-      }).join('')}
-      ${(talents['sports']||0)>=6?`<div style="background:var(--red-bg);border:1px solid rgba(122,32,32,.2);border-radius:6px;padding:.6rem .85rem;margin-top:.5rem;font-size:12px;color:var(--red)">🏀 Sports inclination ≥ 6 — Youth in Motion candidate</div>`:''}
-    </div>` : ''}
-
-    <!-- MINISTRY MATCHES -->
-    <div style="margin-bottom:1rem">
-      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.5rem">Top Ministry Matches</div>
-      ${[giftsData.ministry_match_1,giftsData.ministry_match_2,giftsData.ministry_match_3].filter(Boolean).map((min,i)=>
-        `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:${i===0?'var(--gold-bg)':'var(--green-bg)'};color:${i===0?'var(--gold-dim)':'var(--green)'}">${i===0?'Primary':'Good fit'}</span>
-          <span style="font-size:13px;font-weight:500;color:var(--ink)">${min}</span>
-        </div>`).join('')}
-    </div>
-
-    <!-- ACTIONS -->
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)">
-      <button onclick="copyGiftsLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">🎁 Copy New Gifts Link</button>
-      <button onclick="openGiftsDirect('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 12px;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;">🔗 Retake Gifts Diagnostic</button>
-    </div>`;
+  // Show a brief loading state, then hand off to the report module.
+  wrap.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px">⏳ Loading gift profile...</div>';
+  try {
+    const html = await MultiplyReports.giftsProfile(m.id, {
+      tier: tier,
+      context: 'inline',
+      showActions: true,
+      supabase: db,
+    });
+    wrap.innerHTML = html;
+  } catch (e) {
+    console.error('giftsProfile render failed:', e);
+    wrap.innerHTML = '<div style="padding:1rem;color:var(--red);font-size:13px">⚠ Could not render gift profile: ' + (e.message || e) + '</div>';
+  }
 }
 
 function copyDiagLink(memberId) {
