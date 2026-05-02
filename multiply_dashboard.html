@@ -361,6 +361,10 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </div>
   <div class="tact">
     <div class="sync"><div class="sdot" id="sdot"></div><span id="slbl">Loading...</span></div>
+    <button id="notifBell" onclick="toggleNotifPanel()" title="Notifications" style="position:relative;background:transparent;border:1px solid var(--border);border-radius:50%;width:36px;height:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;flex-shrink:0;">
+      🔔
+      <span id="notifDot" style="display:none;position:absolute;top:5px;right:5px;background:var(--red);color:#fff;font-size:9px;font-weight:700;min-width:14px;height:14px;border-radius:7px;padding:0 4px;line-height:14px;text-align:center"></span>
+    </button>
     <div id="leaderBadge" style="display:flex;align-items:center;gap:8px;background:var(--green-bg);padding:5px 10px 5px 5px;border-radius:20px;border:1px solid rgba(42,92,64,.2);cursor:pointer;" onclick="leaderMenu()" title="Click for menu">
       <div id="leaderBadgeAv" style="width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;">?</div>
       <div style="font-size:11.5px;line-height:1.2">
@@ -2583,6 +2587,147 @@ window.showPanel = function(id, btn){
 // If we're here, LEADER is valid and we can load member data.
 // ═══════════════════════════════════════════════════════════════
 loadMembers();
+
+// ═══════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// Per-leader notification feed surfaced in the topbar bell.
+// Used today for discipler reassignment alerts (gained/lost a
+// disciple) but designed to handle any future notification kind.
+// ═══════════════════════════════════════════════════════════════
+let _notifications = [];
+let _notifPanelOpen = false;
+
+async function loadNotifications(){
+  if(!LEADER || !LEADER.leaderId) return;
+  try {
+    const {data, error} = await db.from('notifications')
+      .select('*')
+      .eq('recipient_id', LEADER.leaderId)
+      .is('dismissed_at', null)
+      .order('created_at', {ascending: false})
+      .limit(30);
+    if(error) throw error;
+    _notifications = data || [];
+    paintNotifBell();
+  } catch(e){ console.warn('loadNotifications:', e); }
+}
+
+function paintNotifBell(){
+  const dot = document.getElementById('notifDot');
+  if(!dot) return;
+  const unread = _notifications.filter(n => !n.read_at).length;
+  if(unread > 0){
+    dot.textContent = unread > 9 ? '9+' : String(unread);
+    dot.style.display = 'flex';
+  } else {
+    dot.style.display = 'none';
+  }
+}
+
+function toggleNotifPanel(){
+  _notifPanelOpen = !_notifPanelOpen;
+  let panel = document.getElementById('notifPanel');
+  if(!panel){
+    panel = document.createElement('div');
+    panel.id = 'notifPanel';
+    panel.style.cssText = 'position:fixed;top:60px;right:20px;width:360px;max-height:70vh;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 18px 50px rgba(0,0,0,.18);z-index:9999;font-family:inherit;';
+    document.body.appendChild(panel);
+    // Click outside to close
+    document.addEventListener('click', function(e){
+      if(_notifPanelOpen && !panel.contains(e.target) && e.target.id !== 'notifBell' && !document.getElementById('notifBell').contains(e.target)){
+        _notifPanelOpen = false;
+        panel.style.display = 'none';
+      }
+    });
+  }
+  panel.style.display = _notifPanelOpen ? 'block' : 'none';
+  if(_notifPanelOpen) renderNotifPanel(panel);
+}
+
+function renderNotifPanel(panel){
+  // Mark all as read on open (best-effort)
+  const unreadIds = _notifications.filter(n => !n.read_at).map(n => n.id);
+  if(unreadIds.length){
+    db.from('notifications').update({read_at: new Date().toISOString()})
+      .in('id', unreadIds)
+      .then(() => {
+        _notifications.forEach(n => { if(unreadIds.includes(n.id)) n.read_at = new Date().toISOString(); });
+        paintNotifBell();
+      }, () => {});
+  }
+
+  if(!_notifications.length){
+    panel.innerHTML = `
+      <div style="padding:1.25rem;text-align:center;color:var(--muted);">
+        <div style="font-size:32px;margin-bottom:8px;opacity:.4">🔔</div>
+        <div style="font-size:13px;">No notifications yet.</div>
+      </div>`;
+    return;
+  }
+
+  const KIND_ICON = {
+    'discipler_lost':   '👋',
+    'discipler_gained': '🤝',
+    'pin_reset':        '🔑',
+    'member_promoted':  '⬆️',
+    'pastoral_concern': '⚠️',
+  };
+
+  let html = `<div style="padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--muted)">Notifications</div>
+    <button onclick="dismissAllNotifs()" style="background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit">Clear all</button>
+  </div>`;
+
+  _notifications.forEach(n => {
+    const icon = KIND_ICON[n.kind] || '🔔';
+    const when = new Date(n.created_at).toLocaleString('en-PH', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+    const unreadStyle = n.read_at ? '' : 'background:var(--green-bg);';
+    html += `<div style="padding:.85rem 1rem;border-bottom:1px solid var(--border);${unreadStyle}position:relative">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="font-size:18px;line-height:1.2;flex-shrink:0">${icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:2px">${escapeHTMLNotif(n.title||'')}</div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.45;margin-bottom:4px">${escapeHTMLNotif(n.body||'')}</div>
+          <div style="font-size:10px;color:var(--lighter);letter-spacing:.05em">${when}</div>
+        </div>
+        <button onclick="dismissNotif('${n.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--muted);font-size:14px;cursor:pointer;line-height:1;padding:2px 4px;flex-shrink:0">×</button>
+      </div>
+    </div>`;
+  });
+
+  panel.innerHTML = html;
+}
+
+function escapeHTMLNotif(s){
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function dismissNotif(id){
+  try {
+    await db.from('notifications').update({dismissed_at: new Date().toISOString()}).eq('id', id);
+    _notifications = _notifications.filter(n => n.id !== id);
+    paintNotifBell();
+    const panel = document.getElementById('notifPanel');
+    if(panel && _notifPanelOpen) renderNotifPanel(panel);
+  } catch(e){ console.warn('dismissNotif:', e); }
+}
+
+async function dismissAllNotifs(){
+  if(!_notifications.length) return;
+  if(!confirm('Clear all '+_notifications.length+' notifications?')) return;
+  try {
+    const ids = _notifications.map(n => n.id);
+    await db.from('notifications').update({dismissed_at: new Date().toISOString()}).in('id', ids);
+    _notifications = [];
+    paintNotifBell();
+    const panel = document.getElementById('notifPanel');
+    if(panel && _notifPanelOpen) renderNotifPanel(panel);
+  } catch(e){ console.warn('dismissAllNotifs:', e); }
+}
+
+// Initial load + poll every 60 seconds for fresh notifications.
+loadNotifications();
+setInterval(loadNotifications, 60000);
 </script>
 </body>
 </html>

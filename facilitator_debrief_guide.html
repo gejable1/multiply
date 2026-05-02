@@ -1509,22 +1509,23 @@ body {
     <!-- FINAL NOTES -->
     <div style="background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-bottom:1.5rem">
       <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--light);font-weight:600;margin-bottom:8px">Final Summary Notes — for the Pipeline Record</div>
-      <textarea class="notes-field" style="min-height:120px" placeholder="Summarize the whole meeting in 3–5 sentences: what you observed, what the outcome is, what the specific next steps are, and when the next contact point is scheduled."></textarea>
+      <textarea id="finalSummary" class="notes-field" style="min-height:120px" placeholder="Summarize the whole meeting in 3–5 sentences: what you observed, what the outcome is, what the specific next steps are, and when the next contact point is scheduled."></textarea>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
         <div>
           <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--light);font-weight:600;margin-bottom:4px">Next meeting date</div>
-          <input type="date" style="font-family:'IBM Plex Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;background:var(--bg)">
+          <input type="date" id="nextMeetingDate" style="font-family:'IBM Plex Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;background:var(--bg)">
         </div>
         <div>
           <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--light);font-weight:600;margin-bottom:4px">Assigned discipler</div>
-          <input type="text" placeholder="Name of assigned discipler" style="font-family:'IBM Plex Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;background:var(--bg)">
+          <input type="text" id="assignedDiscipler" placeholder="Name of assigned discipler" style="font-family:'IBM Plex Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:5px;padding:7px 10px;width:100%;background:var(--bg)">
         </div>
       </div>
+      <div id="saveStatus" style="display:none;margin-top:10px;padding:.6rem .85rem;border-radius:6px;font-size:12.5px;line-height:1.5"></div>
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:1rem">
-      <button onclick="window.print()" style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Print / Save as PDF</button>
-      <button onclick="window.location.reload()" style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;background:transparent;color:var(--ink);border:1.5px solid var(--border);border-radius:6px;cursor:pointer">New Debrief</button>
+      <button onclick="window.print()" style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;background:transparent;color:var(--ink);border:1.5px solid var(--border);border-radius:6px;cursor:pointer">📄 Print / Save as PDF</button>
+      <button id="saveDebriefBtn" onclick="saveDebrief()" style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:11px 24px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">💾 Save &amp; Pick Another Member</button>
     </div>
 
   </div><!-- /outcome -->
@@ -1597,22 +1598,35 @@ window.addEventListener('scroll', () => {
 // ─────────────────────────────────────────────────────────────────
 var _memberOpenAnswers = null;   // Loaded from diagnostic_results.open_answers
 var _memberName = '';
+var _memberId = null;
+var _memberDisciplerId = null;
+var _memberDisciplerName = '';
+var _memberDiagZone = null;
+var _memberDiagScore = null;
+
+// Module-scope Supabase client so save flow can use it too
+var SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+var db = supabase.createClient(SB_URL, SB_KEY, {
+  auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
+});
 
 document.addEventListener('DOMContentLoaded', function() {
   var id = new URLSearchParams(window.location.search).get('id');
   if (!id) return;
+  _memberId = id;
   try {
-    var db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
-      auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
-    });
-
     // Load member summary
-    db.from('members').select('id,name,pipeline_level,discipler_name,discipler,diagnostic_score,diagnostic_zone')
+    db.from('members').select('id,name,pipeline_level,discipler_id,discipler_name,discipler,diagnostic_score,diagnostic_zone')
       .eq('id', id).single()
       .then(function(res) {
         if (!res.data) return;
         var d = res.data;
         _memberName = d.name || '';
+        _memberDisciplerId = d.discipler_id || null;
+        _memberDisciplerName = d.discipler_name || d.discipler || '';
+        _memberDiagZone = d.diagnostic_zone || null;
+        _memberDiagScore = d.diagnostic_score || null;
         var LN = ['Pre-Pipeline','Level 1','Level 2','Level 3','Level 4','Level 5'];
         var ZL = {1:'Zone 1 ✅',2:'Zone 2 🟡',3:'Zone 3 🟠',4:'Zone 4 🔴'};
         document.getElementById('memberBanner').style.display = 'flex';
@@ -1620,7 +1634,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var meta = LN[d.pipeline_level||0];
         if (d.diagnostic_score) meta += ' · Score: ' + d.diagnostic_score + '%';
         if (d.diagnostic_zone) meta += ' · ' + (ZL[d.diagnostic_zone]||'');
-        if (d.discipler_name||d.discipler) meta += ' · Discipler: ' + (d.discipler_name||d.discipler);
+        if (_memberDisciplerName) meta += ' · Discipler: ' + _memberDisciplerName;
         document.getElementById('memberBannerMeta').textContent = meta;
         document.title = 'Debrief Guide — ' + d.name;
       });
@@ -2036,6 +2050,199 @@ function renderAIResults(parsed) {
   html += '<div class="ai-disclaimer">AI assistance only. Always use your own pastoral judgment. These questions are starting points — not scripts. The Holy Spirit is the primary guide in this conversation.</div>';
 
   body.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE DEBRIEF
+// ───────────────────────────────────────────────────────────────
+// Persists the Outcome panel data: final summary, next meeting,
+// assigned discipler. If the typed discipler name resolves to a real
+// member row, also updates members.discipler_id (audit-logged) and
+// notifies the outgoing discipler.
+//
+// "Section-by-section" pastoral notes (the ~25 textareas earlier in
+// the page) are intentionally NOT saved — they remain on the printed
+// PDF only. See debrief_setup.sql for the rationale.
+// ═══════════════════════════════════════════════════════════════
+window.saveDebrief = async function() {
+  if (!_memberId) {
+    showSaveStatus('⚠ No member loaded. Open this page from the dashboard with a member selected.', 'err');
+    return;
+  }
+
+  var summary       = (document.getElementById('finalSummary')?.value || '').trim();
+  var nextMeeting   = (document.getElementById('nextMeetingDate')?.value || '').trim();
+  var disciplerText = (document.getElementById('assignedDiscipler')?.value || '').trim();
+
+  // Don't save an empty record. Better to save nothing than save junk.
+  if (!summary && !nextMeeting && !disciplerText) {
+    showSaveStatus('⚠ Nothing to save yet — fill in at least the final summary or next steps.', 'err');
+    return;
+  }
+
+  var btn = document.getElementById('saveDebriefBtn');
+  btn.disabled = true;
+  var origText = btn.textContent;
+  btn.textContent = '⏳ Saving…';
+
+  try {
+    // ── Identify the facilitator ──
+    // The leader session is set by leader_login.html and stored in
+    // sessionStorage. If absent, save anonymously rather than blocking.
+    var facilitatorId = null, facilitatorName = 'Facilitator';
+    try {
+      var raw = sessionStorage.getItem('multiply_leader_session');
+      if (raw) {
+        var sess = JSON.parse(raw);
+        if (sess && sess.expiresAt && Date.parse(sess.expiresAt) > Date.now()) {
+          facilitatorId = sess.leaderId || null;
+          facilitatorName = sess.leaderName || facilitatorName;
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    // ── Resolve typed discipler name → discipler_id (best-effort) ──
+    // Match strategy: exact case-insensitive match on members.name.
+    // If no match, save the raw text and leave assigned_discipler_id NULL.
+    var newDisciplerId = null;
+    var newDisciplerName = disciplerText;
+    if (disciplerText) {
+      try {
+        var {data: matches} = await db.from('members')
+          .select('id,name')
+          .ilike('name', disciplerText)   // exact (no wildcards)
+          .limit(2);
+        if (matches && matches.length === 1) {
+          newDisciplerId = matches[0].id;
+          newDisciplerName = matches[0].name;
+        } else if (matches && matches.length > 1) {
+          // Ambiguous match — fail safe rather than guess.
+          showSaveStatus(
+            '⚠ Multiple members named "' + disciplerText + '" found. Be more specific (e.g., add a last name) so the system knows which one.',
+            'err'
+          );
+          btn.disabled = false;
+          btn.textContent = origText;
+          return;
+        }
+      } catch (e) {
+        console.warn('Discipler resolution failed:', e);
+      }
+    }
+
+    // ── Insert the debrief record ──
+    var {data: debriefRow, error: debriefErr} = await db.from('debrief_records').insert({
+      member_id:               _memberId,
+      facilitator_id:          facilitatorId,
+      facilitator_name:        facilitatorName,
+      final_summary:           summary || null,
+      next_meeting_date:       nextMeeting || null,
+      assigned_discipler_name: newDisciplerName || null,
+      assigned_discipler_id:   newDisciplerId,
+      member_diag_zone:        _memberDiagZone,
+      member_diag_score:       _memberDiagScore,
+    }).select('id').single();
+    if (debriefErr) throw debriefErr;
+    var debriefId = debriefRow?.id || null;
+
+    // ── If the discipler actually changed, write audit log + update member + notify ──
+    var disciplerChanged = false;
+    if (newDisciplerId && newDisciplerId !== _memberDisciplerId) {
+      disciplerChanged = true;
+
+      // Update the member's discipler immediately.
+      var {error: updErr} = await db.from('members').update({
+        discipler_id:   newDisciplerId,
+        discipler_name: newDisciplerName,
+        updated_at:     new Date().toISOString(),
+      }).eq('id', _memberId);
+      if (updErr) throw updErr;
+
+      // Write to audit log (never blocks the save flow).
+      try {
+        await db.from('discipler_change_log').insert({
+          member_id:          _memberId,
+          old_discipler_id:   _memberDisciplerId,
+          old_discipler_name: _memberDisciplerName || null,
+          new_discipler_id:   newDisciplerId,
+          new_discipler_name: newDisciplerName,
+          changed_by_id:      facilitatorId,
+          changed_by_name:    facilitatorName,
+          context:            'debrief',
+          context_ref:        debriefId,
+        });
+      } catch (e) { console.warn('Audit log write failed (non-fatal):', e); }
+
+      // Notify the OUTGOING discipler if there was one.
+      if (_memberDisciplerId) {
+        try {
+          await db.from('notifications').insert({
+            recipient_id: _memberDisciplerId,
+            kind:         'discipler_lost',
+            title:        _memberName + ' was reassigned',
+            body:         _memberName + ' was reassigned to ' + newDisciplerName +
+                          ' on ' + new Date().toLocaleDateString('en-PH', {year:'numeric',month:'short',day:'numeric'}) +
+                          ' by ' + facilitatorName + ' during a debrief session.',
+            payload: {
+              member_id:        _memberId,
+              member_name:      _memberName,
+              new_discipler_id: newDisciplerId,
+              new_discipler_name: newDisciplerName,
+              changed_by:       facilitatorName,
+              context:          'debrief',
+              debrief_id:       debriefId,
+            },
+          });
+        } catch (e) { console.warn('Notification write failed (non-fatal):', e); }
+      }
+
+      // Notify the INCOMING discipler too (no harm, useful context).
+      try {
+        await db.from('notifications').insert({
+          recipient_id: newDisciplerId,
+          kind:         'discipler_gained',
+          title:        _memberName + ' is now in your care',
+          body:         _memberName + ' was assigned to you on ' +
+                        new Date().toLocaleDateString('en-PH', {year:'numeric',month:'short',day:'numeric'}) +
+                        ' by ' + facilitatorName + ' during a debrief.',
+          payload: {
+            member_id:    _memberId,
+            member_name:  _memberName,
+            changed_by:   facilitatorName,
+            context:      'debrief',
+            debrief_id:   debriefId,
+          },
+        });
+      } catch (e) { console.warn('Notification write failed (non-fatal):', e); }
+    }
+
+    // ── Done. Show confirmation, then redirect after a short pause. ──
+    var msg = '✅ Saved to ' + (_memberName || 'this member') + '\'s record.';
+    if (disciplerChanged) msg += ' Discipler updated to ' + newDisciplerName + '.';
+    else if (disciplerText && !newDisciplerId) msg += ' (Discipler name "' + disciplerText + '" not matched to any member — saved as text only.)';
+    showSaveStatus(msg + ' Returning to dashboard…', 'ok');
+
+    setTimeout(function() {
+      // Send back to the dashboard so they can pick another member.
+      window.location.href = 'multiply_dashboard.html';
+    }, 1800);
+
+  } catch (e) {
+    console.error('Save debrief failed:', e);
+    showSaveStatus('❌ Save failed: ' + (e.message || e) + '. Your typed notes are still in the page — try Save again, or print as PDF as a backup.', 'err');
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+};
+
+function showSaveStatus(text, kind) {
+  var el = document.getElementById('saveStatus');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.background = kind === 'ok' ? '#d4edda' : (kind === 'err' ? '#fdecea' : '#fff8e5');
+  el.style.color     = kind === 'ok' ? '#1a5a30' : (kind === 'err' ? '#7a2020' : '#5c4615');
+  el.style.border    = '1px solid ' + (kind === 'ok' ? '#a3d9b1' : (kind === 'err' ? '#f5c6c2' : '#e8d8a0'));
+  el.textContent = text;
 }
 
 function escapeHtml(s) {
