@@ -517,6 +517,29 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div class="sr"><span class="sl">Send assessment links to multiple members at once</span><button class="sbtn" style="margin-top:0;background:var(--green)" onclick="openBulkSend()">📤 Bulk Send Links</button></div>
     <div class="sr"><span class="sl">Approve, reject, or initiate LC group transfers</span><button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="openTransfers()">🔄 Transfer Management</button></div>
   </div>
+  <!-- ─── PROFILE EDIT LINK GREETING (Pastor-configurable) ─── -->
+  <div class="ss" id="greetingSection"><div class="st">📝 Profile Edit Link Greeting</div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
+      The message sent to members when you (or any LC Leader) shares a Profile Edit Link via WhatsApp, SMS, or email.
+      Use these placeholders — they get replaced automatically:
+      <span style="display:inline-block;margin-top:6px">
+        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px">{firstName}</code>
+        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px;margin-left:4px">{url}</code>
+        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px;margin-left:4px">{days}</code>
+        <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);font-size:11px;margin-left:4px">{senderName}</code>
+      </span><br>
+      <span style="color:var(--lighter);font-size:10.5px">💡 Emojis welcome — type or paste them directly (🙏 💚 ❤️ ✨ 📖 etc.)</span>
+    </div>
+    <textarea id="greetingTemplate" rows="9"
+      placeholder="Hi {firstName}! 🙏..."
+      style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:.65rem;flex-wrap:wrap">
+      <button class="sbtn" id="greetingSaveBtn" style="margin-top:0;background:var(--green)" onclick="saveGreetingTemplate()">💾 Save Greeting</button>
+      <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="resetGreetingTemplate()">↺ Reset to Default</button>
+      <button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="previewGreetingTemplate()">👁 Preview</button>
+      <span id="greetingStatus" style="margin-left:auto;font-size:11px;color:var(--muted);align-self:center"></span>
+    </div>
+  </div>
   <div class="ss"><div class="st">Data Management</div>
     <div class="sr"><span class="sl">Export all members to CSV</span><button class="sbtn" style="margin-top:0" onclick="exportCSV()">Export CSV</button></div>
     <div class="sr"><span class="sl">Load 12 demo members</span><button class="sbtn" style="margin-top:0" onclick="loadSample()">Load Sample</button></div>
@@ -2785,6 +2808,141 @@ window.showPanel = function(id, btn){
 const _SELF_EDIT_BASE = 'https://gejable1.github.io/multiply/member_self_edit.html';
 const _TOKEN_VALIDITY_DAYS = 7;
 
+// ── Greeting template (Pastor-configurable via Settings tab) ─────────
+// Default mirrors what the leader tool used to hardcode. Loaded from
+// system_settings.meta.profile_edit_greeting on boot; falls back here.
+// Placeholders: {firstName} {url} {days} {senderName}
+const _DEFAULT_GREETING_TEMPLATE =
+  'Hi {firstName}! 🙏\n\n' +
+  'Para sa ating church records, paki-update lang po ang inyong personal info ' +
+  '(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n' +
+  '{url}\n\n' +
+  'Valid for {days} days. Salamat po! 💚\n— {senderName}';
+
+// In-memory copy of the current template — populated by loadGreetingTemplate()
+let _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
+
+function _buildGreeting(template, vars){
+  // Replace {placeholder} with vars[placeholder]; missing vars become ''
+  return String(template || _DEFAULT_GREETING_TEMPLATE)
+    .replace(/\{firstName\}/g,  vars.firstName  || '')
+    .replace(/\{url\}/g,        vars.url        || '')
+    .replace(/\{days\}/g,       String(vars.days != null ? vars.days : _TOKEN_VALIDITY_DAYS))
+    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader');
+}
+
+async function loadGreetingTemplate(){
+  try{
+    const {data, error} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    const tpl = data?.meta?.profile_edit_greeting;
+    if(typeof tpl === 'string' && tpl.trim()){
+      _greetingTemplate = tpl;
+    } else {
+      _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
+    }
+  } catch(e){
+    console.warn('Greeting template load failed — using default:', e.message);
+    _greetingTemplate = _DEFAULT_GREETING_TEMPLATE;
+  }
+  // Populate the textarea in Settings tab if it's already rendered
+  const ta = document.getElementById('greetingTemplate');
+  if(ta) ta.value = _greetingTemplate;
+}
+
+async function saveGreetingTemplate(){
+  if(!LeaderScope.isPastor()){
+    toast('Only the Pastor can edit the greeting template','🔒');
+    return;
+  }
+  const ta = document.getElementById('greetingTemplate');
+  const status = document.getElementById('greetingStatus');
+  if(!ta) return;
+  const tpl = ta.value;
+  if(!tpl.includes('{url}')){
+    if(!confirm('Your template does not include {url} — members will receive no link. Save anyway?')) return;
+  }
+  const btn = document.getElementById('greetingSaveBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+  try{
+    // Read existing meta first so we don't clobber other meta fields
+    const {data: cur, error: rErr} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(rErr) throw rErr;
+    const newMeta = {...(cur?.meta || {}), profile_edit_greeting: tpl,
+                     greeting_updated_at: new Date().toISOString(),
+                     greeting_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'};
+    const {error: uErr} = await db.from('system_settings')
+      .update({meta: newMeta}).eq('id', 1);
+    if(uErr) throw uErr;
+    _greetingTemplate = tpl;
+    if(status){ status.textContent = '✓ Saved'; status.style.color = 'var(--green)'; }
+    toast('Greeting template saved ✓');
+    setTimeout(()=>{ if(status) status.textContent = ''; }, 3000);
+  } catch(e){
+    console.error('Save greeting error:', e);
+    toast('Could not save: ' + e.message, '❌');
+    if(status){ status.textContent = '✗ Failed'; status.style.color = 'var(--red)'; }
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Save Greeting'; }
+  }
+}
+
+function resetGreetingTemplate(){
+  if(!confirm('Reset to the default Tagalog greeting? You still need to click Save.')) return;
+  const ta = document.getElementById('greetingTemplate');
+  if(ta) ta.value = _DEFAULT_GREETING_TEMPLATE;
+  const status = document.getElementById('greetingStatus');
+  if(status){ status.textContent = 'Reset — click Save to keep'; status.style.color = 'var(--gold)'; }
+}
+
+function previewGreetingTemplate(){
+  const ta = document.getElementById('greetingTemplate');
+  if(!ta) return;
+  const senderName = (LEADER && LEADER.leaderName) || 'Pastor Gerry';
+  const sample = _buildGreeting(ta.value, {
+    firstName: 'Maria',
+    url: 'https://gejable1.github.io/multiply/member_self_edit.html?token=abc123',
+    days: _TOKEN_VALIDITY_DAYS,
+    senderName
+  });
+  // Simple preview overlay
+  document.querySelectorAll('.greeting-preview-modal').forEach(m=>m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'greeting-preview-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit">' +
+      '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:.4rem">👁 Preview — sample message to <em>Maria</em></div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:.85rem">This is what the member will see when you share the link.</div>' +
+      '<div style="background:#dcf8c6;border-radius:10px;padding:12px;font-size:13px;line-height:1.5;color:#1f1d2c;white-space:pre-wrap;font-family:\'DM Sans\',sans-serif;border-bottom-right-radius:2px;margin-bottom:1rem">' +
+        escapeHTMLNotif(sample) +
+      '</div>' +
+      '<button onclick="this.closest(\'.greeting-preview-modal\').remove()" style="width:100%;padding:9px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ Close</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+  modal.onclick = (e)=>{ if(e.target===modal) modal.remove(); };
+}
+
+// Boot the greeting template loader (fire-and-forget)
+loadGreetingTemplate();
+
+// Hide greeting section entirely for non-pastors (defense in depth)
+(function gateGreetingSection(){
+  const tryGate = ()=>{
+    const sec = document.getElementById('greetingSection');
+    if(!sec) return;
+    if(typeof LeaderScope !== 'undefined' && !LeaderScope.isPastor()){
+      sec.style.display = 'none';
+    }
+  };
+  // Run now and again after boot completes (LeaderScope may not be ready yet)
+  tryGate();
+  setTimeout(tryGate, 500);
+  setTimeout(tryGate, 1500);
+})();
+
 function _genSelfEditToken(){
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
@@ -2825,12 +2983,10 @@ async function sendProfileEditLink(memberId){
     const url = await _createSelfEditToken(memberId);
     const firstName = (m.name||'').split(' ')[0] || 'kapatid';
     const senderName = (LEADER && LEADER.leaderName) || 'Your LC Leader';
-    const messageText =
-      `Hi ${firstName}! 🙏\n\n` +
-      `Para sa ating church records, paki-update lang po ang inyong personal info ` +
-      `(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n` +
-      `${url}\n\n` +
-      `Valid for ${_TOKEN_VALIDITY_DAYS} days. Salamat po! 💚\n— ${senderName}`;
+    // Build message from configurable template (loaded by loadGreetingTemplate)
+    const messageText = _buildGreeting(_greetingTemplate, {
+      firstName, url, days: _TOKEN_VALIDITY_DAYS, senderName
+    });
     const phone = _normalizePHPhone(m.contact);
 
     if(phone){
@@ -2843,7 +2999,7 @@ async function sendProfileEditLink(memberId){
     console.error('Self-edit link error:', e);
     toast('Could not create link: ' + e.message, '❌');
   } finally {
-    if(btn){ btn.disabled = false; btn.innerHTML = '📝 Send Profile Edit Link to Member'; }
+    if(btn){ btn.disabled = false; btn.innerHTML = '📝 Profile Edit Link'; }
   }
 }
 
