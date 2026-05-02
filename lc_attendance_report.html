@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LC Attendance Report — MULTIPLY</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+
+<style>
+:root{
+  --bg:#fbf8f1;
+  --paper:#ffffff;
+  --ink:#1f1d2c;
+  --ink-soft:#5a586d;
+  --ink-faint:#8a8896;
+  --line:#e9e3d4;
+  --line-soft:#f0ebde;
+
+  --gold:#b8860b;
+  --gold-deep:#8b6914;
+  --gold-light:#d4af37;
+
+  /* ── SECTION colors (per category, not per card) ── */
+  /* Champions Circle: warm gold/cream */
+  --champ-bg:#fffbe9;
+  --champ-line:#e8c97a;
+  --champ-line-deep:#b8860b;
+  --champ-text:#7a5a10;
+
+  /* Faithfully Gathering: soft sky */
+  --faith-bg:#eef6fc;
+  --faith-line:#9bcced;
+  --faith-line-deep:#0369a1;
+  --faith-text:#075985;
+
+  /* Awaiting: warm peach */
+  --await-bg:#fff4e6;
+  --await-line:#fdba74;
+  --await-line-deep:#c2410c;
+  --await-text:#9a3412;
+
+  --r:14px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'DM Sans',sans-serif;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  background-image:
+    radial-gradient(circle at 10% 0%, rgba(212,175,55,.05), transparent 40%),
+    radial-gradient(circle at 90% 100%, rgba(125,211,252,.04), transparent 40%);
+  min-height:100vh;
+}
+
+.page{max-width:880px;margin:0 auto;padding:32px 28px 64px;}
+
+/* ─────────── LOADING / EMPTY ─────────── */
+.loading-state,.empty-state{
+  text-align:center;padding:80px 20px;color:var(--ink-soft);
+}
+.loading-state .spinner{
+  width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--gold);
+  border-radius:50%;margin:0 auto 16px;animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty-state .empty-icon{font-size:48px;margin-bottom:12px;}
+.empty-state .empty-title{font-family:'Syne',serif;font-size:18px;font-weight:700;margin-bottom:6px;color:var(--ink);}
+.empty-state .empty-msg{font-size:13px;}
+
+/* ─────────── CONTROL BAR (filters) ─────────── */
+.control-bar{
+  background:white;border:1px solid var(--line);border-radius:14px;
+  padding:14px 18px;margin-bottom:20px;
+  display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+  box-shadow:0 1px 3px rgba(60,40,10,.04);
+}
+.cb-group{display:flex;align-items:center;gap:8px;}
+.cb-label{font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+.cb-input,.cb-select{
+  font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;
+  background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:7px 11px;color:var(--ink);outline:none;cursor:pointer;
+  transition:border-color .15s;
+}
+.cb-input:focus,.cb-select:focus{border-color:var(--gold);}
+.cb-spacer{flex:1;}
+
+/* ─────────── HEADER ─────────── */
+.report-header{
+  position:relative;
+  background:linear-gradient(135deg, #fffdf5 0%, #fdf6dd 100%);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:28px 28px 24px;
+  margin-bottom:24px;
+  overflow:hidden;
+  box-shadow:0 1px 3px rgba(60,40,10,.04);
+}
+.report-header::before{
+  content:'';position:absolute;top:-40px;right:-40px;width:200px;height:200px;
+  background:radial-gradient(circle, rgba(212,175,55,.18), transparent 70%);
+  pointer-events:none;
+}
+.rh-eyebrow{
+  font-family:'DM Mono',monospace;
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;font-weight:500;
+}
+.rh-title{
+  font-family:'Syne',serif;font-size:30px;font-weight:800;line-height:1.1;
+  margin-bottom:6px;letter-spacing:-.01em;color:var(--ink);
+}
+.rh-subtitle{font-size:14px;color:var(--ink-soft);margin-bottom:20px;}
+.rh-period{
+  display:inline-flex;align-items:center;gap:8px;
+  background:white;border:1px solid var(--gold-light);
+  padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;
+  color:var(--gold-deep);
+}
+
+.rh-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:22px;}
+.rh-stat{
+  background:white;border:1px solid var(--line);
+  border-radius:12px;padding:12px 14px;
+  box-shadow:0 1px 2px rgba(60,40,10,.03);
+}
+.rh-stat-num{font-family:'Syne',serif;font-size:22px;font-weight:800;line-height:1;color:var(--ink);}
+.rh-stat-label{font-size:10.5px;color:var(--ink-faint);margin-top:5px;
+  letter-spacing:.05em;text-transform:uppercase;font-weight:600;}
+.rh-stat.gold .rh-stat-num{color:var(--gold-deep);}
+.rh-stat.blue .rh-stat-num{color:var(--faith-line-deep);}
+.rh-stat.orange .rh-stat-num{color:var(--await-line-deep);}
+
+/* ─────────── SECTION WRAPPER (the colored band per category) ─────────── */
+.section{
+  border-radius:18px;
+  padding:20px 22px 22px;
+  margin-bottom:24px;
+  box-shadow:0 1px 3px rgba(60,40,10,.04);
+}
+.section.champions{background:var(--champ-bg);border:1px solid var(--champ-line);}
+.section.faithful  {background:var(--faith-bg);border:1px solid var(--faith-line);}
+.section.awaiting  {background:var(--await-bg);border:1px solid var(--await-line);}
+
+.section-head{
+  display:flex;align-items:baseline;gap:12px;margin-bottom:16px;
+  padding-bottom:12px;border-bottom:1px solid rgba(0,0,0,.08);
+}
+.section-icon{font-size:22px;line-height:1;}
+.section-title{font-family:'Syne',serif;font-size:19px;font-weight:700;letter-spacing:-.01em;color:var(--ink);}
+.section-tagline{font-size:12px;color:var(--ink-soft);font-style:italic;margin-left:auto;}
+.section.champions .section-tagline{color:var(--champ-text);}
+.section.faithful  .section-tagline{color:var(--faith-text);}
+.section.awaiting  .section-tagline{color:var(--await-text);}
+
+.section-count{
+  font-family:'DM Mono',monospace;font-size:11px;
+  background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);
+  padding:3px 9px;border-radius:999px;color:var(--ink-soft);font-weight:500;
+}
+
+/* ─────────── CHAMPIONS CARDS ─────────── */
+.champion-card{
+  background:white;
+  border:1px solid var(--champ-line);
+  border-left:4px solid var(--champ-line-deep);
+  border-radius:var(--r);
+  padding:16px 20px;margin-bottom:10px;
+  display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;
+  box-shadow:0 1px 3px rgba(184,134,11,.08);
+}
+.champion-card:last-child{margin-bottom:0;}
+
+.champion-medal{
+  width:50px;height:50px;border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, #fde68a, var(--gold-light) 60%, var(--gold-deep));
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;flex-shrink:0;
+  box-shadow:0 3px 10px rgba(212,175,55,.4), inset 0 1px 2px rgba(255,255,255,.5);
+}
+.champion-name{font-family:'Syne',serif;font-size:17px;font-weight:700;margin-bottom:3px;
+  letter-spacing:-.005em;color:var(--ink);}
+.champion-meta{font-size:12px;color:var(--ink-soft);}
+.champion-meta strong{color:var(--ink);font-weight:600;}
+.champion-stat{text-align:right;}
+.champion-pct{font-family:'Syne',serif;font-size:26px;font-weight:800;line-height:1;color:var(--gold-deep);}
+.champion-count{font-family:'DM Mono',monospace;font-size:12px;color:var(--ink-soft);
+  margin-top:4px;font-weight:500;}
+
+/* ─────────── RUNNERS-UP CARDS ─────────── */
+.runner-row{
+  background:white;
+  border:1px solid var(--faith-line);
+  border-left:4px solid var(--faith-line-deep);
+  border-radius:10px;
+  padding:13px 18px;margin-bottom:8px;
+  display:grid;grid-template-columns:32px 1fr 130px auto;gap:14px;align-items:center;
+  box-shadow:0 1px 3px rgba(3,105,161,.06);
+}
+.runner-row:last-child{margin-bottom:0;}
+
+.runner-rank{
+  font-family:'Syne',serif;font-size:18px;font-weight:800;
+  text-align:center;color:var(--faith-text);opacity:.55;
+}
+.runner-name{font-weight:700;font-size:15px;color:var(--ink);}
+.runner-leader{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+.runner-bar-wrap{display:flex;flex-direction:column;gap:4px;}
+.runner-bar-track{height:7px;background:#e0eaf3;border-radius:999px;overflow:hidden;}
+.runner-bar-fill{height:100%;background:linear-gradient(90deg,var(--faith-line),var(--faith-line-deep));
+  border-radius:999px;}
+.runner-bar-meta{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;
+  font-size:10.5px;color:var(--ink-soft);}
+.runner-pct{
+  font-family:'Syne',serif;font-size:20px;font-weight:700;color:var(--faith-text);
+  text-align:right;min-width:60px;
+}
+
+/* ─────────── AWAITING CARDS ─────────── */
+.awaiting-banner{
+  background:white;
+  border:1px dashed var(--await-line-deep);
+  border-radius:12px;padding:13px 16px;margin-bottom:14px;
+  display:flex;align-items:center;gap:14px;
+}
+.awaiting-icon{font-size:22px;}
+.awaiting-text{flex:1;font-size:13px;line-height:1.5;color:var(--ink);}
+.awaiting-text strong{color:var(--await-line-deep);}
+.awaiting-text em{color:var(--ink-soft);font-style:normal;display:block;margin-top:3px;font-size:12px;}
+
+.awaiting-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.awaiting-card{
+  background:white;
+  border:1px solid var(--await-line);
+  border-left:4px solid var(--await-line-deep);
+  border-radius:10px;padding:13px 16px;
+  display:flex;align-items:center;gap:12px;
+  box-shadow:0 1px 3px rgba(194,65,12,.06);
+}
+
+.awaiting-dot{
+  width:10px;height:10px;border-radius:50%;background:var(--await-line-deep);
+  flex-shrink:0;box-shadow:0 0 0 4px rgba(194,65,12,.18);
+  animation:gentle-pulse 2s ease-in-out infinite;
+}
+@keyframes gentle-pulse{
+  0%,100%{box-shadow:0 0 0 4px rgba(194,65,12,.18);}
+  50%{box-shadow:0 0 0 7px rgba(194,65,12,.05);}
+}
+.awaiting-info{flex:1;min-width:0;}
+.awaiting-name{font-weight:700;font-size:14px;margin-bottom:2px;color:var(--ink);}
+.awaiting-leader{font-size:11px;color:var(--ink-soft);}
+.awaiting-action{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:var(--await-line-deep);font-weight:600;
+  text-transform:uppercase;letter-spacing:.05em;
+}
+
+/* ─────────── CELEBRATION FOOTER ─────────── */
+.celebration{
+  margin-top:32px;
+  background:linear-gradient(135deg, #fffdf5 0%, #fdf6dd 100%);
+  border:1px solid var(--gold-light);
+  border-radius:18px;
+  padding:28px;
+  text-align:center;
+  box-shadow:0 2px 8px rgba(212,175,55,.1);
+}
+.celebration-emoji{font-size:36px;margin-bottom:10px;}
+.celebration-title{font-family:'Syne',serif;font-size:18px;font-weight:700;
+  margin-bottom:6px;color:var(--gold-deep);}
+.celebration-verse{font-size:13px;color:var(--ink-soft);font-style:italic;
+  max-width:480px;margin:0 auto;line-height:1.6;}
+.celebration-verse strong{color:var(--ink);font-style:normal;}
+
+.report-footer{
+  margin-top:24px;padding-top:18px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:'DM Mono',monospace;font-size:10.5px;color:var(--ink-faint);
+  letter-spacing:.05em;
+}
+
+/* ─────────── PRINT TOOLBAR (screen only) ─────────── */
+.print-toolbar{
+  position:fixed;top:16px;right:16px;z-index:100;
+  display:flex;gap:8px;
+}
+.print-btn{
+  background:var(--gold);color:white;border:none;border-radius:10px;
+  padding:10px 16px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;
+  cursor:pointer;box-shadow:0 4px 12px rgba(184,134,11,.3);
+  transition:transform .1s;
+}
+.print-btn:hover{transform:translateY(-1px);}
+.print-btn.secondary{background:white;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);
+  border:1px solid var(--line);}
+
+/* ═══════════ PRINT ═══════════ */
+@media print{
+  @page{size:A4;margin:14mm 12mm;}
+  html,body{background:white !important;background-image:none !important;}
+  .page{max-width:none;padding:0;margin:0;}
+  .print-toolbar,.control-bar{display:none !important;}
+  .champion-card,.runner-row,.awaiting-card,.rh-stat,.report-header,.celebration,.section,.awaiting-banner{
+    box-shadow:none !important;
+  }
+  .champion-card,.runner-row,.awaiting-card{page-break-inside:avoid;}
+  .section{page-break-inside:avoid;}
+  .section-head{page-break-after:avoid;}
+  .celebration{page-break-inside:avoid;}
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── LEADER GATE ─────────────────────────────────────────────
+     Same gating pattern as dashboard: redirect to leader_login.html
+     if no valid session. Pastor (Level 5) gets full view.
+─────────────────────────────────────────────────────────── -->
+<style id="leader-gate-style">
+  body{visibility:hidden;}
+  body.leader-authenticated{visibility:visible;}
+  #leaderGateBlackout{position:fixed;inset:0;background:#fbf8f1;z-index:9999;
+    display:flex;align-items:center;justify-content:center;color:#8a8896;
+    font-family:'DM Sans',sans-serif;font-size:14px;visibility:visible;}
+</style>
+<div id="leaderGateBlackout">Verifying leader session…</div>
+<script>
+(function leaderGateBoot(){
+  if (typeof MultiplyShared === 'undefined') {
+    location.replace('leader_login.html'); return;
+  }
+  if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+  document.body.classList.add('leader-authenticated');
+  document.getElementById('leaderGateBlackout').remove();
+})();
+</script>
+
+<!-- Print toolbar -->
+<div class="print-toolbar">
+  <button class="print-btn secondary" onclick="goBack()">← Back</button>
+  <button class="print-btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+</div>
+
+<div class="page">
+
+  <!-- Loading state -->
+  <div id="loadingState" class="loading-state">
+    <div class="spinner"></div>
+    <div>Loading attendance data…</div>
+  </div>
+
+  <!-- Report content (rendered by JS) -->
+  <div id="reportContent" style="display:none">
+
+    <!-- Filter controls -->
+    <div class="control-bar">
+      <div class="cb-group">
+        <span class="cb-label">📅 Date</span>
+        <input type="date" class="cb-input" id="filterDate">
+      </div>
+      <div class="cb-group">
+        <span class="cb-label">🎯 Event</span>
+        <select class="cb-select" id="filterEventType">
+          <option value="LC Meeting">LC Meeting</option>
+          <option value="Sunday Service">Sunday Service</option>
+          <option value="Prayer Meeting">Prayer Meeting</option>
+          <option value="Team Building">Team Building</option>
+          <option value="Outing">Outing</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="cb-spacer"></div>
+      <button class="print-btn" style="padding:7px 14px;font-size:12px" onclick="loadReport()">↻ Refresh</button>
+    </div>
+
+    <!-- Header (rendered by renderReport) -->
+    <div id="headerSlot"></div>
+
+    <!-- Sections (rendered by renderReport) -->
+    <div id="sectionsSlot"></div>
+
+    <!-- Celebration footer -->
+    <div class="celebration">
+      <div class="celebration-emoji">🎉 🙌 ✨</div>
+      <div class="celebration-title">Salamat sa Panginoon for every gathered soul!</div>
+      <div class="celebration-verse">
+        <strong>"And let us consider how to stir up one another to love and good works,
+        not neglecting to meet together..."</strong><br>
+        — Hebrews 10:24–25
+      </div>
+    </div>
+
+    <div class="report-footer">
+      <div id="footerGenerated">Generated · —</div>
+      <div>MULTIPLY · Rosehill Christian Church</div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// LC ATTENDANCE COMPLIANCE REPORT
+// ═══════════════════════════════════════════════════════════════
+const db = MultiplyShared.getDB();
+
+// ── Default to last Sunday for LC Meeting (most common case) ──
+function lastSunday(){
+  const d = new Date();
+  const day = d.getDay();           // 0 = Sunday
+  d.setDate(d.getDate() - day);     // back to Sunday (today if today is Sunday)
+  return d.toISOString().split('T')[0];
+}
+
+// ── Strip honorifics + take first given name ──
+const HONORIFICS = ['ate','kuya','ptr','ptr.','pastor','sis','sis.','bro','bro.','rev','rev.','dr','dr.','mr','mr.','mrs','mrs.','ms','ms.'];
+function firstName(fullName){
+  if(!fullName) return 'Leader';
+  const parts = fullName.trim().split(/\s+/);
+  // skip honorifics at the start
+  let i = 0;
+  while(i < parts.length - 1 && HONORIFICS.includes(parts[i].toLowerCase())) i++;
+  return parts[i] || 'Leader';
+}
+
+// ── Display name for an LC group, with fallback ──
+function lcDisplayName(lcGroup, leaderName){
+  const trimmed = (lcGroup||'').trim();
+  if(trimmed) return trimmed;
+  return firstName(leaderName) + ' LC';
+}
+
+// ── Format time for "logged at HH:MM AM/PM" ──
+function fmtTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-PH', {hour:'numeric', minute:'2-digit'});
+}
+
+// ── Format date for header "Sunday, April 26, 2026" ──
+function fmtDate(yyyymmdd){
+  if(!yyyymmdd) return '';
+  // Parse as local date to avoid TZ drift
+  const [y,m,d] = yyyymmdd.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  return dt.toLocaleDateString('en-PH', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+}
+
+// ── Init ──
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('filterDate').value = lastSunday();
+  document.getElementById('filterDate').addEventListener('change', loadReport);
+  document.getElementById('filterEventType').addEventListener('change', loadReport);
+  loadReport();
+});
+
+function goBack(){
+  if(document.referrer && document.referrer.includes(location.host)){
+    history.back();
+  } else {
+    location.href = 'multiply_dashboard.html';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN: load + group + render
+// ═══════════════════════════════════════════════════════════════
+async function loadReport(){
+  document.getElementById('loadingState').style.display = 'block';
+  document.getElementById('reportContent').style.display = 'none';
+
+  const date = document.getElementById('filterDate').value || lastSunday();
+  const eventType = document.getElementById('filterEventType').value || 'LC Meeting';
+
+  try{
+    // ── 1. Pull all members (we need every LC group, even those who didn't log) ──
+    const {data:allMembers, error:mErr} = await db.from('members')
+      .select('id,name,lc_group,pipeline_level');
+    if(mErr) throw mErr;
+
+    // ── 2. Pull attendance rows for the selected date + event ──
+    const {data:attRows, error:aErr} = await db.from('attendance')
+      .select('member_id,member_name,present,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,updated_at')
+      .eq('event_date', date)
+      .eq('event_type', eventType);
+    if(aErr) throw aErr;
+
+    // ── 3. Build the group-by-LC structure ──
+    const report = buildGroups(allMembers||[], attRows||[]);
+
+    // ── 4. Render ──
+    renderReport(report, date, eventType);
+
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('reportContent').style.display = 'block';
+
+  } catch(e){
+    console.error('Report load error:', e);
+    document.getElementById('loadingState').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">⚠️</div>'+
+      '<div class="empty-title">Could not load report</div>'+
+      '<div class="empty-msg">'+(e.message||'Unknown error')+'</div></div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group members by LC + classify into 3 tiers
+// ═══════════════════════════════════════════════════════════════
+function buildGroups(allMembers, attRows){
+  // Determine each LC group's leader: highest-level member in that LC group
+  // (pastor=5, director=4, coach=3, leader=2). Ties broken alphabetically.
+  const lcMap = {};   // key = lc_group string (or '__unassigned__')
+  allMembers.forEach(m => {
+    const key = (m.lc_group||'').trim() || null;
+    if(!key) return;  // unassigned members are not part of any LC group
+    if(!lcMap[key]) lcMap[key] = {members:[], leader:null};
+    lcMap[key].members.push(m);
+    const lvl = m.pipeline_level || 0;
+    if(lvl >= 2){
+      const cur = lcMap[key].leader;
+      if(!cur || lvl > (cur.pipeline_level||0) ||
+         (lvl === (cur.pipeline_level||0) && (m.name||'') < (cur.name||''))){
+        lcMap[key].leader = m;
+      }
+    }
+  });
+
+  // Map attendance rows by LC group (use event_lc_group as the source of truth
+  // for which group the LOG is associated with — this is what the leader saved)
+  const attByLc = {};
+  attRows.forEach(r => {
+    const key = (r.event_lc_group||r.member_lc_group||'').trim();
+    if(!key) return;
+    if(!attByLc[key]) attByLc[key] = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null, loggedById:null};
+    if(r.present) attByLc[key].present++;
+    else attByLc[key].absent++;
+    attByLc[key].total++;
+    if(!attByLc[key].loggedBy && r.logged_by){
+      attByLc[key].loggedBy = r.logged_by;
+      attByLc[key].loggedById = r.logged_by_id;
+      attByLc[key].loggedAt = r.created_at || r.updated_at;
+    }
+  });
+
+  // Now classify each LC group
+  const champions = [];
+  const runners = [];
+  const awaiting = [];
+
+  Object.entries(lcMap).forEach(([lcKey, info]) => {
+    const att = attByLc[lcKey];
+    const memberCount = info.members.length;
+    const leaderName = info.leader?.name || att?.loggedBy || '—';
+    const displayName = lcDisplayName(lcKey, leaderName);
+
+    if(!att || att.total === 0){
+      // No attendance log submitted at all
+      awaiting.push({
+        displayName, leaderName,
+        memberCount,
+        lcKey
+      });
+    } else {
+      const denominator = Math.max(att.total, memberCount); // be safe if extras logged
+      const pct = Math.round((att.present / denominator) * 100);
+      const card = {
+        displayName, leaderName,
+        present: att.present,
+        total: denominator,
+        pct,
+        loggedBy: att.loggedBy,
+        loggedAt: att.loggedAt,
+        lcKey
+      };
+      if(pct === 100) champions.push(card);
+      else runners.push(card);
+    }
+  });
+
+  // Sort
+  champions.sort((a,b) => b.total - a.total);  // bigger groups first when 100%
+  runners.sort((a,b) => b.pct - a.pct);
+  awaiting.sort((a,b) => a.displayName.localeCompare(b.displayName));
+
+  // Totals for header
+  const totalLcGroups = Object.keys(lcMap).length;
+  const totalMembersInLcs = Object.values(lcMap).reduce((s,info)=>s+info.members.length, 0);
+  const totalPresent = Object.values(attByLc).reduce((s,a)=>s+a.present, 0);
+
+  return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderReport(report, date, eventType){
+  const {champions, runners, awaiting, totalMembersInLcs, totalPresent} = report;
+
+  // ── Header ──
+  document.getElementById('headerSlot').innerHTML = `
+    <div class="report-header">
+      <div class="rh-eyebrow">Rosehill Christian Church · MULTIPLY</div>
+      <h1 class="rh-title">LC Attendance Compliance Report</h1>
+      <div class="rh-subtitle">A snapshot of how our Life Communities are gathering — and where we can lift each other up.</div>
+      <div class="rh-period">📅 ${escapeHtml(fmtDate(date))} · ${escapeHtml(eventType)}</div>
+
+      <div class="rh-stats">
+        <div class="rh-stat gold">
+          <div class="rh-stat-num">${champions.length}</div>
+          <div class="rh-stat-label">100% Groups</div>
+        </div>
+        <div class="rh-stat blue">
+          <div class="rh-stat-num">${runners.length}</div>
+          <div class="rh-stat-label">Partial</div>
+        </div>
+        <div class="rh-stat orange">
+          <div class="rh-stat-num">${awaiting.length}</div>
+          <div class="rh-stat-label">Awaiting</div>
+        </div>
+        <div class="rh-stat">
+          <div class="rh-stat-num">${totalPresent}<span style="font-size:14px;color:var(--ink-faint)">/${totalMembersInLcs}</span></div>
+          <div class="rh-stat-label">Total Present</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ── Sections ──
+  const slot = document.getElementById('sectionsSlot');
+  slot.innerHTML = '';
+
+  // 1. Champions
+  if(champions.length){
+    slot.innerHTML += `
+      <div class="section champions">
+        <div class="section-head">
+          <span class="section-icon">🏆</span>
+          <span class="section-title">Champions Circle</span>
+          <span class="section-tagline">Every member present — every name accounted for</span>
+          <span class="section-count">${champions.length} group${champions.length===1?'':'s'}</span>
+        </div>
+        ${champions.map(c => `
+          <div class="champion-card">
+            <div class="champion-medal">🥇</div>
+            <div>
+              <div class="champion-name">${escapeHtml(c.displayName)}</div>
+              <div class="champion-meta">Led by <strong>${escapeHtml(c.leaderName)}</strong>${c.loggedAt?` · Logged ${escapeHtml(fmtTime(c.loggedAt))}`:''}</div>
+            </div>
+            <div class="champion-stat">
+              <div class="champion-pct">100%</div>
+              <div class="champion-count">${c.present} / ${c.total}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // 2. Runners
+  if(runners.length){
+    slot.innerHTML += `
+      <div class="section faithful">
+        <div class="section-head">
+          <span class="section-icon">🥈</span>
+          <span class="section-title">Faithfully Gathering</span>
+          <span class="section-tagline">Logged in — let's keep climbing together</span>
+          <span class="section-count">${runners.length} group${runners.length===1?'':'s'}</span>
+        </div>
+        ${runners.map((r, i) => `
+          <div class="runner-row">
+            <div class="runner-rank">#${i+1}</div>
+            <div>
+              <div class="runner-name">${escapeHtml(r.displayName)}</div>
+              <div class="runner-leader">Led by ${escapeHtml(r.leaderName)}</div>
+            </div>
+            <div class="runner-bar-wrap">
+              <div class="runner-bar-track"><div class="runner-bar-fill" style="width:${r.pct}%"></div></div>
+              <div class="runner-bar-meta"><span>${r.present} of ${r.total}</span><span>${r.total - r.present} absent</span></div>
+            </div>
+            <div class="runner-pct">${r.pct}%</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // 3. Awaiting
+  if(awaiting.length){
+    slot.innerHTML += `
+      <div class="section awaiting">
+        <div class="section-head">
+          <span class="section-icon">🔔</span>
+          <span class="section-title">Awaiting Your Heartbeat</span>
+          <span class="section-tagline">No log received yet — kumusta po kayo?</span>
+          <span class="section-count">${awaiting.length} group${awaiting.length===1?'':'s'}</span>
+        </div>
+        <div class="awaiting-banner">
+          <div class="awaiting-icon">💛</div>
+          <div class="awaiting-text">
+            <strong>A gentle nudge, not a knock.</strong>
+            <em>These groups may have met but not yet logged. A quick message of support and a reminder to submit will keep our shepherd's view complete.</em>
+          </div>
+        </div>
+        <div class="awaiting-grid">
+          ${awaiting.map(a => `
+            <div class="awaiting-card">
+              <div class="awaiting-dot"></div>
+              <div class="awaiting-info">
+                <div class="awaiting-name">${escapeHtml(a.displayName)}</div>
+                <div class="awaiting-leader">Led by ${escapeHtml(a.leaderName)} · ${a.memberCount} member${a.memberCount===1?'':'s'}</div>
+              </div>
+              <div class="awaiting-action">No log</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Empty state if nothing at all ──
+  if(!champions.length && !runners.length && !awaiting.length){
+    slot.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🌱</div>
+        <div class="empty-title">No LC groups configured yet</div>
+        <div class="empty-msg">Once members are assigned to LC groups, this report will come alive.</div>
+      </div>
+    `;
+  }
+
+  // ── Footer ──
+  const now = new Date();
+  document.getElementById('footerGenerated').textContent =
+    'Generated · ' + now.toLocaleDateString('en-PH', {month:'long', day:'numeric', year:'numeric'}) +
+    ' · ' + now.toLocaleTimeString('en-PH', {hour:'numeric', minute:'2-digit'});
+}
+
+// ── escape helper ──
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, ch =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
+}
+</script>
+
+</body>
+</html>
