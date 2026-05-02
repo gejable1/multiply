@@ -536,6 +536,17 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <div class="fi"><label>Contact</label><input id="fco" placeholder="+63..."></div>
       <div class="fi full" style="grid-column:1/-1"><label>Address</label><textarea id="faddr" placeholder="House #, street, barangay, city, province" rows="2" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:100%;resize:vertical;font-family:inherit"></textarea></div>
 
+      <!-- SELF-EDIT LINK -->
+      <div class="fi full" style="grid-column:1/-1">
+        <button type="button" id="sendSelfEditBtn" onclick="if(eid){sendProfileEditLink(eid);}else{toast('Save member first','⚠️');}"
+          style="width:100%;padding:10px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+          📝 Send Profile Edit Link to Member
+        </button>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:5px;line-height:1.5;text-align:center">
+          Lets the member update their own info (birthday, contact, address, family) without your help. Link is valid for 7 days.
+        </div>
+      </div>
+
       <!-- MINISTRY SLOTS -->
       <div class="fi full" style="grid-column:1/-1">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -1310,6 +1321,7 @@ function openAdd(){
   document.getElementById('mti').textContent='Add New Member';document.getElementById('mme').textContent='';
   document.getElementById('delbtn').style.display='none';
   const rpb=document.getElementById('resetPinBtn'); if(rpb) rpb.style.display='none';
+  const sse=document.getElementById('sendSelfEditBtn'); if(sse) sse.parentElement.style.display='none';
   showMT('info',document.querySelector('.mtb'));
   rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
@@ -1342,6 +1354,9 @@ function openEdit(id){
     const showResetPin = LeaderScope.isPastor() && (m.level||0) >= 2;
     rpb.style.display = showResetPin ? 'block' : 'none';
   }
+  // Self-edit link button — visible whenever a saved member is open
+  const sse = document.getElementById('sendSelfEditBtn');
+  if(sse) sse.parentElement.style.display = '';
   showMT('info',document.querySelector('.mtb'));
   buildMinistrySelect();populateDisciplerSelect(m.discipler_name||m.discipler||'');
   rPCL(m);rET(m);rNT(m);rDiagTab(m);
@@ -2580,6 +2595,140 @@ window.showPanel = function(id, btn){
     if(sq){ sq.value = ''; window._sqUserTyped = false; }
   }
 };
+
+// ═══════════════════════════════════════════════════════════════
+// SEND PROFILE SELF-EDIT LINK
+// ───────────────────────────────────────────────────────────────
+// Mirror of the leader-tool flow: generate a single-use token,
+// build a Tagalog/English message, and either deep-link to WhatsApp
+// (if a phone number is on file) or open a share-method picker.
+//
+// The token + member_id pair lives in the existing profile_tokens
+// table — same schema the leader tool already uses, so links from
+// either surface are interchangeable for the member.
+// ═══════════════════════════════════════════════════════════════
+const _SELF_EDIT_BASE = 'https://gejable1.github.io/multiply/member_self_edit.html';
+const _TOKEN_VALIDITY_DAYS = 7;
+
+function _genSelfEditToken(){
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function _normalizePHPhone(raw){
+  if(!raw) return '';
+  let p = String(raw).replace(/\D/g, ''); // strip non-digits
+  if(!p) return '';
+  if(p.startsWith('63') && p.length === 12) return p;
+  if(p.startsWith('09') && p.length === 11) return '63' + p.substring(1);
+  if(p.startsWith('9')  && p.length === 10) return '63' + p;
+  if(p.length >= 10 && p.length <= 15) return p;
+  return '';
+}
+
+async function _createSelfEditToken(memberId){
+  if(!memberId) throw new Error('Member ID required');
+  const token = _genSelfEditToken();
+  const expiresAt = new Date(Date.now() + _TOKEN_VALIDITY_DAYS * 86400000).toISOString();
+  const {error} = await db.from('profile_tokens').insert({
+    token, member_id: memberId, expires_at: expiresAt
+  });
+  if(error) throw new Error(error.message);
+  return _SELF_EDIT_BASE + '?token=' + token;
+}
+
+async function sendProfileEditLink(memberId){
+  if(!memberId){ toast('Member not found','⚠️'); return; }
+  const m = members.find(x => x.id === memberId);
+  if(!m){ toast('Member not in current view','⚠️'); return; }
+
+  const btn = document.getElementById('sendSelfEditBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Generating link…'; }
+
+  try{
+    const url = await _createSelfEditToken(memberId);
+    const firstName = (m.name||'').split(' ')[0] || 'kapatid';
+    const senderName = (LEADER && LEADER.leaderName) || 'Your LC Leader';
+    const messageText =
+      `Hi ${firstName}! 🙏\n\n` +
+      `Para sa ating church records, paki-update lang po ang inyong personal info ` +
+      `(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n` +
+      `${url}\n\n` +
+      `Valid for ${_TOKEN_VALIDITY_DAYS} days. Salamat po! 💚\n— ${senderName}`;
+    const phone = _normalizePHPhone(m.contact);
+
+    if(phone){
+      window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(messageText), '_blank');
+      toast('📝 Edit link ready for ' + firstName + ' — tap Send in WhatsApp');
+    } else {
+      _showSelfEditShareModal(firstName, url, messageText);
+    }
+  } catch(e){
+    console.error('Self-edit link error:', e);
+    toast('Could not create link: ' + e.message, '❌');
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = '📝 Send Profile Edit Link to Member'; }
+  }
+}
+
+function _showSelfEditShareModal(firstName, url, messageText){
+  document.querySelectorAll('.share-link-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'share-link-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit">
+      <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:.4rem">📤 Share Profile Edit Link</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
+        No phone on file for <strong>${escapeHTMLNotif(firstName)}</strong>. Choose how to send:
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
+        <button onclick="_shareSelfEditVia('copy', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">📋 Copy link to clipboard</button>
+        <button onclick="_shareSelfEditVia('copyMsg', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">📝 Copy full message (with greeting)</button>
+        <button onclick="_shareSelfEditVia('sms', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">💬 Send via SMS app</button>
+        <button onclick="_shareSelfEditVia('email', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">✉️ Send via email app</button>
+        <button onclick="_shareSelfEditVia('whatsapp', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">🟢 Open WhatsApp & pick contact</button>
+        ${navigator.share ? `<button onclick="_shareSelfEditVia('native', this)" style="padding:11px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">📲 Share to any app (Messenger, Viber, etc.)</button>` : ''}
+      </div>
+      <div style="background:var(--surface2);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);word-break:break-all;margin-bottom:.75rem;font-family:monospace">${escapeHTMLNotif(url)}</div>
+      <button onclick="this.closest('.share-link-modal').remove()" style="width:100%;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ Close</button>
+    </div>`;
+  window._shareLinkData = {url, messageText, firstName};
+  document.body.appendChild(modal);
+  modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
+}
+
+async function _shareSelfEditVia(method, btn){
+  const data = window._shareLinkData;
+  if(!data) return;
+  const {url, messageText} = data;
+  try{
+    if(method === 'copy'){
+      await navigator.clipboard.writeText(url);
+      toast('🔗 Link copied — paste it anywhere');
+    } else if(method === 'copyMsg'){
+      await navigator.clipboard.writeText(messageText);
+      toast('📝 Full message copied — paste it anywhere');
+    } else if(method === 'sms'){
+      window.location.href = 'sms:?body=' + encodeURIComponent(messageText);
+    } else if(method === 'email'){
+      const subject = encodeURIComponent('Update your profile — Rosehill Christian Church');
+      window.location.href = 'mailto:?subject=' + subject + '&body=' + encodeURIComponent(messageText);
+    } else if(method === 'whatsapp'){
+      window.open('https://wa.me/?text=' + encodeURIComponent(messageText), '_blank');
+    } else if(method === 'native' && navigator.share){
+      await navigator.share({title:'Update your profile', text: messageText});
+      toast('✓ Shared');
+    }
+    btn.closest('.share-link-modal')?.remove();
+  } catch(e){
+    if(e.name !== 'AbortError'){
+      console.error('Share error:', e);
+      toast('Could not share: ' + e.message, '❌');
+    }
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // BOOT
