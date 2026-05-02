@@ -1402,12 +1402,32 @@ function fillF(m){
   // Discipler select - value set by populateDisciplerSelect called in openEdit
   document.getElementById('fd_id').value=m.discipler_id||'';
   document.getElementById('fl').value=m.level||0;
-  // 3 ministry slots
-  document.getElementById('fmi').value=m.ministry||'';
+  // ── 3 ministry slots ──
+  // Critical: the ministry <select> elements must contain matching <option>s
+  // BEFORE we set their .value, otherwise the assignment is silently dropped
+  // and a subsequent Save will write null over the existing ministry data.
+  // We call buildMinistrySelect() here defensively so this function is safe
+  // to invoke from any context, regardless of caller order.
+  if(typeof buildMinistrySelect === 'function') buildMinistrySelect();
+  // Defensive helper: if the saved value isn't in the current MINISTRIES
+  // list (e.g. a ministry was renamed or removed), inject a fallback option
+  // so the select can still hold the value. Otherwise the .value assignment
+  // would silently fail and a subsequent Save would null out the ministry.
+  const _setMinistry = (selId, val) => {
+    const sel = document.getElementById(selId);
+    if(!sel) return;
+    if(val && !Array.from(sel.options).some(o => o.value === val)){
+      const o = document.createElement('option');
+      o.value = val; o.textContent = val + ' (legacy)';
+      sel.appendChild(o);
+    }
+    sel.value = val || '';
+  };
+  _setMinistry('fmi',  m.ministry);
   document.getElementById('fmr').value=m.ministry_role||'';
-  document.getElementById('fmi2').value=m.ministry2||'';
+  _setMinistry('fmi2', m.ministry2);
   document.getElementById('fmr2').value=m.ministry2_role||'';
-  document.getElementById('fmi3').value=m.ministry3||'';
+  _setMinistry('fmi3', m.ministry3);
   document.getElementById('fmr3').value=m.ministry3_role||'';
   document.getElementById('fgi').value=m.gifts||'';
   document.getElementById('fco').value=m.contact||'';
