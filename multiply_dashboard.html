@@ -540,6 +540,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <button class="mtb" onclick="showMT('eolo',this)">EOLO</button>
     <button class="mtb" onclick="showMT('gifts',this)">Gifts</button>
     <button class="mtb" onclick="showMT('notes',this)">Notes</button>
+    <button class="mtb" onclick="showMT('disciples',this)">🌳 Disciples</button>
   </div>
   <div class="mb">
     <!-- INFO TAB -->
@@ -562,34 +563,6 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <div class="fi full"><label>Spiritual Gifts (top 2)</label><input id="fgi" placeholder="e.g. Teaching, Shepherding"></div>
       <div class="fi"><label>Contact</label><input id="fco" placeholder="+63..."></div>
       <div class="fi full" style="grid-column:1/-1"><label>Address</label><textarea id="faddr" placeholder="House #, street, barangay, city, province" rows="2" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;width:100%;resize:vertical;font-family:inherit"></textarea></div>
-
-      <!-- SELF-EDIT LINK -->
-      <div class="fi full" style="grid-column:1/-1">
-        <button type="button" id="sendSelfEditBtn" onclick="if(eid){sendProfileEditLink(eid);}else{toast('Save member first','⚠️');}"
-          style="width:100%;padding:10px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-          📝 Send Profile Edit Link to Member
-        </button>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:5px;line-height:1.5;text-align:center">
-          Lets the member update their own info (birthday, contact, address, family) without your help. Link is valid for 7 days.
-        </div>
-      </div>
-
-      <!-- DISCIPLES PANEL — auto-shown if this member has any direct disciples -->
-      <div class="fi full" id="disciplesPanel" style="grid-column:1/-1;display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <label style="margin:0">🌳 People <span id="dpMemberFirst">they</span> Disciple <span id="dpCountBadge" style="background:var(--green-bg);color:var(--green);font-size:10px;padding:1px 8px;border-radius:10px;font-weight:700;margin-left:4px"></span></label>
-          <div style="display:flex;gap:4px;background:var(--surface2);border-radius:6px;padding:2px">
-            <button type="button" id="dpScopeDirect" onclick="setDisciplesScope('direct')"
-              style="font-family:inherit;font-size:11px;font-weight:600;padding:5px 11px;background:var(--green);color:#fff;border:none;border-radius:5px;cursor:pointer">Direct</button>
-            <button type="button" id="dpScopeTree" onclick="setDisciplesScope('tree')"
-              style="font-family:inherit;font-size:11px;font-weight:600;padding:5px 11px;background:transparent;color:var(--muted);border:none;border-radius:5px;cursor:pointer">Whole Tree</button>
-          </div>
-        </div>
-        <div id="disciplesList" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px;max-height:280px;overflow-y:auto"></div>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:5px;line-height:1.5">
-          Tap any name to open their profile. Direct = people they personally disciple. Whole Tree = also includes everyone discipled by their disciples, recursively.
-        </div>
-      </div>
 
       <!-- MINISTRY SLOTS -->
       <div class="fi full" style="grid-column:1/-1">
@@ -651,9 +624,28 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <div class="fi full"><label>Add Note</label><textarea id="nn" placeholder="Pastoral observation, prayer item..." rows="3"></textarea></div>
       <button class="bsv" style="margin-top:6px;font-size:12px;padding:7px 16px" onclick="addNote()">Add Note</button>
     </div>
+    <!-- DISCIPLES TAB — moved out of Info tab for better organization -->
+    <div id="mt-disciples" style="display:none">
+      <div id="disciplesPanel" style="display:block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <label style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">🌳 People <span id="dpMemberFirst">they</span> Disciple <span id="dpCountBadge" style="background:var(--green-bg);color:var(--green);font-size:10px;padding:1px 8px;border-radius:10px;font-weight:700;margin-left:4px"></span></label>
+          <div style="display:flex;gap:4px;background:var(--surface2);border-radius:6px;padding:2px">
+            <button type="button" id="dpScopeDirect" onclick="setDisciplesScope('direct')"
+              style="font-family:inherit;font-size:11px;font-weight:600;padding:5px 11px;background:var(--green);color:#fff;border:none;border-radius:5px;cursor:pointer">Direct</button>
+            <button type="button" id="dpScopeTree" onclick="setDisciplesScope('tree')"
+              style="font-family:inherit;font-size:11px;font-weight:600;padding:5px 11px;background:transparent;color:var(--muted);border:none;border-radius:5px;cursor:pointer">Whole Tree</button>
+          </div>
+        </div>
+        <div id="disciplesList" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px;max-height:420px;overflow-y:auto"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+          Tap any name to open their profile. <strong>Direct</strong> = people they personally disciple. <strong>Whole Tree</strong> = also includes everyone discipled by their disciples, recursively.
+        </div>
+      </div>
+    </div>
   </div>
   <div class="mf">
     <button class="bdl" id="delbtn" onclick="doDelete()" style="display:none">Delete</button>
+    <button class="bdl" id="sendSelfEditBtn" onclick="if(eid){sendProfileEditLink(eid);}else{toast('Save member first','⚠️');}" style="display:none;background:var(--green-bg);border-color:rgba(42,92,64,.3);color:var(--green)" title="Lets the member update their own info (birthday, contact, address, family). Link valid for 7 days.">📝 Profile Edit Link</button>
     <button class="bdl" id="resetPinBtn" onclick="doResetPin()" style="display:none;background:var(--gold-bg);border-color:rgba(184,136,42,.3);color:var(--gold)">🔑 Reset PIN</button>
     <button class="bcn" onclick="closeMD()">Cancel</button>
     <button class="bsv" onclick="saveMember()">Save Member</button>
@@ -1069,9 +1061,14 @@ function rPipe(){
 // INTERVENTIONS PANEL
 // ═══════════════════════════════════════
 function rInterventions(){
-  const z4=members.filter(m=>m.diagnostic_zone==4);
-  const z2=members.filter(m=>m.diagnostic_zone==2);
-  const z3=members.filter(m=>m.diagnostic_zone==3);
+  // ── Apply leader-scope so LC Leaders only see members in their network.
+  //    Diagnostic zones are sensitive pastoral data — same scope rules
+  //    used by renderTable() and the member modal must apply here too.
+  //    Pastor (Level 5) sees all via LeaderScope.apply when scope = 'all'.
+  const scoped = LeaderScope.apply(members);
+  const z4=scoped.filter(m=>m.diagnostic_zone==4);
+  const z2=scoped.filter(m=>m.diagnostic_zone==2);
+  const z3=scoped.filter(m=>m.diagnostic_zone==3);
   const total=z4.length+z2.length+z3.length;
 
   document.getElementById('int-kpis').innerHTML=[
@@ -1082,7 +1079,21 @@ function rInterventions(){
   ].map(k=>`<div class="kc ${k.c}"><div class="kn">${k.v}</div><div class="kl">${k.l}</div></div>`).join('');
 
   function intCards(list,trackColor,trackIcon,trackName,trackUrl){
-    if(!list.length)return`<div class="empty" style="padding:1.5rem"><div class="ei" style="font-size:1.5rem">✅</div><div class="et" style="font-size:12px">No members in this track</div></div>`;
+    if(!list.length){
+      // Scope-aware empty message: an LC Leader seeing zero in their own
+      // network shouldn't be told "no one in this track" (which sounds
+      // church-wide) — clarify the view scope to prevent misreading.
+      const scopeMsgs = {
+        disciples: 'No one you directly disciple is in this track right now 🙏',
+        tree:      'No one in your discipleship tree is in this track right now 🙏',
+        ministry:  'No one in your ministry is in this track right now 🙏',
+        all:       'No members in this track',
+      };
+      const msg = LeaderScope.isPastor() && LeaderScope.getCurrent()==='all'
+        ? scopeMsgs.all
+        : (scopeMsgs[LeaderScope.getCurrent()] || scopeMsgs.all);
+      return `<div class="empty" style="padding:1.5rem"><div class="ei" style="font-size:1.5rem">✅</div><div class="et" style="font-size:12px">${msg}</div></div>`;
+    }
     return list.map(m=>`<div class="int-card">
       <div class="ic-track" style="background:${trackColor}20">${trackIcon}</div>
       <div class="ic-info">
@@ -1412,22 +1423,39 @@ function renderDisciplesPanel(){
   const panel = document.getElementById('disciplesPanel');
   if(!panel || !eid) return;
   const me = members.find(m => m.id === eid);
-  if(!me){ panel.style.display = 'none'; return; }
+  if(!me){ return; }
 
   const direct = _disciplesDirect(eid);
-  // Hide entirely when member has zero disciples (per spec).
+  const tree   = _disciplesTree(eid);
+
+  // Update the tab badge so the Disciples tab shows count without needing
+  // to be clicked — handy when scanning multiple members.
+  const tabBtn = Array.from(document.querySelectorAll('.mtb'))
+    .find(b => /Disciples/.test(b.textContent));
+  if(tabBtn){
+    const count = direct.length;
+    tabBtn.innerHTML = '🌳 Disciples' + (count > 0
+      ? ` <span style="background:var(--green-bg);color:var(--green);font-size:9px;padding:1px 7px;border-radius:8px;font-weight:700;margin-left:3px">${count}</span>`
+      : '');
+  }
+
+  // Show empty state if no disciples (instead of hiding the panel — the tab
+  // is now always visible so the user sees we explicitly checked).
   if(direct.length === 0){
-    panel.style.display = 'none';
+    document.getElementById('dpMemberFirst').textContent = (me.name||'').split(' ')[0] || 'They';
+    document.getElementById('dpCountBadge').textContent = '0';
+    document.getElementById('disciplesList').innerHTML =
+      '<div style="padding:2rem 1rem;text-align:center"><div style="font-size:2rem;margin-bottom:.5rem">🌱</div>'+
+      '<div style="font-size:13px;color:var(--ink);font-weight:600;margin-bottom:.25rem">No one yet</div>'+
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5">No members are currently flagged as discipled by them. When someone is assigned this person as their discipler, they will appear here.</div></div>';
     return;
   }
-  panel.style.display = '';
 
   // Update the "they" → first name in the label
   const firstName = (me.name||'').split(' ')[0] || 'They';
   document.getElementById('dpMemberFirst').textContent = firstName + "'s";
 
   // Pick which list to render based on scope toggle
-  const tree   = _disciplesTree(eid);
   const list   = _dpScope === 'tree' ? tree : direct;
   document.getElementById('dpCountBadge').textContent = list.length;
 
@@ -1530,8 +1558,12 @@ function openAdd(){
   document.getElementById('mti').textContent='Add New Member';document.getElementById('mme').textContent='';
   document.getElementById('delbtn').style.display='none';
   const rpb=document.getElementById('resetPinBtn'); if(rpb) rpb.style.display='none';
-  const sse=document.getElementById('sendSelfEditBtn'); if(sse) sse.parentElement.style.display='none';
-  const dp=document.getElementById('disciplesPanel'); if(dp) dp.style.display='none';
+  // Self-edit link is now in the footer (not wrapped in a parent div) — hide directly
+  const sse=document.getElementById('sendSelfEditBtn'); if(sse) sse.style.display='none';
+  // Reset Disciples tab badge (stale count from previously viewed member)
+  const tabBtn = Array.from(document.querySelectorAll('.mtb'))
+    .find(b => /Disciples/.test(b.textContent));
+  if(tabBtn) tabBtn.innerHTML = '🌳 Disciples';
   showMT('info',document.querySelector('.mtb'));
   rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
@@ -1565,9 +1597,11 @@ function openEdit(id){
     rpb.style.display = showResetPin ? 'block' : 'none';
   }
   // Self-edit link button — visible whenever a saved member is open
+  // (button is now in the footer, not wrapped in a parent div, so toggle its own display)
   const sse = document.getElementById('sendSelfEditBtn');
-  if(sse) sse.parentElement.style.display = '';
-  // Disciples panel — auto-shows if this member has any direct disciples
+  if(sse) sse.style.display = 'block';
+  // Disciples tab content — refreshes on open AND updates the tab badge so
+  // pastor can see at-a-glance whether this member has anyone under them.
   renderDisciplesPanel();
   showMT('info',document.querySelector('.mtb'));
   // Note: buildMinistrySelect() was previously called here, but that wiped
@@ -1581,13 +1615,14 @@ function openEdit(id){
 function closeMO(e){if(e.target===document.getElementById('mo'))closeMD();}
 function closeMD(){document.getElementById('mo').classList.remove('open');}
 function showMT(t,btn){
-  ['info','diag','profile','pipe','eolo','gifts','notes'].forEach(x=>{
+  ['info','diag','profile','pipe','eolo','gifts','notes','disciples'].forEach(x=>{
     const el=document.getElementById('mt-'+x);if(el)el.style.display=x===t?'block':'none';
   });
   document.querySelectorAll('.mtb').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  if(t==='profile'&&eid){const m=members.find(x=>x.id===eid);if(m)rProfileTab(m);}
-  if(t==='gifts'  &&eid){const m=members.find(x=>x.id===eid);if(m)rGiftsTab(m);}
+  if(t==='profile'  &&eid){const m=members.find(x=>x.id===eid);if(m)rProfileTab(m);}
+  if(t==='gifts'    &&eid){const m=members.find(x=>x.id===eid);if(m)rGiftsTab(m);}
+  if(t==='disciples'&&eid){renderDisciplesPanel();}
 }
 
 function clearF(){
