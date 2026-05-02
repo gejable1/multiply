@@ -549,6 +549,23 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         </div>
       </div>
 
+      <!-- DISCIPLES PANEL — auto-shown if this member has any direct disciples -->
+      <div class="fi full" id="disciplesPanel" style="grid-column:1/-1;display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label style="margin:0">🌳 People <span id="dpMemberFirst">they</span> Disciple <span id="dpCountBadge" style="background:var(--green-bg);color:var(--green);font-size:10px;padding:1px 8px;border-radius:10px;font-weight:700;margin-left:4px"></span></label>
+          <div style="display:flex;gap:4px;background:var(--surface2);border-radius:6px;padding:2px">
+            <button type="button" id="dpScopeDirect" onclick="setDisciplesScope('direct')"
+              style="font-family:inherit;font-size:11px;font-weight:600;padding:5px 11px;background:var(--green);color:#fff;border:none;border-radius:5px;cursor:pointer">Direct</button>
+            <button type="button" id="dpScopeTree" onclick="setDisciplesScope('tree')"
+              style="font-family:inherit;font-size:11px;font-weight:600;padding:5px 11px;background:transparent;color:var(--muted);border:none;border-radius:5px;cursor:pointer">Whole Tree</button>
+          </div>
+        </div>
+        <div id="disciplesList" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px;max-height:280px;overflow-y:auto"></div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:5px;line-height:1.5">
+          Tap any name to open their profile. Direct = people they personally disciple. Whole Tree = also includes everyone discipled by their disciples, recursively.
+        </div>
+      </div>
+
       <!-- MINISTRY SLOTS -->
       <div class="fi full" style="grid-column:1/-1">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -1319,6 +1336,168 @@ function rOvExtras(){
 // ═══════════════════════════════════════
 // MODAL
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// DISCIPLES PANEL (member modal · Info tab)
+// ───────────────────────────────────────────────────────────────
+// Shows the people that the currently-open member disciples. Two
+// scopes via toggle:
+//   'direct' — members where discipler_id === this member's id
+//   'tree'   — direct + everyone under their disciples, recursively
+// Click any name to drill into that member's profile.
+//
+// Reads from the in-memory `members` array (already loaded), so no
+// extra DB query and no concurrency concerns.
+// ═══════════════════════════════════════════════════════════════
+let _dpScope = 'direct';
+
+// Direct disciples of any given member id (not tied to LeaderScope which
+// is bound to the logged-in leader).
+function _disciplesDirect(rootId){
+  if(!rootId) return [];
+  return members.filter(m => m.discipler_id === rootId);
+}
+
+// Recursive tree of any given member id, with cycle protection.
+function _disciplesTree(rootId){
+  if(!rootId) return [];
+  const byDiscipler = new Map();
+  members.forEach(m => {
+    if(!m.discipler_id) return;
+    if(!byDiscipler.has(m.discipler_id)) byDiscipler.set(m.discipler_id, []);
+    byDiscipler.get(m.discipler_id).push(m);
+  });
+  const visited = new Set();
+  const result = [];
+  const queue = [rootId];
+  while(queue.length){
+    const node = queue.shift();
+    (byDiscipler.get(node) || []).forEach(child => {
+      if(visited.has(child.id)) return; // cycle guard
+      visited.add(child.id);
+      result.push(child);
+      queue.push(child.id);
+    });
+  }
+  return result;
+}
+
+// Render the panel for the currently-edited member (eid).
+function renderDisciplesPanel(){
+  const panel = document.getElementById('disciplesPanel');
+  if(!panel || !eid) return;
+  const me = members.find(m => m.id === eid);
+  if(!me){ panel.style.display = 'none'; return; }
+
+  const direct = _disciplesDirect(eid);
+  // Hide entirely when member has zero disciples (per spec).
+  if(direct.length === 0){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+
+  // Update the "they" → first name in the label
+  const firstName = (me.name||'').split(' ')[0] || 'They';
+  document.getElementById('dpMemberFirst').textContent = firstName + "'s";
+
+  // Pick which list to render based on scope toggle
+  const tree   = _disciplesTree(eid);
+  const list   = _dpScope === 'tree' ? tree : direct;
+  document.getElementById('dpCountBadge').textContent = list.length;
+
+  // Update toggle button visuals
+  const btnDirect = document.getElementById('dpScopeDirect');
+  const btnTree   = document.getElementById('dpScopeTree');
+  if(_dpScope === 'direct'){
+    btnDirect.style.background = 'var(--green)'; btnDirect.style.color = '#fff';
+    btnTree.style.background   = 'transparent';  btnTree.style.color   = 'var(--muted)';
+  } else {
+    btnTree.style.background   = 'var(--green)'; btnTree.style.color   = '#fff';
+    btnDirect.style.background = 'transparent';  btnDirect.style.color = 'var(--muted)';
+  }
+
+  // Sort: direct first by name, tree by depth then name
+  const sorted = [...list].sort((a, b) => (a.name||'').localeCompare(b.name||''));
+
+  const ZONE_COLOR = {1:'#2a5c40', 2:'#b8882a', 3:'#d97706', 4:'#b03a2e'};
+  const wrap = document.getElementById('disciplesList');
+  if(!sorted.length){
+    wrap.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);font-size:12px">No one in the tree yet.</div>';
+    return;
+  }
+
+  // Group by their direct discipler so the tree view shows hierarchy at a glance.
+  // For 'direct' mode this is trivial (all under `me`); for 'tree' mode it gives
+  // a flat sectional grouping by sub-discipler.
+  if(_dpScope === 'tree'){
+    const byParent = new Map();
+    sorted.forEach(m => {
+      const parent = m.discipler_id || '';
+      if(!byParent.has(parent)) byParent.set(parent, []);
+      byParent.get(parent).push(m);
+    });
+    let html = '';
+    // Walk BFS so direct disciples come first, then their sub-trees
+    const visited = new Set();
+    const queue = [eid];
+    while(queue.length){
+      const parent = queue.shift();
+      const kids = byParent.get(parent) || [];
+      if(!kids.length) continue;
+      const parentMember = parent === eid ? me : members.find(m => m.id === parent);
+      const parentLabel = parent === eid
+        ? 'Direct disciples'
+        : 'Under ' + ((parentMember && parentMember.name) || 'someone');
+      html += '<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:8px 6px 4px">' + escapeHTMLNotif(parentLabel) + '</div>';
+      kids.forEach(m => {
+        if(visited.has(m.id)) return;
+        visited.add(m.id);
+        html += _disciplesRow(m, ZONE_COLOR);
+        queue.push(m.id);
+      });
+    }
+    wrap.innerHTML = html;
+  } else {
+    wrap.innerHTML = sorted.map(m => _disciplesRow(m, ZONE_COLOR)).join('');
+  }
+}
+
+function _disciplesRow(m, ZONE_COLOR){
+  const initials = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const meta = [];
+  meta.push(LN[m.level||0]);
+  if(m.ministry) meta.push(m.ministry);
+  const zoneDot = m.diagnostic_zone
+    ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ZONE_COLOR[m.diagnostic_zone]||'var(--muted)'};margin-right:6px;vertical-align:middle"></span>`
+    : '';
+  return `<div onclick="drillToMember('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
+    <div style="width:30px;height:30px;border-radius:50%;background:${LC_COLORS[m.level||0]};color:${LC_TEXT[m.level||0]};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">${initials}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${zoneDot}${escapeHTMLNotif(m.name)}</div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTMLNotif(meta.join(' · '))}</div>
+    </div>
+    <div style="font-size:14px;color:var(--muted);flex-shrink:0">›</div>
+  </div>`;
+}
+
+function setDisciplesScope(scope){
+  _dpScope = (scope === 'tree') ? 'tree' : 'direct';
+  renderDisciplesPanel();
+}
+
+// Click a row → close current modal cleanly and open the target member.
+// Reset scope so the new modal starts in 'direct' mode.
+function drillToMember(id){
+  if(!id || id === eid) return;
+  _dpScope = 'direct';
+  // openEdit re-uses the same modal element so we don't need to close first;
+  // it will overwrite eid and re-fill the form. But trigger a tiny scroll
+  // reset so the user lands at the top of the new profile.
+  openEdit(id);
+  const modalBody = document.querySelector('#mo > div');
+  if(modalBody) modalBody.scrollTop = 0;
+}
+
 function openAdd(){
   eid=null;clearF();
   document.getElementById('mav').textContent='?';document.getElementById('mav').style.background='var(--muted)';
@@ -1326,6 +1505,7 @@ function openAdd(){
   document.getElementById('delbtn').style.display='none';
   const rpb=document.getElementById('resetPinBtn'); if(rpb) rpb.style.display='none';
   const sse=document.getElementById('sendSelfEditBtn'); if(sse) sse.parentElement.style.display='none';
+  const dp=document.getElementById('disciplesPanel'); if(dp) dp.style.display='none';
   showMT('info',document.querySelector('.mtb'));
   rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
@@ -1361,6 +1541,8 @@ function openEdit(id){
   // Self-edit link button — visible whenever a saved member is open
   const sse = document.getElementById('sendSelfEditBtn');
   if(sse) sse.parentElement.style.display = '';
+  // Disciples panel — auto-shows if this member has any direct disciples
+  renderDisciplesPanel();
   showMT('info',document.querySelector('.mtb'));
   // Note: buildMinistrySelect() was previously called here, but that wiped
   // the value fillF() had just set. fillF() now calls it itself before
