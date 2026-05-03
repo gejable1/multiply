@@ -739,6 +739,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
             <label style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">➕ Assign Unassigned Members <span id="baCountBadge" style="background:var(--gold-bg);color:var(--gold);font-size:10px;padding:1px 8px;border-radius:10px;font-weight:700;margin-left:4px">0</span></label>
             <div id="baSelCount" style="font-size:11px;color:var(--muted);font-weight:600">0 selected</div>
           </div>
+          <div id="baLeaderHint" style="display:none;font-size:11px;color:var(--gold);background:var(--gold-bg);border:1px solid rgba(184,136,42,.25);border-radius:7px;padding:7px 10px;margin-bottom:8px;line-height:1.5"></div>
           <input type="search" id="baSearch" placeholder="🔍 Search by name..." oninput="renderUnassignedList()"
             style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;margin-bottom:8px">
           <div id="baList" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px;max-height:280px;overflow-y:auto"></div>
@@ -1804,13 +1805,35 @@ function refreshBulkAssignSection(){
   const me = members.find(x => x.id === eid);
   if(!section) return;
 
-  // Visibility rules: Pastor only, must be looking at an LC Leader,
-  // not in self-edit mode (would be inconsistent with locked dropdown)
+  // ── Visibility rules (Pastor Gerry, May 2026) ─────────────────
+  // Two contexts where bulk-assign appears:
+  //
+  // (A) Pastor viewing ANY member's modal → shows for any member.
+  //     If the viewed member isn't flagged as LCL yet, we still allow
+  //     pre-assigning disciples so Pastor can promote them in one flow.
+  //
+  // (B) Self-edit mode (My Profile) → shows for Levels 2-5 (Leader,
+  //     Coach, Director, Exec.). LCLs viewing their own profile can
+  //     scoop up unassigned members onto their own flock without
+  //     needing Pastor to do it for them.
+  //
+  // Outside those: hidden. (Regular members editing someone else's
+  // record shouldn't be possible anyway via scope guards.)
+  if(!me){ section.style.display = 'none'; return; }
+
+  const myLvl   = (LEADER && LEADER.leaderLevel) || 0;
   const isPastor = (typeof LeaderScope !== 'undefined') && LeaderScope.isPastor();
-  if(!me || !isPastor || _selfEditMode || !_isLCLeader(me)){
-    section.style.display = 'none';
-    return;
+
+  let allowed = false;
+  if(_selfEditMode){
+    // Self-edit (My Profile): Level 2+ can self-manage their flock
+    allowed = myLvl >= 2;
+  } else {
+    // Normal modal (clicked from member list): Pastor only
+    allowed = isPastor;
   }
+  if(!allowed){ section.style.display = 'none'; return; }
+
   section.style.display = '';
 
   // Reset selections when switching members
@@ -1818,7 +1841,27 @@ function refreshBulkAssignSection(){
   const search = document.getElementById('baSearch');
   if(search) search.value = '';
   const nameSpan = document.getElementById('baMemberName');
-  if(nameSpan) nameSpan.textContent = (me.name||'').split(' ')[0] || 'this leader';
+  if(nameSpan){
+    // In self-edit mode, address the user as "you"; otherwise use the member's name
+    nameSpan.textContent = _selfEditMode
+      ? 'you'
+      : ((me.name||'').split(' ')[0] || 'this leader');
+  }
+
+  // Show a hint when assigning to a non-flagged member (Pastor view only;
+  // in self-edit mode the user IS the leader, so the hint doesn't apply).
+  const hintBox = document.getElementById('baLeaderHint');
+  if(hintBox){
+    if(!_selfEditMode && !_isLCLeader(me)){
+      hintBox.style.display = '';
+      hintBox.innerHTML =
+        '💡 <strong>' + escapeHTMLNotif((me.name||'').split(' ')[0] || 'This member') +
+        '</strong> isn\'t flagged as an LC Leader yet. ' +
+        'Consider toggling <em>Facilitator</em> in the Info tab to formalize this role.';
+    } else {
+      hintBox.style.display = 'none';
+    }
+  }
 
   renderUnassignedList();
 }
@@ -1909,8 +1952,19 @@ function clearBulkAssignSelection(){
 async function bulkAssignDisciples(){
   const me = members.find(x => x.id === eid);
   if(!me) return;
-  if(!LeaderScope.isPastor()){
-    toast('Only the Pastor can bulk-assign disciples', '🔒');
+  // ── Defense-in-depth permission check (matches refreshBulkAssignSection)
+  // Pastor can assign to anyone; Levels 2-5 can only assign to themselves
+  // (which means in self-edit mode where eid === LEADER.leaderId).
+  const myLvl   = (LEADER && LEADER.leaderLevel) || 0;
+  const isPastor = (typeof LeaderScope !== 'undefined') && LeaderScope.isPastor();
+  let allowed = false;
+  if(_selfEditMode && eid === (LEADER && LEADER.leaderId)){
+    allowed = myLvl >= 2;
+  } else {
+    allowed = isPastor;
+  }
+  if(!allowed){
+    toast('You don\'t have permission to bulk-assign here', '🔒');
     return;
   }
   const ids = [..._baSelected];
