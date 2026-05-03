@@ -604,12 +604,22 @@ function buildGroups(allMembers, attRows){
   //    Members whose discipler isn't a flagged LC Leader OR who have no
   //    discipler at all are tracked separately as "unassigned" so they're
   //    visible in the report instead of silently dropped.
+  //
+  //    KEY INSIGHT (Pastor Gerry, May 2026): a leader IS a member of their
+  //    own discipler's group (e.g., Glenda is Pastor Ramon's flock member).
+  //    A leader is only excluded from being a member of THEIR OWN group
+  //    (the one they facilitate). This keeps the math reconciled with the
+  //    dashboard total without needing a separate "leaders" bucket.
   const unassigned = [];   // members not in any LC group (no discipler / orphan)
-  const isLeader = m => !!(m.is_facilitator || m.facilitator_role);
   allMembers.forEach(m => {
-    if(isLeader(m)) return;     // leaders facilitate their LC, not members of it
     const did = m.discipler_id;
     if(did && lcMap[did]){
+      // Skip the edge case where a leader's discipler_id points to themselves
+      // (would result in being counted in their own group as flock — wrong).
+      if(did === m.id) {
+        unassigned.push(m);  // self-discipled leader is effectively orphan
+        return;
+      }
       lcMap[did].members.push(m);
     } else {
       unassigned.push(m);
@@ -716,6 +726,8 @@ function buildGroups(allMembers, attRows){
   const totalMembersInLcs = Object.values(lcMap).reduce((s,g)=>s+g.members.length, 0);
   const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
   const totalUnassigned = unassigned.length;
+  // Church total reconciles with dashboard: members in LCs + unassigned.
+  // (Leaders are naturally counted as members of their own discipler's group.)
   const totalAllMembers = totalMembersInLcs + totalUnassigned;
 
   return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers};
@@ -761,7 +773,11 @@ function renderReport(report, date, eventType){
             — they have no assigned discipler / LC Leader, so they aren't reflected in the counts above. Total in church: <strong>${totalAllMembers}</strong>.
           </div>
         </div>
-      ` : ''}
+      ` : `
+        <div style="margin-top:14px;font-size:11.5px;color:var(--ink-soft);text-align:right">
+          Total in church: <strong style="color:var(--ink)">${totalAllMembers}</strong>
+        </div>
+      `}
     </div>
   `;
 
