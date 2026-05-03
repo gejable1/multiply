@@ -596,15 +596,29 @@ function buildGroups(allMembers, attRows){
   });
 
   // ── Assign each member to their leader's group via discipler_id.
-  //    Members whose discipler isn't a flagged LC Leader are skipped
-  //    (they don't belong to any LC group from a reporting standpoint).
+  //    EXCEPTION: if this member is themselves an LC Leader, they belong
+  //    to THEIR OWN group (counted by the auto-add below), NOT to their
+  //    discipler's group. Otherwise leaders get double-counted: once in
+  //    their discipler's group, once in their own.
+  //
+  //    Members whose discipler isn't a flagged LC Leader OR who have no
+  //    discipler at all are tracked separately as "unassigned" so they're
+  //    visible in the report instead of silently dropped.
+  const unassigned = [];   // members not in any LC group (no discipler / orphan)
+  const isLeader = m => !!(m.is_facilitator || m.facilitator_role);
   allMembers.forEach(m => {
+    if(isLeader(m)) return;     // leaders go in their own group via auto-add below
     const did = m.discipler_id;
-    if(did && lcMap[did]) lcMap[did].members.push(m);
+    if(did && lcMap[did]){
+      lcMap[did].members.push(m);
+    } else {
+      unassigned.push(m);
+    }
   });
 
-  // ── Also include the leader themselves in their own group's headcount
-  //    (a leader showing up at their own LC meeting counts as 1 attendee).
+  // ── Auto-add the leader themselves to their own group (so they count
+  //    in their own LC's headcount). This is now the ONLY path for a
+  //    leader to appear in any group, so no double-counting.
   Object.values(lcMap).forEach(g => {
     if(!g.members.some(m => m.id === g.leader.id)) g.members.push(g.leader);
   });
@@ -700,15 +714,17 @@ function buildGroups(allMembers, attRows){
   const totalLcGroups = Object.keys(lcMap).length;
   const totalMembersInLcs = Object.values(lcMap).reduce((s,g)=>s+g.members.length, 0);
   const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
+  const totalUnassigned = unassigned.length;
+  const totalAllMembers = totalMembersInLcs + totalUnassigned;
 
-  return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent};
+  return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers};
 }
 
 // ═══════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderReport(report, date, eventType){
-  const {champions, runners, awaiting, totalMembersInLcs, totalPresent} = report;
+  const {champions, runners, awaiting, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers} = report;
 
   // ── Header ──
   document.getElementById('headerSlot').innerHTML = `
@@ -733,9 +749,18 @@ function renderReport(report, date, eventType){
         </div>
         <div class="rh-stat">
           <div class="rh-stat-num">${totalPresent}<span style="font-size:14px;color:var(--ink-faint)">/${totalMembersInLcs}</span></div>
-          <div class="rh-stat-label">Total Present</div>
+          <div class="rh-stat-label">In LC Groups</div>
         </div>
       </div>
+      ${totalUnassigned > 0 ? `
+        <div style="margin-top:14px;padding:10px 14px;background:rgba(251,146,60,.08);border:1px dashed rgba(251,146,60,.35);border-radius:10px;display:flex;align-items:center;gap:10px;font-size:12px">
+          <span style="font-size:18px">⚠️</span>
+          <div style="flex:1;line-height:1.5;color:var(--ink)">
+            <strong style="color:#c2410c">${totalUnassigned} member${totalUnassigned===1?'':'s'} not in any LC group</strong>
+            — they have no assigned discipler / LC Leader, so they aren't reflected in the counts above. Total in church: <strong>${totalAllMembers}</strong>.
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 
@@ -845,8 +870,8 @@ function renderReport(report, date, eventType){
           <div class="gt-label">Total Attendance</div>
           <div class="gt-title">${totalPresent} of ${totalMembersInLcs} members present</div>
           <div class="gt-caveat">
-            <strong>Note:</strong> Counts only registered LC members.
-            Visitors, first-timers, and non-members are not included in this tally.
+            <strong>Note:</strong> Counts only members assigned to an LC group${totalUnassigned > 0 ? ` (${totalUnassigned} unassigned member${totalUnassigned===1?'':'s'} excluded)` : ''}.
+            Visitors, first-timers, and non-members are not included.
           </div>
         </div>
         <div class="gt-stat">
