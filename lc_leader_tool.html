@@ -620,7 +620,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="att-meta">
     <div style="margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">📅 Date of Meeting (tap to change)</div>
-      <input type="date" class="att-date-input" id="attDate" style="font-size:15px;padding:11px 14px;font-weight:600;width:auto;min-width:180px">
+      <input type="date" class="att-date-input" id="attDate" onchange="onAttContextChange()" style="font-size:15px;padding:11px 14px;font-weight:600;width:auto;min-width:180px">
     </div>
     <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Event Type</div>
     <div class="att-date-row" id="attTypeRow">
@@ -635,6 +635,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
     </div>
   </div>
+  <!-- "Already saved" banner — populated by loadExistingAttendance(); hidden when nothing on file -->
+  <div id="attLoadedBanner" style="display:none;margin:0 14px 8px;padding:10px 12px;background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.35);border-radius:10px;font-size:12px;color:var(--text);line-height:1.45"></div>
   <div class="att-list" id="attList"></div>
   <div class="att-save-bar">
     <div class="att-count" id="attCount">0 present</div>
@@ -666,7 +668,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <div class="detail-sections" id="detailSections"></div>
   <div class="detail-actions">
-    <button class="da-btn da-secondary" onclick="logQuickAttendance()">✓ Mark Present</button>
+    <button class="da-btn da-secondary" id="markPresentBtn" onclick="logQuickAttendance()">✓ Mark Present</button>
     <button class="da-btn da-primary" onclick="openSalvationDiag()">📋 Salvation Diag</button>
   </div>
 </div>
@@ -1155,6 +1157,8 @@ function openMember(id){
   document.getElementById('detailZoneDesc').textContent = ' — '+zd.desc;
   buildDetailSections(mem);
   showScreen('screenDetail');
+  // Refresh Mark Present button to reflect today's attendance state
+  _refreshMarkPresentBtn();
 }
 
 function buildDetailSections(mem){
@@ -1393,9 +1397,75 @@ function sendAssessmentLink(file, name){
   sendLink_(currentMember.id, currentMember.name, file, name, currentMember.contact);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Mark Present button — visual state helper
+// Reflects whether currentMember has a Sunday Service row for today.
+// Called when opening detail and after a successful mark.
+// ─────────────────────────────────────────────────────────────
+function _setMarkPresentBtn(state){
+  const btn = document.getElementById('markPresentBtn');
+  if(!btn) return;
+  if(state === 'marked'){
+    btn.textContent = '✓ Marked Present';
+    btn.disabled = true;
+    btn.style.opacity = '0.55';
+    btn.style.cursor = 'default';
+  } else {
+    btn.textContent = '✓ Mark Present';
+    btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+  }
+}
+
+// Check if currentMember already has a Sunday Service attendance for today
+// and reflect that on the button. Fire-and-forget; never throws.
+async function _refreshMarkPresentBtn(){
+  _setMarkPresentBtn('idle'); // optimistic reset while we check
+  if(!currentMember) return;
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await db.from('attendance')
+      .select('id')
+      .eq('member_id', currentMember.id)
+      .eq('event_date', today)
+      .eq('event_type', 'Sunday Service')
+      .eq('present', true)
+      .limit(1);
+    if(!error && data && data.length){
+      _setMarkPresentBtn('marked');
+    }
+  } catch(e){ /* non-fatal */ }
+}
+
 async function logQuickAttendance(){
   if(!currentMember) return;
+  const btn = document.getElementById('markPresentBtn');
+  if(btn && btn.disabled) return; // already marked — no-op
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+
   const today = new Date().toISOString().split('T')[0];
+
+  // Duplicate guard — check first so we don't insert a second row.
+  try {
+    const { data: existing, error: chkErr } = await db.from('attendance')
+      .select('id')
+      .eq('member_id', currentMember.id)
+      .eq('event_date', today)
+      .eq('event_type', 'Sunday Service')
+      .eq('present', true)
+      .limit(1);
+    if(chkErr) throw chkErr;
+    if(existing && existing.length){
+      toast('Already marked present today', 'success');
+      _setMarkPresentBtn('marked');
+      return;
+    }
+  } catch(e){
+    console.warn('Duplicate-check failed, proceeding with insert:', e);
+    // Fall through and try the insert anyway
+  }
+
   const { error } = await db.from('attendance').insert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
@@ -1409,8 +1479,13 @@ async function logQuickAttendance(){
     logged_by:       currentLeader?.name || 'Unknown',
     logged_by_id:    currentLeader?.id || null,
   });
-  if(error){ toast('Error: '+error.message,'error'); return; }
+  if(error){
+    toast('Error: '+error.message,'error');
+    _setMarkPresentBtn('idle');
+    return;
+  }
   toast('✓ Marked present for today','success');
+  _setMarkPresentBtn('marked');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1422,14 +1497,132 @@ function showAttendance(){
   myMembers.forEach(m=>{ attendanceState[m.id]=false; });
   allSelected = false;
   attendanceDirty = false;
+  // Reset banner before fetching
+  const bn = document.getElementById('attLoadedBanner');
+  if(bn){ bn.style.display='none'; bn.innerHTML=''; }
   renderAttList();
   showScreen('screenAttendance');
+  // Fetch any existing attendance for today + currently-selected event type
+  loadExistingAttendance();
 }
 
 function selectAttType(el){
   document.querySelectorAll('.att-type-pill').forEach(p=>p.classList.remove('selected'));
   el.classList.add('selected');
   selectedAttType = el.dataset.type;
+  onAttContextChange();
+}
+
+// Called when the leader changes the date or event type. If they have
+// unsaved toggles, warn before discarding (mirrors the back-button logic).
+function onAttContextChange(){
+  if(attendanceDirty){
+    const ok = confirm('You have unsaved attendance changes.\nDiscard them and load the saved data for this date/type?');
+    if(!ok){
+      // Revert: snap the inputs back. We don't know the prior values
+      // perfectly, so safest is to just leave the UI alone and bail.
+      return;
+    }
+  }
+  // Reset checks before fetching the new context
+  myMembers.forEach(m=>{ attendanceState[m.id]=false; });
+  attendanceDirty = false;
+  renderAttList();
+  loadExistingAttendance();
+}
+
+// Race-protection token: a slow query for an old date can't overwrite
+// state set by a newer one. Each invocation gets a unique token; results
+// only apply if the token still matches the latest invocation.
+let _attLoadToken = 0;
+
+async function loadExistingAttendance(){
+  const date = document.getElementById('attDate').value;
+  const type = selectedAttType;
+  const banner = document.getElementById('attLoadedBanner');
+  if(!date || !type){
+    if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+    return;
+  }
+  const myToken = ++_attLoadToken;
+
+  try {
+    // Pull all rows for this date+type that touch members in our scope.
+    // We filter by member_id list to limit row count and respect scoping.
+    const memberIds = myMembers.map(m=>m.id);
+    if(!memberIds.length){
+      if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+      return;
+    }
+    const { data, error } = await db.from('attendance')
+      .select('member_id, present, logged_by, updated_at, created_at')
+      .eq('event_date', date)
+      .eq('event_type', type)
+      .in('member_id', memberIds);
+
+    // Stale response — a newer fetch already started, so ignore this one
+    if(myToken !== _attLoadToken) return;
+
+    if(error){
+      console.warn('loadExistingAttendance failed:', error);
+      if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+      return;
+    }
+    if(!data || !data.length){
+      // Nothing on file — clean slate, hide banner
+      if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+      return;
+    }
+
+    // Apply the present flags into attendanceState
+    data.forEach(row => {
+      if(row.member_id in attendanceState){
+        attendanceState[row.member_id] = !!row.present;
+      }
+    });
+    attendanceDirty = false; // loaded data isn't "dirty"
+    renderAttList();
+
+    // Build the banner: who saved it + when. Prefer updated_at (reflects
+    // most recent edit) and fall back to created_at.
+    let latest = null;
+    let latestBy = '';
+    data.forEach(row => {
+      const ts = row.updated_at || row.created_at;
+      if(!ts) return;
+      if(!latest || ts > latest){
+        latest = ts;
+        latestBy = row.logged_by || '';
+      }
+    });
+    if(banner){
+      const when = _formatLoggedAt(latest);
+      const byPart = latestBy ? ` by <strong>${escapeAttBanner(latestBy)}</strong>` : '';
+      const whenPart = when ? ` on <strong>${escapeAttBanner(when)}</strong>` : '';
+      banner.innerHTML = `✓ Already saved${whenPart}${byPart}. Tap a row to edit.`;
+      banner.style.display = 'block';
+    }
+  } catch(e){
+    console.warn('loadExistingAttendance threw:', e);
+    if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+  }
+}
+
+function escapeAttBanner(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+
+function _formatLoggedAt(iso){
+  if(!iso) return '';
+  try {
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    // e.g. "May 4, 9:32 AM" — concise, no year (almost always today/recent)
+    const opts = {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'};
+    return d.toLocaleString('en-US', opts);
+  } catch(e){ return ''; }
 }
 
 function renderAttList(){
@@ -1556,6 +1749,8 @@ async function saveAttendance(){
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   attendanceDirty = false;
   toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
+  // Refresh the banner so it now reflects this save (logged_by becomes us)
+  loadExistingAttendance();
   setTimeout(()=>showScreen('screenHome'),1500);
 }
 
@@ -2412,33 +2607,42 @@ async function sendProfileEditLink(memberId, memberName, contact){
       firstName, url, days: TOKEN_VALIDITY_DAYS, senderName
     });
     const phone = normalizePHPhone(contact);
-
-    if(phone){
-      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
-      window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
-      toast(`📝 Edit link ready for ${firstName} — just tap Send`, 'success');
-    } else {
-      // No phone on file — let the leader pick how to deliver
-      _showShareModal(firstName, url, messageText);
-    }
+    // Always show the share modal (Pastor's call, May 2026) — three clean
+    // choices: Copy link, Copy full message, Open WhatsApp. Phone is passed
+    // so the WhatsApp button deep-links to that contact when on file.
+    _showShareModal(firstName, url, messageText, 'Profile Edit Link', phone);
   } catch(e){
     console.error('Self-edit link error:', e);
     toast('Could not create link: '+e.message, 'error');
   }
 }
 
-function _showShareModal(firstName, url, messageText){
+function _showShareModal(firstName, url, messageText, linkType, phone){
   // Remove any existing modal
   document.querySelectorAll('.share-link-modal').forEach(m=>m.remove());
 
   const modal = document.createElement('div');
   modal.className = 'share-link-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+  // Three-button design (Pastor's call, May 2026): Copy link, Copy full
+  // message, Open WhatsApp. WhatsApp deep-links to phone when on file,
+  // else opens the contact picker. Other channels (SMS/email/native) were
+  // removed — leaders found them confusing.
+  const safeFirst = (firstName||'').replace(/[<>&"']/g, '');
+  const safeType  = (linkType||'Link').replace(/[<>&"']/g, '');
+  const subText = phone
+    ? `Choose how to send to <strong>${safeFirst}</strong>:`
+    : `No phone on file for <strong>${safeFirst}</strong>. Choose how to send:`;
+  const waLabel = phone
+    ? '🟢 Open WhatsApp to ' + safeFirst
+    : '🟢 Open WhatsApp & pick contact';
+
   modal.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">📤 Share Profile Edit Link</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">📤 Share ${safeType}</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
-        No phone on file for <strong>${firstName}</strong>. Choose how to send the link:
+        ${subText}
       </div>
 
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
@@ -2450,22 +2654,10 @@ function _showShareModal(firstName, url, messageText){
           style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
           📝 <span>Copy full message (with greeting)</span>
         </button>
-        <button onclick="_shareVia('sms', this)"
-          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
-          💬 <span>Send via SMS app</span>
-        </button>
-        <button onclick="_shareVia('email', this)"
-          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
-          ✉️ <span>Send via email app</span>
-        </button>
         <button onclick="_shareVia('whatsapp', this)"
-          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
-          🟢 <span>Open WhatsApp & pick contact</span>
-        </button>
-        ${navigator.share ? `<button onclick="_shareVia('native', this)"
           style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
-          📲 <span>Share to any app (Messenger, Viber, etc.)</span>
-        </button>` : ''}
+          <span>${waLabel}</span>
+        </button>
       </div>
 
       <div style="background:var(--surface3);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);word-break:break-all;margin-bottom:.75rem;font-family:monospace">${url}</div>
@@ -2477,7 +2669,7 @@ function _showShareModal(firstName, url, messageText){
     </div>`;
 
   // Stash data for the action handlers
-  window._shareLinkData = {url, messageText, firstName};
+  window._shareLinkData = {url, messageText, firstName, phone: phone||''};
 
   document.body.appendChild(modal);
   modal.onclick = (e)=>{ if(e.target===modal) modal.remove(); };
@@ -2486,7 +2678,7 @@ function _showShareModal(firstName, url, messageText){
 async function _shareVia(method, btn){
   const data = window._shareLinkData;
   if(!data) return;
-  const {url, messageText, firstName} = data;
+  const {url, messageText, phone} = data;
 
   try{
     if(method === 'copy'){
@@ -2497,24 +2689,11 @@ async function _shareVia(method, btn){
       await navigator.clipboard.writeText(messageText);
       toast('📝 Full message copied — paste it anywhere', 'success');
     }
-    else if(method === 'sms'){
-      // sms: link works on iOS and most Android (with ?body= or &body=)
-      window.location.href = 'sms:?body=' + encodeURIComponent(messageText);
-    }
-    else if(method === 'email'){
-      const subject = encodeURIComponent('Update your profile — Rosehill Christian Church');
-      window.location.href = `mailto:?subject=${subject}&body=` + encodeURIComponent(messageText);
-    }
     else if(method === 'whatsapp'){
-      // Use api.whatsapp.com to avoid SSL warning on desktop browsers
-      window.open(_buildWhatsAppUrl('', messageText), '_blank');
-    }
-    else if(method === 'native' && navigator.share){
-      await navigator.share({
-        title: 'Update your profile',
-        text: messageText
-      });
-      toast('✓ Shared', 'success');
+      // Use api.whatsapp.com (not wa.me) to avoid SSL warning on desktop.
+      // If phone is on file, deep-link to that contact; otherwise let
+      // WhatsApp prompt for a contact. Same prefilled message either way.
+      window.open(_buildWhatsAppUrl(phone || '', messageText), '_blank');
     }
     // Close modal after action
     btn.closest('.share-link-modal')?.remove();
@@ -2537,14 +2716,9 @@ function sendLink_(memberId, memberName, file, assessName, contact){
   });
   const phone = normalizePHPhone(contact);
 
-  if(phone){
-    // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
-    window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
-    toast(`WhatsApp ready for ${firstName} — just tap Send`, 'success');
-  } else {
-    // No phone on file — open the share picker (same as Profile Edit Link)
-    _showShareModal(firstName, url, messageText);
-  }
+  // Always show share modal so the leader picks the channel (Pastor's call,
+  // May 2026). Phone is passed for direct WhatsApp deep-linking when on file.
+  _showShareModal(firstName, url, messageText, assessName || 'Assessment', phone);
 }
 
 // ═══════════════════════════════════════════════════════

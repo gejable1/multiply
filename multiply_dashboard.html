@@ -3993,14 +3993,11 @@ async function sendProfileEditLink(memberId){
       firstName, url, days: _TOKEN_VALIDITY_DAYS, senderName
     });
     const phone = _normalizePHPhone(m.contact);
-
-    if(phone){
-      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
-      window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
-      toast('📝 Edit link ready for ' + firstName + ' — tap Send in WhatsApp');
-    } else {
-      _showShareLinkModal(firstName, url, messageText, 'Profile Edit Link');
-    }
+    // Always show the share modal (Pastor's call, May 2026) — three clean
+    // choices: Copy link, Copy full message, Open WhatsApp. The phone is
+    // passed so the WhatsApp button deep-links to that contact directly
+    // when on file; falls back to pick-a-contact otherwise.
+    _showShareLinkModal(firstName, url, messageText, 'Profile Edit Link', phone);
   } catch(e){
     console.error('Self-edit link error:', e);
     toast('Could not create link: ' + e.message, '❌');
@@ -4026,39 +4023,40 @@ async function sendAssessmentLink(memberId, assessName, url){
     senderName, days: _TOKEN_VALIDITY_DAYS
   });
   const phone = _normalizePHPhone(m.contact);
-
-  if(phone){
-    window.open(_buildWhatsAppUrl(phone, messageText), '_blank');
-    toast('📤 ' + assessName + ' link ready for ' + firstName);
-  } else {
-    _showShareLinkModal(firstName, url, messageText, assessName);
-  }
+  // Always show share modal so the leader picks the channel (Pastor's call).
+  // Phone is passed for WhatsApp deep-linking when on file.
+  _showShareLinkModal(firstName, url, messageText, assessName, phone);
 }
 
-function _showShareLinkModal(firstName, url, messageText, linkType){
+function _showShareLinkModal(firstName, url, messageText, linkType, phone){
   document.querySelectorAll('.share-link-modal').forEach(m => m.remove());
   const modal = document.createElement('div');
   modal.className = 'share-link-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
   const title = linkType ? '📤 Share ' + escapeHTMLNotif(linkType) : '📤 Share Link';
+  // Three-button design (Pastor's call, May 2026): Copy link, Copy message,
+  // WhatsApp. WhatsApp deep-links to phone when on file, else pick-a-contact.
+  const subText = phone
+    ? `Choose how to send to <strong>${escapeHTMLNotif(firstName)}</strong>:`
+    : `No phone on file for <strong>${escapeHTMLNotif(firstName)}</strong>. Choose how to send:`;
+  const waLabel = phone
+    ? '🟢 Open WhatsApp to ' + escapeHTMLNotif(firstName)
+    : '🟢 Open WhatsApp & pick contact';
   modal.innerHTML = `
     <div style="background:#fff;border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit">
       <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:.4rem">${title}</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
-        No phone on file for <strong>${escapeHTMLNotif(firstName)}</strong>. Choose how to send:
+        ${subText}
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
         <button onclick="_shareSelfEditVia('copy', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">📋 Copy link to clipboard</button>
         <button onclick="_shareSelfEditVia('copyMsg', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">📝 Copy full message (with greeting)</button>
-        <button onclick="_shareSelfEditVia('sms', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">💬 Send via SMS app</button>
-        <button onclick="_shareSelfEditVia('email', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">✉️ Send via email app</button>
-        <button onclick="_shareSelfEditVia('whatsapp', this)" style="padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">🟢 Open WhatsApp & pick contact</button>
-        ${navigator.share ? `<button onclick="_shareSelfEditVia('native', this)" style="padding:11px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">📲 Share to any app (Messenger, Viber, etc.)</button>` : ''}
+        <button onclick="_shareSelfEditVia('whatsapp', this)" style="padding:11px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">${waLabel}</button>
       </div>
       <div style="background:var(--surface2);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);word-break:break-all;margin-bottom:.75rem;font-family:monospace">${escapeHTMLNotif(url)}</div>
       <button onclick="this.closest('.share-link-modal').remove()" style="width:100%;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ Close</button>
     </div>`;
-  window._shareLinkData = {url, messageText, firstName};
+  window._shareLinkData = {url, messageText, firstName, phone: phone||''};
   document.body.appendChild(modal);
   modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
 }
@@ -4070,7 +4068,7 @@ const _showSelfEditShareModal = (firstName, url, messageText) =>
 async function _shareSelfEditVia(method, btn){
   const data = window._shareLinkData;
   if(!data) return;
-  const {url, messageText} = data;
+  const {url, messageText, phone} = data;
   try{
     if(method === 'copy'){
       await navigator.clipboard.writeText(url);
@@ -4078,17 +4076,11 @@ async function _shareSelfEditVia(method, btn){
     } else if(method === 'copyMsg'){
       await navigator.clipboard.writeText(messageText);
       toast('📝 Full message copied — paste it anywhere');
-    } else if(method === 'sms'){
-      window.location.href = 'sms:?body=' + encodeURIComponent(messageText);
-    } else if(method === 'email'){
-      const subject = encodeURIComponent('From your LC Leader — Rosehill Christian Church');
-      window.location.href = 'mailto:?subject=' + subject + '&body=' + encodeURIComponent(messageText);
     } else if(method === 'whatsapp'){
-      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop
-      window.open(_buildWhatsAppUrl('', messageText), '_blank');
-    } else if(method === 'native' && navigator.share){
-      await navigator.share({title:'Link from your LC Leader', text: messageText});
-      toast('✓ Shared');
+      // Use api.whatsapp.com (not wa.me) to avoid SSL warnings on desktop.
+      // If phone is on file, deep-link to that contact; otherwise open the
+      // contact picker. Both paths use the same prefilled message.
+      window.open(_buildWhatsAppUrl(phone || '', messageText), '_blank');
     }
     btn.closest('.share-link-modal')?.remove();
   } catch(e){
