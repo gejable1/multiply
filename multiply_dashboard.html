@@ -622,9 +622,17 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       </div>
       <div class="fi full">
         <label>Assigned Discipler / LC Leader <span style="color:var(--green);font-size:10px">(from flagged members)</span></label>
-        <select id="fd" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;font-family:'DM Sans',sans-serif;font-size:13px;">
-          <option value="">— Select Discipler / LC Leader —</option>
-        </select>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="fd" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);width:100%;font-family:'DM Sans',sans-serif;font-size:13px;flex:1">
+            <option value="">— None —</option>
+          </select>
+          <button type="button" onclick="clearDiscipler()" title="Clear / Erase the assigned discipler"
+            style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s"
+            onmouseover="this.style.background='var(--red-bg)';this.style.color='var(--red)';this.style.borderColor='rgba(176,58,46,.3)'"
+            onmouseout="this.style.background='var(--surface2)';this.style.color='var(--muted)';this.style.borderColor='var(--border)'">
+            ✕ Clear
+          </button>
+        </div>
         <input type="hidden" id="fd_id">
       </div>
       <div class="fi full"><label>Spiritual Gifts (top 2)</label><input id="fgi" placeholder="e.g. Teaching, Shepherding"></div>
@@ -706,6 +714,37 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         <div id="disciplesList" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px;max-height:420px;overflow-y:auto"></div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
           Tap any name to open their profile. <strong>Direct</strong> = people they personally disciple. <strong>Whole Tree</strong> = also includes everyone discipled by their disciples, recursively.
+        </div>
+
+        <!-- ─── BULK ASSIGN: Members without an LC Leader ─────────────
+             Pastor-only. Lets you scoop up unassigned members and
+             assign them to this person in one batch. Hidden when:
+               • The person isn't an LC Leader (no point assigning to them)
+               • The viewer isn't Pastor
+               • In self-edit mode (leader editing self)
+        ─────────────────────────────────────────────────────────── -->
+        <div id="bulkAssignSection" style="display:none;margin-top:18px;padding-top:16px;border-top:1.5px dashed var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <label style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">➕ Assign Unassigned Members <span id="baCountBadge" style="background:var(--gold-bg);color:var(--gold);font-size:10px;padding:1px 8px;border-radius:10px;font-weight:700;margin-left:4px">0</span></label>
+            <div id="baSelCount" style="font-size:11px;color:var(--muted);font-weight:600">0 selected</div>
+          </div>
+          <input type="search" id="baSearch" placeholder="🔍 Search by name..." oninput="renderUnassignedList()"
+            style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;margin-bottom:8px">
+          <div id="baList" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:6px;max-height:280px;overflow-y:auto"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+            <button type="button" onclick="bulkAssignDisciples()" id="baAssignBtn"
+              style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:6px"
+              disabled>
+              ➕ <span id="baAssignBtnText">Assign 0</span>
+            </button>
+            <button type="button" onclick="clearBulkAssignSelection()"
+              style="background:var(--surface2);color:var(--muted);border:1.5px solid var(--border);border-radius:7px;padding:8px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">
+              Clear
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+            Shows members who currently have no Discipler / LC Leader assigned. Tick the ones who should be under <strong id="baMemberName">this leader</strong>, then click Assign.
+          </div>
         </div>
       </div>
     </div>
@@ -1520,6 +1559,9 @@ function renderDisciplesPanel(){
       '<div style="padding:2rem 1rem;text-align:center"><div style="font-size:2rem;margin-bottom:.5rem">🌱</div>'+
       '<div style="font-size:13px;color:var(--ink);font-weight:600;margin-bottom:.25rem">No one yet</div>'+
       '<div style="font-size:11px;color:var(--muted);line-height:1.5">No members are currently flagged as discipled by them. When someone is assigned this person as their discipler, they will appear here.</div></div>';
+    // Still refresh bulk-assign — a brand-new LC Leader with zero disciples
+    // is exactly the case where bulk assignment is most useful.
+    refreshBulkAssignSection();
     return;
   }
 
@@ -1586,6 +1628,9 @@ function renderDisciplesPanel(){
   } else {
     wrap.innerHTML = sorted.map(m => _disciplesRow(m, ZONE_COLOR)).join('');
   }
+  // Refresh the bulk-assign section visibility + candidate list whenever
+  // the disciples panel re-renders (member switch, scope toggle, etc.)
+  refreshBulkAssignSection();
 }
 
 function _disciplesRow(m, ZONE_COLOR){
@@ -1609,6 +1654,202 @@ function _disciplesRow(m, ZONE_COLOR){
 function setDisciplesScope(scope){
   _dpScope = (scope === 'tree') ? 'tree' : 'direct';
   renderDisciplesPanel();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BULK-ASSIGN UNASSIGNED MEMBERS to the currently-open LC Leader
+// (Pastor-only feature in the Disciples tab)
+// ═══════════════════════════════════════════════════════════════
+let _baSelected = new Set();   // selected member IDs
+
+function _isLCLeader(m){
+  return !!(m && (m.is_facilitator || m.facilitator_role));
+}
+
+function _getUnassignedMembers(){
+  // Members with no discipler AND who aren't themselves LC Leaders
+  // (LC Leaders shouldn't be assigned via this bulk widget — use the
+  // discipler dropdown for those edge cases).
+  return members.filter(m => {
+    if(m.id === eid) return false;          // can't disciple self
+    if(_isLCLeader(m)) return false;         // skip flagged leaders
+    if(m.discipler_id) return false;         // already has a discipler
+    if((m.discipler||'').trim() && !m.discipler_id){
+      // Has a name-only discipler (legacy data) — still considered "assigned"
+      return false;
+    }
+    return true;
+  });
+}
+
+function refreshBulkAssignSection(){
+  const section = document.getElementById('bulkAssignSection');
+  const me = members.find(x => x.id === eid);
+  if(!section) return;
+
+  // Visibility rules: Pastor only, must be looking at an LC Leader,
+  // not in self-edit mode (would be inconsistent with locked dropdown)
+  const isPastor = (typeof LeaderScope !== 'undefined') && LeaderScope.isPastor();
+  if(!me || !isPastor || _selfEditMode || !_isLCLeader(me)){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  // Reset selections when switching members
+  _baSelected.clear();
+  const search = document.getElementById('baSearch');
+  if(search) search.value = '';
+  const nameSpan = document.getElementById('baMemberName');
+  if(nameSpan) nameSpan.textContent = (me.name||'').split(' ')[0] || 'this leader';
+
+  renderUnassignedList();
+}
+
+function renderUnassignedList(){
+  const wrap  = document.getElementById('baList');
+  const badge = document.getElementById('baCountBadge');
+  if(!wrap) return;
+
+  const all = _getUnassignedMembers();
+  if(badge) badge.textContent = String(all.length);
+
+  // Apply search filter
+  const q = (document.getElementById('baSearch')?.value || '').trim().toLowerCase();
+  const filtered = q
+    ? all.filter(m => (m.name||'').toLowerCase().includes(q))
+    : all;
+
+  if(all.length === 0){
+    wrap.innerHTML =
+      '<div style="padding:1.25rem;text-align:center"><div style="font-size:1.6rem;margin-bottom:.4rem">✨</div>'+
+      '<div style="font-size:12px;color:var(--ink);font-weight:600;margin-bottom:.2rem">Everyone has a discipler!</div>'+
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5">No members are currently unassigned. New members will appear here once added.</div></div>';
+    _updateBulkAssignButton();
+    return;
+  }
+  if(filtered.length === 0){
+    wrap.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);font-size:12px">No unassigned members match "' + escapeHTMLNotif(q) + '"</div>';
+    _updateBulkAssignButton();
+    return;
+  }
+
+  // Sort alphabetically, then render checkboxes.
+  const sorted = [...filtered].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  wrap.innerHTML = sorted.map(m => {
+    const checked = _baSelected.has(m.id) ? 'checked' : '';
+    const ini = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const lvl = m.level || 0;
+    const lvlBadge = lvl > 0
+      ? `<span style="font-size:9px;background:var(--surface);color:var(--muted);padding:1px 6px;border-radius:8px;margin-left:6px">L${lvl}</span>`
+      : '';
+    return `
+      <label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:6px;cursor:pointer;transition:background .12s"
+        onmouseover="this.style.background='rgba(212,184,122,.08)'"
+        onmouseout="this.style.background='transparent'">
+        <input type="checkbox" ${checked} onchange="toggleBulkAssign('${m.id}', this.checked)"
+          style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--surface);color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">${ini}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTMLNotif(m.name||'(no name)')}${lvlBadge}</div>
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  _updateBulkAssignButton();
+}
+
+function toggleBulkAssign(memberId, isChecked){
+  if(isChecked) _baSelected.add(memberId);
+  else _baSelected.delete(memberId);
+  _updateBulkAssignButton();
+}
+
+function _updateBulkAssignButton(){
+  const btn = document.getElementById('baAssignBtn');
+  const txt = document.getElementById('baAssignBtnText');
+  const cnt = document.getElementById('baSelCount');
+  const n   = _baSelected.size;
+  if(cnt) cnt.textContent = n + ' selected';
+  if(btn) btn.disabled = n === 0;
+  if(txt){
+    const me = members.find(x => x.id === eid);
+    const firstName = me ? ((me.name||'').split(' ')[0] || 'leader') : 'leader';
+    txt.textContent = n === 0
+      ? 'Select members to assign'
+      : 'Assign ' + n + ' to ' + firstName;
+  }
+}
+
+function clearBulkAssignSelection(){
+  _baSelected.clear();
+  // Uncheck all visible checkboxes without re-rendering
+  document.querySelectorAll('#baList input[type="checkbox"]').forEach(cb => cb.checked = false);
+  _updateBulkAssignButton();
+}
+
+async function bulkAssignDisciples(){
+  const me = members.find(x => x.id === eid);
+  if(!me) return;
+  if(!LeaderScope.isPastor()){
+    toast('Only the Pastor can bulk-assign disciples', '🔒');
+    return;
+  }
+  const ids = [..._baSelected];
+  if(ids.length === 0){
+    toast('No members selected', '⚠️');
+    return;
+  }
+  // Confirmation step — show names being assigned
+  const names = ids
+    .map(id => members.find(m => m.id === id)?.name || '?')
+    .sort();
+  const preview = names.length <= 6
+    ? names.join(', ')
+    : names.slice(0, 5).join(', ') + ' and ' + (names.length - 5) + ' more';
+  const ok = confirm(
+    'Assign ' + ids.length + ' member' + (ids.length===1?'':'s') + ' as disciple' + (ids.length===1?'':'s') + ' of ' + me.name + '?\n\n' +
+    preview + '\n\n' +
+    'Their existing record will be updated with you as their Discipler / LC Leader.'
+  );
+  if(!ok) return;
+
+  const btn = document.getElementById('baAssignBtn');
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Assigning…'; }
+
+  try{
+    // Bulk update via Supabase — single .update().in() call
+    const {error} = await db.from('members')
+      .update({
+        discipler_id:   me.id,
+        discipler:      me.name,
+        discipler_name: me.name
+      })
+      .in('id', ids);
+    if(error) throw error;
+
+    // Update local cache so UI reflects immediately without a full reload
+    ids.forEach(id => {
+      const m = members.find(x => x.id === id);
+      if(m){
+        m.discipler_id   = me.id;
+        m.discipler      = me.name;
+        m.discipler_name = me.name;
+      }
+    });
+    _baSelected.clear();
+    toast('✓ Assigned ' + ids.length + ' to ' + (me.name||'').split(' ')[0]);
+    // Re-render both the existing disciples list (now bigger) and the
+    // unassigned candidates list (now smaller).
+    renderDisciplesPanel();
+    refreshBulkAssignSection();
+  } catch(e){
+    console.error('Bulk assign error:', e);
+    toast('Could not assign: ' + e.message, '❌');
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = '➕ <span id="baAssignBtnText">Assign ' + _baSelected.size + '</span>'; }
+  }
 }
 
 // Click a row → close current modal cleanly and open the target member.
@@ -2909,7 +3150,7 @@ function populateDisciplerSelect(currentDisciplerName) {
   const sel = document.getElementById('fd');
   if (!sel) return;
   const facs = members.filter(m => m.is_facilitator || m.facilitator_role);
-  sel.innerHTML = '<option value="">— Select Discipler / LC Leader —</option>';
+  sel.innerHTML = '<option value="">— None —</option>';
   facs.forEach(m => {
     const o = document.createElement('option');
     o.value = m.name;
@@ -2923,6 +3164,21 @@ function populateDisciplerSelect(currentDisciplerName) {
     const selected = this.options[this.selectedIndex];
     document.getElementById('fd_id').value = selected?.dataset?.id || '';
   };
+}
+
+// ── Erase the assigned discipler / LC Leader ───────────────────
+// In self-edit mode the dropdown is locked, so this also no-ops.
+// Save still requires clicking Save Member to persist the change.
+function clearDiscipler(){
+  if(_selfEditMode){
+    toast('Discipler is managed by your Pastor', '🔒');
+    return;
+  }
+  const sel = document.getElementById('fd');
+  const idField = document.getElementById('fd_id');
+  if(sel) sel.value = '';
+  if(idField) idField.value = '';
+  toast('Discipler cleared — click Save Member to persist', 'ℹ️');
 }
 
 // ═══════════════════════════════════════
