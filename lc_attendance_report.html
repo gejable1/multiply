@@ -532,9 +532,11 @@ async function loadReport(){
   const eventType = document.getElementById('filterEventType').value || 'LC Meeting';
 
   try{
-    // ── 1. Pull all members (we need every LC group, even those who didn't log) ──
+    // ── 1. Pull all members (we need every LC group, even those who didn't log).
+    //    Pull discipler_id + facilitator fields too — we now derive group membership
+    //    from the LC Leader (canonical), not from the optional `lc_group` text field.
     const {data:allMembers, error:mErr} = await db.from('members')
-      .select('id,name,lc_group,pipeline_level');
+      .select('id,name,lc_group,pipeline_level,discipler_id,is_facilitator,facilitator_role');
     if(mErr) throw mErr;
 
     // ── 2. Pull attendance rows for the selected date + event ──
@@ -564,60 +566,113 @@ async function loadReport(){
 
 // ═══════════════════════════════════════════════════════════════
 // Group members by LC + classify into 3 tiers
+//
+// IMPORTANT: We derive groups from LC LEADERS (canonical), not from
+// the optional `lc_group` text field. Many leaders haven't named their
+// group yet, so keying on lc_group would silently drop them entirely.
+//
+// Identity rules:
+//   • An LC Leader = any member where is_facilitator=true OR has a
+//     facilitator_role set. (Same rule populateDisciplerSelect uses.)
+//   • Group membership = members whose discipler_id points to the leader.
+//   • Group display name = leader.lc_group if set, else "[FirstName] LC".
+//   • Attendance match = by event_lc_group string (case-insensitive
+//     trim) AND by logged_by_id as a secondary key. Whichever finds
+//     the leader first wins.
 // ═══════════════════════════════════════════════════════════════
 function buildGroups(allMembers, attRows){
-  // Determine each LC group's leader: highest-level member in that LC group
-  // (pastor=5, director=4, coach=3, leader=2). Ties broken alphabetically.
-  const lcMap = {};   // key = lc_group string (or '__unassigned__')
+  // ── Find every LC Leader. Each becomes a "group" no matter what.
+  const leaders = allMembers.filter(m => m.is_facilitator || m.facilitator_role);
+
+  // Build the canonical lcMap keyed by LEADER ID
+  const lcMap = {};   // key = leader.id
+  leaders.forEach(L => {
+    lcMap[L.id] = {
+      leader: L,
+      members: [],   // members under this leader (discipler_id === L.id)
+      lcGroupName: (L.lc_group || '').trim(),  // text label if any
+      lcGroupNorm: (L.lc_group || '').trim().toLowerCase(),  // for matching
+    };
+  });
+
+  // ── Assign each member to their leader's group via discipler_id.
+  //    Members whose discipler isn't a flagged LC Leader are skipped
+  //    (they don't belong to any LC group from a reporting standpoint).
   allMembers.forEach(m => {
-    const key = (m.lc_group||'').trim() || null;
-    if(!key) return;  // unassigned members are not part of any LC group
-    if(!lcMap[key]) lcMap[key] = {members:[], leader:null};
-    lcMap[key].members.push(m);
-    const lvl = m.pipeline_level || 0;
-    if(lvl >= 2){
-      const cur = lcMap[key].leader;
-      if(!cur || lvl > (cur.pipeline_level||0) ||
-         (lvl === (cur.pipeline_level||0) && (m.name||'') < (cur.name||''))){
-        lcMap[key].leader = m;
+    const did = m.discipler_id;
+    if(did && lcMap[did]) lcMap[did].members.push(m);
+  });
+
+  // ── Also include the leader themselves in their own group's headcount
+  //    (a leader showing up at their own LC meeting counts as 1 attendee).
+  Object.values(lcMap).forEach(g => {
+    if(!g.members.some(m => m.id === g.leader.id)) g.members.push(g.leader);
+  });
+
+  // ── Map attendance rows. Key by NORMALIZED lc group string (for backward
+  //    compatibility with rows using event_lc_group), and ALSO build a
+  //    secondary index by logged_by_id (more reliable since user IDs don't
+  //    drift like text strings do).
+  const attByLcName = {};     // key = lowercased trimmed lc group string
+  const attByLogger = {};     // key = logged_by_id (user UUID)
+  attRows.forEach(r => {
+    const nameKey = (r.event_lc_group||r.member_lc_group||'').trim().toLowerCase();
+    const idKey   = r.logged_by_id || null;
+    [
+      nameKey ? [attByLcName, nameKey] : null,
+      idKey   ? [attByLogger, idKey]   : null,
+    ].filter(Boolean).forEach(([bag, key]) => {
+      if(!bag[key]) bag[key] = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null, loggedById:null};
+      // Avoid double-counting: each row contributes once per leader, not twice.
+      // We'll de-dupe at the leader-resolution step below.
+    });
+  });
+  // Now actually accumulate (single pass per row), deciding which leader to credit
+  Object.values(lcMap).forEach(g => {
+    g.attResolved = null;  // attendance bucket once we find one
+  });
+  attRows.forEach(r => {
+    // Try to match this row to a leader: by logged_by_id first, then by name
+    let matchedLeader = null;
+    if(r.logged_by_id && lcMap[r.logged_by_id]) matchedLeader = lcMap[r.logged_by_id];
+    if(!matchedLeader){
+      const nameKey = (r.event_lc_group||r.member_lc_group||'').trim().toLowerCase();
+      if(nameKey){
+        matchedLeader = Object.values(lcMap).find(g => g.lcGroupNorm === nameKey);
       }
     }
-  });
-
-  // Map attendance rows by LC group (use event_lc_group as the source of truth
-  // for which group the LOG is associated with — this is what the leader saved)
-  const attByLc = {};
-  attRows.forEach(r => {
-    const key = (r.event_lc_group||r.member_lc_group||'').trim();
-    if(!key) return;
-    if(!attByLc[key]) attByLc[key] = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null, loggedById:null};
-    if(r.present) attByLc[key].present++;
-    else attByLc[key].absent++;
-    attByLc[key].total++;
-    if(!attByLc[key].loggedBy && r.logged_by){
-      attByLc[key].loggedBy = r.logged_by;
-      attByLc[key].loggedById = r.logged_by_id;
-      attByLc[key].loggedAt = r.created_at || r.updated_at;
+    if(!matchedLeader) return;  // attendance row that doesn't match any current leader
+    if(!matchedLeader.attResolved){
+      matchedLeader.attResolved = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null};
+    }
+    const bag = matchedLeader.attResolved;
+    if(r.present) bag.present++;
+    else bag.absent++;
+    bag.total++;
+    if(!bag.loggedBy && r.logged_by){
+      bag.loggedBy = r.logged_by;
+      bag.loggedAt = r.created_at || r.updated_at;
     }
   });
 
-  // Now classify each LC group
+  // ── Now classify every leader's group into one of 3 tiers
   const champions = [];
   const runners = [];
   const awaiting = [];
 
-  Object.entries(lcMap).forEach(([lcKey, info]) => {
-    const att = attByLc[lcKey];
-    const memberCount = info.members.length;
-    const leaderName = info.leader?.name || att?.loggedBy || '—';
-    const displayName = lcDisplayName(lcKey, leaderName);
+  Object.values(lcMap).forEach(g => {
+    const att = g.attResolved;
+    const memberCount = g.members.length;
+    const leaderName = g.leader?.name || '—';
+    const displayName = lcDisplayName(g.lcGroupName, leaderName);
 
     if(!att || att.total === 0){
-      // No attendance log submitted at all
+      // No attendance log submitted at all — this LC Leader's group
+      // appears in the Awaiting section (the whole point of this report).
       awaiting.push({
         displayName, leaderName,
         memberCount,
-        lcKey
+        lcKey: g.leader.id
       });
     } else {
       const denominator = Math.max(att.total, memberCount); // be safe if extras logged
@@ -629,7 +684,7 @@ function buildGroups(allMembers, attRows){
         pct,
         loggedBy: att.loggedBy,
         loggedAt: att.loggedAt,
-        lcKey
+        lcKey: g.leader.id
       };
       if(pct === 100) champions.push(card);
       else runners.push(card);
@@ -643,8 +698,8 @@ function buildGroups(allMembers, attRows){
 
   // Totals for header
   const totalLcGroups = Object.keys(lcMap).length;
-  const totalMembersInLcs = Object.values(lcMap).reduce((s,info)=>s+info.members.length, 0);
-  const totalPresent = Object.values(attByLc).reduce((s,a)=>s+a.present, 0);
+  const totalMembersInLcs = Object.values(lcMap).reduce((s,g)=>s+g.members.length, 0);
+  const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
 
   return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent};
 }
