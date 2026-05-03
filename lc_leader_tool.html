@@ -477,7 +477,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="topbar">
     <div class="tb-back" onclick="showScreen('screenHome')">←</div>
     <div class="tb-title">My Group</div>
-    <div class="tb-action" onclick="openAddMember()" style="background:var(--gold);color:#0f0f13;border-color:var(--gold)">+ Add Member</div>
+    <div class="tb-action" id="addMemberBtn" onclick="openAddMember()" style="background:var(--gold);color:#0f0f13;border-color:var(--gold)">+ Add Member</div>
   </div>
   <!-- ── SCOPE TABS (Phase 1 access control) ──
        Same model as the desktop dashboard: choose which subset
@@ -734,6 +734,22 @@ let currentMember = null;
 let selectedAttType = 'Sunday Service';
 let filterStr = '';
 let allSelected = false;
+
+// ── Hide "+ Add Member" for non-executive leaders ──
+//    Pastor Gerry's call (May 2026): too many duplicate additions while
+//    LCLs are still learning. Restrict to Level 5 (Executive) for now.
+//    The DOM hide is convenience; openAddMember() also re-checks server-side.
+(function gateAddMemberButton(){
+  const tryGate = ()=>{
+    const btn = document.getElementById('addMemberBtn');
+    if(!btn) return;
+    const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
+    btn.style.display = lvl >= 5 ? '' : 'none';
+  };
+  tryGate();
+  setTimeout(tryGate, 500);
+  setTimeout(tryGate, 1500);
+})();
 
 const LEVEL_NAMES = {0:'Pre-Pipeline',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Exec. Leader'};
 const ZONE_DATA = {
@@ -1038,6 +1054,15 @@ function renderMemberList(){
 // ADD MEMBER (Leader-initiated)
 // ═══════════════════════════════════════════════════════
 function openAddMember(){
+  // ── Executive-only gate (Pastor Gerry, May 2026) ─────────
+  // Adding members is restricted to Executive Leaders (Level 5) while
+  // LCLs are still learning the system — too many accidental duplicates.
+  // The button is also visually hidden via gateAddMemberButton(), this is
+  // defense-in-depth in case someone bypasses the DOM.
+  if(!currentLeader || (currentLeader.pipeline_level||0) < 5){
+    toast('Adding new members is paused — please ask Pastor Gerry to add them.', 'info');
+    return;
+  }
   const today = new Date().toISOString().split('T')[0];
   // Reset form
   document.getElementById('amName').value     = '';

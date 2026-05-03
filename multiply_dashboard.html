@@ -374,7 +374,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       </div>
     </div>
     <button class="bico" onclick="exportCSV()" title="Export CSV">⬇</button>
-    <button class="badd" onclick="openAdd()">+ Add Member</button>
+    <button class="badd" id="addMemberBtn" onclick="openAdd()">+ Add Member</button>
   </div>
 </div>
 
@@ -425,10 +425,20 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </div>
 
   <div class="fbar" style="border-radius:0 0 10px 10px;">
-    <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..."
-      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-      data-lpignore="true" data-form-type="other" data-1p-ignore="true" name="sq_search_box_no_autofill"
-      oninput="window._sqUserTyped=true;renderTable()">
+    <div style="position:relative;flex:1;min-width:200px;display:flex">
+      <input type="text" class="sbox" id="sq" placeholder="Search name, group, gift, ministry..."
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        data-lpignore="true" data-form-type="other" data-1p-ignore="true" name="sq_search_box_no_autofill"
+        style="flex:1;padding-right:32px"
+        oninput="window._sqUserTyped=true;_toggleSearchClearBtn();renderTable()">
+      <button type="button" id="sqClearBtn" onclick="clearSearchBox()" title="Clear search"
+        style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);
+               background:transparent;border:none;width:24px;height:24px;border-radius:50%;
+               cursor:pointer;color:var(--muted);font-size:14px;line-height:1;
+               display:none;align-items:center;justify-content:center;transition:all .12s"
+        onmouseover="this.style.background='var(--red-bg)';this.style.color='var(--red)'"
+        onmouseout="this.style.background='transparent';this.style.color='var(--muted)'">✕</button>
+    </div>
     <button class="fc on" onclick="setF('all',this)">All</button>
     <button class="fc" onclick="setF('L0',this)">Pre-Pipeline</button>
     <button class="fc" onclick="setF('L1',this)">Level 1</button>
@@ -897,6 +907,23 @@ const LEADER = window.LEADER || {}; // populated by gateOrRedirect
   if(el('leaderBadgeRole')) el('leaderBadgeRole').textContent = LEADER.leaderRole || MultiplyShared.LEVEL_NAMES[LEADER.leaderLevel||0];
 })();
 
+// ── Hide "+ Add Member" for non-executive leaders ──
+//    Pastor Gerry's call (May 2026): too many duplicate additions while
+//    LCLs are still learning. Restrict to Level 5 (Executive) for now.
+//    To re-enable broadly, change the < 5 below to your desired threshold
+//    (e.g., < 3 to allow Coaches and Directors).
+(function gateAddMemberButton(){
+  const tryGate = ()=>{
+    const btn = document.getElementById('addMemberBtn');
+    if(!btn) return;
+    const lvl = (LEADER && LEADER.leaderLevel) || 0;
+    btn.style.display = lvl >= 5 ? '' : 'none';
+  };
+  tryGate();
+  setTimeout(tryGate, 500);
+  setTimeout(tryGate, 1500);
+})();
+
 // Logout — delegated to shared module
 async function logoutLeader(){
   await MultiplyShared.logoutLeader('leader_login.html');
@@ -1134,6 +1161,25 @@ function rPV(){
 // ═══════════════════════════════════════
 // MEMBERS TABLE
 // ═══════════════════════════════════════
+// ── Show/hide the ✕ clear button next to the search box ──
+function _toggleSearchClearBtn(){
+  const input = document.getElementById('sq');
+  const btn   = document.getElementById('sqClearBtn');
+  if(!input || !btn) return;
+  // Use 'flex' (not 'inline-block') because the button is a flex centering wrapper for the ✕
+  btn.style.display = input.value.length > 0 ? 'flex' : 'none';
+}
+
+function clearSearchBox(){
+  const input = document.getElementById('sq');
+  if(!input) return;
+  input.value = '';
+  window._sqUserTyped = true;
+  _toggleSearchClearBtn();
+  renderTable();
+  input.focus();   // keep focus so user can immediately type a new query
+}
+
 function setF(f,el){
   filt=f;
   document.querySelectorAll('.fc').forEach(c=>c.classList.remove('on'));
@@ -1167,8 +1213,11 @@ function renderTable(){
       ministry:  'No one in your ministry matches the filters.',
       all:       'No members match the filters.',
     };
+    const canAdd = (LEADER && (LEADER.leaderLevel||0) >= 5);
     const baseMsg = members.length===0
-      ? 'No members yet. Click + Add Member to start.'
+      ? (canAdd
+          ? 'No members yet. Click + Add Member to start.'
+          : 'No members yet — please ask Pastor Gerry to add them.')
       : (scopedMembers.length===0
           ? (scopeMsgs[LeaderScope.getCurrent()] || 'No members in your current view.')
           : 'No members match this filter within your view.');
@@ -1934,6 +1983,15 @@ function drillToMember(id){
 }
 
 function openAdd(){
+  // ── Executive-only gate (Pastor Gerry, May 2026) ─────────
+  // Adding members is restricted to Executive Leaders (Level 5) while
+  // LCLs are still learning the system — too many accidental duplicates.
+  // The button is also visually hidden via gateAddMemberButton(), this is
+  // defense-in-depth in case someone bypasses the DOM.
+  if(!LEADER || (LEADER.leaderLevel||0) < 5){
+    toast('Adding new members is paused — please ask Pastor Gerry to add them.', '🔒');
+    return;
+  }
   eid=null;clearF();
   // Self-edit mode never applies to Add (no existing record to protect).
   // Clear defensively in case state leaked from a prior My Profile session.
