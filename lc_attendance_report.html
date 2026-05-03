@@ -721,14 +721,35 @@ function buildGroups(allMembers, attRows){
   runners.sort((a,b) => b.pct - a.pct);
   awaiting.sort((a,b) => a.displayName.localeCompare(b.displayName));
 
-  // Totals for header
+  // Totals for header — sum from what's actually displayed on the cards
+  // (card denominators may include logged extras like substitutes/visitors,
+  // which is what users see and expect the headline to match).
   const totalLcGroups = Object.keys(lcMap).length;
-  const totalMembersInLcs = Object.values(lcMap).reduce((s,g)=>s+g.members.length, 0);
+  const sumChampions = champions.reduce((s,c) => s + (c.total||0), 0);
+  const sumRunners   = runners.reduce((s,c) => s + (c.total||0), 0);
+  const sumAwaiting  = awaiting.reduce((s,c) => s + (c.memberCount||0), 0);
+  const totalMembersInLcs = sumChampions + sumRunners + sumAwaiting;
   const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
   const totalUnassigned = unassigned.length;
   // Church total reconciles with dashboard: members in LCs + unassigned.
   // (Leaders are naturally counted as members of their own discipler's group.)
   const totalAllMembers = totalMembersInLcs + totalUnassigned;
+
+  // ── Diagnostic logging (browser console) — helps spot silent member drops.
+  //    If `allMembers.length` doesn't equal `totalAllMembers`, something is
+  //    being lost. Common cause: members whose discipler_id points to someone
+  //    who exists but isn't flagged as is_facilitator (so lcMap[did] is missing).
+  try {
+    const sumGroupMembers = Object.values(lcMap).reduce((s,g)=>s+g.members.length, 0);
+    console.log('[Report Math]', {
+      allMembersFromDB: allMembers.length,
+      sumGroupMembers,
+      sumCardTotals: totalMembersInLcs,
+      unassigned: totalUnassigned,
+      headlineTotal: totalAllMembers,
+      missing: allMembers.length - (sumGroupMembers + totalUnassigned),
+    });
+  } catch(e){}
 
   return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers};
 }
