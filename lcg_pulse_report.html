@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LCG Pulse Report · MULTIPLY</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💓</text></svg>">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Bebas+Neue&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+
+<!-- Supabase + shared -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+
+<style>
+:root{
+  --bg:#0f0f13;
+  --surface:#1a1a22;
+  --surface2:#23232d;
+  --surface3:#2d2d3a;
+  --border:rgba(255,255,255,.08);
+  --border-strong:rgba(255,255,255,.16);
+  --text:#f4f4f5;
+  --muted:#9b9aa8;
+  --gold:#fbbf24;
+  --gold-soft:rgba(251,191,36,.12);
+  --green:#34d399;
+  --green-soft:rgba(52,211,153,.14);
+  --amber:#fb923c;
+  --amber-soft:rgba(251,146,60,.14);
+  --red:#f87171;
+  --red-soft:rgba(248,113,113,.14);
+  --purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ─────────────────────── Top bar ─────────────────────── */
+.topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 18px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:50;
+}
+.tb-back{
+  width:38px;height:38px;border-radius:10px;
+  background:var(--surface2);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:18px;color:var(--text);
+  transition:background .15s;
+  text-decoration:none;
+}
+.tb-back:hover{background:var(--surface3)}
+.tb-title{
+  font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.05em;
+  flex:1;
+}
+.tb-leader{
+  font-size:12px;color:var(--muted);font-weight:500;
+  text-align:right;
+}
+.tb-leader strong{color:var(--text);font-weight:600;display:block;font-size:13px}
+
+/* ─────────────────────── Container ─────────────────────── */
+.wrap{max-width:1200px;margin:0 auto;padding:18px}
+
+/* ─────────────────────── Period chooser ─────────────────────── */
+.period-row{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  margin-bottom:18px;
+}
+.period-pill{
+  padding:9px 16px;border-radius:999px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--muted);font-weight:600;font-size:13px;
+  cursor:pointer;transition:all .15s;user-select:none;
+}
+.period-pill:hover{border-color:var(--border-strong);color:var(--text)}
+.period-pill.active{
+  background:var(--gold);color:#0f0f13;border-color:var(--gold);
+}
+.period-custom{
+  display:none;align-items:center;gap:6px;
+  margin-left:6px;
+}
+.period-custom.show{display:inline-flex;flex-wrap:wrap}
+.period-custom input{
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);border-radius:8px;padding:7px 10px;
+  font-family:inherit;font-size:13px;
+  color-scheme:dark;
+}
+.period-custom button{
+  background:var(--gold);color:#0f0f13;border:none;
+  border-radius:8px;padding:7px 14px;font-weight:700;
+  cursor:pointer;font-family:inherit;font-size:12px;
+}
+
+/* ─────────────────────── Hero — the headline ─────────────────────── */
+.hero{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;
+  margin-bottom:18px;
+}
+@media (max-width:720px){ .hero{grid-template-columns:1fr} }
+.hero-card{
+  background:linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+  border:1px solid var(--border);
+  border-radius:16px;padding:22px 22px 20px;
+  position:relative;overflow:hidden;
+}
+.hero-card .label{
+  font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:.18em;
+  color:var(--muted);margin-bottom:10px;
+}
+.hero-num{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:84px;line-height:1;letter-spacing:-.02em;
+  color:var(--text);margin-bottom:6px;
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.hero-num .total{
+  font-size:34px;color:var(--muted);font-weight:400;
+}
+.hero-sub{
+  font-size:13px;color:var(--muted);font-weight:500;
+}
+.hero-sub .accent{color:var(--amber);font-weight:700}
+.hero-sub .good{color:var(--green);font-weight:700}
+
+/* Sparkline column */
+.spark-card .label{margin-bottom:14px}
+.spark-bars{
+  display:flex;align-items:flex-end;gap:10px;height:90px;
+  margin-bottom:10px;
+}
+.spark-col{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;
+  min-width:0;
+}
+.spark-bar{
+  width:100%;max-width:42px;
+  border-radius:6px 6px 0 0;
+  background:linear-gradient(180deg, var(--green), rgba(52,211,153,.5));
+  position:relative;
+  min-height:6px;
+  transition:height .4s ease-out;
+}
+.spark-bar.low{background:linear-gradient(180deg, var(--amber), rgba(251,146,60,.5))}
+.spark-bar.bad{background:linear-gradient(180deg, var(--red), rgba(248,113,113,.5))}
+.spark-pct{
+  font-family:'Bebas Neue',sans-serif;font-size:14px;
+  color:var(--text);
+}
+.spark-wk{
+  font-size:10px;color:var(--muted);font-weight:600;
+  text-align:center;
+}
+
+/* ─────────────────────── Champions strip ─────────────────────── */
+.section-head{
+  display:flex;align-items:center;gap:10px;
+  margin:22px 0 10px;
+}
+.section-head h2{
+  font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.06em;
+  color:var(--text);font-weight:400;
+}
+.section-head .sh-count{
+  background:var(--surface2);color:var(--muted);
+  padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
+}
+
+.champs{
+  display:flex;gap:10px;overflow-x:auto;
+  padding:4px 0 12px;
+  scrollbar-width:thin;
+}
+.champ{
+  flex:0 0 auto;
+  background:linear-gradient(135deg, var(--green-soft), rgba(52,211,153,.04));
+  border:1px solid rgba(52,211,153,.3);
+  border-radius:14px;padding:14px 16px;
+  min-width:200px;max-width:240px;
+}
+.champ-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.champ-avatar{
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(52,211,153,.25);color:var(--green);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:14px;flex-shrink:0;
+}
+.champ-name{font-size:13px;font-weight:700;line-height:1.2;color:var(--text)}
+.champ-grp{font-size:11px;color:var(--muted);margin-top:1px;line-height:1.2}
+.champ-streak{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(52,211,153,.18);color:var(--green);
+  padding:4px 9px;border-radius:999px;
+  font-size:11px;font-weight:700;
+}
+.champs-empty{
+  background:var(--surface2);border:1px dashed var(--border-strong);
+  border-radius:14px;padding:18px;text-align:center;
+  color:var(--muted);font-size:12.5px;font-style:italic;
+}
+
+/* ─────────────────────── Heartbeat cards ─────────────────────── */
+.hb-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:10px;
+}
+.hb-card{
+  background:linear-gradient(135deg, var(--amber-soft), rgba(251,146,60,.04));
+  border:1px solid rgba(251,146,60,.3);
+  border-radius:14px;padding:14px 16px;
+}
+.hb-card.silent-long{
+  background:linear-gradient(135deg, var(--red-soft), rgba(248,113,113,.04));
+  border-color:rgba(248,113,113,.35);
+}
+.hb-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.hb-avatar{
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(251,146,60,.25);color:var(--amber);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:14px;flex-shrink:0;
+}
+.silent-long .hb-avatar{background:rgba(248,113,113,.25);color:var(--red)}
+.hb-name{font-size:14px;font-weight:700;line-height:1.2;color:var(--text)}
+.hb-grp{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.2}
+.hb-stats{
+  display:flex;gap:14px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--muted);
+  margin-bottom:11px;line-height:1.4;
+}
+.hb-stats strong{color:var(--text);font-weight:700}
+.hb-action{
+  width:100%;padding:9px;
+  background:var(--green);color:#0f0f13;border:none;
+  border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.hb-action:hover{filter:brightness(1.1)}
+.hb-action.disabled{
+  background:var(--surface3);color:var(--muted);cursor:not-allowed;
+}
+.hb-empty{
+  background:var(--green-soft);border:1px dashed rgba(52,211,153,.4);
+  border-radius:14px;padding:24px;text-align:center;
+  color:var(--green);font-size:14px;font-weight:600;
+}
+
+/* ─────────────────────── Heatmap ─────────────────────── */
+.heatmap{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:18px;
+  overflow-x:auto;
+}
+.hm-table{
+  border-collapse:separate;border-spacing:3px;
+  min-width:100%;
+}
+.hm-table th{
+  font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:.08em;
+  color:var(--muted);font-weight:400;
+  padding:6px 4px;text-align:center;
+}
+.hm-table th.lcg-head{
+  text-align:left;padding-left:6px;min-width:170px;
+}
+.hm-table td.lcg-name{
+  font-size:12.5px;font-weight:600;color:var(--text);
+  padding:0 8px;line-height:1.25;white-space:nowrap;
+}
+.hm-table td.lcg-name .sub{
+  font-size:10.5px;color:var(--muted);font-weight:500;display:block;
+}
+.hm-cell{
+  width:34px;height:34px;border-radius:6px;
+  background:var(--surface3);
+  position:relative;cursor:default;
+}
+.hm-cell.met{background:var(--green)}
+.hm-cell.weak{background:var(--amber)}
+.hm-cell.miss{background:var(--surface3);border:1px dashed var(--border-strong)}
+.hm-cell[title]{cursor:help}
+.hm-legend{
+  display:flex;gap:14px;flex-wrap:wrap;justify-content:center;
+  margin-top:14px;font-size:11px;color:var(--muted);
+}
+.hm-legend .swatch{
+  width:14px;height:14px;border-radius:4px;
+  display:inline-block;vertical-align:middle;margin-right:5px;
+}
+
+/* ─────────────────────── Action bar ─────────────────────── */
+.actionbar{
+  display:flex;gap:10px;flex-wrap:wrap;
+  margin:22px 0 36px;
+  justify-content:flex-end;
+}
+.act-btn{
+  padding:11px 18px;border-radius:10px;
+  background:var(--surface2);border:1px solid var(--border-strong);
+  color:var(--text);font-family:inherit;font-size:13px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;gap:7px;
+}
+.act-btn:hover{background:var(--surface3)}
+.act-btn.primary{background:var(--gold);color:#0f0f13;border-color:var(--gold)}
+
+/* ─────────────────────── Loading + toast ─────────────────────── */
+.loading{
+  text-align:center;padding:60px 20px;color:var(--muted);font-size:13px;
+}
+.loading::after{
+  content:'';display:inline-block;width:14px;height:14px;
+  border:2px solid var(--muted);border-top-color:transparent;border-radius:50%;
+  margin-left:10px;vertical-align:middle;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--surface3);color:var(--text);
+  padding:12px 22px;border-radius:999px;font-size:13px;font-weight:600;
+  border:1px solid var(--border-strong);
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+  z-index:9999;opacity:0;transition:opacity .25s;
+  max-width:90vw;text-align:center;
+}
+.toast.show{opacity:1}
+.toast.success{background:rgba(52,211,153,.95);color:#0f0f13;border-color:transparent}
+.toast.error{background:rgba(248,113,113,.95);color:#0f0f13;border-color:transparent}
+
+/* ─────────────────────── Banner ─────────────────────── */
+.scope-banner{
+  background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.3);
+  color:var(--text);font-size:12.5px;
+  padding:10px 14px;border-radius:10px;
+  margin-bottom:14px;line-height:1.45;
+}
+.scope-banner strong{color:var(--purple)}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ TOP BAR ═══════════════════ -->
+<div class="topbar">
+  <a class="tb-back" href="lc_leader_tool.html" title="Back to Leader Tool">←</a>
+  <div class="tb-title">💓 LCG Pulse</div>
+  <div class="tb-leader">
+    <strong id="leaderNameLbl">…</strong>
+    <span id="leaderRoleLbl">Loading…</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- Scope banner (hidden by default; shown to non-pastors) -->
+  <div class="scope-banner" id="scopeBanner" style="display:none">
+    Showing pulse across <strong>all LCGs</strong> so leaders can see how they compare.
+    Tap a card to message the leader.
+  </div>
+
+  <!-- ═══════════════════ PERIOD PICKER ═══════════════════ -->
+  <div class="period-row" id="periodRow">
+    <div class="period-pill" data-period="week" onclick="setPeriod('week', this)">This Week</div>
+    <div class="period-pill active" data-period="4w" onclick="setPeriod('4w', this)">Last 4 Weeks</div>
+    <div class="period-pill" data-period="30d" onclick="setPeriod('30d', this)">Last 30 Days</div>
+    <div class="period-pill" data-period="custom" onclick="setPeriod('custom', this)">Custom</div>
+    <div class="period-custom" id="periodCustom">
+      <input type="date" id="customFrom" aria-label="From date">
+      <span style="color:var(--muted);font-size:12px">→</span>
+      <input type="date" id="customTo" aria-label="To date">
+      <button onclick="applyCustom()">Apply</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ CONTENT ═══════════════════ -->
+  <div id="content">
+    <div class="loading">Loading pulse</div>
+  </div>
+
+  <!-- ═══════════════════ ACTION BAR ═══════════════════ -->
+  <div class="actionbar" id="actionbar" style="display:none">
+    <button class="act-btn" onclick="copySummary()">📋 Copy summary</button>
+    <button class="act-btn primary" onclick="window.print()">🖨 Print / Save PDF</button>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// LCG Pulse Report
+// ─────────────────────────────────────────────────────────────────
+// Tracks LCG (Life Community Group) MEETING cadence — distinct from
+// the existing Sunday Service attendance compliance report.
+//
+// Architecture (matches HANDOFF.md keys):
+//  - LC Leader = members.is_facilitator OR facilitator_role set
+//  - Each LC Leader anchors one LCG (their flock = members where
+//    discipler_id === leader.id)
+//  - "Meeting" = an `attendance` row with event_type='LC Meeting'
+//  - The LCG that met is identified by attendance.event_lc_group
+//    OR by looking up the logger's role (event_lc_group is more
+//    reliable in current data)
+//
+// Visible to ALL leaders (Pastor's call) so they can see how they
+// compare to peers. Pastor sees identical view (single source of
+// truth, no special rendering branch).
+// ═══════════════════════════════════════════════════════════════
+
+// ───── Boot — gate session, load module ─────
+// Wrapped in IIFE so the gate can short-circuit cleanly via redirect.
+(function bootGate(){
+  if (!MultiplyShared.gateOrRedirect('leader_login.html')) {
+    // gate redirected; nothing else runs
+    return;
+  }
+})();
+
+const db = MultiplyShared.getDB();
+const L  = window.LEADER || {};
+
+// State
+let allMembers = [];
+let lcLeaders  = []; // members who are LC Leaders
+let lcgMap     = new Map(); // leaderId -> { leader, members: [...], meetings: [...] }
+let meetings   = []; // attendance rows where event_type='LC Meeting' in window
+let currentPeriod = '4w';
+let periodFrom   = null;
+let periodTo     = null;
+let weekBuckets  = []; // [{from, to, label}]
+
+// Compatibility name (the leader's name shown top-right)
+document.getElementById('leaderNameLbl').textContent = L.leaderName || 'Leader';
+document.getElementById('leaderRoleLbl').textContent =
+  (MultiplyShared.LEVEL_NAMES[L.leaderLevel || 0] || 'Leader');
+
+// Show the scope banner to non-pastors
+if ((L.leaderLevel || 0) < MultiplyShared.PASTOR_LEVEL) {
+  document.getElementById('scopeBanner').style.display = 'block';
+}
+
+// Initial load
+init();
+
+async function init() {
+  setPeriodWindow('4w');
+  try {
+    await loadMembers();
+    await reloadAndRender();
+  } catch (e) {
+    console.error('Init failed:', e);
+    document.getElementById('content').innerHTML =
+      '<div class="loading" style="color:var(--red)">Failed to load: ' + escapeHTML(e.message) + '</div>';
+  }
+}
+
+// ─────────────────────── Period management ───────────────────────
+function setPeriod(p, btnEl) {
+  document.querySelectorAll('.period-pill').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+  const customRow = document.getElementById('periodCustom');
+  if (p === 'custom') {
+    customRow.classList.add('show');
+    // pre-fill with current window
+    if (periodFrom) document.getElementById('customFrom').value = isoDate(periodFrom);
+    if (periodTo)   document.getElementById('customTo').value   = isoDate(periodTo);
+    return;
+  }
+  customRow.classList.remove('show');
+  setPeriodWindow(p);
+  reloadAndRender();
+}
+
+function applyCustom() {
+  const from = document.getElementById('customFrom').value;
+  const to   = document.getElementById('customTo').value;
+  if (!from || !to) { toast('Pick both dates', 'error'); return; }
+  if (from > to)     { toast('From-date must be ≤ To-date', 'error'); return; }
+  periodFrom = new Date(from + 'T00:00:00');
+  periodTo   = new Date(to + 'T23:59:59');
+  currentPeriod = 'custom';
+  buildWeekBuckets();
+  reloadAndRender();
+}
+
+function setPeriodWindow(p) {
+  currentPeriod = p;
+  const today = new Date();
+  today.setHours(23,59,59,999);
+  if (p === 'week') {
+    // This calendar week, Mon→Sun (Philippines convention varies; we'll use Sun→Sat)
+    const day = today.getDay(); // 0=Sun
+    const start = new Date(today);
+    start.setDate(start.getDate() - day);
+    start.setHours(0,0,0,0);
+    periodFrom = start;
+    periodTo   = today;
+  } else if (p === '4w') {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 27); // 4 weeks = 28 days incl today
+    start.setHours(0,0,0,0);
+    periodFrom = start;
+    periodTo   = today;
+  } else if (p === '30d') {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 29);
+    start.setHours(0,0,0,0);
+    periodFrom = start;
+    periodTo   = today;
+  }
+  buildWeekBuckets();
+}
+
+function buildWeekBuckets() {
+  // Slice the period into week-sized buckets ending at periodTo.
+  // We want the most recent week first in the display.
+  weekBuckets = [];
+  const msDay = 86400000;
+  const totalDays = Math.ceil((periodTo - periodFrom) / msDay) + 1;
+  const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
+  let cursor = new Date(periodTo);
+  cursor.setHours(23,59,59,999);
+  for (let i = 0; i < numWeeks; i++) {
+    const end = new Date(cursor);
+    const start = new Date(cursor);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0,0,0,0);
+    if (start < periodFrom) start.setTime(periodFrom.getTime());
+    weekBuckets.unshift({ from: start, to: end, label: 'W' + (numWeeks - i) });
+    cursor = new Date(start);
+    cursor.setDate(cursor.getDate() - 1);
+    cursor.setHours(23,59,59,999);
+    if (cursor < periodFrom) break;
+  }
+}
+
+// ─────────────────────── Data loading ───────────────────────
+async function loadMembers() {
+  const { data, error } = await db.from('members')
+    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level');
+  if (error) throw error;
+  allMembers = data || [];
+  // LC Leaders per HANDOFF architecture key 1: is_facilitator OR facilitator_role
+  lcLeaders = allMembers.filter(m => m.is_facilitator || (m.facilitator_role && m.facilitator_role.trim()));
+  // Build LCG map
+  lcgMap.clear();
+  lcLeaders.forEach(leader => {
+    const flock = allMembers.filter(m => m.discipler_id === leader.id);
+    lcgMap.set(leader.id, {
+      leader,
+      members: flock,
+      meetingsByWeek: [], // fills in after loadMeetings
+    });
+  });
+}
+
+async function loadMeetings() {
+  if (!periodFrom || !periodTo) return;
+  const fromIso = isoDate(periodFrom);
+  const toIso   = isoDate(periodTo);
+  const { data, error } = await db.from('attendance')
+    .select('id, event_date, event_type, event_lc_group, logged_by, logged_by_id, member_id, present')
+    .eq('event_type', 'LC Meeting')
+    .gte('event_date', fromIso)
+    .lte('event_date', toIso);
+  if (error) throw error;
+  meetings = data || [];
+  console.log('[lcg-pulse] loaded', meetings.length, 'LC Meeting rows for', fromIso, '→', toIso);
+}
+
+function indexMeetingsByLCG() {
+  // For each LCG, group its meetings into the week buckets.
+  // We attribute a meeting row to a leader by:
+  //   1. logged_by_id (most reliable — matches the leader's member id), else
+  //   2. event_lc_group string match against leader.lc_group
+  // Then we de-dupe per week per LCG (multiple member rows from same meeting
+  // shouldn't count multiple times).
+  lcgMap.forEach(entry => {
+    entry.meetingsByWeek = weekBuckets.map(() => ({ met: false, attendance: 0, weak: false, dates: new Set() }));
+  });
+  const leaderById = new Map(lcLeaders.map(l => [l.id, l]));
+
+  meetings.forEach(row => {
+    let leader = null;
+    if (row.logged_by_id && leaderById.has(row.logged_by_id)) {
+      leader = leaderById.get(row.logged_by_id);
+    } else if (row.event_lc_group) {
+      leader = lcLeaders.find(l => (l.lc_group||'') === row.event_lc_group);
+    }
+    if (!leader) return; // can't attribute — skip
+    const entry = lcgMap.get(leader.id);
+    if (!entry) return;
+    // Find which week bucket this date belongs to
+    const dt = new Date(row.event_date + 'T12:00:00'); // noon to dodge DST
+    const wIdx = weekBuckets.findIndex(w => dt >= w.from && dt <= w.to);
+    if (wIdx < 0) return;
+    const wk = entry.meetingsByWeek[wIdx];
+    wk.met = true;
+    wk.dates.add(row.event_date);
+    if (row.present) wk.attendance += 1;
+  });
+
+  // Mark "weak" weeks — met but only 1 person logged present (suspicious)
+  lcgMap.forEach(entry => {
+    entry.meetingsByWeek.forEach(wk => {
+      if (wk.met && wk.attendance <= 1) wk.weak = true;
+    });
+  });
+}
+
+// ─────────────────────── Render ───────────────────────
+async function reloadAndRender() {
+  document.getElementById('content').innerHTML = '<div class="loading">Loading pulse</div>';
+  document.getElementById('actionbar').style.display = 'none';
+  try {
+    await loadMeetings();
+    indexMeetingsByLCG();
+    render();
+    document.getElementById('actionbar').style.display = 'flex';
+  } catch (e) {
+    console.error('Reload failed:', e);
+    document.getElementById('content').innerHTML =
+      '<div class="loading" style="color:var(--red)">Failed: ' + escapeHTML(e.message) + '</div>';
+  }
+}
+
+function render() {
+  const totalLCGs = lcgMap.size;
+  if (!totalLCGs) {
+    document.getElementById('content').innerHTML =
+      '<div class="loading">No LC Leaders found yet. Designate facilitators first.</div>';
+    return;
+  }
+
+  // ── Hero metrics ──
+  // "On track this week" = LCGs that met in the most recent week bucket.
+  const lastWeekIdx = weekBuckets.length - 1;
+  let onTrackThisWeek = 0;
+  let lcgsList = [];
+  lcgMap.forEach(entry => {
+    const wk = entry.meetingsByWeek[lastWeekIdx];
+    if (wk && wk.met) onTrackThisWeek++;
+    lcgsList.push(entry);
+  });
+  const missedThisWeek = totalLCGs - onTrackThisWeek;
+
+  // Sparkline data — % on-track per week across the period
+  const sparkData = weekBuckets.map((w, idx) => {
+    let metCount = 0;
+    lcgMap.forEach(entry => {
+      if (entry.meetingsByWeek[idx]?.met) metCount++;
+    });
+    return { label: w.label, pct: totalLCGs ? Math.round((metCount/totalLCGs)*100) : 0,
+             range: humanRange(w.from, w.to) };
+  });
+
+  // ── Champions = LCGs that met every week in the period ──
+  const champions = lcgsList.filter(e =>
+    e.meetingsByWeek.length > 0 && e.meetingsByWeek.every(wk => wk.met)
+  );
+
+  // ── Heartbeat (missed this week, sorted by silence length) ──
+  const heartbeat = lcgsList
+    .filter(e => !e.meetingsByWeek[lastWeekIdx]?.met)
+    .map(e => {
+      // Count consecutive missed weeks from the end
+      let silence = 0;
+      for (let i = e.meetingsByWeek.length - 1; i >= 0; i--) {
+        if (e.meetingsByWeek[i].met) break;
+        silence++;
+      }
+      // Find most recent meeting date across all rows attributed to this LCG
+      let lastMet = null;
+      e.meetingsByWeek.forEach(wk => {
+        wk.dates.forEach(d => { if (!lastMet || d > lastMet) lastMet = d; });
+      });
+      return { ...e, silence, lastMet };
+    })
+    .sort((a,b) => b.silence - a.silence);
+
+  // ── Build HTML ──
+  const periodLabel = periodLabelText();
+  const html = `
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-card">
+        <div class="label">📍 ${escapeHTML(weekBuckets[lastWeekIdx]?.label === 'W1' && weekBuckets.length === 1 ? 'This Period' : 'This Week')}</div>
+        <div class="hero-num">
+          ${onTrackThisWeek} <span class="total">/ ${totalLCGs}</span>
+        </div>
+        <div class="hero-sub">
+          LCGs <span class="good">on track</span>
+          ${missedThisWeek > 0 ? ` &nbsp;·&nbsp; <span class="accent">${missedThisWeek} missed</span>` : ''}
+        </div>
+      </div>
+      <div class="hero-card spark-card">
+        <div class="label">🔥 Pulse over ${escapeHTML(periodLabel)}</div>
+        <div class="spark-bars">
+          ${sparkData.map(s => {
+            const cls = s.pct >= 70 ? '' : s.pct >= 40 ? 'low' : 'bad';
+            const h = Math.max(6, Math.round(s.pct * 0.85)); // 0–85px
+            return `
+              <div class="spark-col" title="${escapeHTML(s.range)} — ${s.pct}%">
+                <div class="spark-pct">${s.pct}%</div>
+                <div class="spark-bar ${cls}" style="height:${h}px"></div>
+                <div class="spark-wk">${escapeHTML(s.label)}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Champions -->
+    <div class="section-head">
+      <h2>🏆 Champions</h2>
+      <span class="sh-count">${champions.length} LCG${champions.length===1?'':'s'} · met every week</span>
+    </div>
+    ${champions.length ? `
+      <div class="champs">
+        ${champions.map(e => `
+          <div class="champ">
+            <div class="champ-row">
+              <div class="champ-avatar">${initials(e.leader.name)}</div>
+              <div style="min-width:0">
+                <div class="champ-name">${escapeHTML(e.leader.name)}</div>
+                <div class="champ-grp">${escapeHTML(e.leader.lc_group || 'LC Group')} · ${e.members.length} members</div>
+              </div>
+            </div>
+            <div class="champ-streak">🔥 ${weekBuckets.length}-week streak</div>
+          </div>
+        `).join('')}
+      </div>
+    ` : `
+      <div class="champs-empty">
+        No LCGs met every single week in this period yet. Keep encouraging consistency!
+      </div>
+    `}
+
+    <!-- Heartbeat / Needs attention -->
+    <div class="section-head">
+      <h2>💬 Needs a Heartbeat</h2>
+      <span class="sh-count">${heartbeat.length} LCG${heartbeat.length===1?'':'s'} · missed this week</span>
+    </div>
+    ${heartbeat.length ? `
+      <div class="hb-grid">
+        ${heartbeat.map(e => {
+          const longSilent = e.silence >= 3;
+          const lastMetText = e.lastMet
+            ? `Last met <strong>${escapeHTML(humanDate(e.lastMet))}</strong> (${e.silence} wk${e.silence===1?'':'s'} ago)`
+            : `<strong>No meetings logged</strong> in this period`;
+          const phone = normalizePHPhone(e.leader.contact);
+          const msgText = buildCheckInMessage(e.leader.name, e.silence);
+          const waUrl = phone
+            ? buildWhatsAppUrl(phone, msgText)
+            : buildWhatsAppUrl('', msgText);
+          return `
+            <div class="hb-card ${longSilent ? 'silent-long' : ''}">
+              <div class="hb-row">
+                <div class="hb-avatar">${initials(e.leader.name)}</div>
+                <div style="min-width:0">
+                  <div class="hb-name">${escapeHTML(e.leader.name)}</div>
+                  <div class="hb-grp">${escapeHTML(e.leader.lc_group || 'LC Group')}</div>
+                </div>
+              </div>
+              <div class="hb-stats">
+                <div>${lastMetText}</div>
+                <div>👥 <strong>${e.members.length}</strong> members affected</div>
+              </div>
+              <button class="hb-action" onclick="window.open('${waUrl}', '_blank')">
+                📲 Message ${escapeHTML((e.leader.name||'').split(' ')[0])}
+              </button>
+            </div>`;
+        }).join('')}
+      </div>
+    ` : `
+      <div class="hb-empty">
+        🎉 Every LCG met this week. Praise God!
+      </div>
+    `}
+
+    <!-- Heatmap -->
+    <div class="section-head">
+      <h2>📅 Meeting Pattern</h2>
+      <span class="sh-count">${weekBuckets.length} week${weekBuckets.length===1?'':'s'}</span>
+    </div>
+    <div class="heatmap">
+      <table class="hm-table">
+        <thead>
+          <tr>
+            <th class="lcg-head">LC Group</th>
+            ${weekBuckets.map(w => `<th title="${escapeHTML(humanRange(w.from,w.to))}">${escapeHTML(w.label)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${lcgsList
+            .slice() // copy
+            .sort((a,b) => {
+              // Order: champs first, then by member count desc
+              const aMet = a.meetingsByWeek.filter(w=>w.met).length;
+              const bMet = b.meetingsByWeek.filter(w=>w.met).length;
+              if (aMet !== bMet) return bMet - aMet;
+              return b.members.length - a.members.length;
+            })
+            .map(e => `
+              <tr>
+                <td class="lcg-name">
+                  ${escapeHTML(e.leader.name)}
+                  <span class="sub">${escapeHTML(e.leader.lc_group || 'LC Group')} · ${e.members.length}m</span>
+                </td>
+                ${e.meetingsByWeek.map((wk, idx) => {
+                  const cls = wk.met ? (wk.weak ? 'weak' : 'met') : 'miss';
+                  const tip = wk.met
+                    ? `${humanRange(weekBuckets[idx].from, weekBuckets[idx].to)} — met (${wk.attendance} present${wk.weak ? ', weak' : ''})`
+                    : `${humanRange(weekBuckets[idx].from, weekBuckets[idx].to)} — no meeting`;
+                  return `<td><div class="hm-cell ${cls}" title="${escapeHTML(tip)}"></div></td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+        </tbody>
+      </table>
+      <div class="hm-legend">
+        <span><span class="swatch" style="background:var(--green)"></span>Met</span>
+        <span><span class="swatch" style="background:var(--amber)"></span>Met but weak (≤1 attended)</span>
+        <span><span class="swatch" style="background:var(--surface3);border:1px dashed var(--border-strong)"></span>No meeting</span>
+      </div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+
+  // Stash for copy/print
+  window._pulseSummary = {
+    period: periodLabel, totalLCGs, onTrackThisWeek, missedThisWeek,
+    champions: champions.length, heartbeat: heartbeat.length,
+    sparkData
+  };
+}
+
+// ─────────────────────── Helpers ───────────────────────
+function isoDate(d) { return d.toISOString().split('T')[0]; }
+function humanDate(iso) {
+  try {
+    const d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  } catch(e) { return iso; }
+}
+function humanRange(a, b) {
+  return humanDate(isoDate(a)) + ' – ' + humanDate(isoDate(b));
+}
+function periodLabelText() {
+  if (currentPeriod === 'week') return 'this week';
+  if (currentPeriod === '4w')   return 'last 4 weeks';
+  if (currentPeriod === '30d')  return 'last 30 days';
+  return humanRange(periodFrom, periodTo);
+}
+function initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]||'')[0] + (parts[1]||'')[0] || parts[0][0] || '?').toUpperCase();
+}
+function escapeHTML(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+
+// Phone normalization (matches dashboard/leader-tool convention)
+function normalizePHPhone(raw) {
+  if (!raw) return null;
+  let p = String(raw).replace(/[^\d+]/g, '');
+  if (p.startsWith('+63')) return p.slice(1);
+  if (p.startsWith('63'))  return p;
+  if (p.startsWith('09'))  return '63' + p.slice(1);
+  if (p.startsWith('9') && p.length === 10) return '63' + p;
+  return null;
+}
+function buildWhatsAppUrl(phone, text) {
+  // Uses api.whatsapp.com (not wa.me) per HANDOFF architecture key 6
+  const base = 'https://api.whatsapp.com/send';
+  if (phone) return `${base}?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(text)}`;
+  return `${base}?text=${encodeURIComponent(text)}`;
+}
+
+function buildCheckInMessage(leaderName, silenceWeeks) {
+  const first = (leaderName||'').split(' ')[0] || 'kapatid';
+  const senderName = L.leaderName || 'your pastor';
+  if (silenceWeeks >= 3) {
+    return `Hi Pastor ${first}! 🙏 Kumusta ka? Napansin ko hindi pa nakapag-LC meeting yung group natin nitong nakaraang ${silenceWeeks} weeks. Just checking in — anything I can pray with you about or help you with? — ${senderName}`;
+  }
+  return `Hi Pastor ${first}! 🙏 Kumusta ka? Napansin ko hindi pa nakapag-LC meeting nitong nakaraang week. Anything I can pray with you about or help you plan? — ${senderName}`;
+}
+
+// ─────────────────────── Actions ───────────────────────
+function copySummary() {
+  const s = window._pulseSummary;
+  if (!s) return;
+  const lines = [
+    '💓 LCG Pulse — ' + s.period,
+    '',
+    `On track this week: ${s.onTrackThisWeek} of ${s.totalLCGs}`,
+    `Missed this week: ${s.missedThisWeek}`,
+    `Champions (met every week): ${s.champions}`,
+    `Needs a heartbeat: ${s.heartbeat}`,
+    '',
+    'Weekly pulse:',
+    ...s.sparkData.map(w => `  ${w.label} (${w.range}): ${w.pct}%`)
+  ];
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(
+    () => toast('📋 Summary copied — paste anywhere', 'success'),
+    () => toast('Could not copy', 'error')
+  );
+}
+
+function toast(msg, kind) {
+  const el = document.getElementById('toast');
+  el.className = 'toast ' + (kind || '') + ' show';
+  el.textContent = msg;
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
