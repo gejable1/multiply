@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Attendance Admin — MULTIPLY</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+
+<style>
+:root{
+  --bg:#fbf8f1;--paper:#fff;--ink:#1f1d2c;--ink-soft:#5a586d;--ink-faint:#8a8896;
+  --line:#e9e3d4;--gold:#b8860b;--gold-deep:#8b6914;--gold-light:#d4af37;
+  --green:#16a34a;--green-bg:#dcfce7;--red:#dc2626;--red-bg:#fee2e2;
+  --blue:#2563eb;--orange:#ea580c;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  background:var(--bg);color:var(--ink);font-family:'DM Sans',sans-serif;
+  -webkit-font-smoothing:antialiased;min-height:100vh;
+  background-image:radial-gradient(circle at 10% 0%, rgba(212,175,55,.05), transparent 40%);
+}
+
+/* ─────────── Pastor gate (hidden body until session verified) ─────────── */
+body{visibility:hidden;}
+body.leader-authenticated{visibility:visible;}
+#leaderGateBlackout{
+  position:fixed;inset:0;background:#fbf8f1;z-index:9999;
+  display:flex;align-items:center;justify-content:center;color:#8a8896;
+  font-family:'DM Sans',sans-serif;font-size:14px;visibility:visible;
+}
+
+.page{max-width:1200px;margin:0 auto;padding:24px 22px 64px;}
+
+/* ─────────── HEADER ─────────── */
+.report-header{
+  background:linear-gradient(135deg, #fffdf5 0%, #fdf6dd 100%);
+  border:1px solid var(--line);border-radius:14px;
+  padding:18px 22px;margin-bottom:18px;
+  position:relative;overflow:hidden;
+}
+.rh-eyebrow{
+  font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:6px;
+}
+.rh-title{font-family:'Syne',serif;font-size:22px;font-weight:800;line-height:1;margin-bottom:4px;}
+.rh-subtitle{font-size:12.5px;color:var(--ink-soft);}
+
+/* ─────────── FILTER BAR ─────────── */
+.control-bar{
+  background:white;border:1px solid var(--line);border-radius:12px;
+  padding:12px 16px;margin-bottom:14px;
+  display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+}
+.cb-group{display:flex;align-items:center;gap:6px;}
+.cb-label{font-size:10.5px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+.cb-input,.cb-select{
+  font-family:inherit;font-size:12.5px;font-weight:500;
+  background:var(--bg);border:1px solid var(--line);border-radius:7px;
+  padding:6px 10px;color:var(--ink);outline:none;
+}
+.cb-input:focus,.cb-select:focus{border-color:var(--gold);}
+
+.btn{
+  font-family:inherit;font-weight:600;font-size:12.5px;
+  padding:7px 14px;border-radius:7px;border:none;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.btn.primary{background:var(--gold);color:white;}
+.btn.danger{background:var(--red);color:white;}
+.btn.danger:disabled{background:#e5e5e5;color:#999;cursor:not-allowed;}
+.btn.secondary{background:white;color:var(--ink);border:1px solid var(--line);}
+
+/* ─────────── STATS ROW ─────────── */
+.stats-row{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;
+}
+.stat-card{
+  background:white;border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;
+}
+.stat-num{font-family:'Syne',serif;font-size:20px;font-weight:800;line-height:1;color:var(--ink);}
+.stat-label{font-size:10px;color:var(--ink-faint);margin-top:4px;
+  letter-spacing:.05em;text-transform:uppercase;font-weight:600;}
+.stat-card.sel .stat-num{color:var(--red);}
+.stat-card.lc .stat-num{color:var(--green);}
+.stat-card.sun .stat-num{color:var(--blue);}
+
+/* ─────────── TABLE ─────────── */
+.table-wrap{
+  background:white;border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;
+}
+table{
+  width:100%;border-collapse:collapse;font-size:12.5px;
+}
+thead{background:var(--bg);position:sticky;top:0;z-index:5;}
+thead th{
+  text-align:left;padding:10px 12px;
+  font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-soft);font-weight:700;
+  border-bottom:1px solid var(--line);
+}
+thead th.sortable{cursor:pointer;user-select:none;}
+thead th.sortable:hover{color:var(--ink);}
+thead th .sort-arrow{margin-left:4px;color:var(--gold);font-size:11px;}
+
+tbody tr{border-bottom:1px solid var(--line);}
+tbody tr:hover{background:rgba(212,175,55,.03);}
+tbody tr.selected{background:rgba(220,38,38,.05);}
+tbody td{padding:9px 12px;color:var(--ink);}
+tbody td.muted{color:var(--ink-soft);}
+tbody td.mono{font-family:'DM Mono',monospace;font-size:11.5px;}
+
+.cb-cell{width:34px;text-align:center;}
+.cb-cell input{width:15px;height:15px;cursor:pointer;accent-color:var(--red);}
+
+.badge{
+  display:inline-block;padding:2px 8px;border-radius:8px;
+  font-size:10px;font-weight:700;letter-spacing:.03em;
+}
+.badge.lc{background:var(--green-bg);color:var(--green);}
+.badge.sun{background:#dbeafe;color:var(--blue);}
+.badge.other{background:#f3f4f6;color:var(--ink-soft);}
+.badge.present{background:var(--green-bg);color:var(--green);}
+.badge.absent{background:#fef3c7;color:#a16207;}
+
+.empty-state{padding:60px 20px;text-align:center;color:var(--ink-soft);}
+.empty-state .ei{font-size:42px;margin-bottom:10px;}
+
+.loading{text-align:center;padding:60px 20px;color:var(--ink-soft);}
+.spinner{
+  width:36px;height:36px;border:3px solid var(--line);
+  border-top-color:var(--gold);border-radius:50%;
+  margin:0 auto 14px;animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ─────────── ACTION BAR (bottom, when selections exist) ─────────── */
+.action-bar{
+  position:sticky;bottom:0;
+  background:white;border-top:1px solid var(--line);
+  padding:10px 16px;margin-top:-1px;
+  display:flex;align-items:center;gap:12px;
+  border-radius:0 0 12px 12px;
+}
+.action-bar.hidden{display:none;}
+.action-info{font-size:12.5px;color:var(--ink);font-weight:600;}
+.action-info strong{color:var(--red);}
+
+/* Top toolbar */
+.top-toolbar{
+  position:fixed;top:14px;right:14px;z-index:50;
+  display:flex;gap:8px;
+}
+
+/* Pagination */
+.pager{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 14px;border-top:1px solid var(--line);
+  background:var(--bg);font-size:11.5px;color:var(--ink-soft);
+}
+.pager button{
+  background:white;border:1px solid var(--line);border-radius:6px;
+  padding:5px 10px;font-family:inherit;font-size:11.5px;cursor:pointer;
+  margin:0 2px;
+}
+.pager button:disabled{opacity:.4;cursor:not-allowed;}
+.pager button.active{background:var(--gold);color:white;border-color:var(--gold);}
+</style>
+</head>
+<body>
+
+<div id="leaderGateBlackout">Verifying pastor session…</div>
+<script>
+(function pastorGateBoot(){
+  if(typeof MultiplyShared === 'undefined'){ location.replace('leader_login.html'); return; }
+  if(!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+  // Pastor-only: this page handles destructive deletions
+  const L = window.LEADER || {};
+  if((L.leaderLevel||0) < 5){
+    document.getElementById('leaderGateBlackout').innerHTML =
+      '<div style="text-align:center"><div style="font-size:44px;margin-bottom:10px">🔒</div>' +
+      '<div style="font-family:Syne,serif;font-size:18px;font-weight:700;color:#1f1d2c">Pastor Access Only</div>' +
+      '<div style="margin-top:6px;font-size:13px">This admin tool can delete attendance records.<br>You\'ll be sent back to the dashboard.</div></div>';
+    setTimeout(()=>{ location.replace('multiply_dashboard.html'); }, 2500);
+    return;
+  }
+  document.body.classList.add('leader-authenticated');
+  document.getElementById('leaderGateBlackout').remove();
+})();
+</script>
+
+<!-- Top toolbar -->
+<div class="top-toolbar">
+  <button class="btn secondary" onclick="goBack()">← Back</button>
+</div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="report-header">
+    <div class="rh-eyebrow">Rosehill Christian Church · MULTIPLY · Pastor Admin</div>
+    <h1 class="rh-title">🗂️ Attendance Records Admin</h1>
+    <div class="rh-subtitle">View, search, and delete attendance entries — for fixing wrongly logged event types or duplicates.</div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="control-bar">
+    <div class="cb-group">
+      <span class="cb-label">From</span>
+      <input type="date" class="cb-input" id="filterFrom">
+    </div>
+    <div class="cb-group">
+      <span class="cb-label">To</span>
+      <input type="date" class="cb-input" id="filterTo">
+    </div>
+    <div class="cb-group">
+      <span class="cb-label">Type</span>
+      <select class="cb-select" id="filterType">
+        <option value="">All</option>
+        <option value="Sunday Service">Sunday Service</option>
+        <option value="LC Meeting">LC Meeting</option>
+        <option value="Prayer Meeting">Prayer Meeting</option>
+        <option value="Team Building">Team Building</option>
+        <option value="Outing">Outing</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="cb-group">
+      <span class="cb-label">LC Group</span>
+      <input type="search" class="cb-input" id="filterLc" placeholder="filter by LC group..." style="min-width:160px">
+    </div>
+    <div class="cb-group">
+      <span class="cb-label">Member</span>
+      <input type="search" class="cb-input" id="filterMember" placeholder="filter by name..." style="min-width:160px">
+    </div>
+    <button class="btn primary" onclick="loadAttendance()">↻ Refresh</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num" id="statTotal">—</div>
+      <div class="stat-label">Total Rows</div>
+    </div>
+    <div class="stat-card lc">
+      <div class="stat-num" id="statLC">—</div>
+      <div class="stat-label">LC Meeting</div>
+    </div>
+    <div class="stat-card sun">
+      <div class="stat-num" id="statSun">—</div>
+      <div class="stat-label">Sunday Service</div>
+    </div>
+    <div class="stat-card sel">
+      <div class="stat-num" id="statSel">0</div>
+      <div class="stat-label">Selected</div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <div id="tableContent">
+      <div class="loading">
+        <div class="spinner"></div>
+        <div>Loading attendance records…</div>
+      </div>
+    </div>
+    <div id="pager" class="pager" style="display:none">
+      <div id="pagerInfo">—</div>
+      <div id="pagerControls"></div>
+    </div>
+    <div id="actionBar" class="action-bar hidden">
+      <div class="action-info"><strong id="actionCount">0</strong> records selected for deletion</div>
+      <button class="btn secondary" onclick="clearSelection()">Clear</button>
+      <button class="btn danger" onclick="deleteSelected()" id="delBtn">🗑️ Delete Selected</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ATTENDANCE ADMIN
+// ═══════════════════════════════════════════════════════════════
+const db = MultiplyShared.getDB();
+
+let _allRows = [];        // All rows fetched in current date range
+let _filteredRows = [];   // After client-side filtering
+let _selected = new Set();
+let _sortBy = 'event_date';
+let _sortDir = 'desc';
+let _page = 0;
+const PAGE_SIZE = 50;
+
+function goBack(){
+  if(document.referrer && document.referrer.includes(location.host)) history.back();
+  else location.href = 'multiply_dashboard.html';
+}
+
+// Default range: last 30 days → today
+function isoDate(d){ return d.toISOString().split('T')[0]; }
+function defaultRange(){
+  const today = new Date();
+  const from  = new Date(today); from.setDate(from.getDate()-30);
+  return {from: isoDate(from), to: isoDate(today)};
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const r = defaultRange();
+  document.getElementById('filterFrom').value = r.from;
+  document.getElementById('filterTo').value   = r.to;
+  // Live filtering (no need to refetch — filter in-memory)
+  ['filterType','filterLc','filterMember'].forEach(id => {
+    document.getElementById(id).addEventListener('input', applyFilters);
+    document.getElementById(id).addEventListener('change', applyFilters);
+  });
+  // Date changes refetch
+  ['filterFrom','filterTo'].forEach(id => {
+    document.getElementById(id).addEventListener('change', loadAttendance);
+  });
+  loadAttendance();
+});
+
+async function loadAttendance(){
+  const tbody = document.getElementById('tableContent');
+  tbody.innerHTML = '<div class="loading"><div class="spinner"></div><div>Loading attendance records…</div></div>';
+  _selected.clear();
+  updateActionBar();
+
+  const from = document.getElementById('filterFrom').value;
+  const to   = document.getElementById('filterTo').value;
+  if(!from || !to){
+    tbody.innerHTML = '<div class="empty-state"><div class="ei">📅</div><div>Set a date range to load records.</div></div>';
+    return;
+  }
+
+  try{
+    const {data, error} = await db.from('attendance')
+      .select('id,member_id,member_name,present,event_date,event_type,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at')
+      .gte('event_date', from)
+      .lte('event_date', to)
+      .order('event_date', {ascending:false})
+      .order('created_at', {ascending:false})
+      .limit(2000);   // safety cap
+
+    if(error) throw error;
+    _allRows = data || [];
+    applyFilters();
+  } catch(e){
+    console.error('Load attendance error:', e);
+    tbody.innerHTML = '<div class="empty-state"><div class="ei">⚠️</div><div>Could not load: '+escapeHtml(e.message)+'</div></div>';
+  }
+}
+
+function applyFilters(){
+  const type   = document.getElementById('filterType').value.toLowerCase().trim();
+  const lcQ    = document.getElementById('filterLc').value.toLowerCase().trim();
+  const memQ   = document.getElementById('filterMember').value.toLowerCase().trim();
+
+  _filteredRows = _allRows.filter(r => {
+    if(type && (r.event_type||'').toLowerCase() !== type) return false;
+    if(lcQ){
+      const lc = ((r.event_lc_group||r.member_lc_group||'')+'').toLowerCase();
+      if(!lc.includes(lcQ)) return false;
+    }
+    if(memQ && !((r.member_name||'').toLowerCase().includes(memQ))) return false;
+    return true;
+  });
+
+  // Update stats
+  document.getElementById('statTotal').textContent = _filteredRows.length;
+  document.getElementById('statLC').textContent  = _filteredRows.filter(r => r.event_type === 'LC Meeting').length;
+  document.getElementById('statSun').textContent = _filteredRows.filter(r => r.event_type === 'Sunday Service').length;
+
+  _page = 0;
+  renderTable();
+}
+
+function renderTable(){
+  // Sort
+  const sorted = [..._filteredRows].sort((a,b) => {
+    const va = a[_sortBy] || '';
+    const vb = b[_sortBy] || '';
+    let cmp;
+    if(_sortBy === 'present'){
+      cmp = (a.present?1:0) - (b.present?1:0);
+    } else {
+      cmp = String(va).localeCompare(String(vb));
+    }
+    return _sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  if(sorted.length === 0){
+    document.getElementById('tableContent').innerHTML =
+      '<div class="empty-state"><div class="ei">🌱</div>'+
+      '<div style="font-family:Syne,serif;font-size:16px;font-weight:700;color:var(--ink)">No attendance records found</div>'+
+      '<div style="font-size:12px;margin-top:4px">Adjust your filters or pick a different date range.</div></div>';
+    document.getElementById('pager').style.display = 'none';
+    return;
+  }
+
+  // Paginate
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  if(_page >= totalPages) _page = totalPages - 1;
+  const startIdx = _page * PAGE_SIZE;
+  const pageRows = sorted.slice(startIdx, startIdx + PAGE_SIZE);
+
+  // Build sortable header arrow
+  const arrow = (col) => {
+    if(_sortBy !== col) return '';
+    return '<span class="sort-arrow">' + (_sortDir === 'asc' ? '▲' : '▼') + '</span>';
+  };
+
+  const html = `
+    <table>
+      <thead>
+        <tr>
+          <th class="cb-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAllVisible(this.checked)" title="Select all on this page"></th>
+          <th class="sortable" onclick="setSort('event_date')">Date${arrow('event_date')}</th>
+          <th class="sortable" onclick="setSort('event_type')">Event Type${arrow('event_type')}</th>
+          <th class="sortable" onclick="setSort('event_lc_group')">LC Group${arrow('event_lc_group')}</th>
+          <th class="sortable" onclick="setSort('member_name')">Member${arrow('member_name')}</th>
+          <th class="sortable" onclick="setSort('present')">Status${arrow('present')}</th>
+          <th class="sortable" onclick="setSort('logged_by')">Logged By${arrow('logged_by')}</th>
+          <th>Saved</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pageRows.map(r => {
+          const isSel = _selected.has(r.id);
+          const lc = r.event_lc_group || r.member_lc_group || '—';
+          const typeBadge = r.event_type === 'LC Meeting' ? 'lc'
+                          : r.event_type === 'Sunday Service' ? 'sun' : 'other';
+          const presBadge = r.present ? 'present' : 'absent';
+          const presLabel = r.present ? '✓ Present' : '✗ Absent';
+          const created = r.created_at ? new Date(r.created_at).toLocaleString('en-PH', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+          return `
+            <tr class="${isSel?'selected':''}">
+              <td class="cb-cell"><input type="checkbox" ${isSel?'checked':''} onchange="toggleRow('${r.id}', this.checked)"></td>
+              <td class="mono">${escapeHtml(r.event_date||'')}</td>
+              <td><span class="badge ${typeBadge}">${escapeHtml(r.event_type||'')}</span></td>
+              <td>${escapeHtml(lc)}</td>
+              <td>${escapeHtml(r.member_name||'—')}</td>
+              <td><span class="badge ${presBadge}">${presLabel}</span></td>
+              <td class="muted">${escapeHtml(r.logged_by||'—')}</td>
+              <td class="muted mono">${escapeHtml(created)}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+  document.getElementById('tableContent').innerHTML = html;
+
+  // Pager
+  document.getElementById('pager').style.display = totalPages > 1 ? 'flex' : 'none';
+  if(totalPages > 1){
+    document.getElementById('pagerInfo').textContent =
+      `Showing ${startIdx+1}–${Math.min(startIdx+PAGE_SIZE, sorted.length)} of ${sorted.length}`;
+    document.getElementById('pagerControls').innerHTML = `
+      <button onclick="setPage(0)" ${_page===0?'disabled':''}>« First</button>
+      <button onclick="setPage(${_page-1})" ${_page===0?'disabled':''}>‹ Prev</button>
+      <button class="active">${_page+1} / ${totalPages}</button>
+      <button onclick="setPage(${_page+1})" ${_page>=totalPages-1?'disabled':''}>Next ›</button>
+      <button onclick="setPage(${totalPages-1})" ${_page>=totalPages-1?'disabled':''}>Last »</button>
+    `;
+  }
+}
+
+function setSort(col){
+  if(_sortBy === col) _sortDir = (_sortDir === 'asc' ? 'desc' : 'asc');
+  else { _sortBy = col; _sortDir = 'asc'; }
+  renderTable();
+}
+
+function setPage(n){
+  _page = n;
+  renderTable();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function toggleRow(id, isChecked){
+  if(isChecked) _selected.add(id);
+  else _selected.delete(id);
+  // Update visual highlight without re-rendering everything
+  const cb = document.querySelector(`input[type="checkbox"][onchange*="${id}"]`);
+  if(cb){
+    const tr = cb.closest('tr');
+    if(tr) tr.classList.toggle('selected', isChecked);
+  }
+  updateActionBar();
+}
+
+function toggleSelectAllVisible(isChecked){
+  document.querySelectorAll('tbody input[type="checkbox"]').forEach(cb => {
+    const id = (cb.getAttribute('onchange')||'').match(/'([^']+)'/)?.[1];
+    if(!id) return;
+    cb.checked = isChecked;
+    if(isChecked) _selected.add(id);
+    else _selected.delete(id);
+    cb.closest('tr')?.classList.toggle('selected', isChecked);
+  });
+  updateActionBar();
+}
+
+function clearSelection(){
+  _selected.clear();
+  document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('tbody tr').forEach(tr => tr.classList.remove('selected'));
+  updateActionBar();
+}
+
+function updateActionBar(){
+  const n = _selected.size;
+  const bar = document.getElementById('actionBar');
+  document.getElementById('statSel').textContent = n;
+  document.getElementById('actionCount').textContent = n;
+  document.getElementById('delBtn').disabled = n === 0;
+  bar.classList.toggle('hidden', n === 0);
+}
+
+async function deleteSelected(){
+  const n = _selected.size;
+  if(n === 0) return;
+  // Build a preview of what's being deleted
+  const ids = [..._selected];
+  const rows = _allRows.filter(r => _selected.has(r.id));
+  const byType = {};
+  rows.forEach(r => { byType[r.event_type||'?'] = (byType[r.event_type||'?']||0) + 1; });
+  const breakdown = Object.entries(byType).map(([t,c]) => `  • ${c} × ${t}`).join('\n');
+
+  const ok = confirm(
+    `⚠️ DELETE ${n} attendance record${n===1?'':'s'}?\n\n` +
+    breakdown + '\n\n' +
+    'This permanently removes these rows from the attendance table. ' +
+    'Reports built from this data will recalculate immediately.\n\n' +
+    'This action CANNOT be undone from inside the app.\n' +
+    '(Supabase point-in-time recovery may help if needed.)'
+  );
+  if(!ok) return;
+
+  const btn = document.getElementById('delBtn');
+  btn.disabled = true; btn.textContent = '⏳ Deleting…';
+
+  try{
+    // Bulk delete via .in() - efficient for up to a few thousand rows
+    const {error} = await db.from('attendance').delete().in('id', ids);
+    if(error) throw error;
+    // Remove from local cache so UI updates without refetch
+    _allRows = _allRows.filter(r => !_selected.has(r.id));
+    _selected.clear();
+    applyFilters();
+    btn.textContent = '🗑️ Delete Selected';
+    btn.disabled = true;
+    alert(`✓ Deleted ${n} record${n===1?'':'s'}.`);
+  } catch(e){
+    console.error('Delete error:', e);
+    btn.disabled = false;
+    btn.textContent = '🗑️ Delete Selected';
+    alert('Could not delete: ' + e.message);
+  }
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, ch =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
+}
+</script>
+
+</body>
+</html>
