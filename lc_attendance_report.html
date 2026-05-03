@@ -607,7 +607,7 @@ function buildGroups(allMembers, attRows){
   const unassigned = [];   // members not in any LC group (no discipler / orphan)
   const isLeader = m => !!(m.is_facilitator || m.facilitator_role);
   allMembers.forEach(m => {
-    if(isLeader(m)) return;     // leaders go in their own group via auto-add below
+    if(isLeader(m)) return;     // leaders facilitate their LC, not members of it
     const did = m.discipler_id;
     if(did && lcMap[did]){
       lcMap[did].members.push(m);
@@ -616,12 +616,13 @@ function buildGroups(allMembers, attRows){
     }
   });
 
-  // ── Auto-add the leader themselves to their own group (so they count
-  //    in their own LC's headcount). This is now the ONLY path for a
-  //    leader to appear in any group, so no double-counting.
-  Object.values(lcMap).forEach(g => {
-    if(!g.members.some(m => m.id === g.leader.id)) g.members.push(g.leader);
-  });
+  // ── NOTE: We do NOT add the leader themselves to their own group's
+  //    member count. The LC Leader is the FACILITATOR, not a member,
+  //    so they shouldn't appear in attendance percentages or counts.
+  //    This matches the leader tool (MLT) which only counts the leader's
+  //    flock — never the leader themselves. Otherwise leaders show up
+  //    as "absent" when they didn't tick their own checkbox even though
+  //    they were obviously present (they ran the meeting).
 
   // ── Map attendance rows. Key by NORMALIZED lc group string (for backward
   //    compatibility with rows using event_lc_group), and ALSO build a
