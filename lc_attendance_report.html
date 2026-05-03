@@ -265,6 +265,52 @@ html,body{
   text-transform:uppercase;letter-spacing:.05em;
 }
 
+/* ─────────── GRAND TOTAL CARD ─────────── */
+.grand-total{
+  margin-top:24px;
+  background:linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border:1px solid #7dd3fc;
+  border-radius:18px;
+  padding:22px 26px;
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:20px;
+  box-shadow:0 2px 8px rgba(3,105,161,.08);
+}
+.gt-icon{
+  width:56px;height:56px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 30% 30%, #bae6fd, #38bdf8 60%, #0369a1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;
+  box-shadow:0 3px 10px rgba(3,105,161,.3), inset 0 1px 2px rgba(255,255,255,.5);
+}
+.gt-label{
+  font-family:'Bebas Neue','DM Sans',sans-serif;
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  color:#0369a1;font-weight:600;margin-bottom:3px;
+}
+.gt-title{
+  font-family:'Syne',serif;font-size:18px;font-weight:700;
+  color:#0c4a6e;letter-spacing:-.005em;line-height:1.2;
+}
+.gt-caveat{
+  font-size:11px;color:#075985;margin-top:6px;line-height:1.5;font-style:italic;
+}
+.gt-caveat strong{font-weight:600;font-style:normal;}
+.gt-stat{text-align:right;}
+.gt-number{
+  font-family:'Syne',serif;font-size:42px;font-weight:800;line-height:1;
+  color:#0369a1;letter-spacing:-.02em;
+}
+.gt-number .denom{
+  font-size:22px;color:#7dd3fc;font-weight:600;
+}
+.gt-percent{
+  font-family:'DM Mono',monospace;font-size:12px;
+  color:#0369a1;font-weight:600;margin-top:4px;
+}
+
 /* ─────────── CELEBRATION FOOTER ─────────── */
 .celebration{
   margin-top:32px;
@@ -310,12 +356,13 @@ html,body{
   html,body{background:white !important;background-image:none !important;}
   .page{max-width:none;padding:0;margin:0;}
   .print-toolbar,.control-bar{display:none !important;}
-  .champion-card,.runner-row,.awaiting-card,.rh-stat,.report-header,.celebration,.section,.awaiting-banner{
+  .champion-card,.runner-row,.awaiting-card,.rh-stat,.report-header,.celebration,.section,.awaiting-banner,.grand-total{
     box-shadow:none !important;
   }
   .champion-card,.runner-row,.awaiting-card{page-break-inside:avoid;}
   .section{page-break-inside:avoid;}
   .section-head{page-break-after:avoid;}
+  .grand-total{page-break-inside:avoid;}
   .celebration{page-break-inside:avoid;}
   *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
 }
@@ -724,6 +771,32 @@ function renderReport(report, date, eventType){
               <div class="awaiting-action">No log</div>
             </div>
           `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Grand Total card — shown only when there's at least one logged group.
+  //    Placed AFTER the three sections so it reads as a summary, BEFORE the
+  //    celebration footer. Hidden in the empty state.
+  if(champions.length || runners.length){
+    const overallPct = totalMembersInLcs > 0
+      ? Math.round((totalPresent / totalMembersInLcs) * 100)
+      : 0;
+    slot.innerHTML += `
+      <div class="grand-total">
+        <div class="gt-icon">📊</div>
+        <div>
+          <div class="gt-label">Total Attendance</div>
+          <div class="gt-title">${totalPresent} of ${totalMembersInLcs} members present</div>
+          <div class="gt-caveat">
+            <strong>Note:</strong> Counts only registered LC members.
+            Visitors, first-timers, and non-members are not included in this tally.
+          </div>
+        </div>
+        <div class="gt-stat">
+          <div class="gt-number">${overallPct}<span class="denom">%</span></div>
+          <div class="gt-percent">${totalPresent} / ${totalMembersInLcs}</div>
         </div>
       </div>
     `;
