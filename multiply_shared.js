@@ -153,13 +153,23 @@
       });
     }
 
-    function apply(memberList) {
+    function apply(memberList, opts) {
       const list = memberList || getMembers() || [];
-      if (current === 'all' && isPastor()) return list;
-      if (current === 'disciples') return getDirect();
-      if (current === 'tree') return getTree();
-      if (current === 'ministry') return getMinistry();
-      return getDirect(); // safe fallback
+      // ─── TEST-MEMBER FILTER (Pastor's call, May 2026) ───
+      // By default, exclude members flagged is_test_member so they don't
+      // count in any statistical surface. Admin contexts (Pastor's full
+      // member list, edit modal lookup) pass {includeTest:true} to bypass.
+      const includeTest = !!(opts && opts.includeTest);
+      const filtered = includeTest ? list : list.filter(m => !m.is_test_member);
+      // We need to filter the input to getDirect/getTree/getMinistry too,
+      // since they read from getMembers() directly. Do that by temporarily
+      // wrapping getMembers — but simpler: post-filter their results.
+      const stripTest = arr => includeTest ? arr : arr.filter(m => !m.is_test_member);
+      if (current === 'all' && isPastor()) return filtered;
+      if (current === 'disciples') return stripTest(getDirect());
+      if (current === 'tree') return stripTest(getTree());
+      if (current === 'ministry') return stripTest(getMinistry());
+      return stripTest(getDirect()); // safe fallback
     }
 
     function setView(v) {

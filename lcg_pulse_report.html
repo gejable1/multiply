@@ -166,6 +166,48 @@ html,body{
   text-align:center;
 }
 
+/* ─────────────────────── Champions cards (green-themed grid) ─────────────────────── */
+.champ-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:10px;
+}
+.champ-card{
+  background:linear-gradient(135deg, var(--green-soft), rgba(52,211,153,.04));
+  border:1px solid rgba(52,211,153,.3);
+  border-radius:14px;padding:14px 16px;
+}
+.champ-card.streak-long{
+  background:linear-gradient(135deg, rgba(52,211,153,.18), rgba(52,211,153,.06));
+  border-color:rgba(52,211,153,.5);
+}
+.champ-card .hb-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.champ-card .hb-avatar{
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(52,211,153,.25);color:var(--green);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:14px;flex-shrink:0;
+}
+.champ-card .hb-name{font-size:14px;font-weight:700;line-height:1.2;color:var(--text)}
+.champ-card .hb-grp{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.2}
+.champ-card .hb-stats{
+  display:flex;gap:14px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--muted);
+  margin-bottom:11px;line-height:1.4;
+}
+.champ-card .hb-stats strong{color:var(--green);font-weight:700}
+.champ-card .hb-action{
+  width:100%;padding:9px;
+  background:var(--green);color:#0f0f13;border:none;
+  border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.champ-card .hb-action:hover{filter:brightness(1.1)}
+.champ-empty{
+  background:var(--surface2);border:1px dashed var(--border-strong);
+  border-radius:14px;padding:18px;text-align:center;
+  color:var(--muted);font-size:12.5px;font-style:italic;
+}
+
 /* ─────────────────────── Champions strip ─────────────────────── */
 .section-head{
   display:flex;align-items:center;gap:10px;
@@ -369,7 +411,7 @@ html,body{
   <!-- Scope banner (hidden by default; shown to non-pastors) -->
   <div class="scope-banner" id="scopeBanner" style="display:none">
     Showing pulse across <strong>all LCGs</strong> so leaders can see how they compare.
-    Tap a card to message the leader.
+    Coaches, Directors, and Pastor can send check-in and celebration messages.
   </div>
 
   <!-- ═══════════════════ PERIOD PICKER ═══════════════════ -->
@@ -460,6 +502,7 @@ init();
 async function init() {
   setPeriodWindow('4w');
   try {
+    await loadPulseTemplates();
     await loadMembers();
     await reloadAndRender();
   } catch (e) {
@@ -552,15 +595,20 @@ function buildWeekBuckets() {
 // ─────────────────────── Data loading ───────────────────────
 async function loadMembers() {
   const { data, error } = await db.from('members')
-    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level');
+    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member');
   if (error) throw error;
   allMembers = data || [];
+  // ─── TEST-MEMBER FILTER (Pastor's call, May 2026) ───
+  // Test members count for nobody — never appear as LC Leaders, never
+  // count toward any LCG's flock size. Filter at the source so the rest
+  // of the report doesn't have to think about it.
+  const liveOnly = allMembers.filter(m => !m.is_test_member);
   // LC Leaders per HANDOFF architecture key 1: is_facilitator OR facilitator_role
-  lcLeaders = allMembers.filter(m => m.is_facilitator || (m.facilitator_role && m.facilitator_role.trim()));
+  lcLeaders = liveOnly.filter(m => m.is_facilitator || (m.facilitator_role && m.facilitator_role.trim()));
   // Build LCG map
   lcgMap.clear();
   lcLeaders.forEach(leader => {
-    const flock = allMembers.filter(m => m.discipler_id === leader.id);
+    const flock = liveOnly.filter(m => m.discipler_id === leader.id);
     lcgMap.set(leader.id, {
       leader,
       members: flock,
@@ -594,6 +642,9 @@ function indexMeetingsByLCG() {
     entry.meetingsByWeek = weekBuckets.map(() => ({ met: false, attendance: 0, weak: false, dates: new Set() }));
   });
   const leaderById = new Map(lcLeaders.map(l => [l.id, l]));
+  // Set of test member IDs — their attendance rows shouldn't count toward
+  // an LCG's "people present" tally even if logged during testing.
+  const testIds = new Set(allMembers.filter(m => m.is_test_member).map(m => m.id));
 
   meetings.forEach(row => {
     let leader = null;
@@ -612,7 +663,9 @@ function indexMeetingsByLCG() {
     const wk = entry.meetingsByWeek[wIdx];
     wk.met = true;
     wk.dates.add(row.event_date);
-    if (row.present) wk.attendance += 1;
+    // Skip test members from attendance count; meeting still counts as "met"
+    // because the leader logged something — just don't inflate the headcount.
+    if (row.present && !testIds.has(row.member_id)) wk.attendance += 1;
   });
 
   // Mark "weak" weeks — met but only 1 person logged present (suspicious)
@@ -670,9 +723,23 @@ function render() {
   });
 
   // ── Champions = LCGs that met every week in the period ──
-  const champions = lcgsList.filter(e =>
-    e.meetingsByWeek.length > 0 && e.meetingsByWeek.every(wk => wk.met)
-  );
+  // Sorted by streak (consecutive weeks met from the end), longest first.
+  const champions = lcgsList
+    .filter(e => e.meetingsByWeek.length > 0 && e.meetingsByWeek.every(wk => wk.met))
+    .map(e => {
+      // Streak = consecutive weeks met from the end (== full period length here,
+      // since we've already filtered to all-met. Kept for future flexibility.)
+      let streak = 0;
+      for (let i = e.meetingsByWeek.length - 1; i >= 0; i--) {
+        if (!e.meetingsByWeek[i].met) break;
+        streak++;
+      }
+      // Total members across the period (for the stat strip)
+      let totalAttendance = 0;
+      e.meetingsByWeek.forEach(wk => { totalAttendance += wk.attendance; });
+      return { ...e, streak, totalAttendance };
+    })
+    .sort((a,b) => b.streak - a.streak || b.totalAttendance - a.totalAttendance);
 
   // ── Heartbeat (missed this week, sorted by silence length) ──
   const heartbeat = lcgsList
@@ -731,22 +798,38 @@ function render() {
       <span class="sh-count">${champions.length} LCG${champions.length===1?'':'s'} · met every week</span>
     </div>
     ${champions.length ? `
-      <div class="champs">
-        ${champions.map(e => `
-          <div class="champ">
-            <div class="champ-row">
-              <div class="champ-avatar">${initials(e.leader.name)}</div>
-              <div style="min-width:0">
-                <div class="champ-name">${escapeHTML(e.leader.name)}</div>
-                <div class="champ-grp">${escapeHTML(e.leader.lc_group || 'LC Group')} · ${e.members.length} members</div>
+      <div class="champ-grid">
+        ${champions.map(e => {
+          const longStreak = e.streak >= 4;
+          // Stash for the modal opener (same registry as heartbeat — no collision
+          // because Champions and Heartbeat are mutually exclusive sets).
+          window._pulseLeaders = window._pulseLeaders || {};
+          window._pulseLeaders[e.leader.id] = { leader: e.leader, streak: e.streak };
+          // Send celebration is Level 3+ only (Coach/Director/Pastor).
+          const canSendCelebration = (L.leaderLevel || 0) >= 3;
+          return `
+            <div class="champ-card ${longStreak ? 'streak-long' : ''}">
+              <div class="hb-row">
+                <div class="hb-avatar">${initials(e.leader.name)}</div>
+                <div style="min-width:0">
+                  <div class="hb-name">${escapeHTML(e.leader.name)}</div>
+                  <div class="hb-grp">${escapeHTML(e.leader.lc_group || 'LC Group')}</div>
+                </div>
               </div>
-            </div>
-            <div class="champ-streak">🔥 ${weekBuckets.length}-week streak</div>
-          </div>
-        `).join('')}
+              <div class="hb-stats">
+                <div>🔥 <strong>${e.streak}-week</strong> streak</div>
+                <div>👥 <strong>${e.members.length}</strong> members</div>
+              </div>
+              ${canSendCelebration ? `
+                <button class="hb-action" onclick="openLeaderCelebrateModal('${e.leader.id}')">
+                  🏆 Celebrate ${escapeHTML((e.leader.name||'').split(' ')[0])}
+                </button>
+              ` : ''}
+            </div>`;
+        }).join('')}
       </div>
     ` : `
-      <div class="champs-empty">
+      <div class="champ-empty">
         No LCGs met every single week in this period yet. Keep encouraging consistency!
       </div>
     `}
@@ -767,6 +850,9 @@ function render() {
           // find them by id (we can't pass complex objects through onclick attrs).
           window._pulseLeaders = window._pulseLeaders || {};
           window._pulseLeaders[e.leader.id] = { leader: e.leader, silence: e.silence };
+          // Send check-in button is Level 3+ only (Coach/Director/Pastor).
+          // LCLs see the card for awareness/comparison but can't nudge peers.
+          const canSendCheckIn = (L.leaderLevel || 0) >= 3;
           return `
             <div class="hb-card ${longSilent ? 'silent-long' : ''}">
               <div class="hb-row">
@@ -780,9 +866,11 @@ function render() {
                 <div>${lastMetText}</div>
                 <div>👥 <strong>${e.members.length}</strong> members affected</div>
               </div>
-              <button class="hb-action" onclick="openLeaderCheckInModal('${e.leader.id}')">
-                📲 Message ${escapeHTML((e.leader.name||'').split(' ')[0])}
-              </button>
+              ${canSendCheckIn ? `
+                <button class="hb-action" onclick="openLeaderCheckInModal('${e.leader.id}')">
+                  📲 Message ${escapeHTML((e.leader.name||'').split(' ')[0])}
+                </button>
+              ` : ''}
             </div>`;
         }).join('')}
       </div>
@@ -894,38 +982,118 @@ function buildWhatsAppUrl(phone, text) {
   return `${base}?text=${encodeURIComponent(text)}`;
 }
 
-// Two flavors of the check-in message — the modal lets the leader pick.
-// "Plain" is a short heads-up (just the body); "with greeting" wraps it
-// in a warm Hi/sign-off frame for direct chat use.
-function buildCheckInBody(silenceWeeks) {
-  if (silenceWeeks >= 3) {
-    return `Napansin ko hindi pa nakapag-LC meeting yung group natin nitong nakaraang ${silenceWeeks} weeks. Just checking in — anything I can pray with you about or help you with?`;
+// ─────────────────────── Template loaders + builders ───────────────────────
+// Templates are stored in system_settings.meta.lcg_checkin_greeting and
+// .lcg_celebration_greeting (configured via dashboard Settings → Message Greetings).
+// Loaded once on boot; LPR re-uses the same {placeholder} pattern as the rest
+// of MULTIPLY for consistency.
+
+const _DEFAULT_CHECKIN_TPL =
+  'Hi Pastor {firstName}! 🙏\n\n' +
+  'Kumusta ka? Napansin ko hindi pa nakapag-LC meeting ang grupo natin sa {lcGroup} nitong nakaraang {silenceWeeks} week(s). ' +
+  'Just checking in — anything I can pray with you about or help you with?\n\n' +
+  'God bless po!\n— {senderName}';
+
+const _DEFAULT_CELEBRATE_TPL =
+  'Hi Pastor {firstName}! 🏆\n\n' +
+  'Praise God! Nakapag-meeting ang LCG na {lcGroup} nang {streakWeeks} sunod-sunod na linggo. ' +
+  'Salamat sa iyong faithfulness at malasakit sa mga kapatid. Ipinagdarasal kita! 🙏💚\n\n' +
+  'Keep up the great work!\n— {senderName}';
+
+let _checkinTpl   = _DEFAULT_CHECKIN_TPL;
+let _celebrateTpl = _DEFAULT_CELEBRATE_TPL;
+
+async function loadPulseTemplates() {
+  try {
+    const { data, error } = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const c = data?.meta?.lcg_checkin_greeting;
+    const e = data?.meta?.lcg_celebration_greeting;
+    if (typeof c === 'string' && c.trim()) _checkinTpl   = c;
+    if (typeof e === 'string' && e.trim()) _celebrateTpl = e;
+  } catch (e) {
+    console.warn('[lcg-pulse] template load failed; using defaults:', e.message);
   }
-  return `Napansin ko hindi pa nakapag-LC meeting nitong nakaraang week. Anything I can pray with you about or help you plan?`;
-}
-function buildCheckInWithGreeting(leaderName, silenceWeeks) {
-  const first = (leaderName||'').split(' ')[0] || 'kapatid';
-  const senderName = L.leaderName || 'your pastor';
-  return `Hi Pastor ${first}! 🙏 Kumusta ka? ${buildCheckInBody(silenceWeeks)} — ${senderName}`;
-}
-// Backward-compat shim — kept in case anything else still calls it.
-function buildCheckInMessage(leaderName, silenceWeeks) {
-  return buildCheckInWithGreeting(leaderName, silenceWeeks);
 }
 
-// ─────────────────────── Heartbeat share modal ───────────────────────
+function _fillTemplate(tpl, vars) {
+  return String(tpl || '')
+    .replace(/\{firstName\}/g,    vars.firstName    || 'kapatid')
+    .replace(/\{senderName\}/g,   vars.senderName   || 'your pastor')
+    .replace(/\{silenceWeeks\}/g, String(vars.silenceWeeks != null ? vars.silenceWeeks : ''))
+    .replace(/\{streakWeeks\}/g,  String(vars.streakWeeks  != null ? vars.streakWeeks  : ''))
+    .replace(/\{lcGroup\}/g,      vars.lcGroup      || 'your LC group');
+}
+
+// Two flavors per message kind — "plain" strips the greeting/sign-off
+// frame so the leader can compose their own intro; "with greeting" is
+// the full template with Hi/sign-off.
+function buildCheckInBody(silenceWeeks, lcGroup) {
+  // Plain = the body sentence(s), no Hi/sign-off
+  if (silenceWeeks >= 3) {
+    return `Napansin ko hindi pa nakapag-LC meeting ang grupo natin sa ${lcGroup||'inyong LC'} nitong nakaraang ${silenceWeeks} weeks. Just checking in — anything I can pray with you about or help you with?`;
+  }
+  return `Napansin ko hindi pa nakapag-LC meeting ang grupo natin sa ${lcGroup||'inyong LC'} nitong nakaraang week. Anything I can pray with you about or help you plan?`;
+}
+function buildCheckInWithGreeting(leaderName, silenceWeeks, lcGroup) {
+  return _fillTemplate(_checkinTpl, {
+    firstName:  (leaderName||'').split(' ')[0],
+    senderName: L.leaderName || 'your pastor',
+    silenceWeeks, lcGroup,
+  });
+}
+function buildCelebrationBody(streakWeeks, lcGroup) {
+  return `Praise God! Nakapag-meeting ang LCG na ${lcGroup||'inyong LC'} nang ${streakWeeks} sunod-sunod na linggo. Salamat sa iyong faithfulness at malasakit sa mga kapatid. Keep up the great work! 🏆`;
+}
+function buildCelebrationWithGreeting(leaderName, streakWeeks, lcGroup) {
+  return _fillTemplate(_celebrateTpl, {
+    firstName:  (leaderName||'').split(' ')[0],
+    senderName: L.leaderName || 'your pastor',
+    streakWeeks, lcGroup,
+  });
+}
+// Backward-compat shim
+function buildCheckInMessage(leaderName, silenceWeeks) {
+  return buildCheckInWithGreeting(leaderName, silenceWeeks, '');
+}
+
+// ─────────────────────── Heartbeat / Champion share modal ───────────────────────
 // Mirrors the 3-button modal from dashboard / leader tool so all "Send"
 // surfaces in MULTIPLY behave consistently (Pastor's standardization).
-function openLeaderCheckInModal(leaderId) {
+// Handles both Heartbeat check-ins and Champion celebrations.
+function openLeaderCheckInModal(leaderId) { openLeaderShareModal(leaderId, 'checkin'); }
+function openLeaderCelebrateModal(leaderId) { openLeaderShareModal(leaderId, 'celebrate'); }
+
+function openLeaderShareModal(leaderId, kind) {
+  // Defense in depth — UI also hides the button for Levels < 3, but a
+  // determined console user could still call this. Block them here too.
+  if ((L.leaderLevel || 0) < 3) {
+    toast('Send is for Coaches, Directors, and Pastor', 'error');
+    return;
+  }
   const reg = window._pulseLeaders || {};
   const entry = reg[leaderId];
   if (!entry) { toast('Leader not found', 'error'); return; }
   const leader = entry.leader;
-  const silence = entry.silence;
+  const lcGroup = leader.lc_group || 'inyong LC';
   const phone = normalizePHPhone(leader.contact);
   const firstName = (leader.name||'').split(' ')[0] || 'kapatid';
-  const plainText = buildCheckInBody(silence);
-  const fullText  = buildCheckInWithGreeting(leader.name, silence);
+
+  let plainText, fullText, headline, accentColor;
+  if (kind === 'celebrate') {
+    const streak = entry.streak || 0;
+    plainText = buildCelebrationBody(streak, lcGroup);
+    fullText  = buildCelebrationWithGreeting(leader.name, streak, lcGroup);
+    headline  = '🏆 Send Celebration';
+    accentColor = 'var(--green)';
+  } else {
+    const silence = entry.silence || 0;
+    plainText = buildCheckInBody(silence, lcGroup);
+    fullText  = buildCheckInWithGreeting(leader.name, silence, lcGroup);
+    headline  = '📤 Send Check-in';
+    accentColor = 'var(--green)';
+  }
 
   document.querySelectorAll('.share-link-modal').forEach(m => m.remove());
   const modal = document.createElement('div');
@@ -941,7 +1109,7 @@ function openLeaderCheckInModal(leaderId) {
 
   modal.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit;color:var(--text)">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">📤 Send Check-in</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">${headline}</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
         ${subText}
       </div>
@@ -955,11 +1123,11 @@ function openLeaderCheckInModal(leaderId) {
           📝 Copy with greeting
         </button>
         <button onclick="_pulseShareVia('whatsapp', this)"
-          style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          style="padding:11px;background:${accentColor};color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
           ${waLabel}
         </button>
       </div>
-      <div style="background:var(--surface3);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:.75rem;max-height:120px;overflow-y:auto">${escapeHTML(fullText)}</div>
+      <div style="background:var(--surface3);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:.75rem;max-height:140px;overflow-y:auto;white-space:pre-wrap">${escapeHTML(fullText)}</div>
       <button onclick="this.closest('.share-link-modal').remove()"
         style="width:100%;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">
         ✕ Close
@@ -967,7 +1135,7 @@ function openLeaderCheckInModal(leaderId) {
     </div>`;
 
   // Stash data for the share handlers
-  window._pulseShareData = { plainText, fullText, phone: phone||'', firstName };
+  window._pulseShareData = { plainText, fullText, phone: phone||'', firstName, kind };
 
   document.body.appendChild(modal);
   modal.onclick = (e) => { if (e.target === modal) modal.remove(); };

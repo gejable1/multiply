@@ -574,14 +574,22 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     </div>
 
     <!-- Greeting type toggle -->
-    <div style="display:flex;gap:6px;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:12px">
+    <div style="display:flex;gap:6px;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:12px;flex-wrap:wrap">
       <button class="grtab active" id="grtab-profile" onclick="switchGreetingTab('profile')"
-        style="flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:8px 12px;background:var(--gold);color:#fff;border:none;border-radius:6px;cursor:pointer">
-        📝 Profile Edit Link
+        style="flex:1;min-width:120px;font-family:inherit;font-size:11.5px;font-weight:600;padding:8px 10px;background:var(--gold);color:#fff;border:none;border-radius:6px;cursor:pointer">
+        📝 Profile Edit
       </button>
       <button class="grtab" id="grtab-assess" onclick="switchGreetingTab('assess')"
-        style="flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:8px 12px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
-        📊 Assessment Link
+        style="flex:1;min-width:120px;font-family:inherit;font-size:11.5px;font-weight:600;padding:8px 10px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
+        📊 Assessment
+      </button>
+      <button class="grtab" id="grtab-checkin" onclick="switchGreetingTab('checkin')"
+        style="flex:1;min-width:120px;font-family:inherit;font-size:11.5px;font-weight:600;padding:8px 10px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
+        💬 LC Check-in
+      </button>
+      <button class="grtab" id="grtab-celebrate" onclick="switchGreetingTab('celebrate')"
+        style="flex:1;min-width:120px;font-family:inherit;font-size:11.5px;font-weight:600;padding:8px 10px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
+        🏆 LC Celebrate
       </button>
     </div>
 
@@ -610,6 +618,34 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       </div>
       <textarea id="assessTemplate" rows="9"
         placeholder="Hi {firstName}! 😊..."
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+    </div>
+
+    <!-- LC CHECK-IN GREETING -->
+    <div id="grpane-checkin" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+        Sent from the LCG Pulse Report when checking in on an LC Leader whose group has missed meetings. Placeholders:
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px">{firstName}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{silenceWeeks}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{lcGroup}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{senderName}</code>
+      </div>
+      <textarea id="checkinTemplate" rows="9"
+        placeholder="Hi Pastor {firstName}! 🙏..."
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+    </div>
+
+    <!-- LC CELEBRATION GREETING -->
+    <div id="grpane-celebrate" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+        Sent from the LCG Pulse Report to celebrate Champion LCGs that met every week. Placeholders:
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px">{firstName}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{streakWeeks}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{lcGroup}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{senderName}</code>
+      </div>
+      <textarea id="celebrateTemplate" rows="9"
+        placeholder="Hi Pastor {firstName}! 🏆..."
         style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
     </div>
 
@@ -716,6 +752,18 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         <div class="fi" style="margin-top:.5rem;display:none" id="facRoleRow">
           <label>Facilitator Role</label>
           <select id="fFacRole"><option value="">Select...</option><option>LC Leader</option><option>Pastoral Staff</option><option>Intern Facilitator</option></select>
+        </div>
+      </div>
+
+      <!-- TEST MEMBER FLAG (Pastor-only; hidden for everyone else by JS) -->
+      <div class="fi full" id="testMemberRow" style="display:none;padding:.65rem;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.3);border-radius:7px;">
+        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#7c3aed;font-weight:600;margin-bottom:.35rem">🧪 Test Member (Pastor only)</div>
+        <div class="fac-toggle">
+          <label class="toggle-sw"><input type="checkbox" id="fIsTest" onchange="onToggleTestMember()"><div class="toggle-track"></div></label>
+          <span style="font-size:13px;color:var(--ink)">Mark as test record</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:.4rem;line-height:1.5">
+          When ON: this member is excluded from <strong>every</strong> count and report — attendance denominators, LCG flock sizes, dashboard cards, LCG Pulse, LC Attendance Report. Auto-assigned to your discipling so no LCL sees them.
         </div>
       </div>
     </div></div>
@@ -977,10 +1025,10 @@ const LeaderScope = MultiplyShared.makeLeaderScope(() => members);
 // Update the count badges in the view-tabs UI.
 function updateScopeCounts(){
   const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
-  set('scopeCountDisciples', LeaderScope.getDirect().length);
-  set('scopeCountTree',      LeaderScope.getTree().length);
-  set('scopeCountMinistry',  LeaderScope.getMinistry().length);
-  if(LeaderScope.isPastor()) set('scopeCountAll', members.length);
+  set('scopeCountDisciples', LeaderScope.getDirect().filter(m=>!m.is_test_member).length);
+  set('scopeCountTree',      LeaderScope.getTree().filter(m=>!m.is_test_member).length);
+  set('scopeCountMinistry',  LeaderScope.getMinistry().filter(m=>!m.is_test_member).length);
+  if(LeaderScope.isPastor()) set('scopeCountAll', liveMembers().length);
 }
 
 // Visual: highlight the active scope tab + update the hint line.
@@ -1034,6 +1082,24 @@ function logView(viewedMemberId, context){
 // ═══════════════════════════════════════
 let members=[],filt='all',eid=null;
 
+// ═══════════════════════════════════════
+// liveMembers() — TEST-MEMBER FILTER (Pastor's call, May 2026)
+// Returns members minus those flagged as test/beta records. Used in
+// EVERY counting/statistical context so test members count for nobody:
+//   - dashboard stat cards
+//   - LCG flock counts and attendance denominators
+//   - LPR Champions / Heartbeat (which need real flock sizes)
+//   - LC Attendance Report
+//   - LeaderScope (so test members never show in any leader's view)
+//
+// `members` itself is left intact so admin tools (member list, edit
+// modal, search) can still see test members — they get a 🧪 badge in
+// the Pastor view to make the flag obvious.
+// ═══════════════════════════════════════
+function liveMembers(){
+  return members.filter(m => !m.is_test_member);
+}
+
 function sync(s){
   const d=document.getElementById('sdot'),l=document.getElementById('slbl');
   d.className='sdot '+(s==='ok'?'ok':s==='ing'?'ing':'err');
@@ -1047,7 +1113,10 @@ async function loadMembers(){
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   sync('ok');
   document.getElementById('dbs').textContent='✅ Connected to Supabase';
-  document.getElementById('dbc').textContent=members.length+' members';
+  document.getElementById('dbc').textContent = (function(){
+    const live = liveMembers().length, total = members.length;
+    return live === total ? (total + ' members') : (live + ' live · ' + (total - live) + ' test');
+  })();
   buildSettingsMinistries();
   renderAll();
 }
@@ -1067,6 +1136,7 @@ function l2r(m){
     address:m.address||null,
     checks:m.checks||{},eolo:m.eolo||[],notes:m.notes||[],
     is_facilitator:m.is_facilitator||false,facilitator_role:m.facilitator_role||null,
+    is_test_member:!!m.is_test_member,
     diagnostic_score:m.diagnostic_score||null,diagnostic_zone:m.diagnostic_zone||null,
     diagnostic_date:m.diagnostic_date||null,intervention_track:m.intervention_track||null,
     intervention_status:m.intervention_status||null,facilitator_name:m.facilitator_name||null,
@@ -1090,6 +1160,7 @@ function r2l(r){
     checks:r.checks||{},
     eolo:r.eolo||[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}],
     notes:r.notes||[],is_facilitator:r.is_facilitator||false,
+    is_test_member:!!r.is_test_member,
     facilitator_role:r.facilitator_role||'',diagnostic_score:r.diagnostic_score||null,
     diagnostic_zone:r.diagnostic_zone||null,diagnostic_date:r.diagnostic_date||'',
     intervention_track:r.intervention_track||'',intervention_status:r.intervention_status||'',
@@ -1139,7 +1210,10 @@ function buildSettingsMinistries(){
 function renderAll(){
   rKPI();rPV();renderTable();rPipe();rInterventions();rEolo();rAlerts();rReports();rOvExtras();
   if(typeof updateScopeCounts === 'function') updateScopeCounts();
-  document.getElementById('dbc').textContent=members.length+' members';
+  document.getElementById('dbc').textContent = (function(){
+    const live = liveMembers().length, total = members.length;
+    return live === total ? (total + ' members') : (live + ' live · ' + (total - live) + ' test');
+  })();
   // Show facilitator role row if checked
   document.getElementById('fIsFac')?.addEventListener('change',e=>{
     document.getElementById('facRoleRow').style.display=e.target.checked?'flex':'none';
@@ -1216,7 +1290,9 @@ function setF(f,el){
 function renderTable(){
   const q=(document.getElementById('sq')?.value||'').toLowerCase();
   // ── Apply leader-scope first; then the existing zone/level filters ──
-  const scopedMembers = LeaderScope.apply(members);
+  // Pastor needs to SEE test members here to manage them, so opt in
+  // explicitly. LCLs still get them filtered out automatically.
+  const scopedMembers = LeaderScope.apply(members, {includeTest: LeaderScope.isPastor()});
   let fl=scopedMembers.filter(m=>{
     const ok=!q||(m.name||'').toLowerCase().includes(q)||(m.group||'').toLowerCase().includes(q)||(m.gifts||'').toLowerCase().includes(q)||(m.ministry||'').toLowerCase().includes(q)||(m.discipler||'').toLowerCase().includes(q);
     if(!ok)return false;
@@ -1257,10 +1333,10 @@ function renderTable(){
     const upd=m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—';
     const dz=m.diagnostic_zone;
     const intFlag=dz>=2?`<span class="int-flag ${dz==4?'if-z4':dz==3?'if-z3':'if-z2'}">${dz==4?'🔴 Z4 Gospel':dz==3?'🟠 Z3 First Steps':'🟡 Z2 Assurance'}</span>`:'<span style="font-size:11px;color:var(--lighter)">—</span>';
-    return`<tr onclick="openEdit('${m.id}')">
+    return`<tr onclick="openEdit('${m.id}')" ${m.is_test_member?'style="opacity:.7"':''}>
       <td><div class="nc">
         <div class="av" style="background:${LC_COLORS[l]};color:${LC_TEXT[l]}">${ini}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
-        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}</div>
+        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${m.is_test_member?' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#7c3aed;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);">🧪 Test</span>':''}</div>
         <div class="mi">${m.discipler_name||m.discipler||'No discipler'}</div></div>
       </div></td>
       <td><span class="lb lb${l}">${LN[l]}</span></td>
@@ -1568,12 +1644,13 @@ async function matchDiagnostic(diagId) {
 function rReports(){
   const bl=[0,0,0,0,0,0],bz={1:0,2:0,3:0,4:0,none:0};
   const byMin={};ALL_MINISTRIES.forEach(m=>byMin[m]=0);
-  members.forEach(m=>{
+  const _live = liveMembers();
+  _live.forEach(m=>{
     bl[m.level||0]++;
     if(m.diagnostic_zone)bz[m.diagnostic_zone]++;else bz.none++;
     if(m.ministry&&byMin[m.ministry]!==undefined)byMin[m.ministry]++;
   });
-  const t=members.length||1;
+  const t=_live.length||1;
   const lc2=['#e8e0d0','#2a5c40','#1a4a6b','#4a2a6b','#1a5a60','#7a2020'];
   document.getElementById('rg').innerHTML=`
     <div class="rc"><div class="rct">Pipeline Level Distribution</div>
@@ -1611,8 +1688,10 @@ function rOvExtras(){
       <div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--ink)">${m.name}</div><div style="font-size:10px;color:var(--muted)">${LN[m.level||0]} · ${m.ministry||'Unplaced'}</div></div>
       <div style="font-size:10px;color:var(--muted)">${m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—'}</div>
     </div>`).join('');
-  const bz={1:0,2:0,3:0,4:0};members.forEach(m=>{if(m.diagnostic_zone)bz[m.diagnostic_zone]++;});
-  const t2=members.length||1;
+  const bz={1:0,2:0,3:0,4:0};
+  const _liveZ = liveMembers();
+  _liveZ.forEach(m=>{if(m.diagnostic_zone)bz[m.diagnostic_zone]++;});
+  const t2=_liveZ.length||1;
   document.getElementById('zf').innerHTML=[1,2,3,4].map(z=>`<div class="fr" style="cursor:${bz[z]>0?'pointer':'default'}"
     onclick="${bz[z]>0?`drillDown('Z${z}')`:''}"
     title="${bz[z]>0?`Click to see ${bz[z]} Zone ${z} member${bz[z]!==1?'s':''}`:''}"
@@ -2330,6 +2409,13 @@ function fillF(m){
   document.getElementById('fIsFac').checked=m.is_facilitator||false;
   document.getElementById('fFacRole').value=m.facilitator_role||'';
   document.getElementById('facRoleRow').style.display=m.is_facilitator?'flex':'none';
+  // Test member flag — Pastor-only, hidden from everyone else
+  const isPastorView = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+  const testRow = document.getElementById('testMemberRow');
+  if(testRow){
+    testRow.style.display = isPastorView ? 'block' : 'none';
+    document.getElementById('fIsTest').checked = !!m.is_test_member;
+  }
 }
 
 // ── DIAGNOSTICS TAB ──
@@ -2506,15 +2592,33 @@ async function saveMember(){
   const discId=document.getElementById('fd_id').value||
     (fdSel.options[fdSel.selectedIndex]?.dataset?.id)||'';
   const famData=collectFamilyData();
+  // ─── Test member flag — Pastor-only field ───
+  // Pastor sees the checkbox; everyone else's modal hides the row entirely.
+  // If the row is hidden, preserve whatever was already in the DB to avoid
+  // an LCL accidentally clearing the flag by saving a profile edit.
+  const _isPastor = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+  const _existingTest = eid ? !!(members.find(x=>x.id===eid)?.is_test_member) : false;
+  const isTest = _isPastor
+    ? !!document.getElementById('fIsTest').checked
+    : _existingTest;
+  // ─── Enforce: test members are auto-assigned to Pastor's flock ───
+  // If toggled ON, override the discipler fields so no LCL ever sees them.
+  let effDiscId = discId || null;
+  let effDiscName = discName || null;
+  if(isTest && _isPastor){
+    const me = (typeof LEADER !== 'undefined' && LEADER) ? LEADER : {};
+    effDiscId   = me.leaderId || null;
+    effDiscName = me.leaderName || discName || null;
+  }
   const data={
     id:eid||undefined,name,
     bday:document.getElementById('fb').value,
     civil:document.getElementById('fcs').value,
     baptism:document.getElementById('fbp').value,
     enrolled:document.getElementById('fen').value,
-    discipler_id:discId||null,
-    discipler:discName||null,
-    discipler_name:discName||null,
+    discipler_id:effDiscId,
+    discipler:effDiscName,
+    discipler_name:effDiscName,
     zone: eid ? (members.find(x=>x.id===eid)?.zone||null) : null,
     level:parseInt(document.getElementById('fl').value)||0,
     gifts:document.getElementById('fgi').value,
@@ -2529,6 +2633,7 @@ async function saveMember(){
     family_members:famData,
     is_facilitator:isFac,
     facilitator_role:isFac?document.getElementById('fFacRole').value:null,
+    is_test_member:isTest,
   };
   // ─── DEFENSE IN DEPTH: Self-edit mode field protection ───
   // Even if the user disabled the locks via DevTools, force these
@@ -2543,6 +2648,7 @@ async function saveMember(){
       data.discipler_name    = ex.discipler_name || null;
       data.is_facilitator    = !!ex.is_facilitator;
       data.facilitator_role  = ex.facilitator_role || null;
+      data.is_test_member    = !!ex.is_test_member; // lock — members can't toggle this
       // diagnostic_zone, diagnostic_score, intervention_track, intervention_status
       // are already preserved from `ex` in the block below — no extra work needed.
     }
@@ -3240,6 +3346,32 @@ function toggleFacRole() {
 }
 
 // ═══════════════════════════════════════
+// TEST MEMBER TOGGLE — Pastor only
+// When ON, the member becomes invisible to all reports/counts and is
+// auto-assigned to Pastor's discipling so no LCL ever sees them.
+// We don't reassign the discipler input here in the UI (saveMember does
+// the override at write time), but we warn so Pastor knows.
+// ═══════════════════════════════════════
+function onToggleTestMember() {
+  const checked = document.getElementById('fIsTest').checked;
+  if(!checked) return;
+  // Soft warning if the current discipler isn't Pastor — let Pastor cancel
+  const discInput = document.getElementById('fd');
+  const me = (typeof LEADER !== 'undefined' && LEADER) ? LEADER : {};
+  const myName = me.leaderName || '';
+  const currentDisc = (discInput?.value || '').trim();
+  if(currentDisc && myName && currentDisc !== myName){
+    const ok = confirm(
+      `Marking as test member will move ${currentDisc ? '"' + currentDisc + '"' : 'the current discipler'} ` +
+      `→ you (${myName}) on save, so no LCL sees this record.\n\nProceed?`
+    );
+    if(!ok){
+      document.getElementById('fIsTest').checked = false;
+    }
+  }
+}
+
+// ═══════════════════════════════════════
 // FAMILY MEMBER SLOTS
 // ═══════════════════════════════════════
 const RELATIONSHIPS = ['Wife','Husband','Son','Daughter','Sibling','Parent','Other'];
@@ -3796,20 +3928,39 @@ const _DEFAULT_ASSESS_GREETING =
   '{url}\n\n' +
   'I-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— {senderName}';
 
+const _DEFAULT_CHECKIN_GREETING =
+  'Hi Pastor {firstName}! 🙏\n\n' +
+  'Kumusta ka? Napansin ko hindi pa nakapag-LC meeting ang grupo natin ' +
+  'sa {lcGroup} nitong nakaraang {silenceWeeks} week(s). ' +
+  'Just checking in — anything I can pray with you about or help you with?\n\n' +
+  'God bless po!\n— {senderName}';
+
+const _DEFAULT_CELEBRATE_GREETING =
+  'Hi Pastor {firstName}! 🏆\n\n' +
+  'Praise God! Nakapag-meeting ang LCG na {lcGroup} nang ' +
+  '{streakWeeks} sunod-sunod na linggo. Salamat sa iyong faithfulness ' +
+  'at malasakit sa mga kapatid. Ipinagdarasal kita! 🙏💚\n\n' +
+  'Keep up the great work!\n— {senderName}';
+
 // In-memory copies — populated by loadGreetingTemplates()
-let _greetingTemplate = _DEFAULT_PROFILE_GREETING;
-let _assessTemplate   = _DEFAULT_ASSESS_GREETING;
+let _greetingTemplate  = _DEFAULT_PROFILE_GREETING;
+let _assessTemplate    = _DEFAULT_ASSESS_GREETING;
+let _checkinTemplate   = _DEFAULT_CHECKIN_GREETING;
+let _celebrateTemplate = _DEFAULT_CELEBRATE_GREETING;
 // Tracks which tab is shown in Settings (for Reset/Preview buttons)
 let _currentGreetingTab = 'profile';
 
 function _buildGreeting(template, vars){
   // Replace {placeholder} with vars[placeholder]; missing vars become ''
   return String(template || '')
-    .replace(/\{firstName\}/g,  vars.firstName  || '')
-    .replace(/\{url\}/g,        vars.url        || '')
-    .replace(/\{days\}/g,       String(vars.days != null ? vars.days : _TOKEN_VALIDITY_DAYS))
-    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader')
-    .replace(/\{assessName\}/g, vars.assessName || 'assessment');
+    .replace(/\{firstName\}/g,    vars.firstName    || '')
+    .replace(/\{url\}/g,          vars.url          || '')
+    .replace(/\{days\}/g,         String(vars.days != null ? vars.days : _TOKEN_VALIDITY_DAYS))
+    .replace(/\{senderName\}/g,   vars.senderName   || 'Your LC Leader')
+    .replace(/\{assessName\}/g,   vars.assessName   || 'assessment')
+    .replace(/\{silenceWeeks\}/g, String(vars.silenceWeeks != null ? vars.silenceWeeks : ''))
+    .replace(/\{streakWeeks\}/g,  String(vars.streakWeeks  != null ? vars.streakWeeks  : ''))
+    .replace(/\{lcGroup\}/g,      vars.lcGroup      || 'your LC group');
 }
 
 // ── WhatsApp URL builder — uses api.whatsapp.com to avoid the wa.me
@@ -3830,40 +3981,60 @@ async function loadGreetingTemplates(){
     const {data, error} = await db.from('system_settings')
       .select('meta').eq('id', 1).maybeSingle();
     if(error) throw error;
-    const tplProf = data?.meta?.profile_edit_greeting;
-    const tplAss  = data?.meta?.assessment_link_greeting;
-    if(typeof tplProf === 'string' && tplProf.trim()) _greetingTemplate = tplProf;
-    else _greetingTemplate = _DEFAULT_PROFILE_GREETING;
-    if(typeof tplAss === 'string' && tplAss.trim())  _assessTemplate   = tplAss;
-    else _assessTemplate   = _DEFAULT_ASSESS_GREETING;
+    const tplProf  = data?.meta?.profile_edit_greeting;
+    const tplAss   = data?.meta?.assessment_link_greeting;
+    const tplCheck = data?.meta?.lcg_checkin_greeting;
+    const tplCeleb = data?.meta?.lcg_celebration_greeting;
+    if(typeof tplProf  === 'string' && tplProf.trim())  _greetingTemplate  = tplProf;
+    else _greetingTemplate  = _DEFAULT_PROFILE_GREETING;
+    if(typeof tplAss   === 'string' && tplAss.trim())   _assessTemplate    = tplAss;
+    else _assessTemplate    = _DEFAULT_ASSESS_GREETING;
+    if(typeof tplCheck === 'string' && tplCheck.trim()) _checkinTemplate   = tplCheck;
+    else _checkinTemplate   = _DEFAULT_CHECKIN_GREETING;
+    if(typeof tplCeleb === 'string' && tplCeleb.trim()) _celebrateTemplate = tplCeleb;
+    else _celebrateTemplate = _DEFAULT_CELEBRATE_GREETING;
   } catch(e){
     console.warn('Greeting template load failed — using defaults:', e.message);
-    _greetingTemplate = _DEFAULT_PROFILE_GREETING;
-    _assessTemplate   = _DEFAULT_ASSESS_GREETING;
+    _greetingTemplate  = _DEFAULT_PROFILE_GREETING;
+    _assessTemplate    = _DEFAULT_ASSESS_GREETING;
+    _checkinTemplate   = _DEFAULT_CHECKIN_GREETING;
+    _celebrateTemplate = _DEFAULT_CELEBRATE_GREETING;
   }
   // Populate the textareas in Settings tab if rendered
   const ta1 = document.getElementById('greetingTemplate');
   if(ta1) ta1.value = _greetingTemplate;
   const ta2 = document.getElementById('assessTemplate');
   if(ta2) ta2.value = _assessTemplate;
+  const ta3 = document.getElementById('checkinTemplate');
+  if(ta3) ta3.value = _checkinTemplate;
+  const ta4 = document.getElementById('celebrateTemplate');
+  if(ta4) ta4.value = _celebrateTemplate;
 }
 
 function switchGreetingTab(which){
   _currentGreetingTab = which;
-  const profPane = document.getElementById('grpane-profile');
-  const assPane  = document.getElementById('grpane-assess');
-  const profTab  = document.getElementById('grtab-profile');
-  const assTab   = document.getElementById('grtab-assess');
-  if(!profPane || !assPane) return;
-  if(which === 'profile'){
-    profPane.style.display = ''; assPane.style.display = 'none';
-    profTab.style.background = 'var(--gold)'; profTab.style.color = '#fff';
-    assTab.style.background  = 'transparent';  assTab.style.color  = 'var(--muted)';
-  } else {
-    profPane.style.display = 'none'; assPane.style.display = '';
-    assTab.style.background = 'var(--gold)'; assTab.style.color = '#fff';
-    profTab.style.background = 'transparent'; profTab.style.color = 'var(--muted)';
-  }
+  // All 4 panes + tabs
+  const panes = {
+    profile:   document.getElementById('grpane-profile'),
+    assess:    document.getElementById('grpane-assess'),
+    checkin:   document.getElementById('grpane-checkin'),
+    celebrate: document.getElementById('grpane-celebrate'),
+  };
+  const tabs = {
+    profile:   document.getElementById('grtab-profile'),
+    assess:    document.getElementById('grtab-assess'),
+    checkin:   document.getElementById('grtab-checkin'),
+    celebrate: document.getElementById('grtab-celebrate'),
+  };
+  // Bail if anything missing
+  for(const k of Object.keys(panes)){ if(!panes[k] || !tabs[k]) return; }
+  // Hide all panes, reset all tabs
+  Object.values(panes).forEach(p => p.style.display = 'none');
+  Object.values(tabs).forEach(t => { t.style.background = 'transparent'; t.style.color = 'var(--muted)'; });
+  // Show the active pane + tab
+  panes[which].style.display = '';
+  tabs[which].style.background = 'var(--gold)';
+  tabs[which].style.color = '#fff';
   const status = document.getElementById('greetingStatus');
   if(status) status.textContent = '';
 }
@@ -3875,12 +4046,17 @@ async function saveGreetingTemplates(){
   }
   const ta1 = document.getElementById('greetingTemplate');
   const ta2 = document.getElementById('assessTemplate');
+  const ta3 = document.getElementById('checkinTemplate');
+  const ta4 = document.getElementById('celebrateTemplate');
   const status = document.getElementById('greetingStatus');
-  if(!ta1 || !ta2) return;
-  const profileTpl = ta1.value;
-  const assessTpl  = ta2.value;
+  if(!ta1 || !ta2 || !ta3 || !ta4) return;
+  const profileTpl   = ta1.value;
+  const assessTpl    = ta2.value;
+  const checkinTpl   = ta3.value;
+  const celebrateTpl = ta4.value;
+  // Only the link-bearing templates require {url}; LC templates don't share links.
   if(!profileTpl.includes('{url}') || !assessTpl.includes('{url}')){
-    if(!confirm('One of your templates is missing {url} — members will receive no link in that message. Save anyway?')) return;
+    if(!confirm('Profile or Assessment template is missing {url} — members will receive no link in that message. Save anyway?')) return;
   }
   const btn = document.getElementById('greetingSaveBtn');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
@@ -3893,14 +4069,18 @@ async function saveGreetingTemplates(){
       ...(cur?.meta || {}),
       profile_edit_greeting:    profileTpl,
       assessment_link_greeting: assessTpl,
+      lcg_checkin_greeting:     checkinTpl,
+      lcg_celebration_greeting: celebrateTpl,
       greeting_updated_at:      new Date().toISOString(),
       greeting_updated_by:      (LEADER && LEADER.leaderName) || 'Pastor'
     };
     const {error: uErr} = await db.from('system_settings')
       .update({meta: newMeta}).eq('id', 1);
     if(uErr) throw uErr;
-    _greetingTemplate = profileTpl;
-    _assessTemplate   = assessTpl;
+    _greetingTemplate  = profileTpl;
+    _assessTemplate    = assessTpl;
+    _checkinTemplate   = checkinTpl;
+    _celebrateTemplate = celebrateTpl;
     if(status){ status.textContent = '✓ Saved'; status.style.color = 'var(--green)'; }
     toast('Greetings saved ✓');
     setTimeout(()=>{ if(status) status.textContent = ''; }, 3000);
@@ -3914,40 +4094,64 @@ async function saveGreetingTemplates(){
 }
 
 function resetCurrentGreeting(){
-  const isProfile = _currentGreetingTab === 'profile';
-  const label = isProfile ? 'Profile Edit Link greeting' : 'Assessment Link greeting';
-  if(!confirm('Reset the ' + label + ' to its default? You still need to click Save.')) return;
-  if(isProfile){
-    const ta = document.getElementById('greetingTemplate');
-    if(ta) ta.value = _DEFAULT_PROFILE_GREETING;
-  } else {
-    const ta = document.getElementById('assessTemplate');
-    if(ta) ta.value = _DEFAULT_ASSESS_GREETING;
-  }
+  const tabMap = {
+    profile:   { taId: 'greetingTemplate',   def: _DEFAULT_PROFILE_GREETING,   label: 'Profile Edit Link greeting' },
+    assess:    { taId: 'assessTemplate',     def: _DEFAULT_ASSESS_GREETING,    label: 'Assessment Link greeting' },
+    checkin:   { taId: 'checkinTemplate',    def: _DEFAULT_CHECKIN_GREETING,   label: 'LC Check-in greeting' },
+    celebrate: { taId: 'celebrateTemplate',  def: _DEFAULT_CELEBRATE_GREETING, label: 'LC Celebration greeting' },
+  };
+  const cfg = tabMap[_currentGreetingTab];
+  if(!cfg) return;
+  if(!confirm('Reset the ' + cfg.label + ' to its default? You still need to click Save.')) return;
+  const ta = document.getElementById(cfg.taId);
+  if(ta) ta.value = cfg.def;
   const status = document.getElementById('greetingStatus');
   if(status){ status.textContent = 'Reset — click Save to keep'; status.style.color = 'var(--gold)'; }
 }
 
 function previewCurrentGreeting(){
-  const isProfile = _currentGreetingTab === 'profile';
-  const ta = document.getElementById(isProfile ? 'greetingTemplate' : 'assessTemplate');
+  const tabMap = {
+    profile:   { taId: 'greetingTemplate',  label: 'Profile Edit Link' },
+    assess:    { taId: 'assessTemplate',    label: 'Assessment Link' },
+    checkin:   { taId: 'checkinTemplate',   label: 'LC Check-in' },
+    celebrate: { taId: 'celebrateTemplate', label: 'LC Celebration' },
+  };
+  const cfg = tabMap[_currentGreetingTab];
+  if(!cfg) return;
+  const ta = document.getElementById(cfg.taId);
   if(!ta) return;
   const senderName = (LEADER && LEADER.leaderName) || 'Pastor Gerry';
-  const sample = _buildGreeting(ta.value, {
-    firstName:  'Maria',
-    url:        'https://gejable1.github.io/multiply/' + (isProfile ? 'member_self_edit.html?token=abc123' : 'salvation_assurance_diagnostic.html?id=xyz789'),
-    days:       _TOKEN_VALIDITY_DAYS,
-    senderName: senderName,
-    assessName: 'Salvation Assurance Diagnostic'
-  });
+  // Per-template sample data (shows in the preview bubble)
+  const sampleVars = {
+    profile: {
+      firstName:'Maria',
+      url:'https://gejable1.github.io/multiply/member_self_edit.html?token=abc123',
+      days:_TOKEN_VALIDITY_DAYS, senderName
+    },
+    assess: {
+      firstName:'Maria',
+      url:'https://gejable1.github.io/multiply/salvation_assurance_diagnostic.html?id=xyz789',
+      assessName:'Salvation Assurance Diagnostic', senderName
+    },
+    checkin: {
+      firstName:'Christian', silenceWeeks:2, lcGroup:'LCG North',
+      senderName
+    },
+    celebrate: {
+      firstName:'Levi', streakWeeks:4, lcGroup:'LCG South',
+      senderName
+    }
+  };
+  const sample = _buildGreeting(ta.value, sampleVars[_currentGreetingTab] || {});
+  const preName = sampleVars[_currentGreetingTab]?.firstName || 'Maria';
   document.querySelectorAll('.greeting-preview-modal').forEach(m=>m.remove());
   const modal = document.createElement('div');
   modal.className = 'greeting-preview-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
   modal.innerHTML =
     '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.25);font-family:inherit">' +
-      '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:.4rem">👁 Preview — ' + (isProfile ? 'Profile Edit Link' : 'Assessment Link') + ' to <em>Maria</em></div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:.85rem">This is what the member will see when you share the link.</div>' +
+      '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:.4rem">👁 Preview — ' + cfg.label + ' to <em>' + preName + '</em></div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:.85rem">This is what the recipient will see when you send.</div>' +
       '<div style="background:#dcf8c6;border-radius:10px;padding:12px;font-size:13px;line-height:1.5;color:#1f1d2c;white-space:pre-wrap;font-family:\'DM Sans\',sans-serif;border-bottom-right-radius:2px;margin-bottom:1rem">' +
         escapeHTMLNotif(sample) +
       '</div>' +
