@@ -181,6 +181,10 @@
 
     function canSee(tier, member) {
       if (isPastor()) return true;
+      // Self-clause: a leader can always see their OWN profile, diagnostics,
+      // and assessments. Otherwise leaders couldn't self-administer their own
+      // DISC, Enneagram, Strengths, etc. Only blocks looking at OTHER leaders.
+      if (member && member.id === L().leaderId) return true;
       if (!member) return tier === 'public';
       if (tier === 'public') return true;
       if (tier === 'pastoral') {
