@@ -17,12 +17,17 @@
   --r:14px;--r-sm:8px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{overscroll-behavior-y:contain;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
-     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior:none;}
+     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior-y:contain;}
 
 /* ── SCREENS ── */
-.screen{display:none;min-height:100vh;}
-.screen.active{display:flex;flex-direction:column;}
+.screen{display:none;}
+.screen.active{display:block;min-height:100vh;}
+/* Login + Attendance keep their flex layout because they need vertical centering / sticky save bar */
+#screenLogin.active{display:flex;flex-direction:column;align-items:center;justify-content:center;}
+#screenAttendance.active,
+#screenAddMember.active{display:flex;flex-direction:column;}
 
 /* ── SPLASH / LOGIN ── */
 #screenLogin{background:linear-gradient(160deg,#0f0f13 0%,#1a1228 50%,#0f1318 100%);
@@ -38,8 +43,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .search-wrap{width:100%;max-width:360px;position:relative;}
 .search-input{width:100%;background:var(--surface2);border:1.5px solid var(--border2);
   border-radius:var(--r);padding:14px 16px;color:var(--text);
-  font-family:'DM Sans',sans-serif;font-size:15px;outline:none;
-  transition:border-color .15s;}
+  font-family:'DM Sans',sans-serif;font-size:15px;outline:none;transition:border-color .15s;}
 .search-input:focus{border-color:var(--gold);}
 .search-input::placeholder{color:var(--lighter);}
 .search-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;
@@ -111,6 +115,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .alert-strip.green .as-text strong{color:var(--green);}
 .alert-strip.amber .as-text strong{color:var(--orange);}
 
+/* Transfer alert */
+.transfer-alert{margin:0 16px 10px;background:rgba(251,191,36,.08);
+  border:1px solid rgba(251,191,36,.3);border-left:3px solid #fbbf24;
+  border-radius:var(--r);padding:12px 14px;}
+.ta-title{font-size:10px;font-weight:800;letter-spacing:.1em;color:#fbbf24;margin-bottom:6px;}
+.ta-row{display:flex;align-items:center;gap:8px;padding:4px 0;
+  border-bottom:1px solid rgba(251,191,36,.12);}
+.ta-row:last-child{border-bottom:none;}
+.ta-name{font-size:12px;font-weight:600;flex:1;}
+.ta-to{font-size:11px;color:var(--muted);}
+.ta-date{font-size:10px;color:#fbbf24;}
+
 /* ── MEMBER LIST ── */
 #screenMembers{background:var(--bg);}
 .filter-tabs{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;
@@ -120,6 +136,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   background:transparent;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;
   color:var(--muted);cursor:pointer;flex-shrink:0;transition:all .15s;white-space:nowrap;}
 .ftab.active{background:var(--gold);border-color:var(--gold);color:#0f0f13;}
+
+#scopeTabsMobile::-webkit-scrollbar{display:none;}
+.scope-tab{padding:8px 12px 8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.2);
+  background:transparent;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;
+  color:#fff;cursor:pointer;flex-shrink:0;transition:all .15s;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:5px;}
+.scope-tab.active{background:#fff;color:#1f4530;border-color:#fff;}
+.scope-tab-label{font-size:12px;}
+.scope-tab-count{background:rgba(0,0,0,.15);padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:700;}
+.scope-tab.active .scope-tab-count{background:rgba(31,69,48,.15);}
 
 .member-search{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);}
 .member-search input{width:100%;background:var(--surface2);border:1px solid var(--border);
@@ -147,11 +173,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .z2-badge{background:rgba(96,165,250,.15);color:var(--z2);}
 .z3-badge{background:rgba(251,146,60,.15);color:var(--z3);}
 .z4-badge{background:rgba(248,113,113,.15);color:var(--z4);}
+.z0-badge{background:var(--surface2);color:var(--muted);}
 .mc-tags{padding:0 12px 10px 16px;display:flex;gap:5px;flex-wrap:wrap;}
 .mc-tag{font-size:9.5px;padding:2px 7px;border-radius:6px;
   background:var(--surface2);color:var(--muted);font-weight:600;}
 .mc-tag.pending{background:rgba(248,113,113,.12);color:var(--red);}
 .mc-tag.done{background:rgba(52,211,153,.12);color:var(--green);}
+.mc-tag.transfer{background:rgba(251,191,36,.12);color:#fbbf24;}
 
 /* ── ATTENDANCE ── */
 #screenAttendance{background:var(--bg);}
@@ -164,44 +192,44 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   padding:7px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
 .att-list{flex:1;overflow-y:auto;padding:8px 16px 100px;}
 .att-member{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  margin-bottom:8px;display:flex;align-items:center;gap:12px;padding:12px 14px;
-  cursor:pointer;transition:all .15s;position:relative;overflow:hidden;}
-.att-member.present{border-color:var(--green);background:rgba(52,211,153,.06);}
-.att-member.absent{opacity:.55;}
-.att-member:active{transform:scale(.98);}
-.att-check{width:28px;height:28px;border-radius:8px;border:2px solid var(--border2);
-  display:flex;align-items:center;justify-content:center;font-size:14px;
-  flex-shrink:0;transition:all .15s;}
+  margin-bottom:8px;padding:12px 14px;display:flex;align-items:center;gap:12px;
+  cursor:pointer;transition:all .15s;}
+.att-member.present{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3);}
+.att-check{width:22px;height:22px;border-radius:6px;border:2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  color:var(--green);flex-shrink:0;transition:all .15s;}
 .att-member.present .att-check{background:var(--green);border-color:var(--green);color:#0f0f13;}
-.att-av{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;
+.att-av{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;
   justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
 .att-name{font-size:14px;font-weight:600;flex:1;}
-.att-streak{font-size:10px;color:var(--muted);}
-.att-save-bar{position:fixed;bottom:0;left:0;right:0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));
-  background:var(--surface);border-top:1px solid var(--border);
-  display:flex;gap:10px;z-index:40;}
-.att-count{font-size:13px;color:var(--muted);display:flex;align-items:center;}
-.att-save-btn{flex:1;padding:13px;background:var(--gold);border:none;border-radius:var(--r);
-  font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;color:#0f0f13;cursor:pointer;}
-.att-save-btn:active{filter:brightness(.9);}
-.select-all-btn{padding:13px 16px;background:var(--surface2);border:1px solid var(--border);
-  border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:13px;
-  font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;}
+.att-streak{font-size:11px;color:var(--muted);}
+.att-save-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);
+  border-top:1px solid var(--border);padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  display:flex;align-items:center;gap:10px;z-index:40;}
+.att-count{font-size:13px;font-weight:700;color:var(--gold);flex:1;}
+.select-all-btn{padding:8px 14px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;
+  color:var(--text);cursor:pointer;}
+.att-save-btn{padding:10px 22px;background:var(--gold);border:none;border-radius:var(--r-sm);
+  font-family:'DM Sans',sans-serif;font-size:13px;font-weight:800;color:#0f0f13;cursor:pointer;}
 
 /* ── MEMBER DETAIL ── */
 #screenDetail{background:var(--bg);}
-.detail-hero{background:var(--surface);border-bottom:1px solid var(--border);padding:16px;}
-.dh-top{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+.detail-hero{background:linear-gradient(135deg,var(--surface),var(--surface2));
+  padding:16px;border-bottom:1px solid var(--border);}
+.dh-top{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
 .dh-av{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;
   justify-content:center;font-family:'Syne',serif;font-size:20px;font-weight:800;flex-shrink:0;}
-.dh-name{font-family:'Syne',serif;font-size:18px;font-weight:700;}
-.dh-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+.dh-name{font-family:'Syne',serif;font-size:18px;font-weight:800;}
+.dh-meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .dh-zone-bar{display:flex;align-items:center;gap:8px;}
-.zone-dot{width:10px;height:10px;border-radius:50%;}
-.zone-label{font-size:13px;font-weight:700;}
-.zone-desc{font-size:12px;color:var(--muted);}
+.zone-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.zone-label{font-size:12px;font-weight:700;}
+.zone-desc{font-size:11px;color:var(--muted);}
 
-.detail-sections{flex:1;overflow-y:auto;padding:12px 16px 120px;}
+.detail-sections{flex:1;overflow-y:auto;padding:10px 16px 120px;}
+
+/* Detail section cards */
 .ds-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
   margin-bottom:10px;overflow:hidden;}
 .ds-header{padding:12px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;
@@ -289,8 +317,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .ai-streak{font-size:11px;color:var(--red);}
 
 .pending-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;}
-.pg-card{background:var(--surface2);border-radius:var(--r-sm);padding:10px 12px;
-  text-align:center;}
+.pg-card{background:var(--surface2);border-radius:var(--r-sm);padding:10px 12px;text-align:center;}
 .pg-num{font-family:'Syne',serif;font-size:22px;font-weight:800;}
 .pg-label{font-size:10px;color:var(--muted);margin-top:2px;}
 
@@ -334,20 +361,52 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .empty-title{font-size:16px;font-weight:700;margin-bottom:6px;}
 .empty-sub{font-size:13px;color:var(--muted);}
 
-/* utility */
 .sep{height:1px;background:var(--border);margin:0 16px;}
 </style>
 </head>
 <body>
 
+<!-- ── LEADER SESSION GATE (REDIRECT-BASED) ────────────────────
+     This mobile tool now uses the same login flow as the desktop
+     dashboard. If no valid session exists, redirect to the central
+     login page. This replaces the old open-name-search login.
+─────────────────────────────────────────────────────────────── -->
+<script src="multiply_shared.js"></script>
+<script src="multiply_reports.js"></script>
+<style id="leader-gate-style">
+  body { visibility: hidden; }
+  body.leader-authenticated { visibility: visible; }
+  #leaderGateBlackout {
+    position:fixed; inset:0; background:#0d2118; z-index:99999;
+    display:flex; align-items:center; justify-content:center;
+    color:#d4b87a; font-family:'Inter',sans-serif; font-size:14px;
+  }
+</style>
+<div id="leaderGateBlackout">Verifying leader session…</div>
+<script>
+(function leaderGateBoot(){
+  if (!window.MultiplyShared) {
+    location.replace('leader_login.html');
+    return;
+  }
+  if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+  document.body.classList.add('leader-authenticated');
+  const blackout = document.getElementById('leaderGateBlackout');
+  if (blackout) blackout.remove();
+})();
+</script>
+
 <!-- ══════════════════ SCREEN: LOGIN ══════════════════ -->
-<div class="screen active" id="screenLogin">
+<!-- Login screen kept for legacy reasons but no longer reachable —
+     the gate above redirects unauthenticated users to leader_login.html.
+     If you ever need to roll back, just remove the gate script. -->
+<div class="screen" id="screenLogin">
   <div class="logo-wrap">
     <div class="logo-m">M</div>
     <div class="logo-sub">MULTIPLY · ROSEHILL</div>
   </div>
   <div class="login-title">LC Leader Access</div>
-  <div class="login-desc">Search your name to access your group's dashboard. Leaders at Level 2 and above can view and manage their mentees.</div>
+  <div class="login-desc">Search your name to access your group's dashboard.<br>Leaders at Level 2 and above can view and manage their mentees.</div>
   <div class="search-wrap">
     <input class="search-input" id="loginSearch" type="text" placeholder="Type your name..."
            autocomplete="off" oninput="searchLeader(this.value)">
@@ -357,14 +416,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 </div>
 
 <!-- ══════════════════ SCREEN: HOME ══════════════════ -->
-<div class="screen" id="screenHome">
+<div class="screen active" id="screenHome">
   <div class="home-header">
     <div class="leader-card">
       <div class="leader-av" id="homeAv">?</div>
-      <div>
+      <div style="flex:1">
         <div class="leader-name" id="homeName">Leader Name</div>
         <div class="leader-role" id="homeRole">LC Leader</div>
         <div class="leader-lc" id="homeLc"></div>
+      </div>
+      <div onclick="switchLeader()" title="Switch to another leader" style="
+        width:38px;height:38px;border-radius:10px;background:var(--surface3);
+        border:1px solid var(--border);display:flex;align-items:center;
+        justify-content:center;cursor:pointer;color:var(--muted);font-size:16px;
+        flex-shrink:0;transition:all .15s">
+        🔄
       </div>
     </div>
   </div>
@@ -386,30 +452,24 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="qa-btn" onclick="showScreen('screenMembers')">
       <div class="qa-icon">👥</div>
       <div class="qa-label">My Group</div>
-      <div class="qa-desc">View all members & zones</div>
+      <div class="qa-desc">View & manage members</div>
     </div>
     <div class="qa-btn" onclick="showAttendance()">
-      <div class="qa-icon">📋</div>
-      <div class="qa-label">Log Attendance</div>
-      <div class="qa-desc">Mark today's meeting</div>
-    </div>
-    <div class="qa-btn" onclick="showSendLinks()">
-      <div class="qa-icon">🔗</div>
-      <div class="qa-label">Send Links</div>
-      <div class="qa-desc">Share assessment links</div>
+      <div class="qa-icon">✅</div>
+      <div class="qa-label">Attendance</div>
+      <div class="qa-desc">Log today's meeting</div>
     </div>
     <div class="qa-btn" onclick="showScreen('screenReports')">
       <div class="qa-icon">📊</div>
       <div class="qa-label">Reports</div>
-      <div class="qa-desc">Attendance & zone summary</div>
+      <div class="qa-desc">Zone & assessment stats</div>
+    </div>
+    <div class="qa-btn" onclick="showScreen('screenSendLinks')">
+      <div class="qa-icon">📤</div>
+      <div class="qa-label">Send Links</div>
+      <div class="qa-desc">Share assessment links</div>
     </div>
   </div>
-
-  <div class="section-head">
-    <div class="section-title">Needs Attention</div>
-    <div class="section-action" onclick="showScreen('screenMembers');setFilter('z4')">See all</div>
-  </div>
-  <div id="needsAttentionList" style="padding:0 16px 24px"></div>
 </div>
 
 <!-- ══════════════════ SCREEN: MEMBERS ══════════════════ -->
@@ -417,21 +477,137 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="topbar">
     <div class="tb-back" onclick="showScreen('screenHome')">←</div>
     <div class="tb-title">My Group</div>
-    <div class="tb-action" onclick="showAttendance()">+ Attendance</div>
+    <div class="tb-action" id="addMemberBtn" onclick="openAddMember()" style="background:var(--gold);color:#0f0f13;border-color:var(--gold)">+ Add Member</div>
+  </div>
+  <!-- ── SCOPE TABS (Phase 1 access control) ──
+       Same model as the desktop dashboard: choose which subset
+       of members you're working with. Pastor (Level 5) gets the
+       extra "All Members" tab. -->
+  <div id="scopeTabsMobile" style="display:flex;gap:6px;padding:10px 14px 0;overflow-x:auto;scrollbar-width:none;background:linear-gradient(135deg,#1f4530 0%,#0d2118 100%);">
+    <button class="scope-tab active" data-view="disciples" onclick="setMobileScope('disciples',this)">
+      👥 <span class="scope-tab-label">Disciples</span> <span class="scope-tab-count" id="msCountDisciples">0</span>
+    </button>
+    <button class="scope-tab" data-view="tree" onclick="setMobileScope('tree',this)">
+      🌳 <span class="scope-tab-label">Tree</span> <span class="scope-tab-count" id="msCountTree">0</span>
+    </button>
+    <button class="scope-tab" data-view="ministry" onclick="setMobileScope('ministry',this)">
+      ⛪ <span class="scope-tab-label">Ministry</span> <span class="scope-tab-count" id="msCountMinistry">0</span>
+    </button>
+    <button class="scope-tab" id="msScopeAllBtn" data-view="all" onclick="setMobileScope('all',this)" style="display:none">
+      🔓 <span class="scope-tab-label">All</span> <span class="scope-tab-count" id="msCountAll">0</span>
+    </button>
   </div>
   <div class="filter-tabs">
-    <div class="ftab active" onclick="setFilter('all',this)">All</div>
-    <div class="ftab" onclick="setFilter('z1',this)">Zone 1 ✅</div>
-    <div class="ftab" onclick="setFilter('z2',this)">Zone 2 🔵</div>
-    <div class="ftab" onclick="setFilter('z3',this)">Zone 3 🟠</div>
-    <div class="ftab" onclick="setFilter('z4',this)">Zone 4 🔴</div>
-    <div class="ftab" onclick="setFilter('no_diag',this)">No Diag</div>
+    <button class="ftab active" onclick="setFilter('all',this)">All</button>
+    <button class="ftab" onclick="setFilter('z1',this)">Zone 1 ✅</button>
+    <button class="ftab" onclick="setFilter('z2',this)">Zone 2 🔵</button>
+    <button class="ftab" onclick="setFilter('z3',this)">Zone 3 🟠</button>
+    <button class="ftab" onclick="setFilter('z4',this)">Zone 4 🔴</button>
+    <button class="ftab" onclick="setFilter('no_diag',this)">No Diag</button>
+    <button class="ftab" onclick="setFilter('transfer',this)">🔀 Transfer</button>
   </div>
   <div class="member-search">
-    <input type="text" placeholder="Search member..." oninput="filterMembers(this.value)" id="memberSearchInput">
+    <input type="text" placeholder="Search members..." oninput="filterMembers(this.value)">
   </div>
   <div class="member-list" id="memberList">
     <div class="loading"><div class="spinner"></div><div class="loading-text">Loading members...</div></div>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: ADD MEMBER ══════════════════ -->
+<div class="screen" id="screenAddMember">
+  <div class="topbar">
+    <div class="tb-back" onclick="cancelAddMember()">←</div>
+    <div class="tb-title">Add New Member</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px 16px 100px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--gold);text-transform:uppercase;margin-bottom:14px">📝 Basic Information</div>
+
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Full Name *</div>
+        <input type="text" id="amName" placeholder="Juan Dela Cruz"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+      </div>
+
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Contact (Phone/WhatsApp)</div>
+        <input type="tel" id="amContact" placeholder="+63..."
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Birthday</div>
+          <input type="date" id="amBirthday"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Civil Status</div>
+          <select id="amCivil"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+            <option value="">— Select —</option>
+            <option value="Single">Single</option>
+            <option value="Married">Married</option>
+            <option value="Widowed">Widowed</option>
+            <option value="Separated">Separated</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Address</div>
+        <input type="text" id="amAddress" placeholder="Optional"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--gold);text-transform:uppercase;margin-bottom:14px">⛪ Discipleship Info</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">LC Group</div>
+          <input type="text" id="amLcGroup"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Pipeline Level</div>
+          <select id="amLevel"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+            <option value="0">Pre-Pipeline</option>
+            <option value="1" selected>Team Member</option>
+            <option value="2">Leader</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Discipler</div>
+        <input type="text" id="amDiscipler" readonly
+          style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">Auto-set to you. Pastor can reassign later.</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Enrolled Date</div>
+          <input type="date" id="amEnrolled"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Baptism Date</div>
+          <input type="date" id="amBaptism"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="att-save-bar">
+    <div style="flex:1;font-size:11px;color:var(--muted)">* Required field</div>
+    <button class="select-all-btn" onclick="cancelAddMember()">Cancel</button>
+    <button class="att-save-btn" onclick="saveNewMember()">💾 Save Member</button>
   </div>
 </div>
 
@@ -442,19 +618,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="tb-title" id="attTitle">Log Attendance</div>
   </div>
   <div class="att-meta">
-    <div class="att-date-row" style="margin-bottom:8px">
-      <input type="date" class="att-date-input" id="attDate">
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">←  Date of meeting</div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">📅 Date of Meeting (tap to change)</div>
+      <input type="date" class="att-date-input" id="attDate" onchange="onAttContextChange()" style="font-size:15px;padding:11px 14px;font-weight:600;width:auto;min-width:180px">
     </div>
+    <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Event Type</div>
     <div class="att-date-row" id="attTypeRow">
-      <div class="att-type-pill selected" data-type="LC Meeting" onclick="selectAttType(this)">LC Meeting</div>
-      <div class="att-type-pill" data-type="Sunday Service" onclick="selectAttType(this)">Sunday Service</div>
+      <div class="att-type-pill selected" data-type="Sunday Service" onclick="selectAttType(this)">Sunday Service</div>
+      <div class="att-type-pill" data-type="LC Meeting" onclick="selectAttType(this)">LC Meeting</div>
+      <div class="att-type-pill" data-type="Sunday School" onclick="selectAttType(this)">Sunday School</div>
       <div class="att-type-pill" data-type="Prayer Meeting" onclick="selectAttType(this)">Prayer Meeting</div>
+      <div class="att-type-pill" data-type="BTLI" onclick="selectAttType(this)">BTLI</div>
+      <div class="att-type-pill" data-type="Youth Gathering" onclick="selectAttType(this)">Youth Gathering</div>
       <div class="att-type-pill" data-type="Team Building" onclick="selectAttType(this)">Team Building</div>
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
       <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
     </div>
   </div>
+  <!-- "Already saved" banner — populated by loadExistingAttendance(); hidden when nothing on file -->
+  <div id="attLoadedBanner" style="display:none;margin:0 14px 8px;padding:10px 12px;background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.35);border-radius:10px;font-size:12px;color:var(--text);line-height:1.45"></div>
   <div class="att-list" id="attList"></div>
   <div class="att-save-bar">
     <div class="att-count" id="attCount">0 present</div>
@@ -486,7 +668,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <div class="detail-sections" id="detailSections"></div>
   <div class="detail-actions">
-    <button class="da-btn da-secondary" onclick="logQuickAttendance()">✓ Mark Present</button>
+    <button class="da-btn da-secondary" id="markPresentBtn" onclick="logQuickAttendance()">✓ Mark Present</button>
     <button class="da-btn da-primary" onclick="openSalvationDiag()">📋 Salvation Diag</button>
   </div>
 </div>
@@ -497,10 +679,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="tb-back" onclick="showScreen('screenHome')">←</div>
     <div class="tb-title">Reports</div>
   </div>
-  <div style="flex:1;overflow-y:auto;padding:0 0 40px">
-    <div id="reportsContent" style="padding-bottom:24px">
-      <div class="loading"><div class="spinner"></div></div>
-    </div>
+  <div id="reportsContent" style="padding:0 0 80px">
+    <div class="loading"><div class="spinner"></div></div>
   </div>
 </div>
 
@@ -525,20 +705,54 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 // ═══════════════════════════════════════════════════════
 // SUPABASE
 // ═══════════════════════════════════════════════════════
-const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+// ═══════════════════════════════════════════════════════
+// CONFIG — provided by multiply_shared.js
+// ═══════════════════════════════════════════════════════
 const BASE_URL = 'https://gejable1.github.io/multiply/';
-const db = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+const db = MultiplyShared.getDB();
 
 // ═══════════════════════════════════════════════════════
-// STATE
+// LEADER SESSION (validated by gateOrRedirect at top of <body>)
 // ═══════════════════════════════════════════════════════
-let currentLeader = null;
+// `currentLeader` is the legacy variable used throughout this file.
+// We hydrate it from the shared LEADER session so existing code keeps
+// working unchanged. Shape mirrors what selectLeader() used to set.
+const currentLeader = (function buildCurrentLeaderShim(){
+  const L = window.LEADER || {};
+  return {
+    id:               L.leaderId,
+    name:             L.leaderName,
+    pipeline_level:   L.leaderLevel,
+    facilitator_role: L.leaderRole,
+    lc_group:         L.leaderLcGroup,
+    discipler_name:   null, // not in session; rarely needed in mobile views
+  };
+})();
+
 let myMembers = [];
-let attendanceState = {}; // memberId -> present boolean
+let attendanceState = {};
 let currentFilter = 'all';
 let currentMember = null;
-let selectedAttType = 'LC Meeting';
+let selectedAttType = 'Sunday Service';
+let filterStr = '';
+let allSelected = false;
+
+// ── Hide "+ Add Member" for non-executive leaders ──
+//    Pastor Gerry's call (May 2026): too many duplicate additions while
+//    LCLs are still learning. Restrict to Level 5 (Executive) for now.
+//    The DOM hide is convenience; openAddMember() also re-checks server-side.
+(function gateAddMemberButton(){
+  const tryGate = ()=>{
+    const btn = document.getElementById('addMemberBtn');
+    if(!btn) return;
+    const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
+    btn.style.display = lvl >= 5 ? '' : 'none';
+  };
+  tryGate();
+  setTimeout(tryGate, 500);
+  setTimeout(tryGate, 1500);
+})();
+
 const LEVEL_NAMES = {0:'Pre-Pipeline',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Exec. Leader'};
 const ZONE_DATA = {
   1:{label:'Zone 1 ✅',desc:'Healthy & Multiplying',color:'var(--z1)',bg:'rgba(52,211,153,.15)'},
@@ -547,12 +761,12 @@ const ZONE_DATA = {
   4:{label:'Zone 4 🔴',desc:'Critical — Act Now',color:'var(--z4)',bg:'rgba(248,113,113,.15)'},
 };
 const ASSESSMENTS = [
-  {key:'salvation',    name:'Salvation Assurance', file:'salvation_assurance_diagnostic.html', field:'diagnostic_zone', icon:'✝️'},
-  {key:'gifts',        name:'Spiritual Gifts',      file:'spiritual_gifts_diagnostic.html',     field:'spiritual_gifts', icon:'🎁'},
-  {key:'disc',         name:'DISC Profile',         file:'disc_profile.html',                   field:'disc_primary',    icon:'🧭'},
-  {key:'strengths',    name:'Strengths Profile',    file:'strengths_profile.html',              field:'strengths_top5',  icon:'💪'},
-  {key:'love',         name:'Love Language',        file:'love_language.html',                  field:'love_language_primary', icon:'❤️'},
-  {key:'enneagram',    name:'Enneagram',            file:'enneagram_profile.html',              field:'enneagram_type',  icon:'⭕'},
+  {key:'salvation',  name:'Salvation Assurance', file:'salvation_assurance_diagnostic.html', field:'diagnostic_zone',       icon:'✝️'},
+  {key:'gifts',      name:'Spiritual Gifts',      file:'spiritual_gifts_diagnostic.html',     field:'spiritual_gifts',        icon:'🎁'},
+  {key:'disc',       name:'DISC Profile',         file:'disc_profile.html',                   field:'disc_primary',           icon:'🧭'},
+  {key:'strengths',  name:'Strengths Profile',    file:'strengths_profile.html',              field:'strengths_top5',         icon:'💪'},
+  {key:'love',       name:'Love Language',        file:'love_language.html',                  field:'love_language_primary',  icon:'❤️'},
+  {key:'enneagram',  name:'Enneagram',            file:'enneagram_profile.html',              field:'enneagram_type',         icon:'⭕'},
 ];
 const NEXT_STEPS = {
   4:'Prayerfully reach out this week. Offer to meet one-on-one. Start with the Salvation Diagnostic if not done.',
@@ -564,6 +778,11 @@ const NEXT_STEPS = {
 // ═══════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════
+// Screen history stack for back-button handling
+let screenStack = [];
+let suppressPopstate = false;
+let attendanceDirty = false; // tracks if user has unsaved attendance changes
+
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -571,109 +790,212 @@ function showScreen(id){
   if(id==='screenReports') renderReports();
   if(id==='screenSendLinks') renderSendLinks();
   window.scrollTo(0,0);
-}
 
-// ═══════════════════════════════════════════════════════
-// LOGIN — LEADER SEARCH
-// ═══════════════════════════════════════════════════════
-async function searchLeader(q){
-  const dd = document.getElementById('loginDropdown');
-  if(q.length < 2){ dd.style.display='none'; return; }
-  const {data} = await db.from('members').select('id,name,pipeline_level,lc_group,discipler_name')
-    .ilike('name','%'+q+'%').gte('pipeline_level',2).limit(8);
-  if(!data?.length){ dd.innerHTML='<div class="search-item"><div style="color:var(--muted);font-size:13px">No leaders found matching "'+q+'"</div></div>'; dd.style.display='block'; return; }
-  dd.innerHTML = data.map(m=>`
-    <div class="search-item" onclick="selectLeader(${JSON.stringify(m).replace(/"/g,'&quot;')})">
-      <div class="si-av" style="background:${avColor(m.pipeline_level)};color:#0f0f13">${initials(m.name)}</div>
-      <div>
-        <div class="si-name">${m.name}</div>
-        <div class="si-meta">${LEVEL_NAMES[m.pipeline_level]||'Leader'} · ${m.lc_group||'No group'}</div>
-      </div>
-    </div>`).join('');
-  dd.style.display = 'block';
-}
-
-async function selectLeader(m){
-  document.getElementById('loginDropdown').style.display='none';
-  currentLeader = m;
-  // Load their mentees
-  const {data} = await db.from('members').select('*')
-    .or(`discipler_name.ilike.%${m.name}%,discipler.ilike.%${m.name}%,discipler_id.eq.${m.id}`)
-    .order('name');
-  myMembers = data || [];
-  // Also try lc_group match as fallback
-  if(!myMembers.length && m.lc_group){
-    const {data:d2} = await db.from('members').select('*').ilike('lc_group','%'+m.lc_group+'%').order('name');
-    myMembers = (d2||[]).filter(x=>x.id !== m.id);
+  // Push to screen history (skip if same as current)
+  if(screenStack[screenStack.length-1] !== id){
+    screenStack.push(id);
+    // Push a history state so the browser back button comes here first
+    history.pushState({screen:id, t:Date.now()}, '', '');
   }
-  renderHome();
-  showScreen('screenHome');
 }
+
+// Handle browser back button / swipe-back gesture
+window.addEventListener('popstate', function(e){
+  if(suppressPopstate){ suppressPopstate = false; return; }
+
+  // If there's an unsaved attendance log, warn first
+  if(attendanceDirty){
+    const confirmed = confirm('You have unsaved attendance entries. Leave without saving?');
+    if(!confirmed){
+      // Re-push state so back button stays on this screen
+      suppressPopstate = true;
+      history.pushState({screen:screenStack[screenStack.length-1], t:Date.now()}, '', '');
+      return;
+    }
+    attendanceDirty = false;
+  }
+
+  // If we have screen history, go to previous screen instead of exiting
+  if(screenStack.length > 1){
+    screenStack.pop(); // remove current
+    const prev = screenStack[screenStack.length-1];
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(prev).classList.add('active');
+    if(prev==='screenMembers') renderMemberList();
+    if(prev==='screenReports') renderReports();
+    if(prev==='screenSendLinks') renderSendLinks();
+    window.scrollTo(0,0);
+    // Push state again so the next back-press also gets caught
+    history.pushState({screen:prev, t:Date.now()}, '', '');
+    return;
+  }
+
+  // We're at the root (login or home) — confirm exit
+  const reallyLeave = confirm('Leave the LC Leader Tool?');
+  if(!reallyLeave){
+    suppressPopstate = true;
+    history.pushState({screen:screenStack[0]||'screenLogin', t:Date.now()}, '', '');
+  } else {
+    // User confirmed — let the browser handle it
+    history.back();
+  }
+});
+
+// Warn on tab close / refresh if there's unsaved data
+window.addEventListener('beforeunload', function(e){
+  if(attendanceDirty){
+    e.preventDefault();
+    e.returnValue = ''; // Required for Chrome — shows native browser dialog
+    return '';
+  }
+});
+
+// Initial history entry so the very first back-press doesn't exit
+history.replaceState({screen:'screenHome', t:Date.now()}, '', '');
+
+// ═══════════════════════════════════════════════════════
+// BOOT — load members + apply scope
+// The shared module's gateOrRedirect already verified the leader
+// session before any of this runs. Here we just fetch the member
+// roster and apply the LeaderScope filter to populate myMembers.
+// ═══════════════════════════════════════════════════════
+let allMembers = []; // full roster as returned by Supabase
+const LeaderScope = MultiplyShared.makeLeaderScope(() => allMembers);
+
+async function loadMyMembers(){
+  try {
+    const {data, error} = await db.from('members')
+      .select('*').order('name');
+    if(error) throw error;
+    allMembers = data || [];
+    refreshScopedMembers();
+    updateScopeCountsMobile();
+    renderHome();
+  } catch(e) {
+    console.error('Could not load members:', e);
+    const stats = document.getElementById('statsRow');
+    if(stats) stats.innerHTML =
+      '<div style="grid-column:1/-1;padding:1rem;background:#fdecea;border-radius:8px;color:#7a2020;font-size:13px;text-align:center">' +
+      '⚠️ Could not load members: ' + (e.message||e) + '</div>';
+  }
+}
+
+// Apply current scope and refresh derived state.
+function refreshScopedMembers(){
+  myMembers = LeaderScope.apply(allMembers);
+}
+
+// Mobile scope tab handler — switches view and re-renders.
+function setMobileScope(view, btn){
+  LeaderScope.setView(view);
+  document.querySelectorAll('#scopeTabsMobile .scope-tab').forEach(t=>t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  refreshScopedMembers();
+  renderHome();
+  // If we're currently on the Members screen, re-render that too
+  if(document.getElementById('screenMembers').classList.contains('active')){
+    renderMemberList();
+  }
+}
+
+// Update the count badges + reveal pastor's All tab if applicable.
+function updateScopeCountsMobile(){
+  const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
+  set('msCountDisciples', LeaderScope.getDirect().length);
+  set('msCountTree',      LeaderScope.getTree().length);
+  set('msCountMinistry',  LeaderScope.getMinistry().length);
+  if(LeaderScope.isPastor()){
+    set('msCountAll', allMembers.length);
+    const b = document.getElementById('msScopeAllBtn');
+    if(b) b.style.display = 'inline-flex';
+  }
+}
+
+// Boot
+loadMyMembers();
+
+// Logout — replaces the old switchLeader. Uses the shared module's
+// session helpers so behavior matches the desktop dashboard.
+function switchLeader(){
+  const ok = confirm('Log out and switch to a different leader?\n\nYou will be returned to the login screen.');
+  if(!ok) return;
+  // Clean up legacy localStorage in case anyone has stale data
+  try { localStorage.removeItem('lc_leader_id'); } catch(e){}
+  MultiplyShared.logoutLeader('leader_login.html');
+}
+
+// ═══════════════════════════════════════════════════════
+// LEGACY LOGIN HOOKS (no longer reachable since the gate redirects
+// unauthenticated users to leader_login.html). Kept as no-ops so any
+// stray reference doesn't crash. New leader login lives at
+// leader_login.html — see LEADER_ACCESS_README.md.
+// ═══════════════════════════════════════════════════════
+let leaderResults = [];
+async function searchLeader(){ /* no-op */ }
+async function selectLeader(){ /* no-op */ }
 
 // ═══════════════════════════════════════════════════════
 // HOME
 // ═══════════════════════════════════════════════════════
+function getPendingTransfers(){
+  return myMembers.filter(m => m.pending_lc_group && m.pending_lc_group !== m.lc_group);
+}
+
+function renderTransferAlerts(){
+  const pending = getPendingTransfers();
+  if(!pending.length) return '';
+  const rows = pending.map(m=>`
+    <div class="ta-row">
+      <div class="ta-name">${m.name}</div>
+      <div class="ta-to">→ ${m.pending_lc_group}</div>
+      ${m.transfer_date?`<div class="ta-date">${m.transfer_date}</div>`:''}
+    </div>`).join('');
+  return `<div class="transfer-alert">
+    <div class="ta-title">🔀 PENDING TRANSFERS (${pending.length})</div>
+    ${rows}
+  </div>`;
+}
+
 function renderHome(){
   const m = currentLeader;
   document.getElementById('homeAv').textContent = initials(m.name);
   document.getElementById('homeAv').style.background = avColor(m.pipeline_level);
   document.getElementById('homeName').textContent = m.name;
   document.getElementById('homeRole').textContent = LEVEL_NAMES[m.pipeline_level]||'Leader';
-  document.getElementById('homeLc').textContent = m.lc_group ? '📍 '+m.lc_group : '';
+  document.getElementById('homeLc').textContent = m.lc_group ? '🏠 '+m.lc_group : '';
 
-  // Stats
-  const total = myMembers.length;
+  const z4 = myMembers.filter(x=>x.diagnostic_zone===4).length;
   const z1 = myMembers.filter(x=>x.diagnostic_zone===1).length;
   const z3 = myMembers.filter(x=>x.diagnostic_zone===3).length;
-  const z4 = myMembers.filter(x=>x.diagnostic_zone===4).length;
   const noDiag = myMembers.filter(x=>!x.diagnostic_zone).length;
-  document.getElementById('statTotal').textContent = total;
+
+  document.getElementById('statTotal').textContent = myMembers.length;
   document.getElementById('statZ1').textContent = z1;
   document.getElementById('statZ3').textContent = z3;
   document.getElementById('statZ4').textContent = z4;
   document.getElementById('statPending').textContent = noDiag;
 
-  // Alerts
-  const alerts = document.getElementById('alertsWrap');
-  alerts.innerHTML = '';
-  if(z4>0) alerts.innerHTML += `<div class="alert-strip" style="margin:12px 16px 0">
+  let alerts = '';
+  if(z4>0) alerts += `<div class="alert-strip" style="margin-top:14px">
     <div class="as-icon">🔴</div>
-    <div class="as-text"><strong>${z4} member${z4>1?'s':''} in Zone 4</strong> need immediate pastoral attention. Tap "My Group" → Zone 4.</div>
+    <div class="as-text"><strong>${z4} member${z4>1?'s':''}</strong> in Zone 4 — needs immediate pastoral attention.</div>
   </div>`;
-  if(noDiag>0) alerts.innerHTML += `<div class="alert-strip amber" style="margin:8px 16px 0">
-    <div class="as-icon">⚠️</div>
-    <div class="as-text"><strong>${noDiag} member${noDiag>1?'s':''}</strong> haven't taken the Salvation Diagnostic yet. Send them the link.</div>
+  if(noDiag>0) alerts += `<div class="alert-strip amber" style="margin-top:${z4?'8':'14'}px">
+    <div class="as-icon">📋</div>
+    <div class="as-text"><strong>${noDiag} member${noDiag>1?'s':''}</strong> haven't taken the Salvation Diagnostic yet.</div>
   </div>`;
-  if(z4===0&&noDiag===0) alerts.innerHTML = `<div class="alert-strip green" style="margin:12px 16px 0">
-    <div class="as-icon">✅</div>
-    <div class="as-text"><strong>Great work!</strong> No critical members and everyone has a salvation diagnostic on file.</div>
+  if(z1===myMembers.length && myMembers.length>0) alerts += `<div class="alert-strip green" style="margin-top:${(z4||noDiag)?'8':'14'}px">
+    <div class="as-icon">🎉</div>
+    <div class="as-text"><strong>All members in Zone 1!</strong> Keep investing — look for who can start discipling others.</div>
   </div>`;
 
-  // Needs attention — Zone 4 + Zone 3
-  const critical = myMembers.filter(x=>x.diagnostic_zone>=3).sort((a,b)=>(b.diagnostic_zone||0)-(a.diagnostic_zone||0)).slice(0,4);
-  const nal = document.getElementById('needsAttentionList');
-  if(!critical.length){ nal.innerHTML='<div style="text-align:center;padding:16px;font-size:13px;color:var(--muted)">No critical members right now 🎉</div>'; return; }
-  nal.innerHTML = critical.map(mem=>{
-    const z = mem.diagnostic_zone||0;
-    const zd = ZONE_DATA[z]||{};
-    return `<div class="member-card" onclick="openMember(${mem.id})" style="margin-bottom:8px">
-      <div class="mc-left-bar z${z}-bar"></div>
-      <div class="mc-body">
-        <div class="mc-av" style="background:${zd.bg||'var(--surface2)'};color:${zd.color||'var(--muted)'}">${initials(mem.name)}</div>
-        <div class="mc-info">
-          <div class="mc-name">${mem.name}</div>
-          <div class="mc-sub">${mem.contact||'No contact'}</div>
-        </div>
-        <div><span class="zone-badge z${z}-badge">${zd.label||'Zone '+z}</span></div>
-      </div>
-    </div>`;
-  }).join('');
+  const alertsWrap = document.getElementById('alertsWrap');
+  alertsWrap.innerHTML = alerts + renderTransferAlerts();
 }
 
 // ═══════════════════════════════════════════════════════
 // MEMBER LIST
 // ═══════════════════════════════════════════════════════
-let filterStr = '';
 function setFilter(f, el){
   currentFilter = f;
   if(el){ document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); }
@@ -690,40 +1012,135 @@ function renderMemberList(){
   else if(currentFilter==='z3') members = members.filter(m=>m.diagnostic_zone===3);
   else if(currentFilter==='z4') members = members.filter(m=>m.diagnostic_zone===4);
   else if(currentFilter==='no_diag') members = members.filter(m=>!m.diagnostic_zone);
+  else if(currentFilter==='transfer') members = members.filter(m=>m.pending_lc_group && m.pending_lc_group !== m.lc_group);
+
   const list = document.getElementById('memberList');
-  if(!members.length){ list.innerHTML='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No members found</div><div class="empty-sub">Try a different filter</div></div>'; return; }
+  if(!members.length){
+    list.innerHTML='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No members found</div><div class="empty-sub">Try a different filter</div></div>';
+    return;
+  }
   list.innerHTML = members.map(mem=>{
     const z = mem.diagnostic_zone||0;
     const zd = ZONE_DATA[z]||{color:'var(--muted)',bg:'var(--surface2)',label:'No Zone'};
     const pendingAssess = ASSESSMENTS.filter(a=>!mem[a.field]).length;
+    const hasPendingTransfer = mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group;
     const tags = [];
     if(mem.spiritual_gifts) tags.push({text:'🎁 '+mem.spiritual_gifts.split(',')[0].trim(),cls:'done'});
     if(mem.disc_primary) tags.push({text:'🧭 '+mem.disc_primary,cls:'done'});
     if(pendingAssess>0) tags.push({text:pendingAssess+' assessment'+(pendingAssess>1?'s':'')+' pending',cls:'pending'});
-    return `<div class="member-card" onclick="openMember(${mem.id})">
+    if(hasPendingTransfer) tags.push({text:'🔀 Transfer → '+mem.pending_lc_group,cls:'transfer'});
+    return `<div class="member-card" data-mid="${mem.id}">
       <div class="mc-left-bar z${z}-bar"></div>
       <div class="mc-body">
         <div class="mc-av" style="background:${zd.bg};color:${zd.color}">${initials(mem.name)}</div>
         <div class="mc-info">
           <div class="mc-name">${mem.name}</div>
-          <div class="mc-sub">${mem.contact||''} ${mem.grace_stage?'· '+mem.grace_stage+'-Stage':''}</div>
+          <div class="mc-sub">${mem.contact||''} ${mem.lc_group?'· '+mem.lc_group:''}</div>
         </div>
-        <div><span class="zone-badge z${z||0}-badge">${zd.label}</span></div>
+        <div><span class="zone-badge z${z||0}-badge">${z?zd.label:'No Zone'}</span></div>
       </div>
       ${tags.length?`<div class="mc-tags">${tags.map(t=>`<span class="mc-tag ${t.cls}">${t.text}</span>`).join('')}</div>`:''}</div>`;
   }).join('');
+
+  // Delegated tap handler — works for any name including those with apostrophes
+  list.onclick = function(e){
+    const card = e.target.closest('[data-mid]');
+    if(card) openMember(card.dataset.mid);
+  };
 }
 
 // ═══════════════════════════════════════════════════════
 // MEMBER DETAIL
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// ADD MEMBER (Leader-initiated)
+// ═══════════════════════════════════════════════════════
+function openAddMember(){
+  // ── Executive-only gate (Pastor Gerry, May 2026) ─────────
+  // Adding members is restricted to Executive Leaders (Level 5) while
+  // LCLs are still learning the system — too many accidental duplicates.
+  // The button is also visually hidden via gateAddMemberButton(), this is
+  // defense-in-depth in case someone bypasses the DOM.
+  if(!currentLeader || (currentLeader.pipeline_level||0) < 5){
+    toast('Adding new members is paused — please ask Pastor Gerry to add them.', 'info');
+    return;
+  }
+  const today = new Date().toISOString().split('T')[0];
+  // Reset form
+  document.getElementById('amName').value     = '';
+  document.getElementById('amContact').value  = '';
+  document.getElementById('amBirthday').value = '';
+  document.getElementById('amCivil').value    = '';
+  document.getElementById('amAddress').value  = '';
+  document.getElementById('amBaptism').value  = '';
+  // Pre-fill leader-defaulted fields
+  document.getElementById('amLcGroup').value   = currentLeader?.lc_group || '';
+  document.getElementById('amDiscipler').value = currentLeader?.name     || '';
+  document.getElementById('amEnrolled').value  = today;
+  document.getElementById('amLevel').value     = '1'; // Team Member by default
+  showScreen('screenAddMember');
+}
+
+function cancelAddMember(){
+  showScreen('screenMembers');
+}
+
+async function saveNewMember(){
+  const name = document.getElementById('amName').value.trim();
+  if(!name){ toast('Name is required','error'); return; }
+
+  const payload = {
+    name,
+    contact:        document.getElementById('amContact').value.trim()  || null,
+    birthday:       document.getElementById('amBirthday').value        || null,
+    civil_status:   document.getElementById('amCivil').value           || null,
+    address:        document.getElementById('amAddress').value.trim()  || null,
+    baptism_date:   document.getElementById('amBaptism').value         || null,
+    enrolled_date:  document.getElementById('amEnrolled').value        || null,
+    lc_group:       document.getElementById('amLcGroup').value.trim()  || null,
+    pipeline_level: parseInt(document.getElementById('amLevel').value) || 0,
+    discipler_id:   currentLeader?.id   || null,
+    discipler_name: currentLeader?.name || null,
+    updated_at:     new Date().toISOString(),
+  };
+
+  try {
+    const { data, error } = await db.from('members').insert(payload).select().single();
+    if(error) throw error;
+
+    toast(`✅ ${name} added!`,'success');
+
+    // Add to local mentees list so they show up immediately
+    if(data) myMembers.unshift(data);
+
+    setTimeout(()=>{
+      showScreen('screenMembers');
+      renderMemberList();
+    }, 1200);
+  } catch(e) {
+    console.error('Add member failed:', e);
+    toast('Error: '+e.message,'error');
+  }
+}
+
+
 function openMember(id){
   const mem = myMembers.find(m=>m.id===id);
   if(!mem) return;
   currentMember = mem;
-  const z = mem.diagnostic_zone||0;
-  const zd = ZONE_DATA[z]||{label:'No Assessment',desc:'Salvation Diagnostic needed',color:'var(--muted)',bg:'var(--surface2)'};
-  // Header
+  // Audit log — fire-and-forget
+  MultiplyShared.logView(mem.id, 'profile_open');
+
+  // Diagnostic zone is sensitive (direct discipler + pastor only).
+  // Other leaders see a generic "In Progress" badge instead of the zone.
+  const canSeeZone = LeaderScope.canSee('sensitive', mem);
+  const z = canSeeZone ? (mem.diagnostic_zone||0) : 0;
+  const zd = canSeeZone
+    ? (ZONE_DATA[z]||{label:'No Assessment',desc:'Salvation Diagnostic needed',color:'var(--muted)',bg:'var(--surface2)'})
+    : (mem.diagnostic_zone
+        ? {label:'🔒 Hidden',desc:'Visible to direct discipler only',color:'var(--muted)',bg:'var(--surface2)'}
+        : {label:'No Assessment',desc:'Salvation Diagnostic needed',color:'var(--muted)',bg:'var(--surface2)'});
+
   document.getElementById('detailTitle').textContent = mem.name.split(' ')[0];
   const av = document.getElementById('detailAv');
   av.textContent = initials(mem.name);
@@ -740,12 +1157,33 @@ function openMember(id){
   document.getElementById('detailZoneDesc').textContent = ' — '+zd.desc;
   buildDetailSections(mem);
   showScreen('screenDetail');
+  // Refresh Mark Present button to reflect today's attendance state
+  _refreshMarkPresentBtn();
 }
 
 function buildDetailSections(mem){
   const z = mem.diagnostic_zone||0;
   const sections = document.getElementById('detailSections');
   let html = '';
+
+  // Transfer info if pending
+  if(mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group){
+    html += `<div class="ds-card open" style="border-color:rgba(251,191,36,.3)">
+      <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+        <div class="ds-icon">🔀</div>
+        <div class="ds-title">Pending Transfer</div>
+        <div class="ds-status" style="color:#fbbf24">Awaiting Approval</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body">
+        <div style="font-size:12px;line-height:1.7">
+          <div><span style="color:var(--muted)">From:</span> <strong>${mem.lc_group||'—'}</strong></div>
+          <div><span style="color:var(--muted)">To:</span> <strong style="color:#fbbf24">${mem.pending_lc_group}</strong></div>
+          ${mem.transfer_date?`<div><span style="color:var(--muted)">Effective:</span> <strong>${mem.transfer_date}</strong></div>`:''}
+        </div>
+      </div>
+    </div>`;
+  }
 
   // Next Step
   html += `<div class="ds-card open">
@@ -765,106 +1203,172 @@ function buildDetailSections(mem){
   </div>`;
 
   // Assessments
-  const pendingCount = ASSESSMENTS.filter(a=>!mem[a.field]).length;
-  html += `<div class="ds-card open">
-    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
-      <div class="ds-icon">📋</div>
-      <div class="ds-title">Assessments</div>
-      <div class="ds-status" style="color:${pendingCount?'var(--red)':'var(--green)'}">${pendingCount?pendingCount+' pending':'Complete ✓'}</div>
-      <div class="ds-chevron">▼</div>
-    </div>
-    <div class="ds-body">
-      ${ASSESSMENTS.map(a=>{
-        const done = !!mem[a.field];
-        const val = done ? (Array.isArray(mem[a.field])?mem[a.field].slice(0,2).join(', '):String(mem[a.field]).split(',')[0].trim()) : null;
-        return `<div class="assess-row">
-          <div class="ar-icon">${a.icon}</div>
-          <div class="ar-info">
-            <div class="ar-name">${a.name}</div>
-            ${done?`<div class="ar-result">${val}</div>`:'<div class="ar-result" style="color:var(--red)">Not taken</div>'}
-          </div>
-          <button class="ar-action ${done?'ar-done':'ar-send'}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
-            ${done?'Retake':'Send'}
-          </button>
-        </div>`;
-      }).join('')}
-    </div>
-  </div>`;
+  // ── Tier checks ──
+  const canSeePastoral = LeaderScope.canSee('pastoral', mem);
+  const canSeeSensitive = LeaderScope.canSee('sensitive', mem);
 
-  // Profile
-  html += `<div class="ds-card">
-    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
-      <div class="ds-icon">👤</div>
-      <div class="ds-title">Profile</div>
-      <div class="ds-chevron">▼</div>
-    </div>
-    <div class="ds-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${[
-        ['GRACE Stage', mem.grace_stage?mem.grace_stage+' — '+({'G':'Gather','R':'Receive','A':'Anchor','C':'Cultivate','E':'Extend'}[mem.grace_stage]||''):'—'],
-        ['Pipeline', LEVEL_NAMES[mem.pipeline_level]||'—'],
-        ['Baptism', mem.baptism_date||'—'],
-        ['Enrolled', mem.enrolled_date||'—'],
-        ['Gifts', mem.spiritual_gifts||'—'],
-        ['Strengths', (mem.strengths_top5||[]).slice(0,2).join(', ')||'—'],
-      ].map(([l,v])=>`<div style="background:var(--surface3);border-radius:8px;padding:8px 10px">
-        <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">${l}</div>
-        <div style="font-size:13px;font-weight:600">${v||'—'}</div>
-      </div>`).join('')}
-    </div>
-  </div>`;
+  // Assessments — pastoral tier
+  if(!canSeePastoral){
+    html += `<div class="ds-card">
+      <div class="ds-header" style="cursor:default">
+        <div class="ds-icon">🔒</div>
+        <div class="ds-title">Assessments — Hidden</div>
+      </div>
+      <div class="ds-body" style="font-size:11.5px;color:var(--muted);line-height:1.55">
+        Assessment results (DISC, Enneagram, gifts, etc.) are visible to leaders within the member's discipleship tree.
+      </div>
+    </div>`;
+  } else {
+    const pendingCount = ASSESSMENTS.filter(a=>!mem[a.field]).length;
+    html += `<div class="ds-card open">
+      <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+        <div class="ds-icon">📋</div>
+        <div class="ds-title">Assessments</div>
+        <div class="ds-status" style="color:${pendingCount?'var(--red)':'var(--green)'}">${pendingCount?pendingCount+' pending':'Complete ✓'}</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body">
+        ${ASSESSMENTS.map(a=>{
+          const done = !!mem[a.field];
+          const val = done ? (Array.isArray(mem[a.field])?mem[a.field].slice(0,2).join(', '):String(mem[a.field]).split(',')[0].trim()) : null;
+          return `<div class="assess-row">
+            <div class="ar-icon">${a.icon}</div>
+            <div class="ar-info">
+              <div class="ar-name">${a.name}</div>
+              ${done?`<div class="ar-result">${val}</div>`:'<div class="ar-result" style="color:var(--red)">Not taken</div>'}
+            </div>
+            <button class="ar-action ${done?'ar-done':'ar-send'}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
+              ${done?'Retake':'Send'}
+            </button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
 
-  // Attendance history (last 8 records from localStorage as demo — real would query DB)
-  html += `<div class="ds-card">
-    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
-      <div class="ds-icon">📅</div>
-      <div class="ds-title">Attendance</div>
-      <div class="ds-chevron">▼</div>
-    </div>
-    <div class="ds-body">
-      <div id="attHistoryFor_${mem.id}"><div class="loading-text" style="font-size:12px;color:var(--muted)">Loading...</div></div>
-    </div>
-  </div>`;
+  // Profile — pastoral tier
+  if(!canSeePastoral){
+    html += `<div class="ds-card">
+      <div class="ds-header" style="cursor:default">
+        <div class="ds-icon">🔒</div>
+        <div class="ds-title">Profile — Hidden</div>
+      </div>
+      <div class="ds-body" style="font-size:11.5px;color:var(--muted);line-height:1.55">
+        Personality and gift profiles (DISC, Love Language, Strengths) are visible to leaders within the member's discipleship tree.
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="ds-card">
+      <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+        <div class="ds-icon">👤</div>
+        <div class="ds-title">Profile</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body">
+        <button onclick="event.stopPropagation();sendProfileEditLink('${mem.id}',decodeURIComponent('${encodeURIComponent(mem.name)}'),'${(mem.contact||'').replace(/'/g,'')}')"
+          style="width:100%;padding:10px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px">
+          📝 Send Profile Edit Link to Member
+        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[
+          ['Pipeline', LEVEL_NAMES[mem.pipeline_level]||'—'],
+          ['Baptism', mem.baptism_date||'—'],
+          ['Enrolled', mem.enrolled_date||'—'],
+          ['Gifts', mem.spiritual_gifts||'—'],
+          ['Strengths', (mem.strengths_top5||[]).slice(0,2).join(', ')||'—'],
+          ['DISC', mem.disc_primary||'—'],
+          ['Love Language', mem.love_language_primary||'—'],
+          ['Discipler', mem.discipler_name||'—'],
+        ].map(([l,v])=>`<div style="background:var(--surface3);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">${l}</div>
+          <div style="font-size:12px;font-weight:600">${v}</div>
+        </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }
 
-  // Notes
-  const noteKey = 'lc_note_'+mem.id;
-  const savedNote = localStorage.getItem(noteKey)||'';
-  html += `<div class="ds-card">
-    <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
-      <div class="ds-icon">📝</div>
-      <div class="ds-title">Leader Notes</div>
-      <div class="ds-chevron">▼</div>
-    </div>
-    <div class="ds-body">
-      <textarea class="note-input" id="noteFor_${mem.id}" placeholder="Observations, prayer requests, follow-up needed...">${savedNote}</textarea>
-      <button class="note-save" onclick="saveNote(${mem.id})">Save Note</button>
-    </div>
-  </div>`;
+  // Spiritual Gifts — pastoral tier (uses MultiplyReports module)
+  if(canSeePastoral){
+    html += `<div class="ds-card" id="giftsCard_${mem.id}">
+      <div class="ds-header" onclick="toggleGiftsCard('${mem.id}')">
+        <div class="ds-icon">🎁</div>
+        <div class="ds-title">Spiritual Gifts</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body">
+        <div id="giftsBody_${mem.id}" style="font-size:12px;color:var(--muted);text-align:center;padding:.6rem 0">Tap to load gift profile</div>
+      </div>
+    </div>`;
+  }
+
+  // Notes — sensitive tier (direct discipler + pastor only)
+  if(!canSeeSensitive){
+    html += `<div class="ds-card">
+      <div class="ds-header" style="cursor:default">
+        <div class="ds-icon">🔒</div>
+        <div class="ds-title">Notes — Hidden</div>
+      </div>
+      <div class="ds-body" style="font-size:11.5px;color:var(--muted);line-height:1.55">
+        Pastoral notes contain prayer items and observations meant only for the direct discipler and pastoral staff.
+      </div>
+    </div>`;
+  } else {
+    const savedNote = localStorage.getItem('lc_note_'+mem.id)||'';
+    html += `<div class="ds-card">
+      <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+        <div class="ds-icon">📝</div>
+        <div class="ds-title">Notes</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body">
+        <textarea class="note-input" id="noteFor_${mem.id}" placeholder="Pastoral observations, prayer items...">${savedNote}</textarea>
+        <button class="note-save" onclick="saveNote('${mem.id}')">Save Note</button>
+      </div>
+    </div>`;
+  }
 
   sections.innerHTML = html;
-  loadAttHistory(mem.id);
-}
-
-async function loadAttHistory(memberId){
-  const el = document.getElementById('attHistoryFor_'+memberId);
-  if(!el) return;
-  const {data} = await db.from('attendance').select('date,type,present')
-    .eq('member_id',memberId).order('date',{ascending:false}).limit(12);
-  if(!data?.length){ el.innerHTML='<div style="font-size:12px;color:var(--muted)">No attendance records yet.</div>'; return; }
-  const byType = {};
-  data.forEach(r=>{ if(!byType[r.type]) byType[r.type]=[]; byType[r.type].push(r); });
-  el.innerHTML = Object.entries(byType).map(([type,records])=>`
-    <div style="margin-bottom:10px">
-      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">${type}</div>
-      <div class="att-hist-row">
-        ${records.map(r=>`<div class="att-dot ${r.present?'p':'a'}" title="${r.date}">${r.present?'✓':'✗'}</div>`).join('')}
-      </div>
-    </div>`).join('');
 }
 
 function saveNote(memberId){
   const val = document.getElementById('noteFor_'+memberId)?.value||'';
   localStorage.setItem('lc_note_'+memberId, val);
   toast('Note saved ✓','success');
+}
+
+// Spiritual gifts card — toggles the section open/closed and lazy-loads
+// the report on first open. Uses the shared MultiplyReports module so
+// the same content/format appears here and on the desktop dashboard.
+async function toggleGiftsCard(memberId){
+  const card = document.getElementById('giftsCard_'+memberId);
+  const body = document.getElementById('giftsBody_'+memberId);
+  if(!card || !body) return;
+  card.classList.toggle('open');
+  // Lazy-load: only fetch the first time the user opens the card
+  if(card.classList.contains('open') && !body.dataset.loaded){
+    body.dataset.loaded = '1';
+    body.innerHTML = '<div style="text-align:center;padding:.6rem 0;font-size:12px;color:var(--muted)">⏳ Loading gift profile…</div>';
+    if(typeof MultiplyReports === 'undefined' || !MultiplyReports.giftsProfile){
+      body.innerHTML = '<div style="padding:.6rem 0;color:var(--red);font-size:12px;text-align:center">⚠ Reports module not loaded.<br>Make sure multiply_reports.js is uploaded.</div>';
+      return;
+    }
+    const mem = (myMembers && myMembers.find(x => x.id === memberId)) || currentMember;
+    const tier = (typeof LeaderScope !== 'undefined' && LeaderScope.canSee('pastoral', mem)) ? 'pastoral' : 'public';
+    try {
+      const html = await MultiplyReports.giftsProfile(memberId, {
+        tier: tier,
+        context: 'inline',
+        showActions: true,
+        supabase: db,
+      });
+      body.innerHTML = html;
+    } catch(e){
+      console.error('giftsProfile (mobile) failed:', e);
+      body.innerHTML = '<div style="padding:.6rem 0;color:var(--red);font-size:12px;text-align:center">⚠ Could not render: '+(e.message||e)+'</div>';
+      delete body.dataset.loaded; // allow retry
+    }
+  }
 }
 
 function openSalvationDiag(){
@@ -881,7 +1385,6 @@ function openInterventionTracker(){
 
 function openAssessmentLink(){
   if(!currentMember) return;
-  // Show assessment picker (simple prompt for now)
   const a = ASSESSMENTS.find(x=>!currentMember[x.field]);
   if(a) sendAssessmentLink(a.file, a.name);
   else sendAssessmentLink('salvation_assurance_diagnostic.html','Salvation Assurance');
@@ -889,95 +1392,443 @@ function openAssessmentLink(){
 
 function sendAssessmentLink(file, name){
   if(!currentMember) return;
-  const url = BASE_URL+file+'?id='+currentMember.id+'&name='+encodeURIComponent(currentMember.name);
-  const msg = encodeURIComponent(`Hi ${currentMember.name.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey sa Rosehill, nakakagawa ka ng ${name} assessment.\n\nI-click lang ang link na ito at sagutan mo ito nang tapat:\n${url}\n\nGod bless! 🙏`);
-  window.open('https://wa.me/?text='+msg,'_blank');
+  // Delegate to sendLink_ so this single-button shortcut uses the same
+  // configurable greeting + WhatsApp/share-picker behavior as the bulk send.
+  sendLink_(currentMember.id, currentMember.name, file, name, currentMember.contact);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mark Present button — visual state helper
+// Reflects whether currentMember has a Sunday Service row for today.
+// Called when opening detail and after a successful mark.
+// ─────────────────────────────────────────────────────────────
+function _setMarkPresentBtn(state){
+  const btn = document.getElementById('markPresentBtn');
+  if(!btn) return;
+  if(state === 'marked'){
+    btn.textContent = '✓ Marked Present';
+    btn.disabled = true;
+    btn.style.opacity = '0.55';
+    btn.style.cursor = 'default';
+  } else {
+    btn.textContent = '✓ Mark Present';
+    btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+  }
+}
+
+// Check if currentMember already has a Sunday Service attendance for today
+// and reflect that on the button. Fire-and-forget; never throws.
+async function _refreshMarkPresentBtn(){
+  _setMarkPresentBtn('idle'); // optimistic reset while we check
+  if(!currentMember) return;
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await db.from('attendance')
+      .select('id')
+      .eq('member_id', currentMember.id)
+      .eq('event_date', today)
+      .eq('event_type', 'Sunday Service')
+      .eq('present', true)
+      .limit(1);
+    if(!error && data && data.length){
+      _setMarkPresentBtn('marked');
+    }
+  } catch(e){ /* non-fatal */ }
 }
 
 async function logQuickAttendance(){
   if(!currentMember) return;
+  const btn = document.getElementById('markPresentBtn');
+  if(btn && btn.disabled) return; // already marked — no-op
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+
   const today = new Date().toISOString().split('T')[0];
-  const {error} = await db.from('attendance').insert({
-    member_id:currentMember.id, member_name:currentMember.name,
-    date:today, type:'LC Meeting', present:true,
-    logged_by:currentLeader.name
+
+  // Duplicate guard — check first so we don't insert a second row.
+  try {
+    const { data: existing, error: chkErr } = await db.from('attendance')
+      .select('id')
+      .eq('member_id', currentMember.id)
+      .eq('event_date', today)
+      .eq('event_type', 'Sunday Service')
+      .eq('present', true)
+      .limit(1);
+    if(chkErr) throw chkErr;
+    if(existing && existing.length){
+      toast('Already marked present today', 'success');
+      _setMarkPresentBtn('marked');
+      return;
+    }
+  } catch(e){
+    console.warn('Duplicate-check failed, proceeding with insert:', e);
+    // Fall through and try the insert anyway
+  }
+
+  const { error } = await db.from('attendance').insert({
+    member_id:       currentMember.id,
+    member_name:     currentMember.name,
+    event_date:      today,
+    event_type:      'Sunday Service',
+    present:         true,
+    member_lc_group: currentMember.lc_group || '',
+    member_zone:     currentMember.diagnostic_zone ?? null,
+    member_level:    currentMember.pipeline_level ?? null,
+    event_lc_group:  currentLeader?.lc_group || '',
+    logged_by:       currentLeader?.name || 'Unknown',
+    logged_by_id:    currentLeader?.id || null,
   });
-  if(error){ toast('Error: '+error.message,'error'); return; }
+  if(error){
+    toast('Error: '+error.message,'error');
+    _setMarkPresentBtn('idle');
+    return;
+  }
   toast('✓ Marked present for today','success');
+  _setMarkPresentBtn('marked');
 }
 
 // ═══════════════════════════════════════════════════════
 // ATTENDANCE
 // ═══════════════════════════════════════════════════════
 function showAttendance(){
-  // Set today's date
   document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
   attendanceState = {};
   myMembers.forEach(m=>{ attendanceState[m.id]=false; });
+  allSelected = false;
+  attendanceDirty = false;
+  // Reset banner before fetching
+  const bn = document.getElementById('attLoadedBanner');
+  if(bn){ bn.style.display='none'; bn.innerHTML=''; }
   renderAttList();
   showScreen('screenAttendance');
+  // Fetch any existing attendance for today + currently-selected event type
+  loadExistingAttendance();
 }
 
 function selectAttType(el){
   document.querySelectorAll('.att-type-pill').forEach(p=>p.classList.remove('selected'));
   el.classList.add('selected');
   selectedAttType = el.dataset.type;
+  onAttContextChange();
+}
+
+// Called when the leader changes the date or event type. If they have
+// unsaved toggles, warn before discarding (mirrors the back-button logic).
+function onAttContextChange(){
+  if(attendanceDirty){
+    const ok = confirm('You have unsaved attendance changes.\nDiscard them and load the saved data for this date/type?');
+    if(!ok){
+      // Revert: snap the inputs back. We don't know the prior values
+      // perfectly, so safest is to just leave the UI alone and bail.
+      return;
+    }
+  }
+  // Reset checks before fetching the new context
+  myMembers.forEach(m=>{ attendanceState[m.id]=false; });
+  attendanceDirty = false;
+  renderAttList();
+  loadExistingAttendance();
+}
+
+// Race-protection token: a slow query for an old date can't overwrite
+// state set by a newer one. Each invocation gets a unique token; results
+// only apply if the token still matches the latest invocation.
+let _attLoadToken = 0;
+
+async function loadExistingAttendance(){
+  const date = document.getElementById('attDate').value;
+  const type = selectedAttType;
+  const banner = document.getElementById('attLoadedBanner');
+  console.log('[attendance-load] called', {date, type, scope: LeaderScope.getCurrent ? LeaderScope.getCurrent() : '?', myMembersCount: (myMembers||[]).length});
+  if(!date || !type){
+    console.log('[attendance-load] missing date or type — abort');
+    if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+    return;
+  }
+  const myToken = ++_attLoadToken;
+
+  try {
+    // Pull all rows for this date+type that touch members in our scope.
+    // We filter by member_id list to limit row count and respect scoping.
+    const memberIds = myMembers.map(m=>m.id);
+    if(!memberIds.length){
+      console.log('[attendance-load] no member ids in scope — abort');
+      if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+      return;
+    }
+    const { data, error } = await db.from('attendance')
+      .select('member_id, present, logged_by, updated_at, created_at')
+      .eq('event_date', date)
+      .eq('event_type', type)
+      .in('member_id', memberIds);
+
+    // Stale response — a newer fetch already started, so ignore this one
+    if(myToken !== _attLoadToken){
+      console.log('[attendance-load] stale token — ignoring');
+      return;
+    }
+
+    console.log('[attendance-load] response', {error, rowCount: data ? data.length : 0, sample: data && data[0]});
+
+    if(error){
+      console.warn('loadExistingAttendance failed:', error);
+      if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+      return;
+    }
+    if(!data || !data.length){
+      // Nothing on file — clean slate, hide banner
+      console.log('[attendance-load] no rows for', {date, type, idsChecked: memberIds.length});
+      if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+      return;
+    }
+
+    // Apply the present flags into attendanceState
+    let appliedCount = 0;
+    data.forEach(row => {
+      if(row.member_id in attendanceState){
+        attendanceState[row.member_id] = !!row.present;
+        appliedCount++;
+      }
+    });
+    console.log('[attendance-load] applied', appliedCount, 'rows of', data.length);
+    attendanceDirty = false; // loaded data isn't "dirty"
+    renderAttList();
+
+    // Build the banner: who saved it + when. Prefer updated_at (reflects
+    // most recent edit) and fall back to created_at.
+    let latest = null;
+    let latestBy = '';
+    data.forEach(row => {
+      const ts = row.updated_at || row.created_at;
+      if(!ts) return;
+      if(!latest || ts > latest){
+        latest = ts;
+        latestBy = row.logged_by || '';
+      }
+    });
+    if(banner){
+      const when = _formatLoggedAt(latest);
+      const byPart = latestBy ? ` by <strong>${escapeAttBanner(latestBy)}</strong>` : '';
+      const whenPart = when ? ` on <strong>${escapeAttBanner(when)}</strong>` : '';
+      banner.innerHTML = `✓ Already saved${whenPart}${byPart}. Tap a row to edit.`;
+      banner.style.display = 'block';
+    }
+  } catch(e){
+    console.warn('loadExistingAttendance threw:', e);
+    if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+  }
+}
+
+function escapeAttBanner(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+
+function _formatLoggedAt(iso){
+  if(!iso) return '';
+  try {
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    // e.g. "May 4, 9:32 AM" — concise, no year (almost always today/recent)
+    const opts = {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'};
+    return d.toLocaleString('en-US', opts);
+  } catch(e){ return ''; }
 }
 
 function renderAttList(){
   const list = document.getElementById('attList');
   const presentCount = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = presentCount+' present';
-  list.innerHTML = myMembers.map(mem=>{
+  list.innerHTML = myMembers.map((mem, idx)=>{
     const present = attendanceState[mem.id];
-    return `<div class="att-member ${present?'present':''}" id="att_${mem.id}" onclick="toggleAtt(${mem.id})">
+    return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
       <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
       <div class="att-name">${mem.name}</div>
-      <div class="att-streak" id="streak_${mem.id}"></div>
+      <div class="att-streak"></div>
     </div>`;
   }).join('');
+
+  // Attach click + touchstart on each row so tap works on mobile + desktop
+  list.querySelectorAll('.att-member').forEach(row => {
+    const handler = function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      const mid = row.dataset.mid;
+      toggleAtt(mid);
+    };
+    row.addEventListener('click', handler);
+  });
 }
 
 function toggleAtt(id){
   attendanceState[id] = !attendanceState[id];
-  const el = document.getElementById('att_'+id);
+  attendanceDirty = true;
   const present = attendanceState[id];
+  // Find the row by data-mid (works regardless of UUID format)
+  const el = document.querySelector('.att-member[data-mid="'+id+'"]');
+  if(!el){ console.warn('Could not find att-member for id', id); return; }
   el.classList.toggle('present', present);
-  el.querySelector('.att-check').textContent = present?'✓':'';
-  el.querySelector('.att-av').style.background = present?'rgba(52,211,153,.15)':'var(--surface2)';
-  el.querySelector('.att-av').style.color = present?'var(--z1)':'var(--muted)';
+  const check = el.querySelector('.att-check');
+  const av    = el.querySelector('.att-av');
+  if(check) check.textContent = present?'✓':'';
+  if(av){
+    av.style.background = present?'rgba(52,211,153,.15)':'var(--surface2)';
+    av.style.color      = present?'var(--z1)':'var(--muted)';
+  }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = cnt+' present';
 }
 
-let allSelected = false;
 function toggleSelectAll(){
   allSelected = !allSelected;
   myMembers.forEach(m=>{ attendanceState[m.id]=allSelected; });
+  attendanceDirty = true;
   renderAttList();
 }
 
+// ═══════════════════════════════════════════════════════
+// SAVE ATTENDANCE — PATCHED: writes all new columns
+// ═══════════════════════════════════════════════════════
 async function saveAttendance(){
   const date = document.getElementById('attDate').value;
   if(!date){ toast('Please select a date','error'); return; }
-  const rows = myMembers.map(m=>({
-    member_id:m.id, member_name:m.name,
-    date, type:selectedAttType,
-    present:!!attendanceState[m.id],
-    logged_by:currentLeader?.name||'Unknown',
-    lc_group:currentLeader?.lc_group||''
+
+  const leader        = currentLeader;
+  const eventLcGroup  = leader?.lc_group || '';
+  const loggedById    = leader?.id || null;
+  const loggedBy      = leader?.name || 'Unknown';
+
+  const rows = myMembers.map(m => ({
+    member_id:       m.id,
+    member_name:     m.name,
+    event_date:      date,
+    event_type:      selectedAttType,
+    present:         !!attendanceState[m.id],
+    // ── enriched columns ──────────────────────────────
+    member_lc_group: m.lc_group || '',
+    member_zone:     m.diagnostic_zone ?? null,
+    member_level:    m.pipeline_level  ?? null,
+    event_lc_group:  eventLcGroup,
+    logged_by:       loggedBy,
+    logged_by_id:    loggedById,
   }));
-  const {error} = await db.from('attendance').upsert(rows,{onConflict:'member_id,date,type'});
-  if(error){ toast('Error: '+error.message,'error'); return; }
+
+  // Process each row: check if it exists, then update or insert.
+  // This avoids DELETE entirely (which was failing due to a stale RLS policy).
+  let okCount = 0, failCount = 0, lastErr = null;
+
+  for (const row of rows) {
+    // Check if a row already exists for this member + date + type
+    const { data: existing, error: selErr } = await db
+      .from('attendance')
+      .select('id')
+      .eq('member_id', row.member_id)
+      .eq('event_date', row.event_date)
+      .eq('event_type', row.event_type)
+      .maybeSingle();
+
+    if (selErr) {
+      console.error('SELECT failed for', row.member_name, selErr);
+      lastErr = selErr; failCount++; continue;
+    }
+
+    let writeErr = null;
+    if (existing) {
+      // Update the existing row
+      const { error } = await db.from('attendance').update(row).eq('id', existing.id);
+      writeErr = error;
+    } else {
+      // Insert a new row
+      const { error } = await db.from('attendance').insert(row);
+      writeErr = error;
+    }
+
+    if (writeErr) {
+      console.error('WRITE failed for', row.member_name, writeErr);
+      lastErr = writeErr; failCount++;
+    } else {
+      okCount++;
+    }
+  }
+
+  if (failCount > 0) {
+    toast('Saved '+okCount+', failed '+failCount+': '+(lastErr?.message||'unknown'), 'error');
+    return;
+  }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
+  attendanceDirty = false;
   toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
+  // Refresh the banner so it now reflects this save (logged_by becomes us)
+  loadExistingAttendance();
   setTimeout(()=>showScreen('screenHome'),1500);
 }
 
 // ═══════════════════════════════════════════════════════
 // REPORTS
 // ═══════════════════════════════════════════════════════
+// Period state for attendance report
+let attReportPeriod = 'month'; // month | lastmonth | last30 | last90 | custom
+let attReportFrom = '';
+let attReportTo = '';
+let reportView = 'group';   // 'group' | 'member'
+let reportMemberId = null;
+
+function setReportView(v){
+  reportView = v;
+  if(v === 'member' && !reportMemberId && myMembers.length){
+    reportMemberId = myMembers[0].id;
+  }
+  renderReports();
+}
+
+function setReportMember(id){
+  reportMemberId = id;
+  renderReports();
+}
+
+function getReportRange(){
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  let from, to = fmt(today);
+  switch(attReportPeriod){
+    case 'month': {
+      const d = new Date(today.getFullYear(), today.getMonth(), 1);
+      from = fmt(d);
+      break;
+    }
+    case 'lastmonth': {
+      const start = new Date(today.getFullYear(), today.getMonth()-1, 1);
+      const end   = new Date(today.getFullYear(), today.getMonth(), 0);
+      from = fmt(start); to = fmt(end);
+      break;
+    }
+    case 'last30':  from = fmt(new Date(Date.now()-30*864e5)); break;
+    case 'last90':  from = fmt(new Date(Date.now()-90*864e5)); break;
+    case 'custom':  from = attReportFrom; to = attReportTo; break;
+    default:        from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+  }
+  return { from, to };
+}
+
+function setAttPeriod(p){
+  attReportPeriod = p;
+  if(p === 'custom'){
+    // Default custom range to this month if not set
+    if(!attReportFrom){
+      const d = new Date(); d.setDate(1);
+      attReportFrom = d.toISOString().split('T')[0];
+    }
+    if(!attReportTo) attReportTo = new Date().toISOString().split('T')[0];
+  }
+  renderReports();
+}
+
+function setCustomFrom(v){ attReportFrom = v; if(attReportPeriod === 'custom') renderReports(); }
+function setCustomTo(v){ attReportTo = v; if(attReportPeriod === 'custom') renderReports(); }
+
 async function renderReports(){
   const el = document.getElementById('reportsContent');
   const total = myMembers.length||1;
@@ -986,16 +1837,178 @@ async function renderReports(){
   const pendingByAssess = {};
   ASSESSMENTS.forEach(a=>{ pendingByAssess[a.name] = myMembers.filter(m=>!m[a.field]).length; });
 
-  // Attendance summary — last 30 days
-  const thirtyAgo = new Date(Date.now()-30*24*60*60*1000).toISOString().split('T')[0];
-  const {data:attData} = await db.from('attendance').select('member_id,member_name,present,date,type')
-    .in('member_id', myMembers.map(m=>m.id)).gte('date',thirtyAgo).eq('present',false);
+  // ── Attendance: pull all rows in the selected range ──
+  const range = getReportRange();
+  let attRows = [];
+  if(range.from && range.to && myMembers.length){
+    const {data, error} = await db.from('attendance')
+      .select('member_id,present,event_date,event_type')
+      .in('member_id', myMembers.map(m=>m.id))
+      .gte('event_date', range.from)
+      .lte('event_date', range.to);
+    if(!error) attRows = data || [];
+  }
 
-  const absentCounts = {};
-  (attData||[]).forEach(r=>{ absentCounts[r.member_id]=(absentCounts[r.member_id]||0)+1; });
-  const frequentAbsent = myMembers.filter(m=>absentCounts[m.id]>=2).sort((a,b)=>(absentCounts[b.id]||0)-(absentCounts[a.id]||0));
+  // Per-member attendance stats
+  const memberStats = {};
+  myMembers.forEach(m => {
+    memberStats[m.id] = { present: 0, absent: 0, total: 0, name: m.name };
+  });
+  attRows.forEach(r => {
+    if(!memberStats[r.member_id]) return;
+    memberStats[r.member_id].total++;
+    if(r.present) memberStats[r.member_id].present++;
+    else memberStats[r.member_id].absent++;
+  });
+
+  // Unique meetings in this period (by event_date + event_type)
+  const meetingKeys = new Set();
+  attRows.forEach(r => meetingKeys.add(r.event_date + '|' + r.event_type));
+  const totalMeetings = meetingKeys.size;
+
+  // Sort members by attendance rate (descending) for the report table
+  const memberRanked = myMembers.map(m => {
+    const s = memberStats[m.id];
+    const rate = s.total ? Math.round(s.present / s.total * 100) : null;
+    return { ...m, ...s, rate };
+  }).sort((a,b) => {
+    // Members with no attendance data go to the bottom
+    if(a.rate === null && b.rate === null) return a.name.localeCompare(b.name);
+    if(a.rate === null) return 1;
+    if(b.rate === null) return -1;
+    return b.rate - a.rate;
+  });
+
+  const frequentAbsent = memberRanked.filter(m => m.absent >= 2);
+  const pendingTransfers = getPendingTransfers();
+
+  // ── Build chart data: one entry per (event_date + event_type) ──
+  const eventMap = {};
+  attRows.forEach(r => {
+    const key = r.event_date + '|' + r.event_type;
+    if(!eventMap[key]){
+      eventMap[key] = { date: r.event_date, type: r.event_type, present: 0, total: 0 };
+    }
+    eventMap[key].total++;
+    if(r.present) eventMap[key].present++;
+  });
+  const events = Object.values(eventMap)
+    .map(e => ({ ...e, rate: e.total ? Math.round(e.present/e.total*100) : 0 }))
+    .sort((a,b) => a.date === b.date
+      ? a.type.localeCompare(b.type)
+      : a.date.localeCompare(b.date));
+
+  // Group by date so we can show same-day events side-by-side
+  const eventsByDate = {};
+  events.forEach(e => {
+    if(!eventsByDate[e.date]) eventsByDate[e.date] = [];
+    eventsByDate[e.date].push(e);
+  });
+  const sortedDates = Object.keys(eventsByDate).sort();
+
+  // Color per event type
+  const TYPE_COLORS = {
+    'LC Meeting':      '#34d399',  // green
+    'Sunday Service':  '#60a5fa',  // blue
+    'Sunday School':   '#22d3ee',  // cyan
+    'Prayer Meeting':  '#a78bfa',  // purple
+    'BTLI':            '#f472b6',  // pink
+    'Youth Gathering': '#facc15',  // yellow
+    'Team Building':   '#fb923c',  // orange
+    'Outing':          '#f5d78e',  // gold
+    'Other':           '#888899',  // muted
+  };
+  const colorFor = t => TYPE_COLORS[t] || '#888899';
+
+  window._lastEvents = events;
+
+  // Period label for display
+  const periodLabel = (() => {
+    switch(attReportPeriod){
+      case 'month':     return 'This Month';
+      case 'lastmonth': return 'Last Month';
+      case 'last30':    return 'Last 30 Days';
+      case 'last90':    return 'Last 90 Days';
+      case 'custom':    return range.from + ' → ' + range.to;
+    }
+  })();
+
+  // ── PER-MEMBER VIEW DATA ──
+  let memberView = null;
+  if(reportView === 'member' && reportMemberId){
+    const m = myMembers.find(x => x.id === reportMemberId);
+    if(m){
+      const memberAttRows = attRows.filter(r => r.member_id === m.id);
+      const presentRows = memberAttRows.filter(r => r.present);
+      const absentRows  = memberAttRows.filter(r => !r.present);
+      const totalEvts   = memberAttRows.length;
+      const rate = totalEvts ? Math.round(presentRows.length/totalEvts*100) : null;
+
+      // Build a sorted timeline (newest first)
+      const timeline = memberAttRows
+        .map(r => ({ date: r.event_date, type: r.event_type, present: r.present }))
+        .sort((a,b) => b.date.localeCompare(a.date));
+
+      // Last attended date
+      const lastPresent = presentRows.sort((a,b)=>b.event_date.localeCompare(a.event_date))[0];
+      const daysSince = lastPresent
+        ? Math.floor((Date.now() - new Date(lastPresent.event_date).getTime())/864e5)
+        : null;
+
+      // Per-event-type breakdown for this member
+      const byType = {};
+      memberAttRows.forEach(r => {
+        if(!byType[r.event_type]) byType[r.event_type] = { present:0, total:0 };
+        byType[r.event_type].total++;
+        if(r.present) byType[r.event_type].present++;
+      });
+
+      memberView = { member:m, totalEvts, presentCount:presentRows.length, absentCount:absentRows.length, rate, timeline, lastPresent, daysSince, byType };
+      window._lastMemberTimeline = [...timeline].reverse(); // chronological for chart
+    }
+  }
+
+  // Click handler for member rows
+  document.getElementById('reportsContent').onclick = function(e){
+    const item = e.target.closest('[data-mid]');
+    if(item) openMember(item.dataset.mid);
+  };
 
   el.innerHTML = `
+    <!-- ─── EXTERNAL REPORTS ─── -->
+    <div class="report-card" style="margin-top:12px;padding:14px;background:linear-gradient(135deg, rgba(251,191,36,.08), rgba(251,146,60,.04));border:1px solid rgba(251,191,36,.25)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="font-size:22px">💓</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700;color:var(--text);line-height:1.2">LCG Pulse Report</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35">See which LCGs are meeting weekly · compare with peers</div>
+        </div>
+        <button onclick="window.open('lcg_pulse_report.html', '_blank')"
+          style="padding:8px 14px;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
+          Open →
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── REPORT VIEW TOGGLE ─── -->
+    <div class="report-card" style="margin-top:12px;padding:12px 14px">
+      <div style="display:flex;gap:6px;margin-bottom:${reportView==='member'?'10px':'0'}">
+        <button class="ftab ${reportView==='group'?'active':''}"
+          onclick="setReportView('group')" style="flex:1">👥 Group View</button>
+        <button class="ftab ${reportView==='member'?'active':''}"
+          onclick="setReportView('member')" style="flex:1">👤 Per-Member</button>
+      </div>
+      ${reportView === 'member' ? `
+        <select onchange="setReportMember(this.value)" style="
+          width:100%;background:var(--surface2);border:1px solid var(--border);
+          border-radius:var(--r-sm);padding:9px 12px;color:var(--text);
+          font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          ${myMembers.map(m => `<option value="${m.id}" ${m.id===reportMemberId?'selected':''}>${m.name}</option>`).join('')}
+        </select>
+      ` : ''}
+    </div>
+
+    ${reportView === 'group' ? `
     <div class="report-card" style="margin-top:12px">
       <div class="rc-title">Zone Distribution</div>
       ${[1,2,3,4].map(z=>{
@@ -1015,6 +2028,171 @@ async function renderReports(){
       </div>`:''}
     </div>
 
+    <!-- ─── ATTENDANCE REPORT ─── -->
+    <div class="report-card">
+      <div class="rc-title">📅 Attendance Report — ${periodLabel}</div>
+
+      <!-- Period selector chips -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        ${[
+          ['month','This Month'],
+          ['lastmonth','Last Month'],
+          ['last30','Last 30 Days'],
+          ['last90','Last 90 Days'],
+          ['custom','Custom'],
+        ].map(([key,label])=>`<button
+          class="ftab ${attReportPeriod===key?'active':''}"
+          onclick="setAttPeriod('${key}')">${label}</button>`).join('')}
+      </div>
+
+      ${attReportPeriod==='custom'?`
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--muted)">From:</span>
+          <input type="date" class="att-date-input" value="${attReportFrom}" onchange="setCustomFrom(this.value)">
+          <span style="font-size:11px;color:var(--muted)">To:</span>
+          <input type="date" class="att-date-input" value="${attReportTo}" onchange="setCustomTo(this.value)">
+        </div>
+      `:''}
+
+      <!-- Summary stats -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+        <div class="pg-card">
+          <div class="pg-num" style="color:var(--gold)">${totalMeetings}</div>
+          <div class="pg-label">Meetings</div>
+        </div>
+        <div class="pg-card">
+          <div class="pg-num" style="color:var(--green)">${attRows.filter(r=>r.present).length}</div>
+          <div class="pg-label">Total Present</div>
+        </div>
+        <div class="pg-card">
+          <div class="pg-num" style="color:var(--red)">${attRows.filter(r=>!r.present).length}</div>
+          <div class="pg-label">Total Absent</div>
+        </div>
+      </div>
+
+      ${totalMeetings === 0 ? `
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">
+          No attendance records in this period.<br>Log a meeting to see data here.
+        </div>
+      ` : `
+        <!-- Per-member table -->
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);
+             text-transform:uppercase;margin-bottom:6px">Per-Member Attendance</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${memberRanked.map(m => {
+            const rate = m.rate;
+            const rateColor = rate === null ? 'var(--muted)'
+              : rate >= 80 ? 'var(--green)'
+              : rate >= 50 ? 'var(--gold)'
+              : 'var(--red)';
+            const trackBg = rate === null ? 'var(--surface3)' : rateColor;
+            return `<div data-mid="${m.id}" style="
+              background:var(--surface2);border-radius:8px;padding:9px 12px;
+              display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;
+              cursor:pointer;border:1px solid var(--border)">
+              <div>
+                <div style="font-size:13px;font-weight:600">${m.name}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                  ${m.total === 0 ? 'No attendance logged'
+                    : m.present + ' present · ' + m.absent + ' absent · ' + m.total + ' total'}
+                </div>
+              </div>
+              <div style="width:80px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+                <div style="width:${rate||0}%;height:100%;background:${trackBg};transition:width .4s"></div>
+              </div>
+              <div style="font-size:13px;font-weight:800;color:${rateColor};min-width:42px;text-align:right">
+                ${rate === null ? '—' : rate + '%'}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <!-- Export -->
+        <button onclick="exportAttendanceCSV()" style="
+          margin-top:12px;width:100%;padding:9px;background:var(--surface3);
+          border:1px solid var(--border);border-radius:8px;color:var(--text);
+          font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+          📥 Export to CSV
+        </button>
+      `}
+    </div>
+
+    <!-- ─── ATTENDANCE BAR CHART ─── -->
+    ${events.length ? `
+    <div class="report-card">
+      <div class="rc-title">📊 Attendance Rate per Event</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Tap any bar to see event details. Each color is a different event type.
+      </div>
+
+      <!-- Color legend -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+        ${[...new Set(events.map(e=>e.type))].map(t=>`
+          <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+            <div style="width:10px;height:10px;border-radius:2px;background:${colorFor(t)}"></div>
+            <span style="color:var(--muted);font-weight:600">${t}</span>
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- Chart area -->
+      <div style="position:relative;background:var(--surface2);border-radius:8px;padding:14px 10px 8px 36px;overflow-x:auto">
+
+        <!-- Y axis labels (0/25/50/75/100) -->
+        ${[100,75,50,25,0].map((v,i)=>`
+          <div style="position:absolute;left:4px;top:${14+i*((180-14)/4)}px;
+            font-size:9px;color:var(--muted);font-family:'DM Mono',monospace">${v}%</div>
+        `).join('')}
+
+        <!-- Horizontal grid lines -->
+        ${[0,25,50,75,100].map((v,i)=>`
+          <div style="position:absolute;left:30px;right:8px;top:${14+(4-i)*((180-14)/4)}px;
+            height:1px;background:rgba(255,255,255,.05);pointer-events:none"></div>
+        `).join('')}
+
+        <!-- Bars -->
+        <div style="display:flex;align-items:flex-end;gap:14px;min-height:200px;
+          padding-bottom:36px;position:relative;z-index:1">
+          ${sortedDates.map(date => {
+            const dateEvents = eventsByDate[date];
+            // Format date as MMM-DD
+            const d = new Date(date);
+            const lbl = d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+            return `
+              <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:${Math.max(28*dateEvents.length, 40)}px">
+                <!-- Bar group for this date -->
+                <div style="display:flex;gap:3px;align-items:flex-end;height:170px">
+                  ${dateEvents.map((ev,i) => {
+                    const h = ev.rate * 1.6; // 100% = 160px
+                    const c = colorFor(ev.type);
+                    return `<div
+                      onclick="showEventTip(${events.indexOf(ev)})"
+                      style="width:24px;height:${Math.max(h,2)}px;background:${c};
+                        border-radius:4px 4px 0 0;cursor:pointer;
+                        position:relative;transition:filter .15s;
+                        box-shadow:0 -1px 0 rgba(255,255,255,.2) inset"
+                      title="${ev.type} on ${ev.date} — ${ev.rate}%"
+                    >
+                      <div style="position:absolute;bottom:calc(100% + 2px);left:50%;
+                        transform:translateX(-50%);font-size:9px;font-weight:800;
+                        color:${c};white-space:nowrap">${ev.rate}%</div>
+                    </div>`;
+                  }).join('')}
+                </div>
+                <!-- Date label below -->
+                <div style="font-size:9px;color:var(--muted);margin-top:6px;
+                  font-family:'DM Mono',monospace;white-space:nowrap">${lbl}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Tap-to-view popup target -->
+      <div id="evTip" style="display:none;margin-top:10px;background:var(--surface3);
+        border-radius:8px;padding:10px 12px;border-left:3px solid var(--gold)">
+      </div>
+    </div>` : ''}
+
     <div class="report-card">
       <div class="rc-title">Pending Assessments</div>
       <div class="pending-grid">
@@ -1025,13 +2203,22 @@ async function renderReports(){
       </div>
     </div>
 
+    ${pendingTransfers.length?`<div class="report-card">
+      <div class="rc-title">🔀 Pending Transfers</div>
+      ${pendingTransfers.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;flex:1">${m.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${m.lc_group||'—'} → <strong style="color:#fbbf24">${m.pending_lc_group}</strong></div>
+        ${m.transfer_date?`<div style="font-size:10px;color:var(--muted)">${m.transfer_date}</div>`:''}
+      </div>`).join('')}
+    </div>`:''}
+
     ${frequentAbsent.length?`<div class="report-card">
-      <div class="rc-title">Frequent Absences (30 days)</div>
+      <div class="rc-title">⚠️ Frequent Absences (${periodLabel})</div>
       <div class="absent-list">
-        ${frequentAbsent.map(m=>`<div class="absent-item" onclick="openMember(${m.id})">
+        ${frequentAbsent.map(m=>`<div class="absent-item" data-mid="${m.id}">
           <div class="ai-av" style="background:rgba(248,113,113,.15);color:var(--red)">${initials(m.name)}</div>
           <div class="ai-name">${m.name}</div>
-          <div class="ai-streak">${absentCounts[m.id]} absences</div>
+          <div class="ai-streak">${m.absent} absence${m.absent>1?'s':''}</div>
         </div>`).join('')}
       </div>
     </div>`:''}
@@ -1044,7 +2231,266 @@ async function renderReports(){
         <div class="pg-card"><div class="pg-num" style="color:var(--muted)">${zones[0]||0}</div><div class="pg-label">Not Assessed</div></div>
         <div class="pg-card"><div class="pg-num" style="color:var(--orange)">${frequentAbsent.length}</div><div class="pg-label">Frequent Absent</div></div>
       </div>
-    </div>`;
+    </div>` : ''}
+
+    ${reportView === 'member' && memberView ? `
+      <!-- ─── PER-MEMBER REPORT ─── -->
+      <div class="report-card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="width:48px;height:48px;border-radius:14px;
+            background:rgba(232,184,75,.15);color:var(--gold);
+            display:flex;align-items:center;justify-content:center;
+            font-family:'Syne',serif;font-size:18px;font-weight:800">
+            ${initials(memberView.member.name)}
+          </div>
+          <div style="flex:1">
+            <div style="font-family:'Syne',serif;font-size:17px;font-weight:700">${memberView.member.name}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              ${LEVEL_NAMES[memberView.member.pipeline_level]||'Pre-Pipeline'}
+              ${memberView.member.lc_group?' · '+memberView.member.lc_group:''}
+            </div>
+          </div>
+        </div>
+
+        <!-- Stat cards -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+          <div class="pg-card">
+            <div class="pg-num" style="color:${memberView.rate===null?'var(--muted)':memberView.rate>=80?'var(--green)':memberView.rate>=50?'var(--gold)':'var(--red)'}">
+              ${memberView.rate===null?'—':memberView.rate+'%'}
+            </div>
+            <div class="pg-label">Attendance</div>
+          </div>
+          <div class="pg-card">
+            <div class="pg-num" style="color:var(--green)">${memberView.presentCount}</div>
+            <div class="pg-label">Present</div>
+          </div>
+          <div class="pg-card">
+            <div class="pg-num" style="color:var(--red)">${memberView.absentCount}</div>
+            <div class="pg-label">Absent</div>
+          </div>
+        </div>
+
+        ${memberView.daysSince !== null ? `
+          <div style="background:${memberView.daysSince>14?'rgba(248,113,113,.1)':memberView.daysSince>7?'rgba(251,146,60,.1)':'rgba(52,211,153,.1)'};
+            border:1px solid ${memberView.daysSince>14?'rgba(248,113,113,.3)':memberView.daysSince>7?'rgba(251,146,60,.3)':'rgba(52,211,153,.3)'};
+            border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">
+            <strong>Last attended:</strong>
+            ${memberView.daysSince === 0 ? 'today' :
+              memberView.daysSince === 1 ? 'yesterday' :
+              memberView.daysSince + ' days ago'}
+            (${memberView.lastPresent.event_type}, ${memberView.lastPresent.event_date})
+            ${memberView.daysSince > 14 ? '<br><strong style="color:var(--red)">⚠️ Consider follow-up</strong>' : ''}
+          </div>
+        ` : `
+          <div style="background:var(--surface3);border-radius:8px;padding:10px 12px;
+            margin-bottom:12px;font-size:12px;color:var(--muted)">
+            No attendance recorded in this period.
+          </div>
+        `}
+      </div>
+
+      ${memberView.totalEvts ? `
+      <!-- Per-event-type breakdown -->
+      <div class="report-card">
+        <div class="rc-title">By Event Type</div>
+        ${Object.entries(memberView.byType).map(([type, stats]) => {
+          const r = Math.round(stats.present/stats.total*100);
+          const c = colorFor(type);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+            <div style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></div>
+            <div style="flex:1;font-size:12px;font-weight:600">${type}</div>
+            <div style="font-size:11px;color:var(--muted)">${stats.present}/${stats.total}</div>
+            <div style="width:60px;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden">
+              <div style="width:${r}%;height:100%;background:${c}"></div>
+            </div>
+            <div style="font-size:11px;font-weight:800;width:36px;text-align:right;color:${c}">${r}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ` : ''}
+
+      <!-- Per-member bar chart — always show, with empty state if no data -->
+      <div class="report-card">
+        <div class="rc-title">📊 Personal Attendance Chart</div>
+        ${memberView.totalEvts === 0 ? `
+          <div style="text-align:center;padding:24px 16px;color:var(--muted);font-size:12px">
+            No attendance logged for ${memberView.member.name.split(' ')[0]} in this period.<br>
+            Try widening the period (Last 90 Days or Custom range).
+          </div>
+        ` : `
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+          Each bar is one event. Green (above) = present, red (below) = absent. Tap any bar for details.
+        </div>
+
+        <div style="position:relative;background:var(--surface2);border-radius:8px;padding:14px 10px 8px 36px;overflow-x:auto">
+          <!-- Y axis labels -->
+          ${['Present','—','Absent'].map((v,i)=>`
+            <div style="position:absolute;left:4px;top:${14 + i*60}px;
+              font-size:9px;color:var(--muted);font-family:'DM Mono',monospace">${v}</div>
+          `).join('')}
+
+          <!-- Centerline -->
+          <div style="position:absolute;left:30px;right:8px;top:74px;
+            height:1px;background:rgba(255,255,255,.15);pointer-events:none"></div>
+
+          <!-- Bars -->
+          <div style="display:flex;align-items:center;gap:10px;min-height:170px;
+            padding:0;position:relative;z-index:1">
+            ${[...memberView.timeline].reverse().map((t, idx) => {
+              const c = t.present ? 'var(--green)' : 'var(--red)';
+              const h = 50;
+              const d = new Date(t.date);
+              const monthLbl = d.toLocaleDateString('en-US',{month:'short'});
+              const dayLbl   = d.getDate();
+              const marginTop = t.present ? (70 - h) : 70;
+              const borderRadius = t.present ? '4px 4px 0 0' : '0 0 4px 4px';
+              return `<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+                <div onclick="showMemberEventTip(${idx})" style="
+                  width:28px;height:${h}px;background:${c};
+                  border-radius:${borderRadius};
+                  cursor:pointer;transition:filter .15s;
+                  margin-top:${marginTop}px;
+                  box-shadow:0 -1px 0 rgba(255,255,255,.2) inset;
+                  border:4px solid ${colorFor(t.type)}">
+                </div>
+                <div style="margin-top:8px;text-align:center;line-height:1.2">
+                  <div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase">${monthLbl}</div>
+                  <div style="font-size:14px;color:var(--text);font-weight:800;font-family:'DM Mono',monospace">${dayLbl}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;margin-top:14px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;background:var(--green);border-radius:2px"></div>
+            <span>Present</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;background:var(--red);border-radius:2px"></div>
+            <span>Absent</span>
+          </div>
+        </div>
+
+        <!-- Event type legend -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:10px">
+          <span style="color:var(--muted);font-weight:600">Border colors:</span>
+          ${[...new Set(memberView.timeline.map(t=>t.type))].map(t=>`
+            <div style="display:flex;align-items:center;gap:4px">
+              <div style="width:14px;height:14px;border-radius:3px;border:3px solid ${colorFor(t)};box-sizing:border-box"></div>
+              <span style="color:var(--muted);font-weight:600">${t}</span>
+            </div>
+          `).join('')}
+        </div>
+
+        <div id="memberEvTip" style="display:none;margin-top:10px;background:var(--surface3);
+          border-radius:8px;padding:10px 12px;border-left:3px solid var(--gold)"></div>
+        `}
+      </div>
+
+      ${memberView.totalEvts ? `
+      <!-- Timeline -->
+      <div class="report-card" style="margin-bottom:24px">
+        <div class="rc-title">Attendance Timeline</div>
+        <div style="display:flex;flex-direction:column;gap:5px;max-height:400px;overflow-y:auto">
+          ${memberView.timeline.map(t => {
+            const d = new Date(t.date);
+            const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+              background:${t.present?'rgba(52,211,153,.06)':'rgba(248,113,113,.05)'};
+              border-radius:7px;border-left:3px solid ${t.present?'var(--green)':'var(--red)'}">
+              <div style="font-size:14px;width:18px">${t.present?'✓':'✗'}</div>
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:600">${t.type}</div>
+                <div style="font-size:10px;color:var(--muted)">${dateStr}</div>
+              </div>
+              <div style="font-size:9px;font-weight:800;letter-spacing:.05em;
+                color:${t.present?'var(--green)':'var(--red)'}">
+                ${t.present?'PRESENT':'ABSENT'}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
+    ` : ''}
+  `;
+
+  // Stash the ranked data for CSV export
+  window._lastAttRanked = memberRanked;
+  window._lastAttPeriod = periodLabel;
+}
+
+// CSV export
+function exportAttendanceCSV(){
+  const ranked = window._lastAttRanked || [];
+  const period = window._lastAttPeriod || 'Report';
+  if(!ranked.length){ toast('No data to export','error'); return; }
+
+  const lines = ['Name,Present,Absent,Total Meetings,Attendance Rate'];
+  ranked.forEach(m => {
+    const rate = m.rate === null ? '' : m.rate + '%';
+    lines.push([
+      '"' + m.name.replace(/"/g,'""') + '"',
+      m.present, m.absent, m.total, rate
+    ].join(','));
+  });
+
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'attendance_' + period.replace(/[^a-z0-9]+/gi,'_').toLowerCase() + '_' +
+               new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV downloaded ✓','success');
+}
+
+// Click handler for chart bars — show event details
+function showEventTip(idx){
+  const events = window._lastEvents || [];
+  const ev = events[idx];
+  if(!ev) return;
+  const tip = document.getElementById('evTip');
+  if(!tip) return;
+  const d = new Date(ev.date);
+  const dateStr = d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  tip.innerHTML = `
+    <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin-bottom:4px">Event Details</div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:3px">${ev.type}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${dateStr}</div>
+    <div style="display:flex;gap:14px;font-size:12px">
+      <div><span style="color:var(--muted)">Present:</span> <strong style="color:var(--green)">${ev.present}</strong></div>
+      <div><span style="color:var(--muted)">Absent:</span> <strong style="color:var(--red)">${ev.total - ev.present}</strong></div>
+      <div><span style="color:var(--muted)">Rate:</span> <strong>${ev.rate}%</strong></div>
+    </div>
+  `;
+  tip.style.display = 'block';
+  tip.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// Click handler for per-member chart bars
+function showMemberEventTip(idx){
+  const timeline = window._lastMemberTimeline || [];
+  const ev = timeline[idx];
+  if(!ev) return;
+  const tip = document.getElementById('memberEvTip');
+  if(!tip) return;
+  const d = new Date(ev.date);
+  const dateStr = d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const status = ev.present ? 'PRESENT' : 'ABSENT';
+  const statusColor = ev.present ? 'var(--green)' : 'var(--red)';
+  tip.innerHTML = `
+    <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin-bottom:4px">Event Details</div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:3px">${ev.type}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${dateStr}</div>
+    <div style="font-size:13px;font-weight:800;color:${statusColor}">${ev.present?'✓':'✗'} ${status}</div>
+  `;
+  tip.style.display = 'block';
+  tip.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1053,16 +2499,28 @@ async function renderReports(){
 function renderSendLinks(){
   const el = document.getElementById('sendLinksContent');
   if(!myMembers.length){ el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No members</div></div>'; return; }
+
   el.innerHTML = myMembers.map(mem=>{
     const pending = ASSESSMENTS.filter(a=>!mem[a.field]);
-    const done = ASSESSMENTS.filter(a=>!!mem[a.field]);
+    const done    = ASSESSMENTS.filter(a=>!!mem[a.field]);
+    // Use encodeURIComponent on name for inline onclick safety
+    const safeName = encodeURIComponent(mem.name);
+    const hasPhone = !!normalizePHPhone(mem.contact);
+    const phoneBadge = hasPhone
+      ? '<span style="font-size:10px;color:var(--green);font-weight:700;margin-left:6px">📱</span>'
+      : '<span style="font-size:10px;color:var(--red);font-weight:700;margin-left:6px" title="No phone on file">⚠️ no phone</span>';
     return `<div class="sl-member">
-      <div class="slm-name">${mem.name}</div>
+      <div class="slm-name">${mem.name}${phoneBadge}</div>
       <div class="slm-links">
+        <div class="slm-link-row" style="background:rgba(52,211,153,.08);border-radius:6px;padding:6px 8px;margin-bottom:4px">
+          <div class="slr-name">📝 Profile Edit (info update)</div>
+          <span class="slr-status" style="background:rgba(52,211,153,.2);color:var(--green);font-weight:700">Always</span>
+          <button class="slr-send" style="background:var(--green);color:#0f0f13" onclick="sendProfileEditLink('${mem.id}',decodeURIComponent('${safeName}'),'${(mem.contact||'').replace(/'/g,'')}')">📤 Send</button>
+        </div>
         ${pending.map(a=>`<div class="slm-link-row">
           <div class="slr-name">${a.icon} ${a.name}</div>
           <span class="slr-status slr-pending">Pending</span>
-          <button class="slr-send" onclick="sendLink_('${mem.id}','${mem.name}','${a.file}','${a.name}')">📤 Send</button>
+          <button class="slr-send" onclick="sendLink_('${mem.id}',decodeURIComponent('${safeName}'),'${a.file}','${a.name}','${mem.contact||''}')">📤 Send</button>
         </div>`).join('')}
         ${done.length?`<div style="font-size:10px;color:var(--lighter);margin-top:4px;font-weight:600">Completed: ${done.map(a=>a.icon+' '+a.name).join(' · ')}</div>`:''}
       </div>
@@ -1070,25 +2528,247 @@ function renderSendLinks(){
   }).join('');
 }
 
-function sendLink_(memberId, memberName, file, assessName){
+// Convert PH phone number to WhatsApp international format (no + or dashes)
+// Accepts: 09171234567, +639171234567, 0917-123-4567, etc. → 639171234567
+function normalizePHPhone(raw){
+  if(!raw) return '';
+  let p = String(raw).replace(/\D/g, ''); // strip non-digits
+  if(!p) return '';
+  // Already in international format starting with 63
+  if(p.startsWith('63') && p.length === 12) return p;
+  // Local format starting with 09 → drop the leading 0, add 63
+  if(p.startsWith('09') && p.length === 11) return '63' + p.substring(1);
+  // Bare 10-digit mobile (9171234567) → add 63
+  if(p.startsWith('9') && p.length === 10) return '63' + p;
+  // International number with another country code → return as-is if reasonable
+  if(p.length >= 10 && p.length <= 15) return p;
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════
+// PROFILE SELF-EDIT LINK (token-based)
+// ═══════════════════════════════════════════════════════
+const SELF_EDIT_BASE = BASE_URL + 'member_self_edit.html';
+const TOKEN_VALIDITY_DAYS = 7;
+
+// ── Greeting templates (Pastor-configurable from dashboard Settings) ──
+// Loaded from system_settings.meta on boot; falls back to these defaults
+// if fetch fails. Both pages (dashboard + leader tool) share the same
+// source of truth, so changes in Settings flow to leaders automatically.
+const _DEFAULT_PROFILE_GREETING =
+  'Hi {firstName}! 🙏\n\n' +
+  'Para sa ating church records, paki-update lang po ang inyong personal info ' +
+  '(birthday, contact, address, family). Kayo lang ang makakakita nito.\n\n' +
+  '{url}\n\n' +
+  'Valid for {days} days. Salamat po! 💚\n— {senderName}';
+
+const _DEFAULT_ASSESS_GREETING =
+  'Hi {firstName}! 😊\n\n' +
+  'Bilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang {assessName} assessment?\n\n' +
+  '{url}\n\n' +
+  'I-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— {senderName}';
+
+let _greetingTemplate = _DEFAULT_PROFILE_GREETING;
+let _assessTemplate   = _DEFAULT_ASSESS_GREETING;
+
+function _buildGreeting(template, vars){
+  return String(template || '')
+    .replace(/\{firstName\}/g,  vars.firstName  || '')
+    .replace(/\{url\}/g,        vars.url        || '')
+    .replace(/\{days\}/g,       String(vars.days != null ? vars.days : TOKEN_VALIDITY_DAYS))
+    .replace(/\{senderName\}/g, vars.senderName || 'Your LC Leader')
+    .replace(/\{assessName\}/g, vars.assessName || 'assessment');
+}
+
+// ── WhatsApp URL builder — uses api.whatsapp.com to avoid the wa.me
+//    redirect chain that triggers "Your connection is not private" on
+//    desktop browsers (Edge, Safari, Samsung Internet).
+function _buildWhatsAppUrl(phone, message){
+  const enc = encodeURIComponent(message || '');
+  if(phone) return 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + enc;
+  return 'https://api.whatsapp.com/send?text=' + enc;
+}
+
+async function loadGreetingTemplates(){
+  try{
+    const {data, error} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    const tplProf = data?.meta?.profile_edit_greeting;
+    const tplAss  = data?.meta?.assessment_link_greeting;
+    if(typeof tplProf === 'string' && tplProf.trim()) _greetingTemplate = tplProf;
+    if(typeof tplAss  === 'string' && tplAss.trim())  _assessTemplate   = tplAss;
+  } catch(e){
+    console.warn('Greeting template load failed — using defaults:', e.message);
+  }
+}
+// Fire-and-forget on boot — leaders never get blocked from sending if this fails
+loadGreetingTemplates();
+
+function _genSelfEditToken(){
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function createSelfEditToken(memberId){
+  if(!memberId) throw new Error('Member ID required');
+  const token = _genSelfEditToken();
+  const expiresAt = new Date(Date.now() + TOKEN_VALIDITY_DAYS * 86400000).toISOString();
+  const {error} = await db.from('profile_tokens').insert({
+    token,
+    member_id: memberId,
+    expires_at: expiresAt
+  });
+  if(error) throw new Error(error.message);
+  return SELF_EDIT_BASE + '?token=' + token;
+}
+
+async function sendProfileEditLink(memberId, memberName, contact){
+  if(!memberId){ toast('Member not found', 'error'); return; }
+  try{
+    const url = await createSelfEditToken(memberId);
+    const firstName = (memberName||'').split(' ')[0] || 'kapatid';
+    const senderName = currentLeader?.name || 'Your LC Leader';
+    const messageText = _buildGreeting(_greetingTemplate, {
+      firstName, url, days: TOKEN_VALIDITY_DAYS, senderName
+    });
+    const phone = normalizePHPhone(contact);
+    // Always show the share modal (Pastor's call, May 2026) — three clean
+    // choices: Copy link, Copy full message, Open WhatsApp. Phone is passed
+    // so the WhatsApp button deep-links to that contact when on file.
+    _showShareModal(firstName, url, messageText, 'Profile Edit Link', phone);
+  } catch(e){
+    console.error('Self-edit link error:', e);
+    toast('Could not create link: '+e.message, 'error');
+  }
+}
+
+function _showShareModal(firstName, url, messageText, linkType, phone){
+  // Remove any existing modal
+  document.querySelectorAll('.share-link-modal').forEach(m=>m.remove());
+
+  const modal = document.createElement('div');
+  modal.className = 'share-link-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+  // Three-button design (Pastor's call, May 2026): Copy link, Copy full
+  // message, Open WhatsApp. WhatsApp deep-links to phone when on file,
+  // else opens the contact picker. Other channels (SMS/email/native) were
+  // removed — leaders found them confusing.
+  const safeFirst = (firstName||'').replace(/[<>&"']/g, '');
+  const safeType  = (linkType||'Link').replace(/[<>&"']/g, '');
+  const subText = phone
+    ? `Choose how to send to <strong>${safeFirst}</strong>:`
+    : `No phone on file for <strong>${safeFirst}</strong>. Choose how to send:`;
+  const waLabel = phone
+    ? '🟢 Open WhatsApp to ' + safeFirst
+    : '🟢 Open WhatsApp & pick contact';
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">📤 Share ${safeType}</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
+        ${subText}
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
+        <button onclick="_shareVia('copy', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          📋 <span>Copy link to clipboard</span>
+        </button>
+        <button onclick="_shareVia('copyMsg', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          📝 <span>Copy full message (with greeting)</span>
+        </button>
+        <button onclick="_shareVia('whatsapp', this)"
+          style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          <span>${waLabel}</span>
+        </button>
+      </div>
+
+      <div style="background:var(--surface3);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);word-break:break-all;margin-bottom:.75rem;font-family:monospace">${url}</div>
+
+      <button onclick="this.closest('.share-link-modal').remove()"
+        style="width:100%;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>`;
+
+  // Stash data for the action handlers
+  window._shareLinkData = {url, messageText, firstName, phone: phone||''};
+
+  document.body.appendChild(modal);
+  modal.onclick = (e)=>{ if(e.target===modal) modal.remove(); };
+}
+  // Remove any existing modal
+async function _shareVia(method, btn){
+  const data = window._shareLinkData;
+  if(!data) return;
+  const {url, messageText, phone} = data;
+
+  try{
+    if(method === 'copy'){
+      await navigator.clipboard.writeText(url);
+      toast('🔗 Link copied — paste it anywhere', 'success');
+    }
+    else if(method === 'copyMsg'){
+      await navigator.clipboard.writeText(messageText);
+      toast('📝 Full message copied — paste it anywhere', 'success');
+    }
+    else if(method === 'whatsapp'){
+      // Use api.whatsapp.com (not wa.me) to avoid SSL warning on desktop.
+      // If phone is on file, deep-link to that contact; otherwise let
+      // WhatsApp prompt for a contact. Same prefilled message either way.
+      window.open(_buildWhatsAppUrl(phone || '', messageText), '_blank');
+    }
+    // Close modal after action
+    btn.closest('.share-link-modal')?.remove();
+  } catch(e){
+    if(e.name !== 'AbortError'){  // user cancelled native share — don't toast
+      console.error('Share error:', e);
+      toast('Could not share: ' + e.message, 'error');
+    }
+  }
+}
+
+function sendLink_(memberId, memberName, file, assessName, contact){
   const url = BASE_URL+file+'?id='+memberId+'&name='+encodeURIComponent(memberName);
-  const msg = encodeURIComponent(`Hi ${memberName.split(' ')[0]}! 😊\n\nBilang bahagi ng aming MULTIPLY journey, handa ka na bang gawin ang ${assessName} assessment?\n\n${url}\n\nI-tap lang ang link at sagutan mo nang honest. ~15-20 minuto lang. God bless! 🙏\n— ${currentLeader?.name||'Your LC Leader'}`);
-  window.open('https://wa.me/?text='+msg,'_blank');
-  toast('WhatsApp opened for '+memberName.split(' ')[0],'success');
+  const firstName = (memberName||'').split(' ')[0] || 'kapatid';
+  const senderName = currentLeader?.name || 'Your LC Leader';
+  // Build from the configurable assessment greeting (loaded from system_settings)
+  const messageText = _buildGreeting(_assessTemplate, {
+    firstName, url, assessName: assessName || 'assessment',
+    senderName, days: TOKEN_VALIDITY_DAYS
+  });
+  const phone = normalizePHPhone(contact);
+
+  // Always show share modal so the leader picks the channel (Pastor's call,
+  // May 2026). Phone is passed for direct WhatsApp deep-linking when on file.
+  _showShareModal(firstName, url, messageText, assessName || 'Assessment', phone);
 }
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════
 function initials(name){return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
-function avColor(level){const colors={1:'#374151',2:'#1e3a5f',3:'#1a3d2b',4:'#4a2060',5:'#7a3010'};return colors[level]||'#374151';}
+function avColor(level){
+  const colors={0:'#2a2a38',1:'#1e2a3a',2:'#1a3d2b',3:'#3d2060',4:'#5a2010',5:'#7a4a00'};
+  return colors[level]||'#2a2a38';
+}
 function toast(msg,type=''){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className='toast '+(type||'');
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800);
 }
-document.getElementById('loginSearch').addEventListener('keydown',e=>{ if(e.key==='Escape') document.getElementById('loginDropdown').style.display='none'; });
-document.addEventListener('click',e=>{ if(!e.target.closest('#loginSearch')&&!e.target.closest('#loginDropdown')) document.getElementById('loginDropdown').style.display='none'; });
+
+document.getElementById('loginSearch').addEventListener('keydown',e=>{
+  if(e.key==='Escape') document.getElementById('loginDropdown').style.display='none';
+});
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#loginSearch')&&!e.target.closest('#loginDropdown'))
+    document.getElementById('loginDropdown').style.display='none';
+});
 </script>
 </body>
 </html>
