@@ -2246,10 +2246,14 @@ function openEdit(id){
     const showResetPin = LeaderScope.isPastor() && (m.level||0) >= 2;
     rpb.style.display = showResetPin ? 'block' : 'none';
   }
-  // Self-edit link button — visible whenever a saved member is open
-  // (button is now in the footer, not wrapped in a parent div, so toggle its own display)
+  // Self-edit link button — visible whenever a saved member is open,
+  // EXCEPT when the open member is the user themselves (sending yourself
+  // an edit link is silly — you can edit directly).
   const sse = document.getElementById('sendSelfEditBtn');
-  if(sse) sse.style.display = 'block';
+  if(sse){
+    const isSelf = (typeof LEADER !== 'undefined' && LEADER && m.id === LEADER.leaderId);
+    sse.style.display = isSelf ? 'none' : 'block';
+  }
   // Disciples tab content — refreshes on open AND updates the tab badge so
   // pastor can see at-a-glance whether this member has anyone under them.
   renderDisciplesPanel();
