@@ -672,42 +672,190 @@ body {
 .scale-label .en { display: block; font-size: 10.5px; color: var(--lighter); font-style: italic; }
 .purpose-en { display: block; font-size: 12.5px; color: var(--muted); font-style: italic; margin-top: 10px; line-height: 1.6; }
 
+/* ── BILINGUAL TOGGLE (added May 2026, matches Strengths Profile pattern) ──
+   Default state: English (body has data-lang="en" set in markup).
+   Toggle button switches data-lang between "en" and "tl".
+   We hide either the .*-en variants or the .*-tl variants depending on mode.
+
+   Class families that switch:
+     .tl-text / .en-text         (general inline pairs — Strengths convention)
+     .q-tl    / .q-en-sub        (question text)
+     .qsub-tl / .qsub-en         (question subtext)
+     .mc-tl   / .mc-en           (multiple-choice option text)
+     .section-title-en           (English subtitle on section headers)
+     .section-desc-en            (English subtitle on section descriptions)
+     .purpose-en                 (English subtitle in purpose box)
+*/
+[data-lang="tl"] .en-text,
+[data-lang="tl"] .en,
+[data-lang="tl"] .q-en-sub,
+[data-lang="tl"] .qsub-en,
+[data-lang="tl"] .mc-en,
+[data-lang="tl"] .section-title-en,
+[data-lang="tl"] .section-desc-en,
+[data-lang="tl"] .purpose-en { display: none !important; }
+[data-lang="en"] .tl-text,
+[data-lang="en"] .tl,
+[data-lang="en"] .q-tl,
+[data-lang="en"] .qsub-tl,
+[data-lang="en"] .mc-tl { display: none !important; }
+
+/* Strengths-style toggle — bottom-right, two buttons (Filipino / English) */
+.lang-toggle {
+  position: fixed; bottom: 18px; right: 18px;
+  background: var(--cream); border: 1.5px solid var(--gold);
+  border-radius: 30px; padding: 3px;
+  display: flex; gap: 2px; z-index: 1000;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15);
+}
+.lt-btn {
+  padding: 7px 14px; border: none; background: transparent;
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 700;
+  cursor: pointer; border-radius: 25px;
+  color: var(--muted); transition: all .15s;
+}
+.lt-btn.active { background: var(--gold); color: #fff; }
+@media (max-width:520px){
+  .lang-toggle { bottom: 12px; right: 12px; }
+  .lt-btn { font-size: 10.5px; padding: 6px 12px; }
+}
+
+/* ── FONT SIZE CONTROL (added May 2026) ──
+   Scales the whole document via the CSS zoom property. Five steps:
+   90% / 100% / 110% / 125% / 140%. Persists to localStorage.
+   Sits to the LEFT of the language toggle so they're paired in the
+   bottom-right corner without colliding.
+*/
+.font-toggle {
+  position: fixed; bottom: 18px; right: 178px;
+  background: var(--cream); border: 1.5px solid var(--gold);
+  border-radius: 30px; padding: 3px;
+  display: flex; align-items: center; gap: 2px; z-index: 1000;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  font-family: 'DM Sans', sans-serif;
+}
+.ft-btn {
+  border: none; background: transparent;
+  font-family: inherit; font-weight: 700;
+  cursor: pointer; border-radius: 25px;
+  color: var(--muted); transition: all .15s;
+  padding: 7px 11px;
+  line-height: 1;
+}
+.ft-btn.ft-minus { font-size: 13px; }
+.ft-btn.ft-plus  { font-size: 16px; }
+.ft-btn:hover    { background: rgba(212,175,55,.10); }
+.ft-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ft-label {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--ink); padding: 0 6px; min-width: 38px; text-align: center;
+}
+@media (max-width:520px){
+  /* On phones, stack font toggle ABOVE the language toggle so neither gets cropped */
+  .font-toggle { bottom: 56px; right: 12px; padding: 2px; }
+  .ft-btn { padding: 6px 9px; }
+  .ft-btn.ft-minus { font-size: 12px; }
+  .ft-btn.ft-plus  { font-size: 15px; }
+  .ft-label { font-size: 10px; min-width: 34px; padding: 0 4px; }
+}
+
+/* ── PAUSE / RESUME (added May 2026) ── */
+.pause-btn {
+  position: fixed; top: 14px; right: 14px; z-index: 100;
+  background: var(--cream); border: 1px solid var(--gold); color: var(--ink);
+  font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  display: none; /* shown after first answer via JS */
+}
+.pause-btn:hover { background: rgba(212,175,55,.08); }
+@media (max-width:520px){
+  .pause-btn { top: 8px; right: 8px; font-size: 11px; padding: 6px 11px; }
+}
+
+.resume-banner {
+  display: none;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 1.5px solid var(--gold); border-radius: 12px;
+  padding: 14px 16px; margin: 16px 0;
+  font-family: 'DM Sans', sans-serif;
+}
+.resume-banner.show { display: block; }
+.resume-banner .rb-title { font-weight: 700; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
+.resume-banner .rb-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
+.resume-banner .rb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.resume-banner button {
+  flex: 1; min-width: 130px;
+  padding: 9px 14px; border-radius: 8px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; border: none;
+}
+.resume-banner .rb-yes { background: #2a5c40; color: #fff; }
+.resume-banner .rb-no  { background: #fff; color: var(--ink); border: 1px solid var(--border); }
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
-<body>
+<body data-lang="en">
+
+<!-- Font size control (paired with language toggle) -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+</div>
+
+<!-- Bilingual toggle (matches Strengths Profile pattern: Filipino / English) -->
+<div class="lang-toggle" role="group" aria-label="Language toggle">
+  <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+</div>
+
+<!-- Pause button (revealed after first answer) -->
+<button class="pause-btn" id="pauseBtn" onclick="showPauseModal()"><span class="tl-text">⏸ I-pause</span><span class="en-text">⏸ Pause</span></button>
 
 <!-- COVER -->
 <div class="cover">
-  <p class="cover-eyebrow">MULTIPLY Leadership Pipeline · Pasukan ng Antas 1<br><span style="font-size:11px;opacity:.7;font-style:italic">Level 1 Entry Assessment</span></p>
-  <h1 class="cover-title"><em>Katiyakan ng Kaligtasan</em><br>Diagnostic<br><span style="font-size:14px;opacity:.7;font-style:italic;font-weight:300">Salvation Assurance Diagnostic</span></h1>
+  <p class="cover-eyebrow"><span class="tl-text">MULTIPLY Leadership Pipeline · Pasukan ng Antas 1</span><span class="en-text">MULTIPLY Leadership Pipeline · Level 1 Entry Assessment</span></p>
+  <h1 class="cover-title"><span class="tl-text"><em>Katiyakan ng Kaligtasan</em><br>Diagnostic</span><span class="en-text"><em>Salvation Assurance</em><br>Diagnostic</span></h1>
   <div class="cover-divider"></div>
-  <p class="cover-verse">"Sinusulat ko ang mga bagay na ito sa inyo na sumasampalataya sa pangalan ng Anak ng Diyos, upang malaman ninyo na taglay ninyo ang buhay na walang hanggan."<br>— 1 Juan 5:13<br><span style="font-size:11px;opacity:.6;font-style:italic">"I write these things to you who believe in the name of the Son of God, so that you may know that you have eternal life."</span></p>
-  <p class="cover-meta">Komprehensibo · Kompidensyal · Karakter at Kakayahan · Pinangangasiwaan ng Pastor o Sinanay na Discipler<br><span style="font-size:10px;opacity:.65;font-style:italic">Comprehensive · Confidential · Character & Competence · Administered by Pastor or Trained Discipler</span></p>
+  <p class="cover-verse"><span class="tl-text">"Sinusulat ko ang mga bagay na ito sa inyo na sumasampalataya sa pangalan ng Anak ng Diyos, upang malaman ninyo na taglay ninyo ang buhay na walang hanggan."<br>— 1 Juan 5:13</span><span class="en-text">"I write these things to you who believe in the name of the Son of God, so that you may know that you have eternal life."<br>— 1 John 5:13</span></p>
+  <p class="cover-meta"><span class="tl-text">Komprehensibo · Kompidensyal · Karakter at Kakayahan · Pinangangasiwaan ng Pastor o Sinanay na Discipler</span><span class="en-text">Comprehensive · Confidential · Character & Competence · Administered by Pastor or Trained Discipler</span></p>
 </div>
 
 <!-- STICKY PROGRESS -->
 <div class="progress-wrap">
   <span class="progress-text" id="progressText">0 of — answered</span>
   <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-  <button class="calc-btn" onclick="calcScore()">Tingnan ang Resulta · View Results</button>
+  <button class="calc-btn" onclick="calcScore()"><span class="tl-text">Tingnan ang Resulta</span><span class="en-text">View Results</span></button>
 </div>
 
 <div class="container">
 
+  <!-- Resume banner — shown by JS when localStorage has saved progress -->
+  <div class="resume-banner" id="resumeBanner">
+    <div class="rb-title">📋 <span class="tl-text">May hindi pa tapos na test</span><span class="en-text">You have an unfinished test</span></div>
+    <div class="rb-sub"><span class="tl-text">Gusto mo bang ipagpatuloy kung saan ka huminto?</span><span class="en-text">Would you like to continue where you left off?</span></div>
+    <div class="rb-actions">
+      <button class="rb-yes" onclick="resumeTest()">✓ <span class="tl-text">Ituloy</span><span class="en-text">Continue</span></button>
+      <button class="rb-no"  onclick="discardProgress()">↻ <span class="tl-text">Magsimula ulit</span><span class="en-text">Start Over</span></button>
+    </div>
+  </div>
+
   <!-- PURPOSE -->
   <div class="purpose-box">
-    <strong>Layunin ng kasangkapang ito:</strong> Ang diagnostic na ito ay hindi pagsusulit na pasado o bagsak. Ito ay isang kasangkapan para sa pampastoral na pag-uusap — isang salamin na inilalapat upang ikaw at ang iyong discipler ay makakita nang malinaw kung ano ang ginawa ng Diyos, kung ano ang kasalukuyan Niyang ginagawa, at kung ano pa ang gagawin Niya sa iyong buhay. Idinisenyo ito upang mahayag pareho ang <strong>karakter</strong> (kung sino ka na sa pakikipag-isa kay Kristo) at ang <strong>kakayahan</strong> (kung ano ang kaya mong gawin bilang disipulo). Kompidensyal ang mga sagot. Walang mapanlinlang na tanong. Ang mga matatapat na sagot lamang ang tunay na nakatutulong.<span class="purpose-en"><strong>Purpose of this instrument:</strong> This diagnostic is not a test to pass or fail. It is a pastoral conversation tool — a mirror held up so that you and your discipler can see clearly what God has done, is doing, and is yet to do in your life. It is designed to uncover both <strong>character</strong> (who you are becoming in Christ) and <strong>competence</strong> (what you can do as a disciple). Answers are confidential. There are no trick questions. Honest responses are the only ones that help.</span>
+    <span class="tl-text"><strong>Layunin ng kasangkapang ito:</strong> Ang diagnostic na ito ay hindi pagsusulit na pasado o bagsak. Ito ay isang kasangkapan para sa pampastoral na pag-uusap — isang salamin na inilalapat upang ikaw at ang iyong discipler ay makakita nang malinaw kung ano ang ginawa ng Diyos, kung ano ang kasalukuyan Niyang ginagawa, at kung ano pa ang gagawin Niya sa iyong buhay. Idinisenyo ito upang mahayag pareho ang <strong>karakter</strong> (kung sino ka na sa pakikipag-isa kay Kristo) at ang <strong>kakayahan</strong> (kung ano ang kaya mong gawin bilang disipulo). Kompidensyal ang mga sagot. Walang mapanlinlang na tanong. Ang mga matatapat na sagot lamang ang tunay na nakatutulong.</span><span class="en-text"><strong>Purpose of this instrument:</strong> This diagnostic is not a test to pass or fail. It is a pastoral conversation tool — a mirror held up so that you and your discipler can see clearly what God has done, is doing, and is yet to do in your life. It is designed to uncover both <strong>character</strong> (who you are becoming in Christ) and <strong>competence</strong> (what you can do as a disciple). Answers are confidential. There are no trick questions. Honest responses are the only ones that help.</span>
   </div>
 
   <div class="instructions">
-    <h3>Paano Gamitin ang Kasangkapang Ito <span style="font-size:13px;color:var(--muted);font-style:italic;font-weight:400">· How to Use This Instrument</span></h3>
+    <h3><span class="tl-text">Paano Gamitin ang Kasangkapang Ito</span><span class="en-text">How to Use This Instrument</span></h3>
     <ol>
-      <li>Sagutan ang lahat ng bahagi nang tapat, nang walang patnubay mula sa iba.<span class="qsub-en">Complete all sections honestly, without coaching from others beforehand.</span></li>
-      <li>Para sa mga rating: 1 = Hindi talaga / Kailanman &nbsp;|&nbsp; 2 = Bihira &nbsp;|&nbsp; 3 = Minsan &nbsp;|&nbsp; 4 = Madalas &nbsp;|&nbsp; 5 = Palagi<span class="qsub-en">For rating questions: 1 = Not at all / Never | 2 = Rarely | 3 = Sometimes | 4 = Often | 5 = Consistently / Always</span></li>
-      <li>Para sa mga bukas na tanong, sumulat nang malaya — walang maling sagot.<span class="qsub-en">For open-ended questions, write freely — there are no wrong answers.</span></li>
-      <li>Ang bahagi ng pasilitador (gintong hangganan) ay binabasa at sinasagutan ng discipler, hindi ng tinatanong.<span class="qsub-en">The facilitator section (gold border) is read and completed by the discipler, not the respondent.</span></li>
-      <li>Mayroong pag-uusap kasama ang iyong discipler o pastor sa loob ng 7 araw matapos ito sagutan.<span class="qsub-en">A debrief conversation with your discipler or pastor follows within 7 days of completion.</span></li>
+      <li><span class="tl-text">Sagutan ang lahat ng bahagi nang tapat, nang walang patnubay mula sa iba.</span><span class="en-text">Complete all sections honestly, without coaching from others beforehand.</span></li>
+      <li><span class="tl-text">Para sa mga rating: 1 = Hindi talaga / Kailanman &nbsp;|&nbsp; 2 = Bihira &nbsp;|&nbsp; 3 = Minsan &nbsp;|&nbsp; 4 = Madalas &nbsp;|&nbsp; 5 = Palagi</span><span class="en-text">For rating questions: 1 = Not at all / Never &nbsp;|&nbsp; 2 = Rarely &nbsp;|&nbsp; 3 = Sometimes &nbsp;|&nbsp; 4 = Often &nbsp;|&nbsp; 5 = Consistently / Always</span></li>
+      <li><span class="tl-text">Para sa mga bukas na tanong, sumulat nang malaya — walang maling sagot.</span><span class="en-text">For open-ended questions, write freely — there are no wrong answers.</span></li>
+      <li><span class="tl-text">Ang bahagi ng pasilitador (gintong hangganan) ay binabasa at sinasagutan ng discipler, hindi ng tinatanong.</span><span class="en-text">The facilitator section (gold border) is read and completed by the discipler, not the respondent.</span></li>
+      <li><span class="tl-text">Mayroong pag-uusap kasama ang iyong discipler o pastor sa loob ng 7 araw matapos ito sagutan.</span><span class="en-text">A debrief conversation with your discipler or pastor follows within 7 days of completion.</span></li>
     </ol>
   </div>
 
@@ -715,52 +863,52 @@ body {
   <div class="section-header" data-section="A" style="--section-color:#1c1810">
     <div class="section-num" style="background:#1c1810">P</div>
     <div class="section-info">
-      <div class="section-title" style="color:#1c1810">Profile ng Kalahok<span class="section-title-en">Participant Profile</span></div>
-      <div class="section-ref">Sasagutan ng kalahok / To be completed by the participant</div>
+      <div class="section-title" style="color:#1c1810"><span class="tl-text">Profile ng Kalahok</span><span class="en-text">Participant Profile</span></div>
+      <div class="section-ref"><span class="tl-text">Sasagutan ng kalahok</span><span class="en-text">To be completed by the participant</span></div>
     </div>
   </div>
 
   <div class="profile-grid">
     <div class="field-group">
-      <label>Buong Pangalan <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Full Name</span></label>
-      <input type="text" placeholder="Pangalan / Your name">
+      <label><span class="tl-text">Buong Pangalan</span><span class="en-text">Full Name</span></label>
+      <input type="text" placeholder="Your name" data-ph-tl="Pangalan" data-ph-en="Your name">
     </div>
     <div class="field-group">
-      <label>Petsa ng Pagsagot <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Date Completed</span></label>
+      <label><span class="tl-text">Petsa ng Pagsagot</span><span class="en-text">Date Completed</span></label>
       <input type="date">
     </div>
     <div class="field-group">
-      <label>Edad <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Age</span></label>
-      <input type="number" min="8" max="99" placeholder="hal. 28 / e.g. 28">
+      <label><span class="tl-text">Edad</span><span class="en-text">Age</span></label>
+      <input type="number" min="8" max="99" placeholder="e.g. 28" data-ph-tl="hal. 28" data-ph-en="e.g. 28">
     </div>
     <div class="field-group">
       <label>Civil Status</label>
       <select>
-        <option value="">Pumili... / Select...</option>
-        <option>Single / Walang asawa</option>
-        <option>Married / May asawa</option>
-        <option>Widowed / Balo</option>
-        <option>Separated / Hiwalay</option>
+        <option value="" data-opt-tl="Pumili..." data-opt-en="Select...">Select...</option>
+        <option data-opt-tl="Single" data-opt-en="Walang asawa">Walang asawa</option>
+        <option data-opt-tl="Married" data-opt-en="May asawa">May asawa</option>
+        <option data-opt-tl="Widowed" data-opt-en="Balo">Balo</option>
+        <option data-opt-tl="Separated" data-opt-en="Hiwalay">Hiwalay</option>
       </select>
     </div>
     <div class="field-group">
-      <label>Gaano katagal ka nang dumadalo sa simbahang ito? <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ How long have you been attending this church?</span></label>
+      <label><span class="tl-text">Gaano katagal ka nang dumadalo sa simbahang ito?</span><span class="en-text">How long have you been attending this church?</span></label>
       <select>
-        <option value="">Pumili... / Select...</option>
-        <option>Wala pang 6 na buwan / Less than 6 months</option>
-        <option>6 buwan – 1 taon / 6 months – 1 year</option>
-        <option>1–3 taon / 1–3 years</option>
-        <option>3–5 taon / 3–5 years</option>
-        <option>Higit sa 5 taon / More than 5 years</option>
+        <option value="" data-opt-tl="Pumili..." data-opt-en="Select...">Select...</option>
+        <option data-opt-tl="Wala pang 6 na buwan" data-opt-en="Less than 6 months">Less than 6 months</option>
+        <option data-opt-tl="6 buwan – 1 taon" data-opt-en="6 months – 1 year">6 months – 1 year</option>
+        <option data-opt-tl="1–3 taon" data-opt-en="1–3 years">1–3 years</option>
+        <option data-opt-tl="3–5 taon" data-opt-en="3–5 years">3–5 years</option>
+        <option data-opt-tl="Higit sa 5 taon" data-opt-en="More than 5 years">More than 5 years</option>
       </select>
     </div>
     <div class="field-group">
-      <label>Kasalukuyang ministeryo (kung mayroon) <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Current ministry involvement (if any)</span></label>
-      <input type="text" placeholder="hal. Worship team, miyembro ng Life Community">
+      <label><span class="tl-text">Kasalukuyang ministeryo (kung mayroon)</span><span class="en-text">Current ministry involvement (if any)</span></label>
+      <input type="text" placeholder="e.g. Worship team, Life Community member" data-ph-tl="hal. Worship team, miyembro ng Life Community" data-ph-en="e.g. Worship team, Life Community member">
     </div>
     <div class="field-group full">
-      <label>Sino ang nagpapangasiwa nito? (Discipler / Pastor) <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Who is administering this diagnostic?</span></label>
-      <input type="text" placeholder="Pangalan ng discipler o pastor">
+      <label><span class="tl-text">Sino ang nagpapangasiwa nito? (Discipler / Pastor)</span><span class="en-text">Who is administering this diagnostic?</span></label>
+      <input type="text" placeholder="Discipler or pastor's name" data-ph-tl="Pangalan ng discipler o pastor" data-ph-en="Discipler or pastor's name">
     </div>
   </div>
 
@@ -770,7 +918,7 @@ body {
   <div class="section-header" data-section="A">
     <div class="section-num">A</div>
     <div class="section-info">
-      <div class="section-title">Ang Pangyayari ng Ebanghelyo — Ano ang Naganap?<span class="section-title-en">The Gospel Event — What Happened?</span></div>
+      <div class="section-title"><span class="tl-text">Ang Pangyayari ng Ebanghelyo — Ano ang Naganap?</span><span class="en-text">The Gospel Event — What Happened?</span></div>
       <div class="section-ref">Rom 10:9–10 · John 3:16 · Eph 2:8–9 · Acts 16:31</div>
     </div>
   </div>
@@ -793,7 +941,7 @@ body {
     </div>
     <div style="margin-top:.5rem;display:flex;align-items:center;gap:8px;">
       <span style="font-size:11px;color:#6b5e47;font-weight:600">Administered by:</span>
-      <input type="text" id="administeredBy" placeholder="LC Leader / Facilitator name"
+      <input type="text" id="administeredBy" placeholder="Facilitator name" data-ph-tl="LC Leader" data-ph-en="Facilitator name"
         style="flex:1;background:white;border:1px solid #e2d8cc;border-radius:6px;padding:5px 9px;font-family:'DM Sans',sans-serif;font-size:12px;color:#1a1612;">
     </div>
   </div>
@@ -811,7 +959,7 @@ body {
     <div id="memberSelected" style="display:none;background:#eef6f1;border:1px solid rgba(42,92,64,.2);border-radius:6px;padding:6px 10px;font-size:13px;color:#2a5c40;font-weight:500;margin-top:4px"></div>
     <div style="margin-top:.5rem;display:flex;align-items:center;gap:8px;">
       <span style="font-size:11px;color:#6b5e47;font-weight:600">Administered by:</span>
-      <input type="text" id="administeredByManual" placeholder="LC Leader / Facilitator name"
+      <input type="text" id="administeredByManual" placeholder="Facilitator name" data-ph-tl="LC Leader" data-ph-en="Facilitator name"
         style="flex:1;background:white;border:1px solid #e2d8cc;border-radius:6px;padding:5px 9px;font-family:'DM Sans',sans-serif;font-size:12px;color:#1a1612;">
     </div>
     <div style="font-size:11px;color:#9a8f80;margin-top:.35rem">💡 Tip: Ask your LC Leader to send you a personalized link — it pre-fills your name automatically.</div>
@@ -821,10 +969,10 @@ body {
   <input type="hidden" id="selectedMemberName">
 </div>
 <p class="section-desc">This section examines whether the person has genuine knowledge of and personal response to the gospel — the content of saving faith and the nature of the decision made.</p>
-  <span class="dim-badge dim-char">Karakter / Character</span><span class="dim-badge dim-comp">Kakayahan / Competence</span>
+  <span class="dim-badge dim-char"><span class="tl-text">Karakter</span><span class="en-text">Character</span></span><span class="dim-badge dim-comp"><span class="tl-text">Kakayahan</span><span class="en-text">Competence</span></span>
 
   <div class="facilitator-box">
-    <div class="f-label">🔑 Tala ng Pasilitador <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Facilitator Note</span></div>
+    <div class="f-label">🔑 <span class="tl-text">Tala ng Pasilitador</span><span class="en-text">Facilitator Note</span></div>
     <p>This section targets <em>knowledge</em> (competence) and <em>sincerity of response</em> (character). Listen for whether the person understands that salvation is by grace through faith — not by behavior, church attendance, or good intentions. A person can be baptized, attend regularly, and even serve without ever making a genuine personal commitment. Probe gently but clearly. If the gospel content is confused or missing, this is the most important conversation you will ever have with this person.</p>
   </div>
 
@@ -836,7 +984,7 @@ body {
         <div class="q-sub"><span class="qsub-tl">Huwag tingnan kahit saan. Isulat ang talagang alam at pinaniniwalaan mo ngayon.</span><span class="qsub-en">Do not look it up. Write what you actually know and believe right now.</span></div>
       </div>
     </div>
-    <textarea class="open-text" placeholder="Isulat ang iyong sagot dito... / Write your answer here..." data-scorable="open" data-q-id="A1" data-section="A"></textarea>
+    <textarea class="open-text" placeholder="Write your answer here..." data-ph-tl="Isulat ang iyong sagot dito..." data-ph-en="Write your answer here..." data-scorable="open" data-q-id="A1" data-section="A"></textarea>
   </div>
 
   <div class="q-card" data-section="A">
@@ -861,7 +1009,7 @@ body {
         <div class="q-text"><span class="q-tl">Kung sumagot ka ng oo sa itaas, isalaysay kung ano ang naganap — kailan, saan, at ano ang naunawaan at ipinasya mo sa sandaling iyon.</span><span class="q-en-sub">If you answered yes above, describe what happened — when, where, and what you understood and decided at that moment.</span></div>
       </div>
     </div>
-    <textarea class="open-text" placeholder="Ang iyong patotoo ng sandali ng iyong desisyon... / Your testimony of the moment of decision..." data-scorable="open" data-q-id="A3" data-section="A"></textarea>
+    <textarea class="open-text" placeholder="Your testimony of the moment of decision..." data-ph-tl="Ang iyong patotoo ng sandali ng iyong desisyon..." data-ph-en="Your testimony of the moment of decision..." data-scorable="open" data-q-id="A3" data-section="A"></textarea>
   </div>
 
   <div class="q-card" data-section="A">
@@ -890,7 +1038,7 @@ body {
         <div class="q-sub"><span class="qsub-tl">Ito ay isa sa pinakamahalagang tanong sa buong diagnostic. Sumagot nang tapat.</span><span class="qsub-en">This is one of the most revealing questions in the entire diagnostic. Answer honestly.</span></div>
       </div>
     </div>
-    <textarea class="open-text" placeholder="Isulat ang iyong tapat na sagot dito... / Write your honest answer here..." data-scorable="open" data-q-id="A5" data-section="A"></textarea>
+    <textarea class="open-text" placeholder="Write your honest answer here..." data-ph-tl="Isulat ang iyong tapat na sagot dito..." data-ph-en="Write your honest answer here..." data-scorable="open" data-q-id="A5" data-section="A"></textarea>
   </div>
 
   <div class="q-card" data-section="A">
@@ -917,15 +1065,15 @@ body {
   <div class="section-header" data-section="B">
     <div class="section-num">B</div>
     <div class="section-info">
-      <div class="section-title">Katiyakan ng Kaligtasan — Sigurado Ka Bang Sigurado Ka?<span class="section-title-en">Assurance of Salvation — Do You Know That You Know?</span></div>
+      <div class="section-title"><span class="tl-text">Katiyakan ng Kaligtasan — Sigurado Ka Bang Sigurado Ka?</span><span class="en-text">Assurance of Salvation — Do You Know That You Know?</span></div>
       <div class="section-ref">1 John 5:11–13 · Rom 8:16 · John 10:28–29 · Heb 10:22</div>
     </div>
   </div>
-  <p class="section-desc">Ang katiyakan ay hindi kayabangan — ito ay matibay na pagtitiwala sa mga pangako ng Diyos, hindi sa sariling pagganap. Ang bahaging ito ay naghihiwalay ng tunay na katiyakan mula sa pagpapalagay o pagdududa.<span class="section-desc-en">Assurance is not arrogance — it is the confident trust in God's promises, not one's own performance. This section distinguishes genuine assurance from presumption or uncertainty.</span></p>
-  <span class="dim-badge dim-char">Karakter / Character</span>
+  <p class="section-desc"><span class="tl-text">Ang katiyakan ay hindi kayabangan — ito ay matibay na pagtitiwala sa mga pangako ng Diyos, hindi sa sariling pagganap. Ang bahaging ito ay naghihiwalay ng tunay na katiyakan mula sa pagpapalagay o pagdududa.</span><span class="en-text">Assurance is not arrogance — it is the confident trust in God's promises, not one's own performance. This section distinguishes genuine assurance from presumption or uncertainty.</span></p>
+  <span class="dim-badge dim-char"><span class="tl-text">Karakter</span><span class="en-text">Character</span></span>
 
   <div class="facilitator-box">
-    <div class="f-label">🔑 Tala ng Pasilitador <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Facilitator Note</span></div>
+    <div class="f-label">🔑 <span class="tl-text">Tala ng Pasilitador</span><span class="en-text">Facilitator Note</span></div>
     <p>Many Filipino believers live in chronic uncertainty about their salvation, often rooted in performance-based theology ("I must be good enough"). Others have presumption ("I was baptized so I'm fine"). Neither is healthy. You are looking for confident, grace-based assurance — faith resting on God's promise, not personal achievement. Low scores here don't necessarily mean no salvation; they may indicate a formation need around the doctrine of assurance.</p>
   </div>
 
@@ -1011,15 +1159,15 @@ body {
   <div class="section-header" data-section="C">
     <div class="section-num">C</div>
     <div class="section-info">
-      <div class="section-title">Patunay ng Espiritu — Pagsusuri ng Karakter<span class="section-title-en">Evidence of the Spirit — The Character Test</span></div>
+      <div class="section-title"><span class="tl-text">Patunay ng Espiritu — Pagsusuri ng Karakter</span><span class="en-text">Evidence of the Spirit — The Character Test</span></div>
       <div class="section-ref">Gal 5:22–23 · 1 John 2:3–6 · 2 Cor 5:17 · Matt 7:16–20</div>
     </div>
   </div>
   <p class="section-desc">Jesus said "by their fruit you will know them." This section examines the nine fruits of the Spirit as observable, measurable evidence of genuine transformation — the primary character dimension of the diagnostic.</p>
-  <span class="dim-badge dim-char">Character — Primary</span>
+  <span class="dim-badge dim-char"><span class="tl-text">Karakter — Pangunahing</span><span class="en-text">Character — Primary</span></span>
 
   <div class="facilitator-box">
-    <div class="f-label">🔑 Tala ng Pasilitador <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Facilitator Note</span></div>
+    <div class="f-label">🔑 <span class="tl-text">Tala ng Pasilitador</span><span class="en-text">Facilitator Note</span></div>
     <p>The fruit of the Spirit is not about perfection — it is about direction and pattern. You are looking for a consistent trajectory of growth, not a spotless record. Pay attention to which fruits the person rates highest and lowest. Low scores in multiple areas over a long period of church attendance may indicate either (a) a formation deficit, (b) an unresolved sin pattern, or rarely (c) an unconverted heart. The follow-up questions are the most important part of this section.</p>
   </div>
 
@@ -1185,15 +1333,15 @@ body {
   <div class="section-header" data-section="D">
     <div class="section-num">D</div>
     <div class="section-info">
-      <div class="section-title">Ang mga Pagsubok sa 1 Juan — Anim na Marka ng Tunay na Pananampalataya<span class="section-title-en">The 1 John Tests — Six Biblical Markers of Genuine Faith</span></div>
+      <div class="section-title"><span class="tl-text">Ang mga Pagsubok sa 1 Juan — Anim na Marka ng Tunay na Pananampalataya</span><span class="en-text">The 1 John Tests — Six Biblical Markers of Genuine Faith</span></div>
       <div class="section-ref">1 John 1:6–7 · 2:3–4 · 2:15 · 3:6 · 3:14 · 4:7–8 · 5:1–4</div>
     </div>
   </div>
   <p class="section-desc">The apostle John wrote his first letter explicitly so believers could know they have eternal life (5:13). He gives six repeating tests throughout the letter. This section applies all six.</p>
-  <span class="dim-badge dim-char">Character — Primary</span>
+  <span class="dim-badge dim-char"><span class="tl-text">Karakter — Pangunahing</span><span class="en-text">Character — Primary</span></span>
 
   <div class="facilitator-box">
-    <div class="f-label">🔑 Tala ng Pasilitador <span style="font-size:11px;color:var(--muted);font-style:italic;font-weight:400">/ Facilitator Note</span></div>
+    <div class="f-label">🔑 <span class="tl-text">Tala ng Pasilitador</span><span class="en-text">Facilitator Note</span></div>
     <p>John's six tests are: (1) Walking in the light, (2) Keeping God's commands, (3) Not loving the world, (4) Practicing righteousness, (5) Loving other believers, (6) Believing in Jesus. Notice that these tests are about consistent pattern and direction, not perfection. A person who scores low on multiple tests consistently, especially tests 1 and 5, warrants a deeper pastoral conversation before placement in any ministry role.</p>
   </div>
 
@@ -1302,12 +1450,12 @@ body {
   <div class="section-header" data-section="E">
     <div class="section-num">E</div>
     <div class="section-info">
-      <div class="section-title">Mga Disiplinang Espirituwal — Saligan ng Kakayahan<span class="section-title-en">Spiritual Disciplines — The Competence Foundation</span></div>
+      <div class="section-title"><span class="tl-text">Mga Disiplinang Espirituwal — Saligan ng Kakayahan</span><span class="en-text">Spiritual Disciplines — The Competence Foundation</span></div>
       <div class="section-ref">Josh 1:8 · Ps 1:1–3 · Luke 18:1 · Heb 10:24–25 · 1 Thess 5:17</div>
     </div>
   </div>
   <p class="section-desc">The spiritual disciplines are the competence infrastructure of every disciple. They are the practices by which a person trains themselves in godliness (1 Tim 4:7). This section measures both the presence and consistency of these habits.</p>
-  <span class="dim-badge dim-comp">Competence — Primary</span><span class="dim-badge dim-char">Karakter / Character</span>
+  <span class="dim-badge dim-comp"><span class="tl-text">Kakayahan — Pangunahing</span><span class="en-text">Competence — Primary</span></span><span class="dim-badge dim-char"><span class="tl-text">Karakter</span><span class="en-text">Character</span></span>
 
   <div class="q-card" data-section="E">
     <div class="q-top"><span class="q-num">E1</span><div><div class="q-text"><span class="q-tl"><strong>Pagbabasa ng Bibliya:</strong> Personal akong nagbabasa ng Bibliya nang regular — hindi lamang sa serbisyo ng simbahan o pulong ng grupo.</span><span class="q-en-sub"><strong>Bible Reading:</strong> I read the Bible personally on a regular basis — not just during church services or group meetings.</span></div></div></div>
@@ -1433,12 +1581,12 @@ body {
   <div class="section-header" data-section="F">
     <div class="section-num">F</div>
     <div class="section-info">
-      <div class="section-title">Ebanghelismo at Misyon — Pagsubok sa EOLO Competence<span class="section-title-en">Evangelism & Mission — The EOLO Competence Test</span></div>
+      <div class="section-title"><span class="tl-text">Ebanghelismo at Misyon — Pagsubok sa EOLO Competence</span><span class="en-text">Evangelism & Mission — The EOLO Competence Test</span></div>
       <div class="section-ref">Matt 28:18–20 · Acts 1:8 · 1 Pet 3:15 · Rom 10:14–15</div>
     </div>
   </div>
   <p class="section-desc">A genuine disciple is a witness — not because of a program but because of an overflow of what Christ has done. This section measures both the desire and the practical ability to share faith.</p>
-  <span class="dim-badge dim-comp">Competence — Primary</span>
+  <span class="dim-badge dim-comp"><span class="tl-text">Kakayahan — Pangunahing</span><span class="en-text">Competence — Primary</span></span>
 
   <div class="q-card" data-section="F">
     <div class="q-top"><span class="q-num">F1</span><div><div class="q-text"><span class="q-tl">Kaya kong ibahagi ang ebanghelyo nang malinaw sa likas na pag-uusap — ipinapaliwanag kung sino si Hesus, kung ano ang Kanyang ginawa, at kung ano ang dapat gawin ng tao para maligtas — nang hindi nagbabasa ng tract.</span><span class="q-en-sub">I can share the gospel clearly in a natural conversation — explaining who Jesus is, what He did, and what a person must do to be saved — without reading from a tract.</span></div></div></div>
@@ -1514,12 +1662,12 @@ body {
   <div class="section-header" data-section="G">
     <div class="section-num">G</div>
     <div class="section-info">
-      <div class="section-title">Pakikiisa sa Simbahan at Komunidad<span class="section-title-en">Church & Community Integration</span></div>
+      <div class="section-title"><span class="tl-text">Pakikiisa sa Simbahan at Komunidad</span><span class="en-text">Church & Community Integration</span></div>
       <div class="section-ref">Acts 2:42–47 · Heb 10:24–25 · Rom 12:4–5 · Eph 4:16</div>
     </div>
   </div>
   <p class="section-desc">A disciple is not a solo Christian. This section examines the depth of genuine integration into the local body — the community dimension of both character and competence.</p>
-  <span class="dim-badge dim-both">Karakter at Kakayahan / Character & Competence</span>
+  <span class="dim-badge dim-both"><span class="tl-text">Karakter at Kakayahan</span><span class="en-text">Character & Competence</span></span>
 
   <div class="q-card" data-section="G">
     <div class="q-top"><span class="q-num">G1</span><div><div class="q-text"><span class="q-tl">Itinuturing kong ang simbahang ito ay aking espirituwal na tahanan — kabilang ako rito, hindi lamang dumadalo. Nararamdaman ko ang tunay na pananagutan sa kalusugan at misyon nito.</span><span class="q-en-sub">I consider this church my spiritual home — I belong here, not just attend here. I feel genuine responsibility for its health and mission.</span></div></div></div>
@@ -1585,12 +1733,12 @@ body {
   <div class="section-header" data-section="H">
     <div class="section-num">H</div>
     <div class="section-info">
-      <div class="section-title">Bukas na Pagninilay — Ang Iyong Sariling Tinig<span class="section-title-en">Open Reflection — Your Own Voice</span></div>
+      <div class="section-title"><span class="tl-text">Bukas na Pagninilay — Ang Iyong Sariling Tinig</span><span class="en-text">Open Reflection — Your Own Voice</span></div>
       <div class="section-ref">Ps 139:23–24 · Lam 3:40 · 2 Cor 13:5</div>
     </div>
   </div>
   <p class="section-desc">These final questions invite honest self-reflection and personal expression. There are no right or wrong answers. The quality and honesty of these responses often reveal more than all the rating questions combined.</p>
-  <span class="dim-badge dim-both">Karakter at Kakayahan / Character & Competence</span>
+  <span class="dim-badge dim-both"><span class="tl-text">Karakter at Kakayahan</span><span class="en-text">Character & Competence</span></span>
 
   <div class="narrative-prompt">
     <div class="prompt-label">Narrative Prompt H1 — Your Spiritual Autobiography</div>
@@ -1668,17 +1816,17 @@ body {
 
     <!-- SUBMIT TO DASHBOARD — only active when survey is complete -->
     <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
-      <button id="submitBtn" onclick="submitToDashboard()" style="display:none;width:100%;padding:13px;background:#2a5c40;color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;">
-        💾 Save Results to Dashboard
+      <button id="submitBtn" onclick="confirmSubmitToDashboard()" style="display:none;width:100%;padding:13px;background:#2a5c40;color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;">
+        💾 <span class="tl-text">I-save ang Resulta sa Dashboard</span><span class="en-text">Save Results to Dashboard</span>
       </button>
       <div id="submitMsg" style="display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem 1rem;font-size:13px;color:#1a5a30;text-align:center;"></div>
     </div>
   </div>
 
   <div class="action-bar">
-    <button class="btn btn-primary" onclick="calcScore()">Calculate & View Results</button>
-    <button class="btn btn-outline" onclick="window.print()">Print / Save as PDF</button>
-    <button class="btn btn-outline" onclick="clearForm()">Clear All Answers</button>
+    <button class="btn btn-primary" onclick="calcScore()"><span class="tl-text">Tingnan ang Resulta</span><span class="en-text">Calculate & View Results</span></button>
+    <button class="btn btn-outline" onclick="downloadPDFReport(false)"><span class="tl-text">I-download bilang PDF</span><span class="en-text">Download as PDF</span></button>
+    <button class="btn btn-outline" onclick="clearForm()"><span class="tl-text">Burahin ang Lahat ng Sagot</span><span class="en-text">Clear All Answers</span></button>
   </div>
 
   <!-- FACILITATOR LOCK GATE -->
@@ -1730,13 +1878,13 @@ body {
       </div>
       <div class="field-group">
         <label>Facilitator Name</label>
-        <input type="text" placeholder="Pangalan / Your name">
+        <input type="text" placeholder="Your name" data-ph-tl="Pangalan" data-ph-en="Your name">
       </div>
       <div class="field-group" style="grid-column:1/-1">
         <label>Overall Outcome Assessment</label>
         <select>
           <option value="">Select outcome...</option>
-          <option value="clear">✅ Clear Assurance — Proceed to BTLI 101 / Level 1 immediately</option>
+          <option value="clear" data-opt-tl="✅ Clear Assurance — Proceed to BTLI 101" data-opt-en="Level 1 immediately">Level 1 immediately</option>
           <option value="genuine-uncertain">🟡 Genuine but Uncertain — 2–3 additional assurance sessions needed first</option>
           <option value="formation">🟠 Formation Gap — Salvation likely; significant discipleship deficits identified</option>
           <option value="unresolved">🔴 Unresolved — Gospel needs to be presented again; do not assume prior conversion</option>
@@ -2249,6 +2397,580 @@ function clearForm() {
   if (ptEl) ptEl.textContent = '0 of ' + total + ' answered';
   if (pfEl) pfEl.style.width = '0%';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// BILINGUAL TOGGLE (added May 2026, matches Strengths Profile pattern)
+// ─────────────────────────────────────────────────────────────────
+// Two modes: 'en' (default) and 'tl'. Persisted to localStorage so
+// the user's choice survives reloads.
+// ═══════════════════════════════════════════════════════════════
+const _SALV_LANG_KEY = 'multiply_salvation_lang';
+function setLang(lang){
+  if (lang !== 'tl' && lang !== 'en') lang = 'en';
+  document.body.setAttribute('data-lang', lang);
+  ['tl','en'].forEach(l => {
+    const b = document.getElementById('lt-' + l);
+    if (b) b.classList.toggle('active', l === lang);
+  });
+  // Swap input placeholders that have data-ph-tl/data-ph-en attrs
+  document.querySelectorAll('[data-ph-tl][data-ph-en]').forEach(el => {
+    const v = el.dataset['ph' + (lang === 'tl' ? 'Tl' : 'En')];
+    if (v != null) el.setAttribute('placeholder', v);
+  });
+  // Swap <option> text that has data-opt-tl/data-opt-en attrs
+  document.querySelectorAll('option[data-opt-tl][data-opt-en]').forEach(el => {
+    const v = el.dataset['opt' + (lang === 'tl' ? 'Tl' : 'En')];
+    if (v != null) el.textContent = v;
+  });
+  try { localStorage.setItem(_SALV_LANG_KEY, lang); } catch(e){}
+}
+// Restore on load
+(function initLang(){
+  let saved = 'en';
+  try { saved = localStorage.getItem(_SALV_LANG_KEY) || 'en'; } catch(e){}
+  if (saved !== 'tl' && saved !== 'en') saved = 'en';
+  setLang(saved);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER (added May 2026)
+// ─────────────────────────────────────────────────────────────────
+// Five steps via the "A−" / "A+" buttons. Uses CSS zoom — wide browser
+// support and scales everything proportionally without rewriting all
+// the absolute pixel sizes throughout the file. Persists to localStorage.
+// ═══════════════════════════════════════════════════════════════
+const _SALV_FONT_KEY = 'multiply_salvation_fontscale';
+const _FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40]; // 90% to 140%
+let _fontIdx = 1; // index into _FONT_STEPS — default to 100%
+
+function applyFontScale(){
+  const scale = _FONT_STEPS[_fontIdx];
+  // Use zoom (Chrome/Safari/Edge/modern Firefox). Keep it on the container
+  // so the fixed-position toggles in the corners aren't affected.
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  // Disable buttons at the ends so it's clear when you've hit the limit
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_fontIdx <= 0);
+  if (up) up.disabled = (_fontIdx >= _FONT_STEPS.length - 1);
+}
+
+function changeFontScale(direction){
+  _fontIdx = Math.max(0, Math.min(_FONT_STEPS.length - 1, _fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(_SALV_FONT_KEY, String(_fontIdx)); } catch(e){}
+}
+
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_SALV_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _FONT_STEPS.length) _fontIdx = saved;
+  } catch(e){}
+  applyFontScale();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// PAUSE / RESUME (added May 2026)
+// ─────────────────────────────────────────────────────────────────
+// All answers (radio + checkbox + textarea) plus profile fields are
+// auto-saved to localStorage every change. The Pause button exists for
+// users who want to be reassured they won't lose work. On reload, if
+// saved progress exists, the resume banner appears at top of container.
+// ═══════════════════════════════════════════════════════════════
+const _SALV_SAVE_KEY = 'multiply_salvation_progress';
+const _SALV_AUTOSAVE_DEBOUNCE = 600; // ms — coalesce rapid typing
+
+function _collectFormState(){
+  const state = { radios:{}, checks:{}, texts:{}, fields:{} };
+  // Radio inputs (single per name)
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => {
+    if (r.name) state.radios[r.name] = r.value;
+  });
+  // Checkbox inputs (multi per name)
+  document.querySelectorAll('input[type="checkbox"]:checked').forEach(c => {
+    if (!c.name) return;
+    if (!state.checks[c.name]) state.checks[c.name] = [];
+    state.checks[c.name].push(c.value);
+  });
+  // Textareas — keyed by data-q-id when present, else by id, else by index
+  let taIdx = 0;
+  document.querySelectorAll('textarea').forEach(t => {
+    const key = t.dataset.qId || t.id || ('ta_' + (taIdx++));
+    if (t.value.trim()) state.texts[key] = t.value;
+  });
+  // Profile / metadata fields — name, date, age, etc.
+  document.querySelectorAll('input[type="text"], input[type="date"], input[type="number"], select').forEach(i => {
+    const key = i.dataset.field || i.name || i.id;
+    if (key && i.value) state.fields[key] = i.value;
+  });
+  return state;
+}
+
+function _applyFormState(state){
+  if (!state || typeof state !== 'object') return;
+  // Radios
+  Object.keys(state.radios || {}).forEach(name => {
+    const val = state.radios[name];
+    const el = document.querySelector(`input[type="radio"][name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+    if (el) el.checked = true;
+  });
+  // Checkboxes
+  Object.keys(state.checks || {}).forEach(name => {
+    (state.checks[name] || []).forEach(val => {
+      const el = document.querySelector(`input[type="checkbox"][name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+      if (el) el.checked = true;
+    });
+  });
+  // Textareas — try data-q-id first, then id
+  Object.keys(state.texts || {}).forEach(key => {
+    let el = document.querySelector(`textarea[data-q-id="${CSS.escape(key)}"]`);
+    if (!el) el = document.getElementById(key);
+    if (el) el.value = state.texts[key];
+  });
+  // Profile fields
+  Object.keys(state.fields || {}).forEach(key => {
+    let el = document.querySelector(`[data-field="${CSS.escape(key)}"]`);
+    if (!el) el = document.getElementById(key) || document.querySelector(`[name="${CSS.escape(key)}"]`);
+    if (el) el.value = state.fields[key];
+  });
+}
+
+let _saveTimer = null;
+function saveProgress(){
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try {
+      const state = _collectFormState();
+      // Don't bother saving if literally nothing answered
+      const hasAny = Object.keys(state.radios).length || Object.keys(state.checks).length
+                  || Object.keys(state.texts).length;
+      if (!hasAny) {
+        localStorage.removeItem(_SALV_SAVE_KEY);
+        return;
+      }
+      localStorage.setItem(_SALV_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+      // Reveal pause button after first save
+      const pb = document.getElementById('pauseBtn');
+      if (pb) pb.style.display = 'block';
+      // Arm the idle timer — the user has now actually answered something
+      _idleArmed = true;
+      _armIdleTimer();
+    } catch(e){ console.warn('saveProgress failed:', e); }
+  }, _SALV_AUTOSAVE_DEBOUNCE);
+}
+
+function loadProgress(){
+  try {
+    const raw = localStorage.getItem(_SALV_SAVE_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload || !payload.state) return;
+    // Show banner — actual restore happens when user taps Continue
+    document.getElementById('resumeBanner').classList.add('show');
+    window._pendingResume = payload.state;
+  } catch(e){ console.warn('loadProgress failed:', e); }
+}
+
+function resumeTest(){
+  if (window._pendingResume){
+    _applyFormState(window._pendingResume);
+    if (typeof updateProgressFromGlobal === 'function') updateProgressFromGlobal();
+  }
+  document.getElementById('resumeBanner').classList.remove('show');
+  // Recompute progress (function is closure-scoped inside DOMContentLoaded — use UI refresh)
+  document.querySelectorAll('input, textarea').forEach(el => {
+    el.dispatchEvent(new Event('change', {bubbles:true}));
+  });
+  // Show pause button since we have answers
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.style.display = 'block';
+  // Arm idle timer — they have content from a previous session
+  _idleArmed = true;
+  _armIdleTimer();
+}
+
+function discardProgress(){
+  if (!confirm('Sigurado ka bang gusto mong burahin ang lahat at magsimula ulit?\n\nDelete saved progress and start over?')) return;
+  try { localStorage.removeItem(_SALV_SAVE_KEY); } catch(e){}
+  window._pendingResume = null;
+  document.getElementById('resumeBanner').classList.remove('show');
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.style.display = 'none';
+}
+
+function showPauseModal(){
+  // Force a save first to flush any pending debounce
+  clearTimeout(_saveTimer);
+  try {
+    const state = _collectFormState();
+    localStorage.setItem(_SALV_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+  } catch(e){}
+  alert('✓ Na-save ang progreso mo.\n\nIsara mo na ang tab — pagbalik mo, ibibigay namin ang opsyon na ipagpatuloy.\n\n— — —\n\n✓ Your progress is saved.\n\nYou can close this tab now — when you return, we will offer to resume where you left off.');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE DETECTION — auto-prompt to pause after N minutes (May 2026)
+// ─────────────────────────────────────────────────────────────────
+// Threshold is configurable in dashboard Settings → Diagnostic Settings
+// (stored in system_settings.meta.salvation_idle_minutes). Default 3 min.
+// On idle: an interrupting modal asks "Pause to continue later?" — Yes
+// saves and effectively dismisses, No just resets the timer to give them
+// more time. The modal itself counts as activity so it won't re-trigger
+// instantly after dismiss.
+// ═══════════════════════════════════════════════════════════════
+let _idleMinutes = 3;          // default — overwritten by loadIdleThreshold
+let _idleTimer = null;
+let _idleModalOpen = false;
+let _idleArmed = false;        // only arm after the user has answered something
+
+async function loadIdleThreshold(){
+  try {
+    if (typeof db === 'undefined' || !db) return;
+    const { data, error } = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if (typeof v === 'number' && v >= 1 && v <= 30) _idleMinutes = v;
+  } catch(e){
+    console.warn('[idle] threshold load failed; using default', _idleMinutes, 'min:', e.message);
+  }
+}
+
+function _armIdleTimer(){
+  // Only arm once the user has actually started answering — no point
+  // pestering someone who's still on the cover page reading the intro.
+  if (!_idleArmed) return;
+  if (_idleModalOpen) return;
+  clearTimeout(_idleTimer);
+  _idleTimer = setTimeout(_showIdlePrompt, _idleMinutes * 60 * 1000);
+}
+
+function _resetIdleTimer(){
+  // Mark armed on first activity post-answer. _idleArmed is set true by
+  // saveProgress (which only runs when there's content). After that, every
+  // input/mouse/keyboard event resets the countdown.
+  _armIdleTimer();
+}
+
+function _showIdlePrompt(){
+  if (_idleModalOpen) return;
+  _idleModalOpen = true;
+  // Force a save so whatever they last typed is preserved
+  clearTimeout(_saveTimer);
+  try {
+    const state = _collectFormState();
+    localStorage.setItem(_SALV_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+  } catch(e){}
+
+  document.querySelectorAll('.salv-idle-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'salv-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-family:'DM Serif Display','Playfair Display',serif;font-size:1.2rem;font-weight:700;color:#1a0a0a;margin-bottom:.5rem">⏸ <span class="tl-text">Hihinto muna?</span><span class="en-text">Pause for now?</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mukhang hindi ka nagsasagot ng ${_idleMinutes} minuto na. Na-save na ang lahat ng iyong sagot — ligtas mong maisasara ang tab at ipagpatuloy mamaya. Gusto mo bang humintong sandali?</span>
+        <span class="en-text">It looks like there's been no activity for ${_idleMinutes} minutes. Your answers are saved — you can safely close this tab and resume later. Would you like to pause?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="idleYes" style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          ✓ <span class="tl-text">Oo, hihinto muna ako</span><span class="en-text">Yes — pause now</span>
+        </button>
+        <button id="idleNo" style="padding:11px;background:transparent;color:#5a5a5a;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <span class="tl-text">Ipagpatuloy ko</span><span class="en-text">Keep going</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  // Apply current language to the freshly-injected spans (they need
+  // the same CSS rules — already set on body data-lang, so they'll work)
+
+  const close = () => {
+    modal.remove();
+    _idleModalOpen = false;
+    _armIdleTimer(); // restart countdown after dismiss
+  };
+  modal.querySelector('#idleYes').onclick = () => {
+    close();
+    showPauseModal(); // re-uses the existing "saved, you can close tab" alert
+  };
+  modal.querySelector('#idleNo').onclick = close;
+  // Don't allow click-outside to dismiss — this is a deliberate interrupt
+}
+
+// Start the idle timer machinery once the page is ready
+(function initIdleDetection(){
+  function start(){
+    loadIdleThreshold();  // async, fire-and-forget
+    // Listen for any human activity to reset the countdown
+    ['mousemove','mousedown','touchstart','keydown','scroll','input','change'].forEach(evt => {
+      document.addEventListener(evt, _resetIdleTimer, { passive: true });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+// Wire autosave to all inputs after DOM settles
+(function wireAutosave(){
+  function attach(){
+    document.querySelectorAll('input, textarea, select').forEach(el => {
+      el.addEventListener('change', saveProgress);
+      el.addEventListener('input',  saveProgress);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attach);
+  } else {
+    attach();
+  }
+})();
+
+// Try to load any existing progress on page ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadProgress);
+} else {
+  loadProgress();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE CONFIRMATION MODAL — "Before saving…" prompt with PDF option
+// ─────────────────────────────────────────────────────────────────
+// Mirrors Strengths Profile pattern: saving clears localStorage progress,
+// so the user gets one chance to download a PDF first.
+// ═══════════════════════════════════════════════════════════════
+function confirmSubmitToDashboard(){
+  // If results not calculated yet, just route to submit (it has its own guards)
+  if (!document.getElementById('submitBtn') ||
+      document.getElementById('submitBtn').style.display === 'none') {
+    if (typeof submitToDashboard === 'function') submitToDashboard();
+    return;
+  }
+  document.querySelectorAll('.salv-save-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'salv-save-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-family:'DM Serif Display','Playfair Display',serif;font-size:1.15rem;font-weight:700;color:#1a0a0a;margin-bottom:.5rem">📋 Bago mag-save · Before saving</div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        Mawawala ang iyong mga sagot pagkatapos ma-save. Kunin muna ang PDF copy ng lahat ng iyong sagot at resulta?<br><br>
+        <em style="color:#6b6b6b">Saving will clear your saved progress. Want a PDF copy of all your answers and results first?</em>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="ssPdf"    style="padding:11px;background:#1a0a0a;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">📄 Oo — i-download muna ang PDF / Yes — Download PDF first</button>
+        <button id="ssSave"   style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">💾 I-save na lang (skip PDF) / Just save</button>
+        <button id="ssCancel" style="padding:9px;background:transparent;color:#6b6b6b;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ Kanselahin / Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('#ssPdf').onclick    = () => { close(); downloadPDFReport(true); };
+  modal.querySelector('#ssSave').onclick   = () => { close(); if (typeof submitToDashboard === 'function') submitToDashboard(); };
+  modal.querySelector('#ssCancel').onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF EXPORT (jsPDF) — full report including all answers
+// ─────────────────────────────────────────────────────────────────
+// Builds a multi-page letter-format PDF: header, member info, scores
+// per section, every question + the user's answer, pastoral notes.
+// After download, optionally chains into submitToDashboard.
+// ═══════════════════════════════════════════════════════════════
+async function downloadPDFReport(chainToSave){
+  if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF){
+    alert('PDF library not loaded. Check your internet connection and refresh the page.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 50;
+  let y = margin;
+
+  // Helpers
+  const ensureSpace = (need) => {
+    if (y + (need || 20) > pageH - margin) { doc.addPage(); y = margin; }
+  };
+  const writeText = (text, opts) => {
+    opts = opts || {};
+    const size = opts.size || 11;
+    const style = opts.style || 'normal';
+    const color = opts.color || [40,40,40];
+    const maxW = pageW - margin*2;
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+    const lines = doc.splitTextToSize(String(text || ''), maxW);
+    lines.forEach(line => {
+      ensureSpace(size + 4);
+      doc.text(line, margin, y);
+      y += size + 4;
+    });
+  };
+  const hr = () => {
+    ensureSpace(10);
+    doc.setDrawColor(220,220,220);
+    doc.line(margin, y, pageW - margin, y);
+    y += 8;
+  };
+
+  // ── HEADER BANNER ──
+  doc.setFillColor(26,10,10);
+  doc.rect(0, 0, pageW, 90, 'F');
+  doc.setTextColor(245,237,216);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.text('Salvation Assurance Diagnostic', margin, 38);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  doc.text('A Pastoral Conversation Tool · Rosehill Christian Church', margin, 58);
+  doc.setFontSize(10);
+  doc.text('Generated ' + new Date().toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}), margin, 76);
+  y = 110;
+
+  // ── MEMBER INFO ──
+  const memberName = (_selectedMemberName ||
+    document.getElementById('selectedMemberName')?.value ||
+    document.querySelector('input[data-field="name"]')?.value ||
+    'Unknown').trim();
+  const dateCompleted = document.querySelector('input[data-field="date"]')?.value || new Date().toISOString().split('T')[0];
+  const lcGroup = document.querySelector('input[data-field="group"], select[data-field="group"]')?.value || '—';
+  const facilitator = document.getElementById('administeredBy')?.value
+    || document.getElementById('administeredByManual')?.value
+    || document.querySelector('input[data-field="facilitator"]')?.value
+    || '—';
+  writeText('Name: ' + memberName, { size:13, style:'bold' });
+  writeText('LC Group: ' + lcGroup);
+  writeText('Date Completed: ' + dateCompleted);
+  writeText('Administered by: ' + facilitator);
+  hr();
+
+  // ── SCORES ──
+  let scores = null;
+  try { scores = (typeof collectScores === 'function') ? collectScores() : null; } catch(e){}
+  if (scores){
+    writeText('Results Summary', { size:14, style:'bold', color:[26,10,10] });
+    writeText('Total Score: ' + scores.total + ' / ' + scores.maxTotal + '  (' + scores.pct + '%)', { style:'bold' });
+    writeText('Diagnostic Zone: ' + scores.zone, { style:'bold' });
+    y += 4;
+    writeText('Section Breakdown:', { style:'bold' });
+    Object.keys(scores.sections || {}).forEach(k => {
+      writeText('  · Section ' + k + ': ' + scores.sections[k]);
+    });
+    hr();
+  }
+
+  // ── ALL ANSWERS ──
+  writeText('Detailed Responses', { size:14, style:'bold', color:[26,10,10] });
+  y += 4;
+
+  document.querySelectorAll('.q-card').forEach(card => {
+    const numEl = card.querySelector('.q-num');
+    const txtEl = card.querySelector('.q-text');
+    const num = numEl ? numEl.textContent.trim() : '';
+    // Prefer Tagalog primary; fall back to English
+    const tlText = card.querySelector('.q-tl')?.textContent.trim();
+    const enText = card.querySelector('.q-en-sub')?.textContent.trim();
+    const qText = tlText || enText || (txtEl ? txtEl.textContent.trim() : '');
+
+    ensureSpace(40);
+    writeText(num + '. ' + qText, { size:11, style:'bold' });
+
+    // Find the answer for this card
+    let answerText = '';
+    // Radio
+    const radio = card.querySelector('input[type="radio"]:checked');
+    if (radio){
+      const lbl = radio.closest('label');
+      const tlLbl = lbl?.querySelector('.mc-tl')?.textContent.trim();
+      const enLbl = lbl?.querySelector('.mc-en')?.textContent.trim();
+      answerText = '✓ ' + (tlLbl || enLbl || radio.value);
+    }
+    // Checkboxes (collect all checked)
+    const checks = [...card.querySelectorAll('input[type="checkbox"]:checked')];
+    if (checks.length){
+      const parts = checks.map(c => {
+        const lbl = c.closest('label');
+        const tl = lbl?.querySelector('.mc-tl')?.textContent.trim();
+        const en = lbl?.querySelector('.mc-en')?.textContent.trim();
+        return '✓ ' + (tl || en || c.value);
+      });
+      answerText = parts.join('\n');
+    }
+    // Textarea
+    const ta = card.querySelector('textarea');
+    if (ta && ta.value.trim()){
+      answerText = (answerText ? answerText + '\n' : '') + ta.value.trim();
+    }
+    // Scale
+    const scaleSel = card.querySelector('input[data-scorable="scale"]:checked');
+    if (scaleSel){
+      answerText = (answerText ? answerText + '\n' : '') + 'Rating: ' + scaleSel.value;
+    }
+
+    if (answerText) {
+      writeText(answerText, { size:10, color:[60,60,60] });
+    } else {
+      writeText('(No answer)', { size:10, style:'italic', color:[160,160,160] });
+    }
+    y += 6;
+  });
+
+  // ── FACILITATOR / PASTORAL NOTES (if filled) ──
+  const facNotes = [...document.querySelectorAll('.facilitator-box textarea, [class*="pastoral"] textarea')]
+    .map(t => t.value.trim())
+    .filter(Boolean);
+  if (facNotes.length){
+    hr();
+    writeText('Facilitator / Pastoral Notes', { size:14, style:'bold', color:[26,10,10] });
+    facNotes.forEach((n, i) => {
+      writeText((i + 1) + '. ' + n, { size:10, color:[60,60,60] });
+      y += 4;
+    });
+  }
+
+  // ── FOOTER on every page ──
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++){
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150,150,150);
+    doc.text('Confidential · Salvation Assurance Diagnostic · ' + memberName, margin, pageH - 24);
+    doc.text('Page ' + p + ' of ' + pageCount, pageW - margin, pageH - 24, { align:'right' });
+  }
+
+  // ── Save the file ──
+  const safeName = memberName.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40);
+  const filename = 'Salvation_Diagnostic_' + safeName + '_' + dateCompleted + '.pdf';
+  doc.save(filename);
+
+  // After PDF, optionally chain into submit
+  if (chainToSave){
+    setTimeout(() => {
+      if (typeof submitToDashboard === 'function') submitToDashboard();
+    }, 800);
+  }
+}
+
+// Clear localStorage progress AFTER successful submit. Hook into submit
+// completion by wrapping submitToDashboard if it exists.
+(function wrapSubmit(){
+  if (typeof submitToDashboard !== 'function') return;
+  const orig = submitToDashboard;
+  window.submitToDashboard = async function(){
+    const result = await orig.apply(this, arguments);
+    // Clear saved progress on successful save (don't break if it fails)
+    try { localStorage.removeItem(_SALV_SAVE_KEY); } catch(e){}
+    return result;
+  };
+})();
+
 </script>
 
 </body>

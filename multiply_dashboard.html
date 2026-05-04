@@ -566,6 +566,28 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div class="sr"><span class="sl">Approve, reject, or initiate LC group transfers</span><button class="sbtn" style="margin-top:0;background:var(--gold)" onclick="openTransfers()">🔄 Transfer Management</button></div>
     <div class="sr"><span class="sl">View, fix, or delete wrongly logged attendance entries</span><button class="sbtn" style="margin-top:0;background:var(--red)" onclick="window.open('attendance_admin.html','_blank')">🗂️ Attendance Admin</button></div>
   </div>
+  <!-- ─── DIAGNOSTIC SETTINGS (Pastor-configurable) ─── -->
+  <div class="ss" id="diagSettingsSection"><div class="st">⚙️ Diagnostic Settings</div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
+      Settings that apply across spiritual self-assessments (Salvation Diagnostic, etc.)
+    </div>
+    <div class="sr" style="align-items:center">
+      <span class="sl" style="display:flex;flex-direction:column;gap:2px">
+        <span>Idle prompt threshold</span>
+        <span style="font-size:10.5px;color:var(--lighter);font-weight:400">If no activity for this many minutes, the assessment shows a "Pause to continue later?" modal.</span>
+      </span>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:0">
+        <input type="number" id="diagIdleMinutes" min="1" max="30" step="1"
+          style="width:70px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;text-align:center"
+          oninput="updateIdleStatus()">
+        <span style="font-size:11.5px;color:var(--muted)">min</span>
+        <button class="sbtn" style="margin-top:0;background:var(--green);padding:7px 14px;font-size:11.5px"
+          onclick="saveDiagSettings()" id="diagSettingsSaveBtn">💾 Save</button>
+      </div>
+    </div>
+    <div id="diagSettingsStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+  </div>
+
   <!-- ─── MESSAGE GREETINGS (Pastor-configurable) ─── -->
   <div class="ss" id="greetingSection"><div class="st">📝 Message Greetings</div>
     <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
@@ -4167,6 +4189,105 @@ function previewCurrentGreeting(){
 
 // Boot the greeting template loader (fire-and-forget)
 loadGreetingTemplates();
+
+// ═══════════════════════════════════════════════════════════════
+// DIAGNOSTIC SETTINGS — idle-prompt threshold (Pastor-only)
+// ─────────────────────────────────────────────────────────────────
+// Stored in system_settings.meta.salvation_idle_minutes. Used by the
+// salvation diagnostic (and any future assessment) to decide when to
+// interrupt the user with a "want to pause?" modal during inactivity.
+// Default: 3 minutes. Range: 1–30.
+// ═══════════════════════════════════════════════════════════════
+const _DEFAULT_IDLE_MINUTES = 3;
+let _diagIdleMinutes = _DEFAULT_IDLE_MINUTES;
+
+async function loadDiagSettings(){
+  try{
+    const {data, error} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if(typeof v === 'number' && v >= 1 && v <= 30) _diagIdleMinutes = v;
+    else _diagIdleMinutes = _DEFAULT_IDLE_MINUTES;
+  } catch(e){
+    console.warn('Diag settings load failed — using default:', e.message);
+    _diagIdleMinutes = _DEFAULT_IDLE_MINUTES;
+  }
+  const inp = document.getElementById('diagIdleMinutes');
+  if(inp) inp.value = _diagIdleMinutes;
+  updateIdleStatus();
+}
+
+function updateIdleStatus(){
+  const inp = document.getElementById('diagIdleMinutes');
+  const status = document.getElementById('diagSettingsStatus');
+  if(!inp || !status) return;
+  const v = parseInt(inp.value, 10);
+  if(isNaN(v) || v < 1 || v > 30){
+    status.textContent = '⚠ Enter a number between 1 and 30';
+    status.style.color = 'var(--red)';
+  } else if(v !== _diagIdleMinutes){
+    status.textContent = 'Click Save to apply';
+    status.style.color = 'var(--gold)';
+  } else {
+    status.textContent = '';
+  }
+}
+
+async function saveDiagSettings(){
+  if(!LeaderScope.isPastor()){
+    toast('Only the Pastor can edit these settings','🔒');
+    return;
+  }
+  const inp = document.getElementById('diagIdleMinutes');
+  const status = document.getElementById('diagSettingsStatus');
+  const btn = document.getElementById('diagSettingsSaveBtn');
+  if(!inp) return;
+  const v = parseInt(inp.value, 10);
+  if(isNaN(v) || v < 1 || v > 30){
+    toast('Threshold must be between 1 and 30 minutes','⚠');
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+  try{
+    const {data: cur, error: rErr} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(rErr) throw rErr;
+    const newMeta = {
+      ...(cur?.meta || {}),
+      salvation_idle_minutes: v,
+      diag_settings_updated_at: new Date().toISOString(),
+      diag_settings_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'
+    };
+    const {error: uErr} = await db.from('system_settings').update({meta: newMeta}).eq('id', 1);
+    if(uErr) throw uErr;
+    _diagIdleMinutes = v;
+    if(status){ status.textContent = '✓ Saved — new threshold applies on next assessment session'; status.style.color = 'var(--green)'; }
+    toast('Diagnostic settings saved ✓');
+  } catch(e){
+    if(status){ status.textContent = '⚠ ' + (e.message || 'Save failed'); status.style.color = 'var(--red)'; }
+    toast('Save failed: ' + e.message, '❌');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Save'; }
+  }
+}
+
+// Boot the diagnostic settings loader (fire-and-forget)
+loadDiagSettings();
+
+// Hide the diag settings section entirely for non-pastors (defense in depth)
+(function gateDiagSettingsSection(){
+  const tryGate = ()=>{
+    const sec = document.getElementById('diagSettingsSection');
+    if(!sec) return;
+    if(typeof LeaderScope !== 'undefined' && !LeaderScope.isPastor()){
+      sec.style.display = 'none';
+    }
+  };
+  tryGate();
+  setTimeout(tryGate, 500);
+  setTimeout(tryGate, 1500);
+})();
 
 // Hide greeting section entirely for non-pastors (defense in depth)
 (function gateGreetingSection(){
