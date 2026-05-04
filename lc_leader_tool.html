@@ -1502,8 +1502,99 @@ function showAttendance(){
   if(bn){ bn.style.display='none'; bn.innerHTML=''; }
   renderAttList();
   showScreen('screenAttendance');
-  // Fetch any existing attendance for today + currently-selected event type
-  loadExistingAttendance();
+  // ── RECOVERY: try to restore unsaved work from localStorage first ──
+  // This catches cases where the browser killed the tab (Android low-memory),
+  // user accidentally navigated away, or page was force-refreshed.
+  const recovered = _recoverAttendanceDraft();
+  if(!recovered){
+    // No draft to recover → fetch any existing attendance from DB
+    loadExistingAttendance();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// ATTENDANCE AUTO-SAVE (May 2026) — protects against Android Chrome
+// killing the tab when user switches to WhatsApp etc. Saves the in-progress
+// attendance to localStorage on every checkbox tap. Cleared on successful
+// save to DB.
+// ═══════════════════════════════════════════════════════
+const _ATT_DRAFT_KEY = 'multiply_mlt_att_draft';
+
+function _persistAttendanceDraft(){
+  if(!currentLeader) return;
+  // Only persist if there's at least one checked member — otherwise
+  // an empty load would trigger a useless "recover" prompt later.
+  const hasAny = Object.values(attendanceState).some(Boolean);
+  if(!hasAny){
+    try { localStorage.removeItem(_ATT_DRAFT_KEY); } catch(e){}
+    return;
+  }
+  try {
+    const payload = {
+      leaderId:  currentLeader.id,
+      date:      document.getElementById('attDate')?.value || '',
+      eventType: selectedAttType || 'Sunday Service',
+      state:     attendanceState,
+      savedAt:   Date.now()
+    };
+    localStorage.setItem(_ATT_DRAFT_KEY, JSON.stringify(payload));
+  } catch(e){ /* localStorage full or disabled — non-fatal */ }
+}
+
+function _clearAttendanceDraft(){
+  try { localStorage.removeItem(_ATT_DRAFT_KEY); } catch(e){}
+}
+
+function _recoverAttendanceDraft(){
+  if(!currentLeader) return false;
+  let payload = null;
+  try {
+    const raw = localStorage.getItem(_ATT_DRAFT_KEY);
+    if(!raw) return false;
+    payload = JSON.parse(raw);
+  } catch(e){ return false; }
+
+  // Only recover if it's THIS leader's draft (avoid confusing scenarios
+  // where two leaders use the same phone)
+  if(!payload || payload.leaderId !== currentLeader.id) return false;
+
+  // Drafts older than 24 hours are probably stale — discard silently
+  const ageHours = (Date.now() - (payload.savedAt||0)) / 3600000;
+  if(ageHours > 24){ _clearAttendanceDraft(); return false; }
+
+  // Set context to match the draft
+  if(payload.date){
+    const di = document.getElementById('attDate');
+    if(di) di.value = payload.date;
+  }
+  if(payload.eventType){
+    selectedAttType = payload.eventType;
+    document.querySelectorAll('.att-type-pill').forEach(p=>{
+      p.classList.toggle('selected', p.dataset.type === payload.eventType);
+    });
+  }
+  // Restore the state for members still in scope
+  let restoredCount = 0;
+  Object.keys(payload.state || {}).forEach(mid => {
+    if(mid in attendanceState && payload.state[mid]){
+      attendanceState[mid] = true;
+      restoredCount++;
+    }
+  });
+  if(restoredCount === 0){ _clearAttendanceDraft(); return false; }
+  attendanceDirty = true; // it's unsaved work
+  renderAttList();
+  // Show recovery banner so user knows what happened
+  const bn = document.getElementById('attLoadedBanner');
+  if(bn){
+    const minsAgo = Math.max(1, Math.round((Date.now() - payload.savedAt) / 60000));
+    bn.style.background = 'rgba(251,146,60,.10)';
+    bn.style.borderColor = 'rgba(251,146,60,.35)';
+    bn.innerHTML = `↩ Recovered ${restoredCount} unsaved check${restoredCount===1?'':'s'} from ${minsAgo} min${minsAgo===1?'':'s'} ago. Review and tap Save when ready.`;
+    bn.style.display = 'block';
+  }
+  console.log('[attendance-draft] recovered', restoredCount, 'checks for', payload.date, payload.eventType);
+  return true;
 }
 
 function selectAttType(el){
@@ -1680,6 +1771,8 @@ function toggleAtt(id){
   }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = cnt+' present';
+  // Persist draft so accidental tab death doesn't lose this work
+  _persistAttendanceDraft();
 }
 
 function toggleSelectAll(){
@@ -1687,6 +1780,7 @@ function toggleSelectAll(){
   myMembers.forEach(m=>{ attendanceState[m.id]=allSelected; });
   attendanceDirty = true;
   renderAttList();
+  _persistAttendanceDraft();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1760,6 +1854,8 @@ async function saveAttendance(){
   }
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   attendanceDirty = false;
+  // Successful save → clear the recovery draft so we don't re-prompt
+  _clearAttendanceDraft();
   toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
   // Refresh the banner so it now reflects this save (logged_by becomes us)
   loadExistingAttendance();
