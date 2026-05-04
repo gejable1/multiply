@@ -763,11 +763,10 @@ function render() {
           const lastMetText = e.lastMet
             ? `Last met <strong>${escapeHTML(humanDate(e.lastMet))}</strong> (${e.silence} wk${e.silence===1?'':'s'} ago)`
             : `<strong>No meetings logged</strong> in this period`;
-          const phone = normalizePHPhone(e.leader.contact);
-          const msgText = buildCheckInMessage(e.leader.name, e.silence);
-          const waUrl = phone
-            ? buildWhatsAppUrl(phone, msgText)
-            : buildWhatsAppUrl('', msgText);
+          // Stash the leader on a window registry so the modal opener can
+          // find them by id (we can't pass complex objects through onclick attrs).
+          window._pulseLeaders = window._pulseLeaders || {};
+          window._pulseLeaders[e.leader.id] = { leader: e.leader, silence: e.silence };
           return `
             <div class="hb-card ${longSilent ? 'silent-long' : ''}">
               <div class="hb-row">
@@ -781,7 +780,7 @@ function render() {
                 <div>${lastMetText}</div>
                 <div>👥 <strong>${e.members.length}</strong> members affected</div>
               </div>
-              <button class="hb-action" onclick="window.open('${waUrl}', '_blank')">
+              <button class="hb-action" onclick="openLeaderCheckInModal('${e.leader.id}')">
                 📲 Message ${escapeHTML((e.leader.name||'').split(' ')[0])}
               </button>
             </div>`;
@@ -895,13 +894,107 @@ function buildWhatsAppUrl(phone, text) {
   return `${base}?text=${encodeURIComponent(text)}`;
 }
 
-function buildCheckInMessage(leaderName, silenceWeeks) {
+// Two flavors of the check-in message — the modal lets the leader pick.
+// "Plain" is a short heads-up (just the body); "with greeting" wraps it
+// in a warm Hi/sign-off frame for direct chat use.
+function buildCheckInBody(silenceWeeks) {
+  if (silenceWeeks >= 3) {
+    return `Napansin ko hindi pa nakapag-LC meeting yung group natin nitong nakaraang ${silenceWeeks} weeks. Just checking in — anything I can pray with you about or help you with?`;
+  }
+  return `Napansin ko hindi pa nakapag-LC meeting nitong nakaraang week. Anything I can pray with you about or help you plan?`;
+}
+function buildCheckInWithGreeting(leaderName, silenceWeeks) {
   const first = (leaderName||'').split(' ')[0] || 'kapatid';
   const senderName = L.leaderName || 'your pastor';
-  if (silenceWeeks >= 3) {
-    return `Hi Pastor ${first}! 🙏 Kumusta ka? Napansin ko hindi pa nakapag-LC meeting yung group natin nitong nakaraang ${silenceWeeks} weeks. Just checking in — anything I can pray with you about or help you with? — ${senderName}`;
+  return `Hi Pastor ${first}! 🙏 Kumusta ka? ${buildCheckInBody(silenceWeeks)} — ${senderName}`;
+}
+// Backward-compat shim — kept in case anything else still calls it.
+function buildCheckInMessage(leaderName, silenceWeeks) {
+  return buildCheckInWithGreeting(leaderName, silenceWeeks);
+}
+
+// ─────────────────────── Heartbeat share modal ───────────────────────
+// Mirrors the 3-button modal from dashboard / leader tool so all "Send"
+// surfaces in MULTIPLY behave consistently (Pastor's standardization).
+function openLeaderCheckInModal(leaderId) {
+  const reg = window._pulseLeaders || {};
+  const entry = reg[leaderId];
+  if (!entry) { toast('Leader not found', 'error'); return; }
+  const leader = entry.leader;
+  const silence = entry.silence;
+  const phone = normalizePHPhone(leader.contact);
+  const firstName = (leader.name||'').split(' ')[0] || 'kapatid';
+  const plainText = buildCheckInBody(silence);
+  const fullText  = buildCheckInWithGreeting(leader.name, silence);
+
+  document.querySelectorAll('.share-link-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'share-link-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+  const subText = phone
+    ? `Choose how to send to <strong>${escapeHTML(firstName)}</strong>:`
+    : `No phone on file for <strong>${escapeHTML(firstName)}</strong>. Choose how to send:`;
+  const waLabel = phone
+    ? '🟢 Open WhatsApp to ' + escapeHTML(firstName)
+    : '🟢 Open WhatsApp & pick contact';
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit;color:var(--text)">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.4rem">📤 Send Check-in</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
+        ${subText}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
+        <button onclick="_pulseShareVia('copyPlain', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          📋 Copy message
+        </button>
+        <button onclick="_pulseShareVia('copyFull', this)"
+          style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+          📝 Copy with greeting
+        </button>
+        <button onclick="_pulseShareVia('whatsapp', this)"
+          style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          ${waLabel}
+        </button>
+      </div>
+      <div style="background:var(--surface3);border-radius:6px;padding:8px;font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:.75rem;max-height:120px;overflow-y:auto">${escapeHTML(fullText)}</div>
+      <button onclick="this.closest('.share-link-modal').remove()"
+        style="width:100%;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">
+        ✕ Close
+      </button>
+    </div>`;
+
+  // Stash data for the share handlers
+  window._pulseShareData = { plainText, fullText, phone: phone||'', firstName };
+
+  document.body.appendChild(modal);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+async function _pulseShareVia(method, btn) {
+  const data = window._pulseShareData;
+  if (!data) return;
+  try {
+    if (method === 'copyPlain') {
+      await navigator.clipboard.writeText(data.plainText);
+      toast('📋 Message copied — paste anywhere', 'success');
+    } else if (method === 'copyFull') {
+      await navigator.clipboard.writeText(data.fullText);
+      toast('📝 Full message copied — paste anywhere', 'success');
+    } else if (method === 'whatsapp') {
+      // Use api.whatsapp.com (not wa.me) per architecture key 6.
+      // Phone-on-file → deep-link; otherwise WhatsApp prompts for contact.
+      window.open(buildWhatsAppUrl(data.phone || '', data.fullText), '_blank');
+    }
+    btn.closest('.share-link-modal')?.remove();
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.error('Pulse share error:', e);
+      toast('Could not share: ' + e.message, 'error');
+    }
   }
-  return `Hi Pastor ${first}! 🙏 Kumusta ka? Napansin ko hindi pa nakapag-LC meeting nitong nakaraang week. Anything I can pray with you about or help you plan? — ${senderName}`;
 }
 
 // ─────────────────────── Actions ───────────────────────
