@@ -2716,7 +2716,9 @@ async function loadLcDetails(){
     .gte('pipeline_level', 1);
   if(error) throw error;
 
-  const all = (data || []).filter(m => !m.is_test_member);
+  // Test members are kept in the list so they can be tested end-to-end.
+  // (They show with a 🧪 badge in the LC sheet so anyone viewing knows.)
+  const all = data || [];
 
   // Fellow members = everyone in the LC except myself, AND who consented (share_with_lc !== false)
   // I always see myself implicitly. share_with_lc defaults to true.
@@ -2845,10 +2847,13 @@ function openLcDetail(){
     mBox.innerHTML = lcMembers.map(m => {
       const initials = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       const tag = m.is_facilitator ? '<div class="mate-tag">LEADER</div>' : '';
+      const testTag = m.is_test_member
+        ? '<span style="background:#fde2d3;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em">🧪 TEST</span>'
+        : '';
       return `
         <div class="lc-mate">
           <div class="mate-av">${MultiplyShared.escapeHTML(initials)}</div>
-          <div class="mate-name">${MultiplyShared.escapeHTML(m.name)}</div>
+          <div class="mate-name">${MultiplyShared.escapeHTML(m.name)}${testTag}</div>
           ${tag}
         </div>
       `;
@@ -2892,7 +2897,9 @@ async function loadCelebrationFeed(){
     .eq('lc_group', memberRow.lc_group)
     .gte('pipeline_level', 1);
   if(error) throw error;
-  const all = (lcRows || []).filter(m => !m.is_test_member);
+  // Test members included so their wins appear during end-to-end testing.
+  // Each celebration row gets a 🧪 badge if the member is a test member.
+  const all = lcRows || [];
   const recent_threshold_days = 21; // ~3 weeks of recent wins
   const cutoff = Date.now() - recent_threshold_days * 24*3600*1000;
 
@@ -2926,6 +2933,7 @@ async function loadCelebrationFeed(){
       wins.push({
         memberId: m.id,
         memberName: m.name,
+        isTest: !!m.is_test_member,
         icon: primaryWin.icon,
         label_en: primaryWin.label_en,
         label_tl: primaryWin.label_tl,
@@ -2955,12 +2963,15 @@ function renderCelebrationFeed(){
     const displayName = isMe
       ? (document.body.classList.contains('lang-tl') ? 'Ikaw' : 'You')
       : w.memberName;
+    const testTag = w.isTest
+      ? '<span style="background:#fde2d3;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em;vertical-align:middle">🧪 TEST</span>'
+      : '';
     return `
       <div class="win-row">
         <div class="win-icon">${w.icon}</div>
         <div class="win-body">
           <div class="win-text">
-            <span class="name">${MultiplyShared.escapeHTML(displayName)}</span>
+            <span class="name">${MultiplyShared.escapeHTML(displayName)}</span>${testTag}
             <span class="en-text"> ${MultiplyShared.escapeHTML(w.label_en)}</span>
             <span class="tl-text"> ${MultiplyShared.escapeHTML(w.label_tl)}</span>
           </div>

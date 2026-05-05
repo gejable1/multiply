@@ -344,8 +344,10 @@ async function loadMembers(){
       .gte('pipeline_level', 1)
       .order('name');
     if(error) throw error;
-    // Filter out test members from the searchable list
-    allMembers = (data || []).filter(m => !m.is_test_member);
+    // Test members ARE included in the login search — Pastor uses them to verify
+    // MMT behavior end-to-end. They're visually marked with a 🧪 badge so anyone
+    // browsing the search list can identify them at a glance.
+    allMembers = data || [];
   }catch(e){
     showError('err1', 'Could not load member list. Check your connection. ('+e.message+')');
   }
@@ -366,8 +368,11 @@ nameInput.addEventListener('input', ()=>{
   } else {
     dropdown.innerHTML = matches.map(m=>{
       const role = m.facilitator_role || LN[m.pipeline_level||0];
+      const testBadge = m.is_test_member
+        ? ' <span style="background:#fde2d3;color:#9a3412;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px;letter-spacing:.04em;vertical-align:middle">🧪 TEST</span>'
+        : '';
       return `<div class="search-item" onclick="pickMember('${m.id}')">
-        <div class="si-name">${escapeHTML(m.name)}</div>
+        <div class="si-name">${escapeHTML(m.name)}${testBadge}</div>
         <div class="si-meta">${escapeHTML(role)}${m.lc_group?' · '+escapeHTML(m.lc_group):''}</div>
       </div>`;
     }).join('');
