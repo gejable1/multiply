@@ -408,6 +408,10 @@ html,body{
  *      (Chrome/Edge default to "save ink" which strips colors otherwise)
  *   5. Page-break hints so cards don't split awkwardly
  * ═══════════════════════════════════════════════════════════════ */
+
+/* Print-only header (hidden on screen, revealed by @media print) */
+.print-header { display:none; }
+
 @page {
   size: auto;
   margin: 0.5in;
@@ -513,6 +517,31 @@ html,body{
   body { font-size: 11pt; }
   .wrap { padding: 0 !important; max-width: 100% !important; }
   a { color:#1a1a22 !important; text-decoration:none !important; }
+
+  /* ── 7. Print-only report header ── */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin: 0 0 14pt 0;
+    padding: 0 0 10pt 0;
+    border-bottom: 1.5pt solid #b8882a;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  .print-header .ph-title {
+    font-size: 18pt;
+    font-weight: 800;
+    letter-spacing: 0.5pt;
+    color: #1a1a22 !important;
+    margin: 0 0 4pt 0;
+    line-height: 1.2;
+  }
+  .print-header .ph-sub {
+    font-size: 10.5pt;
+    color: #6b6258 !important;
+    font-style: italic;
+    margin: 0;
+  }
 }
 </style>
 </head>
@@ -529,6 +558,12 @@ html,body{
 </div>
 
 <div class="wrap">
+
+  <!-- ═══════════════════ PRINT-ONLY HEADER (hidden on screen) ═══════════════════ -->
+  <div class="print-header">
+    <div class="ph-title">LC Meeting Pulse Report</div>
+    <div class="ph-sub" id="phSub">&nbsp;</div>
+  </div>
 
   <!-- Scope banner (hidden by default; shown to non-pastors) -->
   <div class="scope-banner" id="scopeBanner" style="display:none">
@@ -620,6 +655,12 @@ if ((L.leaderLevel || 0) < MultiplyShared.PASTOR_LEVEL) {
 
 // Initial load
 init();
+
+// Defense in depth: refresh the print subline right before any print dialog,
+// so Ctrl+P or browser-menu print also gets the current period + today's date.
+window.addEventListener('beforeprint', () => {
+  try { updatePrintSub(); } catch (e) { /* noop */ }
+});
 
 async function init() {
   setPeriodWindow('4w');
@@ -815,6 +856,9 @@ async function reloadAndRender() {
 }
 
 function render() {
+  // Keep the print-only header subline in sync with the active period.
+  updatePrintSub();
+
   const totalLCGs = lcgMap.size;
   if (!totalLCGs) {
     document.getElementById('content').innerHTML =
@@ -1075,6 +1119,18 @@ function periodLabelText() {
   if (currentPeriod === '4w')   return 'last 4 weeks';
   if (currentPeriod === '30d')  return 'last 30 days';
   return humanRange(periodFrom, periodTo);
+}
+// Refresh the print-only subline (period + print-on date).
+// Cheap to call on every render() and every period change.
+function updatePrintSub() {
+  const el = document.getElementById('phSub');
+  if (!el) return;
+  const period = periodLabelText();
+  const today = new Date().toLocaleDateString(undefined, {
+    year: 'numeric', month: 'long', day: 'numeric'
+  });
+  const cap = period.charAt(0).toUpperCase() + period.slice(1);
+  el.textContent = cap + ' · printed ' + today;
 }
 function initials(name) {
   if (!name) return '?';
