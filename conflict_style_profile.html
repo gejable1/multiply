@@ -1964,6 +1964,19 @@ async function saveToDashboard(){
     });
     if (error) throw error;
 
+    // Denormalize primary onto members.conflict_primary so MLT/dashboard
+    // can show "done" status without joining member_profiles.
+    if (memberId) {
+      try {
+        await getDB().from('members').update({
+          conflict_primary: primary.mode,
+          updated_at: new Date().toISOString()
+        }).eq('id', memberId);
+      } catch(e) {
+        console.warn('Failed to update members.conflict_primary:', e.message);
+      }
+    }
+
     if (msg){
       msg.style.display = 'block';
       msg.innerHTML = `✅ Saved! <strong>${name}</strong> · Primary: ${primary.mode} (${primary.score}/12)${memberId ? ' · Dashboard updated.' : ' · Not linked to member record.'}`;

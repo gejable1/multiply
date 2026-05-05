@@ -41,6 +41,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 
 /* LANGUAGE TOGGLE */
 .lang-toggle{position:fixed;bottom:18px;right:18px;background:var(--paper);border:1.5px solid var(--border);border-radius:30px;padding:3px;display:flex;gap:2px;z-index:1000;box-shadow:var(--shadow2);}
+
+/* ── FONT SIZE CONTROL (assessment standard, May 2026) ── */
+.font-toggle{position:fixed;bottom:18px;right:178px;background:var(--paper);border:1.5px solid var(--border);border-radius:30px;padding:3px;display:flex;align-items:center;gap:2px;z-index:1000;box-shadow:var(--shadow2);font-family:'DM Sans',sans-serif;}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:25px;color:var(--lighter);transition:all .15s;padding:7px 11px;line-height:1;}
+.ft-btn.ft-minus{font-size:13px;}
+.ft-btn.ft-plus{font-size:16px;}
+.ft-btn:hover{background:rgba(184,136,42,.10);}
+.ft-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.ft-label{font-size:10.5px;font-weight:700;color:var(--ink);padding:0 6px;min-width:38px;text-align:center;}
+@media (max-width:520px){
+  .font-toggle{bottom:56px;right:12px;padding:2px;}
+  .ft-btn{padding:6px 9px;}
+  .ft-btn.ft-minus{font-size:12px;}
+  .ft-btn.ft-plus{font-size:15px;}
+  .ft-label{font-size:10px;min-width:34px;padding:0 4px;}
+}
 .lt-btn{padding:7px 14px;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;border-radius:25px;color:var(--lighter);transition:all .15s;}
 .lt-btn.active{background:var(--green);color:white;}
 
@@ -213,6 +229,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 </style>
 </head>
 <body data-lang="en">
+
+<!-- Font size control (assessment standard, May 2026) -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+</div>
 
 <!-- LANGUAGE TOGGLE -->
 <div class="lang-toggle">
@@ -546,12 +569,133 @@ let _consecutiveTimeouts = 0;
 // LANGUAGE TOGGLE
 // ═══════════════════════════════════════════════════════
 function setLang(lang){
+  if (lang !== 'tl' && lang !== 'en') lang = 'en';
   _lang=lang;
   document.body.setAttribute('data-lang',lang);
   document.getElementById('lt-tl').classList.toggle('active',lang==='tl');
   document.getElementById('lt-en').classList.toggle('active',lang==='en');
   updateProgressLabel();
+  try { localStorage.setItem('multiply_strengths_lang', lang); } catch(e){}
 }
+// Restore on load (assessment standard)
+(function initLang(){
+  let saved = 'en';
+  try { saved = localStorage.getItem('multiply_strengths_lang') || 'en'; } catch(e){}
+  if (saved !== 'tl' && saved !== 'en') saved = 'en';
+  setLang(saved);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER (assessment standard, May 2026)
+// ═══════════════════════════════════════════════════════════════
+const _STR_FONT_KEY = 'multiply_strengths_fontscale';
+const _STR_FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40];
+let _str_fontIdx = 1;
+function applyFontScale(){
+  const scale = _STR_FONT_STEPS[_str_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_str_fontIdx <= 0);
+  if (up) up.disabled = (_str_fontIdx >= _STR_FONT_STEPS.length - 1);
+}
+function changeFontScale(direction){
+  _str_fontIdx = Math.max(0, Math.min(_STR_FONT_STEPS.length - 1, _str_fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(_STR_FONT_KEY, String(_str_fontIdx)); } catch(e){}
+}
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_STR_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _STR_FONT_STEPS.length) _str_fontIdx = saved;
+  } catch(e){}
+  applyFontScale();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE DETECTION (assessment standard, May 2026)
+// Threshold from system_settings.meta.salvation_idle_minutes (shared)
+// ═══════════════════════════════════════════════════════════════
+let _idleMinutes_str = 3;
+let _idleTimer_str = null;
+let _idleModalOpen_str = false;
+let _idleArmed_str = false;
+
+async function loadIdleThreshold_str(){
+  try {
+    const sb = (typeof getDB === 'function') ? getDB() : null;
+    if (!sb) return;
+    const { data, error } = await sb.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if (typeof v === 'number' && v >= 1 && v <= 30) _idleMinutes_str = v;
+  } catch(e){ console.warn('[idle] threshold load failed; using default'); }
+}
+
+function _armIdleTimer_str(){
+  if (!_idleArmed_str) return;
+  if (_idleModalOpen_str) return;
+  clearTimeout(_idleTimer_str);
+  _idleTimer_str = setTimeout(_showIdlePrompt_str, _idleMinutes_str * 60 * 1000);
+}
+
+function _showIdlePrompt_str(){
+  if (_idleModalOpen_str) return;
+  _idleModalOpen_str = true;
+  // Force a save first
+  try { if (typeof saveProgress === 'function') saveProgress(); } catch(e){}
+
+  document.querySelectorAll('.str-idle-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'str-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-size:1.2rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">⏸ <span class="tl-text">Hihinto muna?</span><span class="en-text">Pause for now?</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mukhang hindi ka nagsasagot ng ${_idleMinutes_str} minuto na. Na-save na ang lahat ng iyong sagot. Gusto mo bang humintong sandali?</span>
+        <span class="en-text">It looks like there has been no activity for ${_idleMinutes_str} minutes. Your answers are saved. Would you like to pause?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="idleYes" style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          ✓ <span class="tl-text">Oo, hihinto muna ako</span><span class="en-text">Yes — pause now</span>
+        </button>
+        <button id="idleNo" style="padding:11px;background:transparent;color:#5a5a5a;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <span class="tl-text">Ipagpatuloy ko</span><span class="en-text">Keep going</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => { modal.remove(); _idleModalOpen_str = false; _armIdleTimer_str(); };
+  modal.querySelector('#idleYes').onclick = () => { close(); if (typeof showPauseModal === 'function') showPauseModal(); };
+  modal.querySelector('#idleNo').onclick = close;
+}
+
+// Wrap existing saveProgress so the idle timer arms after first answer
+(function wrapSaveProgress_str(){
+  if (typeof saveProgress !== 'function') return;
+  const orig = saveProgress;
+  window.saveProgress = function(){
+    const result = orig.apply(this, arguments);
+    _idleArmed_str = true;
+    _armIdleTimer_str();
+    return result;
+  };
+})();
+
+// Wire activity listeners + threshold loader
+(function initIdleListeners_str(){
+  function start(){
+    loadIdleThreshold_str();
+    ['mousemove','mousedown','touchstart','keydown','scroll','input','change'].forEach(evt => {
+      document.addEventListener(evt, _armIdleTimer_str, { passive: true });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
 
 // ═══════════════════════════════════════════════════════
 // BUILD PAIRS

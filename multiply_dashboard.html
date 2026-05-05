@@ -2905,7 +2905,7 @@ function getGiftsUrl(memberId) {
 
 function getProfileUrl(type, memberId) {
   const BASE = 'https://gejable1.github.io/multiply/';
-  const map = {love_language:'love_language.html',disc:'disc_profile.html',enneagram:'enneagram_profile.html',strengths:'strengths_profile.html',gifts:'spiritual_gifts_diagnostic.html'};
+  const map = {love_language:'love_language.html',disc:'disc_profile.html',enneagram:'enneagram_profile.html',strengths:'strengths_profile.html',gifts:'spiritual_gifts_diagnostic.html',conflict:'conflict_style_profile.html'};
   return BASE + (map[type]||'') + '?id=' + memberId;
 }
 function getResultsUrl(type, memberId) {
@@ -2935,7 +2935,8 @@ function copyProfileLink(type, memberId) {
     disc:          'DISC Personality Assessment',
     enneagram:     'Enneagram Profile',
     strengths:     'Clifton Strengths Assessment',
-    gifts:         'Spiritual Gifts Diagnostic'
+    gifts:         'Spiritual Gifts Diagnostic',
+    conflict:      'Conflict Response Style Inventory'
   };
   sendAssessmentLink(memberId, NAMES[type] || 'Assessment', getProfileUrl(type, memberId));
 }
@@ -2998,6 +2999,43 @@ async function rProfileTab(m) {
     '7':{name:'The Enthusiast',formation:'Contentment is a spiritual discipline. (Philippians 4:11). Learn to finish what you start.',ministry:'Youth in Motion · Evangelism · Youth Ministry · Music Ministry · EOLO',discipler:'Help them finish what they start. Pair with a structured type. Teach that staying and going deep is also an adventure.'},
     '8':{name:'The Challenger',formation:'Strength is perfected in weakness. (2 Cor 12:9). Submitted power is true power.',ministry:'Church Council · Core Group · Community Outreach · Preaching Ministry',discipler:'Earn respect through character, not title. Help them see their impact on quieter members.'},
     '9':{name:'The Peacemaker',formation:'True peace requires the courage to speak. Jesus came to bring a sword of truth. (Matthew 10:34)',ministry:'Couples Ministry · Pastoral Care · Children\'s Ministry · Kitchen Ministry',discipler:'Help them discover their own voice. Watch for passive resistance. Give direct but gentle accountability.'}
+  };
+  const CONFLICT_KB = {
+    'Competing':{
+      tagline:'Direct, decisive, willing to take a stand',
+      ministry:'Church Council · Core Group · Preaching Ministry · Community Outreach (frontline)',
+      team:'Brings courage and clarity to the team. Cuts through indecision. Should be paired with collaborators to ensure others stay heard.',
+      discipler:'Earn respect through character, not just argument. Help them see how strength can be weaponized. Coach toward Galatians 5:22-23 fruit of gentleness without losing conviction.',
+      careful:'Watch for control, harshness, or running over quieter voices.'
+    },
+    'Collaborating':{
+      tagline:'Seeks win-win solutions that honor all sides',
+      ministry:'Pastoral Care · LC Leadership · Discipleship · Couples Ministry · Counseling',
+      team:'Natural unity-builder. Excellent at facilitating decisions that stick. Beware of over-processing simple matters.',
+      discipler:'Affirm their relational instincts. Coach them to know when speed matters more than full consensus. Teach trust in the Spirit\'s timing.',
+      careful:'Watch for delaying decisions when speed matters, or over-discussing low-stakes issues.'
+    },
+    'Compromising':{
+      tagline:'Finds practical middle ground; fair and expedient',
+      ministry:'Negotiation · Mediation · Couples Ministry · Building Admin · Mission planning',
+      team:'Pragmatic peacemaker. Excellent at moving teams forward when stuck. Ensure they don\'t settle for half-solutions when better is possible.',
+      discipler:'Affirm their fairness instinct. Push them not to settle prematurely on matters of principle. Help them tell apart wisdom-compromises from courage-compromises.',
+      careful:'Watch for trading godly conviction for easy peace.'
+    },
+    'Avoiding':{
+      tagline:'Steps back, postpones, or sidesteps conflict',
+      ministry:'Documentation · Lights & Tech · Behind-the-scenes admin · Roles with low confrontation',
+      team:'Brings restraint and protects against premature conflict. Should be coached toward courage when issues need to be named.',
+      discipler:'Build trust slowly. Coach toward courage. Help them distinguish between wise restraint and fearful avoidance. Use clear, gentle accountability.',
+      careful:'Watch for unresolved tension and passive distance accumulating in relationships.'
+    },
+    'Accommodating':{
+      tagline:'Yields gracefully, peace-keeping',
+      ministry:'Pastoral Care · Welcome Ministry · Children\'s Ministry · Kitchen Ministry · Hospitality',
+      team:'Brings humility and warmth. Backbone of hospitality. Watch carefully for resentment from over-yielding.',
+      discipler:'Help them name their own needs. Distinguish biblical yieldedness from people-pleasing. Practice saying no in safe spaces. Reinforce identity in Christ, not approval.',
+      careful:'Watch for resentment, weak boundaries, or losing themselves to keep peace.'
+    }
   };
 
   function infoRow(label, text, color) {
@@ -3098,6 +3136,41 @@ async function rProfileTab(m) {
          ${domStr ? infoBox('📊 Domain Breakdown', domStr, 'var(--green-bg)', 'var(--green)') : ''}
          ${infoBox('⛪ Ministry Placement Principle', 'Lead with Executing themes → operational/admin roles. Influencing → evangelism/communications. Relationship Building → pastoral/discipleship. Strategic Thinking → leadership/teaching/planning.', '#e8f0f8', '#1a4a6b')}`;
      }},
+    {key:'conflict_style', label:'⚖️ Conflict Style', color:'#7a4f9c',
+     render: (d) => {
+       const kb = CONFLICT_KB[d.top_result] || {};
+       // Build all-five ranked list from results JSON
+       let allFive = '';
+       if (d.results && typeof d.results === 'object') {
+         const sorted = Object.entries(d.results)
+           .map(([k,v]) => ({ name: k, score: v }))
+           .sort((a,b) => b.score - a.score);
+         const colorMap = {'Competing':'#c44a3e','Collaborating':'#2a7a4c','Compromising':'#b8882a','Avoiding':'#5b6573','Accommodating':'#7a4f9c'};
+         allFive = `<div style="margin-bottom:.6rem">
+           <div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#7a4f9c;margin-bottom:6px">All Five Modes (Score / 12)</div>
+           ${sorted.map((cs, i) => {
+             const pct = Math.round(cs.score / 12 * 100);
+             const isTop = i === 0;
+             const isSecond = i === 1;
+             const c = colorMap[cs.name] || '#7a4f9c';
+             return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+               <div style="font-size:11px;font-weight:${isTop?'800':isSecond?'700':'400'};color:${isTop?c:isSecond?'var(--ink)':'var(--muted)'};width:140px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':''}${cs.name}</div>
+               <div style="flex:1;background:#efe8f1;border-radius:4px;height:10px;overflow:hidden">
+                 <div style="width:${pct}%;height:100%;background:${c};border-radius:4px;transition:width .5s ease"></div>
+               </div>
+               <div style="font-size:11px;font-weight:700;color:${isTop?c:'var(--muted)'};width:36px;text-align:right">${cs.score}/12</div>
+             </div>`;
+           }).join('')}
+         </div>`;
+       }
+       return `
+         ${allFive || infoRow('Primary Style', `<strong>${d.top_result||'—'}</strong>`, '#7a4f9c') + (d.second_result ? infoRow('Secondary', d.second_result, 'var(--muted)') : '')}
+         ${kb.tagline ? infoRow('In Brief', `<em>${kb.tagline}</em>`, '#7a4f9c') : ''}
+         ${kb.ministry ? infoBox('⛪ Best Ministry Fit', kb.ministry, '#f3eef6', '#7a4f9c') : ''}
+         ${kb.team ? infoBox('👥 In a Team', kb.team, '#fff8f0', '#b8882a') : ''}
+         ${kb.discipler ? infoBox('🤝 Discipling This Person', kb.discipler, 'var(--green-bg)', 'var(--green)') : ''}
+         ${kb.careful ? infoBox('⚠ Watch For', kb.careful, '#fdf3f2', '#c44a3e') : ''}`;
+     }},
   ];
 
   let html = `<div style="display:flex;flex-direction:column;gap:.65rem;padding:.75rem 0">`;
@@ -3132,8 +3205,8 @@ async function rProfileTab(m) {
       return k;
     };
     // Color per type to match the section headers above
-    const TYPE_COLOR = {love_language:'#8a2040', disc:'#1a4a6b', enneagram:'#b8882a', strengths:'#2a5c40'};
-    const TYPE_LABEL = {love_language:'Love Language', disc:'DISC', enneagram:'Enneagram', strengths:'Strengths'};
+    const TYPE_COLOR = {love_language:'#8a2040', disc:'#1a4a6b', enneagram:'#b8882a', strengths:'#2a5c40', conflict_style:'#7a4f9c'};
+    const TYPE_LABEL = {love_language:'Love Language', disc:'DISC', enneagram:'Enneagram', strengths:'Strengths', conflict_style:'Conflict Style'};
 
     html += `<div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;box-shadow:var(--shadow)">
       <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--muted);margin-bottom:.6rem">Assessment History — Top 5</div>`;
