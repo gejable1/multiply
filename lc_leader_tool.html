@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>LC Leader Tool · MULTIPLY</title>
+<!-- ─── PWA manifest + iOS standalone hints (added May 2026) ─── -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2a5c3f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MLT">
+<link rel="apple-touch-icon" href="icon_192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon_192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon_512.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -417,6 +426,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 
 <!-- ══════════════════ SCREEN: HOME ══════════════════ -->
 <div class="screen active" id="screenHome">
+  <!-- ─── PWA install banner (auto-shown when installable) ─── -->
+  <div id="pwaInstallBanner" style="display:none;background:linear-gradient(135deg,rgba(251,191,36,.12),rgba(251,191,36,.04));border-bottom:1px solid rgba(251,191,36,.3);padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:13px">
+    <div style="font-size:20px;flex-shrink:0">📱</div>
+    <div style="flex:1;line-height:1.35">
+      <div style="font-weight:700;color:var(--text);margin-bottom:2px">Install MLT as an app</div>
+      <div style="font-size:11.5px;color:var(--muted)" id="pwaInstallSubtext">Adds icon to your home screen — opens like a real app</div>
+    </div>
+    <button onclick="pwaInstall()" id="pwaInstallBtn" style="background:var(--gold);color:#0f0f13;border:none;padding:8px 14px;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Install</button>
+    <button onclick="pwaDismissBanner()" style="background:transparent;color:var(--muted);border:none;font-size:18px;cursor:pointer;padding:4px 8px;flex-shrink:0">✕</button>
+  </div>
+
   <div class="home-header">
     <div class="leader-card">
       <div class="leader-av" id="homeAv">?</div>
@@ -2865,6 +2885,117 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#loginSearch')&&!e.target.closest('#loginDropdown'))
     document.getElementById('loginDropdown').style.display='none';
 });
+
+// ═══════════════════════════════════════════════════════════════
+// PWA — service worker registration + install banner (May 2026)
+// ─────────────────────────────────────────────────────────────────
+// Goals:
+//   1. Register the service worker so MLT works offline / loads faster
+//   2. Show an install banner when the OS supports it (Android Chrome)
+//   3. Show iOS-specific instructions on iPhones (Safari has no auto-prompt)
+//   4. Hide the banner once installed or dismissed (remembered for 14 days)
+// ═══════════════════════════════════════════════════════════════
+
+// ── 1. Register service worker ─────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(reg => {
+        console.log('[pwa] service worker registered, scope:', reg.scope);
+      })
+      .catch(err => console.warn('[pwa] SW registration failed:', err.message));
+  });
+}
+
+// ── 2. Capture the install prompt event (Android/Chrome) ──────
+let _pwaDeferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); // don't show the browser's mini-bar
+  _pwaDeferredPrompt = e;
+  _pwaMaybeShowBanner();
+});
+
+// ── 3. Banner show/hide logic ─────────────────────────────────
+const _PWA_DISMISS_KEY = 'multiply_pwa_install_dismissed';
+const _PWA_DISMISS_DAYS = 14; // re-show after 2 weeks if still not installed
+
+function _pwaIsStandalone(){
+  // Already running as installed PWA → no banner needed
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true; // iOS
+}
+
+function _pwaIsIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+function _pwaWasDismissed(){
+  try {
+    const ts = parseInt(localStorage.getItem(_PWA_DISMISS_KEY), 10);
+    if (!ts) return false;
+    const ageDays = (Date.now() - ts) / 86400000;
+    return ageDays < _PWA_DISMISS_DAYS;
+  } catch(e){ return false; }
+}
+
+function _pwaMaybeShowBanner(){
+  const banner = document.getElementById('pwaInstallBanner');
+  if (!banner) return;
+  // Don't show if already installed
+  if (_pwaIsStandalone()) { banner.style.display = 'none'; return; }
+  // Don't show if user recently dismissed
+  if (_pwaWasDismissed()) { banner.style.display = 'none'; return; }
+  // Show with appropriate message
+  if (_pwaIsIOS()) {
+    document.getElementById('pwaInstallSubtext').textContent =
+      'Tap Share, then "Add to Home Screen"';
+    document.getElementById('pwaInstallBtn').textContent = 'How?';
+  } else if (!_pwaDeferredPrompt) {
+    // Android Chrome but prompt hasn't fired yet — wait silently
+    return;
+  }
+  banner.style.display = 'flex';
+}
+
+function pwaInstall(){
+  if (_pwaIsIOS()) {
+    // iOS: there's no programmatic install, so show step-by-step
+    alert(
+      'To install MLT on iPhone:\n\n' +
+      '1. Tap the Share button (square with arrow up) at the bottom of Safari\n' +
+      '2. Scroll and tap "Add to Home Screen"\n' +
+      '3. Tap "Add" in the top-right\n\n' +
+      'MLT will appear on your home screen like a regular app.'
+    );
+    return;
+  }
+  if (_pwaDeferredPrompt) {
+    _pwaDeferredPrompt.prompt();
+    _pwaDeferredPrompt.userChoice.then(choice => {
+      console.log('[pwa] install choice:', choice.outcome);
+      if (choice.outcome === 'accepted') {
+        document.getElementById('pwaInstallBanner').style.display = 'none';
+      }
+      _pwaDeferredPrompt = null;
+    });
+  }
+}
+
+function pwaDismissBanner(){
+  document.getElementById('pwaInstallBanner').style.display = 'none';
+  try { localStorage.setItem(_PWA_DISMISS_KEY, String(Date.now())); } catch(e){}
+}
+
+// Hide banner if the page becomes a PWA mid-session
+window.addEventListener('appinstalled', () => {
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'none';
+  console.log('[pwa] installed');
+});
+
+// First check on load — useful for iOS where there's no beforeinstallprompt event
+// Wait a moment so the page settles before potentially showing a banner
+setTimeout(_pwaMaybeShowBanner, 1500);
 </script>
 </body>
 </html>
