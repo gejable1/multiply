@@ -392,6 +392,128 @@ html,body{
   margin-bottom:14px;line-height:1.45;
 }
 .scope-banner strong{color:var(--purple)}
+
+/* ═══════════════════════════════════════════════════════════════
+ * PRINT STYLESHEET (kapatid Pastor Gerry, May 2026)
+ *
+ * On screen the LPR stays dark (some leaders prefer it on phone).
+ * In print/PDF we flip to a light theme so it's gentle on ink + paper
+ * for the Wednesday bulletin board posting.
+ *
+ * Strategy:
+ *   1. Override CSS variables to light equivalents — automatic catch
+ *   2. Disable gradients and shadows (ink wasters)
+ *   3. Hide screen-only chrome (back button, action bar, toasts, refresh)
+ *   4. Force color-adjust:exact so colored borders/badges still render
+ *      (Chrome/Edge default to "save ink" which strips colors otherwise)
+ *   5. Page-break hints so cards don't split awkwardly
+ * ═══════════════════════════════════════════════════════════════ */
+@page {
+  size: auto;
+  margin: 0.5in;
+}
+
+@media print {
+  /* Force browsers to honor color choices instead of "ink saver" mode */
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* ── 1. Light theme via variable override ── */
+  :root {
+    --bg:#ffffff;
+    --surface:#ffffff;
+    --surface2:#f7f5f0;
+    --surface3:#efece5;
+    --border:#d8d3c8;
+    --border-strong:#b8b0a0;
+    --text:#1a1a22;
+    --muted:#6b6258;
+    --gold:#b8882a;
+    --gold-soft:#fdf6e8;
+    --green:#2a7a4c;
+    --green-soft:#e8f5ee;
+    --amber:#b8651e;
+    --amber-soft:#fdf0e2;
+    --red:#a62020;
+    --red-soft:#fde8e8;
+    --purple:#5b3b9c;
+  }
+
+  html, body {
+    background:#ffffff !important;
+    color:#1a1a22 !important;
+  }
+
+  /* ── 2. Kill gradients + shadows (force flat fills) ── */
+  * {
+    background-image:none !important;
+    box-shadow:none !important;
+    text-shadow:none !important;
+  }
+
+  /* ── 3. Hide screen-only chrome ── */
+  .topbar,
+  .actionbar,
+  .scope-banner,
+  .period-row,
+  .toast,
+  .act-btn,
+  .tb-back,
+  .refresh,
+  button {
+    display:none !important;
+  }
+
+  /* ── 4. Re-light specific containers that had hardcoded rgba bg ── */
+  .pulse-card,
+  .lcg-row,
+  .silent-row,
+  .topbar,
+  .scope-banner {
+    background:#ffffff !important;
+    border:1px solid #d8d3c8 !important;
+  }
+
+  /* Subtle tints so categories are still visually distinct in print */
+  .silent-card { background:#fdf0e2 !important; }
+  .silent-long { background:#fde8e8 !important; }
+  .lcg-row     { background:#f7f5f0 !important; }
+
+  /* Spark bars — re-color for light bg with solid fills */
+  .spark-bar       { background:#2a7a4c !important; }
+  .spark-bar.low   { background:#b8651e !important; }
+  .spark-bar.bad   { background:#a62020 !important; }
+
+  /* Avatar/badge bubbles — flat, readable */
+  .silent-card .hb-avatar,
+  .lcg-rank,
+  .lcg-pct {
+    background:#efece5 !important;
+    color:#1a1a22 !important;
+    border:1px solid #d8d3c8 !important;
+  }
+
+  /* ── 5. Page-break hints ── */
+  .pulse-card,
+  .lcg-row,
+  .silent-row {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* ── 6. Compact spacing for paper ── */
+  body { font-size: 11pt; }
+  .wrap { padding: 0 !important; max-width: 100% !important; }
+  a { color:#1a1a22 !important; text-decoration:none !important; }
+}
 </style>
 </head>
 <body>
