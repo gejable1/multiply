@@ -589,6 +589,48 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div id="diagSettingsStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
   </div>
 
+  <!-- ─── HEADS-UP SETTINGS (Pastor-configurable events + reasons) ─── -->
+  <div class="ss" id="headsUpSettingsSection"><div class="st">🙏 Heads-Up Settings</div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
+      Configure the events and reasons members can pick when giving you a heads-up about an absence.
+      Tap × on a chip to remove. Edits take effect immediately for members.
+    </div>
+
+    <div style="margin-bottom:1rem">
+      <div style="font-size:11px;color:var(--gold);letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:6px">
+        Events members can give heads-ups for
+      </div>
+      <div id="headsUpEvents" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:34px"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="headsUpNewEvent" placeholder="e.g. Easter Sunday" maxlength="60"
+          style="flex:1;background:white;border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;font-family:inherit;font-size:13px;color:var(--ink);outline:none"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();headsUpAdd('event');}">
+        <button class="sbtn" style="margin-top:0;background:var(--green);padding:6px 14px;font-size:12px"
+          onclick="headsUpAdd('event')">+ Add</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1rem">
+      <div style="font-size:11px;color:var(--gold);letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:6px">
+        Reasons members can pick
+      </div>
+      <div id="headsUpReasons" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:34px"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="headsUpNewReason" placeholder="e.g. Travel" maxlength="60"
+          style="flex:1;background:white;border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;font-family:inherit;font-size:13px;color:var(--ink);outline:none"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();headsUpAdd('reason');}">
+        <button class="sbtn" style="margin-top:0;background:var(--green);padding:6px 14px;font-size:12px"
+          onclick="headsUpAdd('reason')">+ Add</button>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-top:.5rem">
+      <button class="sbtn" id="headsUpSaveBtn" style="margin-top:0;background:var(--green);padding:7px 16px;font-size:12px"
+        onclick="saveHeadsUpSettings()">💾 Save Heads-Up Settings</button>
+      <span id="headsUpStatus" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+  </div>
+
   <!-- ─── MESSAGE GREETINGS (Pastor-configurable) ─── -->
   <div class="ss" id="greetingSection"><div class="st">📝 Message Greetings</div>
     <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
@@ -4348,6 +4390,137 @@ async function saveDiagSettings(){
 
 // Boot the diagnostic settings loader (fire-and-forget)
 loadDiagSettings();
+
+// ═══════════════════════════════════════════════════════════════
+// HEADS-UP SETTINGS (Pastor-configurable events + reasons)
+// ───────────────────────────────────────────────────────────────
+// Stored in system_settings.meta.absence_events and .absence_reasons.
+// Members read these on MMT init to populate the heads-up modal.
+// ═══════════════════════════════════════════════════════════════
+const _DEFAULT_HEADSUP_EVENTS  = ['Sunday Service','LC Night','Prayer Meeting','Special Service'];
+const _DEFAULT_HEADSUP_REASONS = ['Work','Family','Health','Travel','Other',"I'd rather not say"];
+let _huEvents  = [];
+let _huReasons = [];
+let _huDirty   = false;
+
+async function loadHeadsUpSettings(){
+  try{
+    const {data, error} = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    const meta = data?.meta || {};
+    _huEvents  = Array.isArray(meta.absence_events)  ? meta.absence_events.slice() : _DEFAULT_HEADSUP_EVENTS.slice();
+    _huReasons = Array.isArray(meta.absence_reasons) ? meta.absence_reasons.slice() : _DEFAULT_HEADSUP_REASONS.slice();
+  }catch(e){
+    console.warn('Heads-up settings load failed — using defaults:', e.message);
+    _huEvents  = _DEFAULT_HEADSUP_EVENTS.slice();
+    _huReasons = _DEFAULT_HEADSUP_REASONS.slice();
+  }
+  _huDirty = false;
+  renderHeadsUpChips();
+  setHeadsUpStatus('');
+}
+
+function renderHeadsUpChips(){
+  const evWrap = document.getElementById('headsUpEvents');
+  const rsWrap = document.getElementById('headsUpReasons');
+  if(!evWrap || !rsWrap) return;
+
+  const chipStyle = 'display:inline-flex;align-items:center;gap:5px;padding:5px 10px;background:var(--green-bg);border:1.5px solid var(--green);border-radius:99px;font-size:12px;color:var(--ink);';
+  const xStyle    = 'background:none;border:none;color:var(--green);cursor:pointer;font-size:14px;line-height:1;padding:0;font-weight:700;';
+
+  evWrap.innerHTML = _huEvents.length
+    ? _huEvents.map((s,i) => `<span style="${chipStyle}">${escapeHTML(s)} <button style="${xStyle}" onclick="headsUpRemove('event',${i})" title="Remove">×</button></span>`).join('')
+    : '<span style="font-size:11px;color:var(--muted);font-style:italic">No events yet — members won\'t be able to give heads-ups until you add some.</span>';
+
+  rsWrap.innerHTML = _huReasons.length
+    ? _huReasons.map((s,i) => `<span style="${chipStyle}">${escapeHTML(s)} <button style="${xStyle}" onclick="headsUpRemove('reason',${i})" title="Remove">×</button></span>`).join('')
+    : '<span style="font-size:11px;color:var(--muted);font-style:italic">No reasons yet — members will see an empty dropdown.</span>';
+}
+
+function headsUpAdd(kind){
+  const inpId = (kind === 'event') ? 'headsUpNewEvent' : 'headsUpNewReason';
+  const inp = document.getElementById(inpId);
+  if(!inp) return;
+  const val = (inp.value || '').trim();
+  if(!val){ toast('Type something first','⚠'); return; }
+  const arr = (kind === 'event') ? _huEvents : _huReasons;
+  // Dedupe (case-insensitive)
+  if(arr.some(x => x.toLowerCase() === val.toLowerCase())){
+    toast('Already in the list','⚠');
+    return;
+  }
+  arr.push(val);
+  inp.value = '';
+  _huDirty = true;
+  renderHeadsUpChips();
+  setHeadsUpStatus('Click Save to apply');
+}
+
+function headsUpRemove(kind, idx){
+  const arr = (kind === 'event') ? _huEvents : _huReasons;
+  if(idx < 0 || idx >= arr.length) return;
+  const item = arr[idx];
+  if(!confirm(`Remove "${item}" from the list?`)) return;
+  arr.splice(idx, 1);
+  _huDirty = true;
+  renderHeadsUpChips();
+  setHeadsUpStatus('Click Save to apply');
+}
+
+function setHeadsUpStatus(msg, isError){
+  const el = document.getElementById('headsUpStatus');
+  if(!el) return;
+  el.textContent = msg || '';
+  el.style.color = isError ? 'var(--red)' : (msg ? 'var(--gold)' : 'var(--muted)');
+}
+
+async function saveHeadsUpSettings(){
+  if(typeof LeaderScope !== 'undefined' && !LeaderScope.isPastor()){
+    toast('Only the Pastor can edit these settings','🔒');
+    return;
+  }
+  const btn = document.getElementById('headsUpSaveBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+  try{
+    const {data: cur, error: rErr} = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if(rErr) throw rErr;
+    const newMeta = {
+      ...(cur?.meta || {}),
+      absence_events:  _huEvents,
+      absence_reasons: _huReasons,
+      headsup_settings_updated_at: new Date().toISOString(),
+      headsup_settings_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'
+    };
+    const {error: uErr} = await db.from('system_settings').update({meta: newMeta}).eq('id', 1);
+    if(uErr) throw uErr;
+    _huDirty = false;
+    setHeadsUpStatus('✓ Saved — members will see updates on next MMT load');
+    const st = document.getElementById('headsUpStatus');
+    if(st) st.style.color = 'var(--green)';
+    toast('Heads-Up settings saved ✓');
+  }catch(e){
+    setHeadsUpStatus('⚠ ' + (e.message || 'Save failed'), true);
+    toast('Save failed: ' + e.message, '❌');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Save Heads-Up Settings'; }
+  }
+}
+
+loadHeadsUpSettings();
+
+// Hide heads-up settings entirely for non-pastors (defense in depth)
+(function gateHeadsUpSettingsSection(){
+  const tryGate = ()=>{
+    const sec = document.getElementById('headsUpSettingsSection');
+    if(!sec) return;
+    if(typeof LeaderScope !== 'undefined' && !LeaderScope.isPastor()){
+      sec.style.display = 'none';
+    }
+  };
+  tryGate();
+  setTimeout(tryGate, 500);
+  setTimeout(tryGate, 1500);
+})();
 
 // Hide the diag settings section entirely for non-pastors (defense in depth)
 (function gateDiagSettingsSection(){

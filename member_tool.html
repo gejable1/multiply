@@ -1087,6 +1087,115 @@ body.lang-tl .tl-text{display:inline;}
   cursor:pointer;
 }
 
+/* ═══════════════ HEADS-UP BUTTON & MODAL ═══════════════ */
+.headsup-btn{
+  width:100%;
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-left:3px solid var(--coral);
+  border-radius:12px;
+  padding:13px 14px;
+  display:flex;align-items:center;gap:12px;
+  cursor:pointer;text-align:left;
+  font-family:inherit;
+  margin-bottom:14px;
+  transition:transform .15s;
+}
+.headsup-btn:active{transform:scale(.98);}
+.headsup-btn .hu-icon{
+  width:38px;height:38px;flex-shrink:0;
+  border-radius:10px;
+  background:linear-gradient(135deg,#fde2d3,#fad9d9);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;
+}
+.headsup-btn .hu-body{flex:1;min-width:0;}
+.headsup-btn .hu-title{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:13.5px;color:var(--ink);margin-bottom:2px;
+}
+.headsup-btn .hu-meta{font-size:11px;color:var(--muted);}
+
+/* Recent heads-ups list (compact) */
+.hu-row{
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:10px 12px;
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:8px;
+}
+.hu-row .hu-row-icon{
+  font-size:16px;flex-shrink:0;
+}
+.hu-row .hu-row-body{flex:1;min-width:0;}
+.hu-row .hu-row-event{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:13px;color:var(--ink);line-height:1.2;
+}
+.hu-row .hu-row-meta{
+  font-size:10.5px;color:var(--muted);margin-top:2px;
+}
+.hu-row .hu-row-status{
+  font-size:9.5px;font-weight:700;letter-spacing:.04em;
+  padding:2px 8px;border-radius:99px;
+  text-transform:uppercase;
+}
+.hu-row .hu-row-status.pending{background:#fde2d3;color:#9a3412;}
+.hu-row .hu-row-status.seen{background:#d1f5e3;color:#0e3a2c;}
+
+/* Heads-up modal */
+.hu-bd{
+  position:fixed;inset:0;background:rgba(28,24,16,.55);
+  display:none;align-items:flex-end;justify-content:center;
+  z-index:130;padding:0;
+}
+.hu-bd.show{display:flex;}
+.hu-modal{
+  background:var(--paper);
+  border-radius:18px 18px 0 0;
+  width:100%;max-width:440px;
+  max-height:90vh;overflow-y:auto;
+  padding:20px 18px 18px;
+  box-shadow:0 -10px 40px rgba(0,0,0,.3);
+  animation:slideUp .2s ease;
+}
+.hu-modal-head h3{
+  font-family:'Fraunces',serif;font-weight:600;font-size:17px;
+  color:var(--ink);margin-bottom:6px;
+}
+.hu-modal-head p{
+  font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;
+}
+.hu-field{margin-bottom:12px;}
+.hu-field label{
+  display:block;font-size:11px;font-weight:700;letter-spacing:.12em;
+  color:var(--gold);text-transform:uppercase;margin-bottom:5px;
+}
+.hu-field select, .hu-field input, .hu-field textarea{
+  width:100%;padding:10px 12px;font-family:inherit;font-size:14px;
+  border:1.5px solid var(--line);border-radius:9px;
+  background:#fff;color:var(--ink);outline:none;
+  transition:border-color .15s;
+}
+.hu-field select:focus, .hu-field input:focus, .hu-field textarea:focus{
+  border-color:var(--forest);
+}
+.hu-field textarea{resize:vertical;min-height:50px;font-family:'Fraunces',serif;}
+.hu-actions{
+  display:flex;gap:10px;justify-content:flex-end;
+  margin-top:1rem;
+}
+.hu-btn{
+  padding:11px 18px;font-family:inherit;font-size:13px;font-weight:600;
+  border-radius:9px;border:none;cursor:pointer;
+  transition:transform .15s;
+}
+.hu-btn:active{transform:scale(.98);}
+.hu-btn:disabled{opacity:.6;cursor:not-allowed;}
+.hu-btn.submit{background:var(--forest);color:#fff;flex:1;}
+.hu-btn.cancel{background:var(--cream);color:var(--ink-soft);border:1px solid var(--line);}
+
 /* ═══════════════ MODAL (edit field) ═══════════════ */
 .modal-backdrop{
   position:fixed;inset:0;background:rgba(28,24,16,.55);
@@ -1280,6 +1389,33 @@ body.lang-tl .tl-text{display:inline;}
         </div>
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
+
+      <!-- Heads-up to leader button -->
+      <button class="headsup-btn" onclick="openHeadsUpModal()">
+        <div class="hu-icon">🙏</div>
+        <div class="hu-body">
+          <div class="hu-title">
+            <span class="en-text">Heads up to my leader</span>
+            <span class="tl-text">Sabihan ang aking lider</span>
+          </div>
+          <div class="hu-meta">
+            <span class="en-text">Let them know if you can't make it</span>
+            <span class="tl-text">Sabihin kung hindi ka makakapunta</span>
+          </div>
+        </div>
+        <div style="color:var(--muted);font-size:18px">›</div>
+      </button>
+
+      <!-- My recent heads-ups (only shown if any) -->
+      <div id="myHeadsUpsSection" style="display:none">
+        <div class="section-label">
+          <div class="title">
+            <span class="en-text">My recent heads-ups</span>
+            <span class="tl-text">Mga inihatid kong sabi</span>
+          </div>
+        </div>
+        <div id="myHeadsUpsList"></div>
+      </div>
 
       <!-- Celebration Feed -->
       <div class="section-label">
@@ -1537,6 +1673,71 @@ body.lang-tl .tl-text{display:inline;}
   </div>
 </div>
 
+<!-- ═══════════════ HEADS-UP MODAL ═══════════════ -->
+<div class="hu-bd" id="huBackdrop" onclick="closeHeadsUpModal(event)">
+  <div class="hu-modal" onclick="event.stopPropagation()">
+    <div class="hu-modal-head">
+      <h3>
+        <span class="en-text">Heads up to my leader 🙏</span>
+        <span class="tl-text">Sabihan ang aking lider 🙏</span>
+      </h3>
+      <p>
+        <span class="en-text">Tell your leader you can't make it. They'll see this in MLT.</span>
+        <span class="tl-text">Sabihan ang lider mo na hindi ka makakapunta. Makikita nila sa MLT.</span>
+      </p>
+    </div>
+
+    <div class="hu-field">
+      <label>
+        <span class="en-text">Which event?</span>
+        <span class="tl-text">Anong event?</span>
+      </label>
+      <select id="huEventSel"></select>
+    </div>
+
+    <div class="hu-field">
+      <label>
+        <span class="en-text">Date you'll miss</span>
+        <span class="tl-text">Petsa ng aabsentin</span>
+      </label>
+      <input type="date" id="huDate">
+    </div>
+
+    <div class="hu-field">
+      <label>
+        <span class="en-text">Reason</span>
+        <span class="tl-text">Dahilan</span>
+      </label>
+      <select id="huReasonSel"></select>
+    </div>
+
+    <div class="hu-field">
+      <label>
+        <span class="en-text">Anything else? (optional)</span>
+        <span class="tl-text">May iba pa? (opsyonal)</span>
+      </label>
+      <textarea id="huNote" rows="2" placeholder="..." maxlength="200"></textarea>
+    </div>
+
+    <div class="hu-field">
+      <label>
+        <span class="en-text">Back by? (optional)</span>
+        <span class="tl-text">Babalik kailan? (opsyonal)</span>
+      </label>
+      <input type="date" id="huReturn">
+    </div>
+
+    <div class="hu-actions">
+      <button class="hu-btn cancel" onclick="closeHeadsUpModal()">
+        <span class="en-text">Cancel</span><span class="tl-text">I-cancel</span>
+      </button>
+      <button class="hu-btn submit" id="huSubmitBtn" onclick="submitHeadsUp()">
+        <span class="en-text">Send to my leader</span><span class="tl-text">Ipadala sa lider</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════ TOAST ═══════════════ -->
 <div class="toast" id="toast">…</div>
 
@@ -1730,6 +1931,8 @@ async function initMMT(){
     try{ await loadTodaysDevo(); }catch(e){ console.warn('devo failed:', e); }
     try{ await loadLcDetails(); }catch(e){ console.warn('lc details failed:', e); }
     try{ await loadCelebrationFeed(); }catch(e){ console.warn('feed failed:', e); }
+    try{ await loadHeadsUpConfig(); }catch(e){ console.warn('headsup config failed:', e); }
+    try{ await loadMyRecentNotices(); }catch(e){ console.warn('my notices failed:', e); }
     renderHome();
     renderPipeline();
     renderAssessments();
@@ -2819,6 +3022,7 @@ renderHome = function(){
   _origRenderHome();
   try{ renderLcCard(); }catch(e){ console.warn(e); }
   try{ renderCelebrationFeed(); }catch(e){ console.warn(e); }
+  try{ renderMyHeadsUps(); }catch(e){ console.warn(e); }
 };
 
 // Same for renderProfile — extend to render the share toggle
@@ -3250,6 +3454,152 @@ function openDevoFromBrowse(iso){
   closeBrowseMonth();
   // Slight delay so the close animation doesn't fight with the open
   setTimeout(() => openDevoReader('date', iso), 150);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════ HEADS-UP TO LEADER ════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+let huEvents  = [];
+let huReasons = [];
+let myRecentNotices = [];
+
+const _DEFAULT_HU_EVENTS  = ['Sunday Service','LC Night','Prayer Meeting','Special Service'];
+const _DEFAULT_HU_REASONS = ['Work','Family','Health','Travel','Other',"I'd rather not say"];
+
+async function loadHeadsUpConfig(){
+  try{
+    const {data, error} = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    const meta = data?.meta || {};
+    huEvents  = Array.isArray(meta.absence_events)  ? meta.absence_events.slice() : _DEFAULT_HU_EVENTS.slice();
+    huReasons = Array.isArray(meta.absence_reasons) ? meta.absence_reasons.slice() : _DEFAULT_HU_REASONS.slice();
+  }catch(e){
+    console.warn('Heads-up config load failed:', e.message);
+    huEvents  = _DEFAULT_HU_EVENTS.slice();
+    huReasons = _DEFAULT_HU_REASONS.slice();
+  }
+}
+
+async function loadMyRecentNotices(){
+  try{
+    const {data, error} = await db.from('absence_notices')
+      .select('id,event_label,event_date,reason_label,reason_note,return_date,acknowledged_at,created_at')
+      .eq('member_id', MEMBER.memberId)
+      .order('created_at', { ascending:false })
+      .limit(3);
+    if(error) throw error;
+    myRecentNotices = data || [];
+  }catch(e){
+    console.warn('My notices load failed:', e.message);
+    myRecentNotices = [];
+  }
+}
+
+function renderMyHeadsUps(){
+  const section = document.getElementById('myHeadsUpsSection');
+  const list    = document.getElementById('myHeadsUpsList');
+  if(!section || !list) return;
+  if(!myRecentNotices.length){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  list.innerHTML = myRecentNotices.map(n => {
+    const ack = !!n.acknowledged_at;
+    const dt = new Date(n.event_date + 'T00:00:00');
+    const dateStr = dt.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    const reason = n.reason_label ? ' · ' + MultiplyShared.escapeHTML(n.reason_label) : '';
+    return `
+      <div class="hu-row">
+        <div class="hu-row-icon">${ack ? '✓' : '🙏'}</div>
+        <div class="hu-row-body">
+          <div class="hu-row-event">${MultiplyShared.escapeHTML(n.event_label || '')} · ${MultiplyShared.escapeHTML(dateStr)}</div>
+          <div class="hu-row-meta">${MultiplyShared.escapeHTML('Sent ' + timeAgo(n.created_at))}${reason}</div>
+        </div>
+        <div class="hu-row-status ${ack ? 'seen' : 'pending'}">
+          ${ack
+            ? '<span class="en-text">Seen</span><span class="tl-text">Nakita</span>'
+            : '<span class="en-text">Sent</span><span class="tl-text">Naipadala</span>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openHeadsUpModal(){
+  if(!huEvents.length || !huReasons.length){
+    showToast('Heads-up settings not yet configured. Ask Pastor.', true);
+    return;
+  }
+  // Populate event dropdown
+  const evSel = document.getElementById('huEventSel');
+  evSel.innerHTML = huEvents.map(e => `<option value="${MultiplyShared.escapeHTML(e)}">${MultiplyShared.escapeHTML(e)}</option>`).join('');
+
+  // Populate reason dropdown
+  const rsSel = document.getElementById('huReasonSel');
+  rsSel.innerHTML = huReasons.map(r => `<option value="${MultiplyShared.escapeHTML(r)}">${MultiplyShared.escapeHTML(r)}</option>`).join('');
+
+  // Default date = next Sunday if event includes "Sunday", else today
+  const today = new Date();
+  const todayIso = today.toISOString().slice(0,10);
+  document.getElementById('huDate').value = todayIso;
+  document.getElementById('huDate').min = todayIso;
+  document.getElementById('huNote').value = '';
+  document.getElementById('huReturn').value = '';
+  document.getElementById('huReturn').min = todayIso;
+
+  document.getElementById('huBackdrop').classList.add('show');
+}
+
+function closeHeadsUpModal(e){
+  if(e && e.target && !e.target.classList.contains('hu-bd')) return;
+  document.getElementById('huBackdrop').classList.remove('show');
+}
+
+async function submitHeadsUp(){
+  const eventLabel = document.getElementById('huEventSel').value;
+  const eventDate  = document.getElementById('huDate').value;
+  const reasonLbl  = document.getElementById('huReasonSel').value;
+  const note       = (document.getElementById('huNote').value || '').trim();
+  const returnDate = document.getElementById('huReturn').value || null;
+
+  if(!eventLabel || !eventDate || !reasonLbl){
+    showToast('Please fill all required fields', true);
+    return;
+  }
+
+  const btn = document.getElementById('huSubmitBtn');
+  if(btn){ btn.disabled = true; }
+
+  try{
+    const payload = {
+      member_id: MEMBER.memberId,
+      member_name: memberRow.name,
+      member_lc_group: memberRow.lc_group || null,
+      discipler_id: memberRow.discipler_id || null,
+      event_label: eventLabel,
+      event_date: eventDate,
+      reason_label: reasonLbl,
+      reason_note: note || null,
+      return_date: returnDate
+    };
+    const {error} = await db.from('absence_notices').insert(payload);
+    if(error) throw error;
+
+    closeHeadsUpModal();
+    showToast(document.body.classList.contains('lang-tl')
+      ? 'Naipaalam na sa lider mo, kapatid 💚'
+      : 'Your leader has been notified, kapatid 💚');
+
+    // Refresh recent list
+    await loadMyRecentNotices();
+    renderMyHeadsUps();
+  }catch(e){
+    console.error('Heads-up submit failed:', e);
+    showToast('Could not send: '+e.message, true);
+  } finally {
+    if(btn){ btn.disabled = false; }
+  }
 }
 </script>
 </body>

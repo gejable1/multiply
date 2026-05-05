@@ -437,6 +437,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <button onclick="pwaDismissBanner()" style="background:transparent;color:var(--muted);border:none;font-size:18px;cursor:pointer;padding:4px 8px;flex-shrink:0">✕</button>
   </div>
 
+  <!-- ─── HEADS-UP BANNER (members' absence notices) ─── -->
+  <div id="headsUpBanner" style="display:none;background:linear-gradient(135deg,rgba(224,120,86,.15),rgba(224,120,86,.04));border-bottom:1px solid rgba(224,120,86,.4);padding:11px 14px;display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer" onclick="openHeadsUpList()">
+    <div style="font-size:20px;flex-shrink:0">🙏</div>
+    <div style="flex:1;line-height:1.35">
+      <div style="font-weight:700;color:var(--text);margin-bottom:2px"><span id="headsUpBannerCount">0</span> heads-up<span id="headsUpBannerPlural">s</span> from your LC</div>
+      <div style="font-size:11.5px;color:var(--muted)">Tap to see who can't make it</div>
+    </div>
+    <div style="color:var(--muted);font-size:18px">›</div>
+  </div>
+
   <div class="home-header">
     <div class="leader-card">
       <div class="leader-av" id="homeAv">?</div>
@@ -715,6 +725,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     Tap <strong style="color:var(--blue)">Send</strong> to open WhatsApp with a pre-filled message and link for each pending assessment.
   </div>
   <div style="flex:1;overflow-y:auto;padding-bottom:40px" id="sendLinksContent">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: HEADS-UPS ══════════════════ -->
+<div class="screen" id="screenHeadsUps">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">Heads-ups from your LC</div>
+  </div>
+  <div style="padding:12px 16px;font-size:12.5px;color:var(--muted);line-height:1.6;
+    background:var(--surface);border-bottom:1px solid var(--border)">
+    Members let you know when they can't make it to a service or LC night. Tap <strong style="color:var(--green)">Acknowledge</strong> to clear the alert.
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:14px 12px 40px" id="headsUpListContent">
     <div class="loading"><div class="spinner"></div></div>
   </div>
 </div>
@@ -3011,6 +3036,141 @@ window.addEventListener('appinstalled', () => {
 // First check on load — useful for iOS where there's no beforeinstallprompt event
 // Wait a moment so the page settles before potentially showing a banner
 setTimeout(_pwaMaybeShowBanner, 1500);
+
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════ HEADS-UPS FROM LC MEMBERS ═════════════════════
+// ═══════════════════════════════════════════════════════════════
+// Loads pending (unacknowledged) absence notices for this leader's
+// LC scope. Shows banner on home, list on screenHeadsUps. Tap
+// "Acknowledge" → updates acknowledged_at + clears from banner.
+
+let pendingNotices = [];
+
+async function loadHeadsUps(){
+  // Resolve the LC group(s) we should query for
+  const lcGroup = (LEADER && LEADER.leaderLcGroup) ? LEADER.leaderLcGroup : null;
+  const leaderId = (LEADER && LEADER.leaderId) ? LEADER.leaderId : null;
+  if(!lcGroup && !leaderId){
+    pendingNotices = [];
+    renderHeadsUpBanner();
+    return;
+  }
+
+  try{
+    // Pastor (Level 5) sees all unacknowledged notices.
+    // Other leaders see only those from their own LC group OR addressed to them.
+    let query = db.from('absence_notices')
+      .select('id,member_id,member_name,member_lc_group,event_label,event_date,reason_label,reason_note,return_date,created_at,acknowledged_at,discipler_id')
+      .is('acknowledged_at', null)
+      .order('created_at', { ascending:false })
+      .limit(100);
+
+    const isPastor = (LEADER && (LEADER.leaderLevel || 0) >= 5);
+    if(!isPastor){
+      // Filter: same LC group OR me as discipler
+      // Supabase: use .or() with comma-separated conditions
+      const conditions = [];
+      if(lcGroup)  conditions.push(`member_lc_group.eq.${lcGroup}`);
+      if(leaderId) conditions.push(`discipler_id.eq.${leaderId}`);
+      if(conditions.length){
+        query = query.or(conditions.join(','));
+      }
+    }
+
+    const {data, error} = await query;
+    if(error) throw error;
+    pendingNotices = data || [];
+  }catch(e){
+    console.warn('Heads-ups load failed:', e.message);
+    pendingNotices = [];
+  }
+  renderHeadsUpBanner();
+}
+
+function renderHeadsUpBanner(){
+  const banner = document.getElementById('headsUpBanner');
+  const cnt    = document.getElementById('headsUpBannerCount');
+  const plural = document.getElementById('headsUpBannerPlural');
+  if(!banner || !cnt) return;
+  if(!pendingNotices.length){
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = '';
+  cnt.textContent = pendingNotices.length;
+  if(plural) plural.textContent = pendingNotices.length === 1 ? '' : 's';
+}
+
+function openHeadsUpList(){
+  showScreen('screenHeadsUps');
+  renderHeadsUpList();
+}
+
+function renderHeadsUpList(){
+  const wrap = document.getElementById('headsUpListContent');
+  if(!wrap) return;
+  if(!pendingNotices.length){
+    wrap.innerHTML = '<div style="text-align:center;color:var(--muted);font-style:italic;padding:30px 14px">No pending heads-ups. 🎉</div>';
+    return;
+  }
+  const escHTML = (s)=>String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmtDate = (iso)=>{
+    if(!iso) return '';
+    try{ const d=new Date(iso+'T00:00:00'); return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
+    catch(e){ return iso; }
+  };
+  const ago = (iso)=>{
+    if(!iso) return '';
+    const t = Date.parse(iso);
+    if(!t) return '';
+    const m = Math.floor((Date.now()-t)/60000);
+    if(m<60) return m+'m ago';
+    const h = Math.floor(m/60);
+    if(h<24) return h+'h ago';
+    return Math.floor(h/24)+'d ago';
+  };
+
+  wrap.innerHTML = pendingNotices.map(n => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:10px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;color:var(--text);font-size:14px">${escHTML(n.member_name || 'Unknown')}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:1px">${escHTML(n.member_lc_group || '')} · sent ${ago(n.created_at)}</div>
+        </div>
+        <button onclick="acknowledgeHeadsUp('${n.id}')" style="background:var(--green);color:#fff;border:none;padding:6px 12px;border-radius:7px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;flex-shrink:0">✓ Acknowledge</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text);line-height:1.5">
+        Won't make it to <strong>${escHTML(n.event_label || 'event')}</strong> on <strong>${escHTML(fmtDate(n.event_date))}</strong>${n.reason_label ? ' — ' + escHTML(n.reason_label) : ''}.
+      </div>
+      ${n.reason_note ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;line-height:1.5">"${escHTML(n.reason_note)}"</div>` : ''}
+      ${n.return_date ? `<div style="font-size:11px;color:var(--gold);margin-top:6px;font-weight:600">↩ Back by ${escHTML(fmtDate(n.return_date))}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function acknowledgeHeadsUp(noticeId){
+  if(!noticeId) return;
+  try{
+    const {error} = await db.from('absence_notices').update({
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: (LEADER && LEADER.leaderId) || null
+    }).eq('id', noticeId);
+    if(error) throw error;
+    // Remove from local pending list
+    pendingNotices = pendingNotices.filter(n => n.id !== noticeId);
+    renderHeadsUpBanner();
+    renderHeadsUpList();
+    if(typeof toast === 'function') toast('Acknowledged ✓');
+  }catch(e){
+    console.error('Acknowledge failed:', e);
+    if(typeof toast === 'function') toast('Failed: '+e.message);
+  }
+}
+
+// Initial load — fire after a short delay so the gate finishes first
+setTimeout(loadHeadsUps, 800);
+// Re-poll every 2 minutes so leaders see new notices without manual refresh
+setInterval(loadHeadsUps, 120000);
 </script>
 </body>
 </html>
