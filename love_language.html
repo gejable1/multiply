@@ -8,6 +8,7 @@
 <title>Love Language Profile — MULTIPLY Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--bg:#faf7f2;--paper:#fff;--ink:#1a1410;--muted:#6b5f50;--lighter:#a09080;--border:#e8ddd0;--surface2:#f5f0e8;--rose:#8a2040;--rose2:#b83060;--rose-bg:#fdf0f4;--rose-light:#fff5f8;--gold:#b8882a;--gold-bg:#fdf6e8;--green:#2a5c40;--green-bg:#eef6f1;--navy:#1b2a4a;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.1);}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -103,9 +104,44 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 @media(max-width:520px){.choice-wrap{grid-template-columns:1fr;}.choice{border-right:none;border-bottom:1px solid var(--border);}.choice:last-child{border-bottom:none;}}
 
 /* ── Language Toggle ── */
-.lang-toggle{position:fixed;top:12px;right:12px;z-index:300;display:flex;background:var(--paper);border:1.5px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.12);}
-.lt-btn{padding:5px 14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;border:none;background:transparent;cursor:pointer;color:var(--muted);transition:all .15s;letter-spacing:.03em;}
-.lt-btn.active{background:var(--gold,#b8882a);color:white;}
+/* ── BILINGUAL TOGGLE (assessment standard, bottom-right gold pill) ── */
+.lang-toggle{position:fixed;bottom:18px;right:18px;background:var(--paper);border:1.5px solid var(--gold,#b8882a);border-radius:30px;padding:3px;display:flex;gap:2px;z-index:1000;box-shadow:0 4px 14px rgba(0,0,0,.15);}
+.lt-btn{padding:7px 14px;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;border-radius:25px;color:var(--muted);transition:all .15s;}
+.lt-btn.active{background:var(--gold,#b8882a);color:#fff;}
+
+/* ── FONT SIZE CONTROL (assessment standard) ── */
+.font-toggle{position:fixed;bottom:18px;right:178px;background:var(--paper);border:1.5px solid var(--gold,#b8882a);border-radius:30px;padding:3px;display:flex;align-items:center;gap:2px;z-index:1000;box-shadow:0 4px 14px rgba(0,0,0,.15);font-family:'DM Sans',sans-serif;}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:25px;color:var(--muted);transition:all .15s;padding:7px 11px;line-height:1;}
+.ft-btn.ft-minus{font-size:13px;}
+.ft-btn.ft-plus{font-size:16px;}
+.ft-btn:hover{background:rgba(184,136,42,.10);}
+.ft-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.ft-label{font-size:10.5px;font-weight:700;color:var(--ink,#1a1612);padding:0 6px;min-width:38px;text-align:center;}
+
+/* ── PAUSE BUTTON (assessment standard) ── */
+.pause-btn{position:fixed;top:14px;right:14px;z-index:100;background:var(--paper);border:1.5px solid var(--gold,#b8882a);color:var(--ink,#1a1612);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:7px 14px;border-radius:999px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);display:none;}
+.pause-btn:hover{background:var(--gold-bg,rgba(184,136,42,.08));}
+
+/* ── RESUME BANNER (assessment standard) ── */
+.resume-banner{display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid var(--gold,#b8882a);border-radius:12px;padding:14px 16px;margin:16px;font-family:'DM Sans',sans-serif;}
+.resume-banner.show{display:block;}
+.resume-banner .rb-title{font-weight:700;font-size:14px;color:var(--ink,#1a1612);margin-bottom:4px;}
+.resume-banner .rb-sub{font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.45;}
+.resume-banner .rb-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.resume-banner button{flex:1;min-width:130px;padding:9px 14px;border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:none;}
+.resume-banner .rb-yes{background:var(--green,#2a5c40);color:#fff;}
+.resume-banner .rb-no{background:#fff;color:var(--ink,#1a1612);border:1px solid var(--border,#e5ddd0);}
+
+@media (max-width:520px){
+  .lang-toggle{bottom:12px;right:12px;}
+  .lt-btn{font-size:10.5px;padding:6px 12px;}
+  .font-toggle{bottom:56px;right:12px;padding:2px;}
+  .ft-btn{padding:6px 9px;}
+  .ft-btn.ft-minus{font-size:12px;}
+  .ft-btn.ft-plus{font-size:15px;}
+  .ft-label{font-size:10px;min-width:34px;padding:0 4px;}
+  .pause-btn{top:8px;right:8px;font-size:11px;padding:6px 11px;}
+}
 /* Show/hide by lang */
 body[data-lang="en"] .tl-text{display:none!important;}
 body[data-lang="tl"] .en-text{display:none!important;}
@@ -119,9 +155,30 @@ body[data-lang="tl"] .choice-en{display:none!important;}
 <body data-lang="en">
 
 <!-- Language Toggle -->
-<div class="lang-toggle">
-  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+<!-- Font size control -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+</div>
+
+<!-- Bilingual toggle (assessment standard: Filipino / English) -->
+<div class="lang-toggle" role="group" aria-label="Language toggle">
   <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+</div>
+
+<!-- Pause button (revealed after first answer) -->
+<button class="pause-btn" id="pauseBtn" onclick="showPauseModal()"><span class="tl-text">⏸ I-pause</span><span class="en-text">⏸ Pause</span></button>
+
+<!-- Resume banner — shown by JS when localStorage has saved progress -->
+<div class="resume-banner" id="resumeBanner">
+  <div class="rb-title">📋 <span class="tl-text">May hindi pa tapos na test</span><span class="en-text">You have an unfinished test</span></div>
+  <div class="rb-sub"><span class="tl-text">Gusto mo bang ipagpatuloy kung saan ka huminto?</span><span class="en-text">Would you like to continue where you left off?</span></div>
+  <div class="rb-actions">
+    <button class="rb-yes" onclick="resumeTest()">✓ <span class="tl-text">Ituloy</span><span class="en-text">Continue</span></button>
+    <button class="rb-no"  onclick="discardProgress()">↻ <span class="tl-text">Magsimula ulit</span><span class="en-text">Start Over</span></button>
+  </div>
 </div>
 
 <div class="cover">
@@ -186,7 +243,7 @@ body[data-lang="tl"] .choice-en{display:none!important;}
   <div id="langCards"></div>
 </div>
 <div class="save-wrap">
-  <button class="save-btn" id="saveBtn" onclick="saveToDashboard()"><span class="en-text">💾 Save to MULTIPLY Dashboard</span><span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span></button>
+  <button class="save-btn" id="saveBtn" onclick="confirmSaveToDashboard()"><span class="en-text">💾 Save to MULTIPLY Dashboard</span><span class="tl-text">💾 I-save sa MULTIPLY Dashboard</span></button>
   <div class="save-msg" id="saveMsg"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -418,17 +475,412 @@ document.addEventListener('DOMContentLoaded', function() {
 // ── Language Toggle ──────────────────────────────────────────
 let _lang = 'en';
 function setLang(lang){
+  if (lang !== 'tl' && lang !== 'en') lang = 'en';
   _lang = lang;
   document.body.setAttribute('data-lang', lang);
-  document.getElementById('lt-en').classList.toggle('active', lang==='en');
-  document.getElementById('lt-tl').classList.toggle('active', lang==='tl');
+  const enBtn = document.getElementById('lt-en');
+  const tlBtn = document.getElementById('lt-tl');
+  if (enBtn) enBtn.classList.toggle('active', lang === 'en');
+  if (tlBtn) tlBtn.classList.toggle('active', lang === 'tl');
   document.documentElement.setAttribute('lang', lang);
-  // Swap placeholder text on inputs with data-tl/data-en attrs
-  document.querySelectorAll('[data-tl][data-en]').forEach(el=>{
-    if(el.tagName==='INPUT') el.placeholder = lang==='tl' ? el.dataset.tl : el.dataset.en;
+  // Swap input placeholders that have data-tl/data-en attrs (legacy convention)
+  document.querySelectorAll('[data-tl][data-en]').forEach(el => {
+    if (el.tagName === 'INPUT') el.placeholder = lang === 'tl' ? el.dataset.tl : el.dataset.en;
   });
-  if(typeof updateProgLabel==='function') updateProgLabel();
+  // Swap input placeholders that have data-ph-tl/data-ph-en attrs (standard)
+  document.querySelectorAll('[data-ph-tl][data-ph-en]').forEach(el => {
+    const v = el.dataset['ph' + (lang === 'tl' ? 'Tl' : 'En')];
+    if (v != null) el.setAttribute('placeholder', v);
+  });
+  // Swap <option> text that has data-opt-tl/data-opt-en attrs
+  document.querySelectorAll('option[data-opt-tl][data-opt-en]').forEach(el => {
+    const v = el.dataset['opt' + (lang === 'tl' ? 'Tl' : 'En')];
+    if (v != null) el.textContent = v;
+  });
+  if (typeof updateProgLabel === 'function') updateProgLabel();
+  try { localStorage.setItem('multiply_love_lang', lang); } catch(e){}
 }
+// Restore on load
+(function initLang(){
+  let saved = 'en';
+  try { saved = localStorage.getItem('multiply_love_lang') || 'en'; } catch(e){}
+  if (saved !== 'tl' && saved !== 'en') saved = 'en';
+  setLang(saved);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER (assessment standard, May 2026)
+// ═══════════════════════════════════════════════════════════════
+const _LOVE_FONT_KEY = 'multiply_love_fontscale';
+const _FONT_STEPS_LOVE = [0.90, 1.00, 1.10, 1.25, 1.40];
+let _fontIdx_love = 1;
+function applyFontScale(){
+  const scale = _FONT_STEPS_LOVE[_fontIdx_love];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_fontIdx_love <= 0);
+  if (up) up.disabled = (_fontIdx_love >= _FONT_STEPS_LOVE.length - 1);
+}
+function changeFontScale(direction){
+  _fontIdx_love = Math.max(0, Math.min(_FONT_STEPS_LOVE.length - 1, _fontIdx_love + direction));
+  applyFontScale();
+  try { localStorage.setItem(_LOVE_FONT_KEY, String(_fontIdx_love)); } catch(e){}
+}
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_LOVE_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _FONT_STEPS_LOVE.length) _fontIdx_love = saved;
+  } catch(e){}
+  applyFontScale();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-SAVE & RESUME (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+const _LOVE_SAVE_KEY = 'multiply_love_progress';
+const _LOVE_AUTOSAVE_DEBOUNCE = 600;
+
+function _collectFormState_love(){
+  const state = { radios:{}, checks:{}, fields:{}, member:{} };
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => {
+    if (r.name) state.radios[r.name] = r.value;
+  });
+  document.querySelectorAll('input[type="checkbox"]:checked').forEach(c => {
+    if (!c.name) return;
+    if (!state.checks[c.name]) state.checks[c.name] = [];
+    state.checks[c.name].push(c.value);
+  });
+  document.querySelectorAll('input[type="text"], input[type="date"], input[type="number"], textarea, select').forEach(i => {
+    const key = i.dataset.field || i.name || i.id;
+    if (key && i.value) state.fields[key] = i.value;
+  });
+  const memId = document.getElementById('selectedMemberId');
+  if (memId && memId.value) state.member.id = memId.value;
+  const memName = document.getElementById('memberSearch');
+  if (memName && memName.value) state.member.name = memName.value;
+  return state;
+}
+
+function _applyFormState_love(state){
+  if (!state || typeof state !== 'object') return;
+  Object.keys(state.radios || {}).forEach(name => {
+    const val = state.radios[name];
+    const el = document.querySelector(`input[type="radio"][name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+    if (el) { el.checked = true; el.dispatchEvent(new Event('change', {bubbles:true})); }
+  });
+  Object.keys(state.checks || {}).forEach(name => {
+    (state.checks[name] || []).forEach(val => {
+      const el = document.querySelector(`input[type="checkbox"][name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+      if (el) { el.checked = true; el.dispatchEvent(new Event('change', {bubbles:true})); }
+    });
+  });
+  Object.keys(state.fields || {}).forEach(key => {
+    let el = document.querySelector(`[data-field="${CSS.escape(key)}"]`);
+    if (!el) el = document.getElementById(key) || document.querySelector(`[name="${CSS.escape(key)}"]`);
+    if (el) el.value = state.fields[key];
+  });
+  if (state.member && state.member.id && typeof selectMember === 'function'){
+    selectMember(state.member.id, state.member.name || '');
+  }
+}
+
+let _saveTimer_love = null;
+function saveProgress(){
+  clearTimeout(_saveTimer_love);
+  _saveTimer_love = setTimeout(() => {
+    try {
+      const state = _collectFormState_love();
+      const hasAny = Object.keys(state.radios).length > 0 || Object.keys(state.checks).length > 0;
+      if (!hasAny) { localStorage.removeItem(_LOVE_SAVE_KEY); return; }
+      localStorage.setItem(_LOVE_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+      const pb = document.getElementById('pauseBtn');
+      if (pb) pb.style.display = 'block';
+      _idleArmed_love = true;
+      _armIdleTimer_love();
+    } catch(e){ console.warn('saveProgress failed:', e); }
+  }, _LOVE_AUTOSAVE_DEBOUNCE);
+}
+
+function loadProgress(){
+  try {
+    const raw = localStorage.getItem(_LOVE_SAVE_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload || !payload.state) return;
+    document.getElementById('resumeBanner').classList.add('show');
+    window._pendingResume_love = payload.state;
+  } catch(e){ console.warn('loadProgress failed:', e); }
+}
+
+function resumeTest(){
+  if (window._pendingResume_love){ _applyFormState_love(window._pendingResume_love); }
+  document.getElementById('resumeBanner').classList.remove('show');
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.style.display = 'block';
+  _idleArmed_love = true;
+  _armIdleTimer_love();
+}
+
+function discardProgress(){
+  if (!confirm('Sigurado ka bang gusto mong burahin ang lahat at magsimula ulit?\n\nDelete saved progress and start over?')) return;
+  try { localStorage.removeItem(_LOVE_SAVE_KEY); } catch(e){}
+  window._pendingResume_love = null;
+  document.getElementById('resumeBanner').classList.remove('show');
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.style.display = 'none';
+}
+
+function showPauseModal(){
+  clearTimeout(_saveTimer_love);
+  try {
+    const state = _collectFormState_love();
+    localStorage.setItem(_LOVE_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+  } catch(e){}
+  alert('✓ Na-save ang progreso mo.\n\nIsara mo na ang tab — pagbalik mo, ibibigay namin ang opsyon na ipagpatuloy.\n\n— — —\n\n✓ Your progress is saved.\n\nYou can close this tab now — when you return, we will offer to resume where you left off.');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE DETECTION (assessment standard)
+// Threshold from system_settings.meta.salvation_idle_minutes (shared)
+// ═══════════════════════════════════════════════════════════════
+let _idleMinutes_love = 3;
+let _idleTimer_love = null;
+let _idleModalOpen_love = false;
+let _idleArmed_love = false;
+
+async function loadIdleThreshold(){
+  try {
+    if (typeof getDB !== 'function') return;
+    const db = getDB();
+    if (!db) return;
+    const { data, error } = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if (typeof v === 'number' && v >= 1 && v <= 30) _idleMinutes_love = v;
+  } catch(e){ console.warn('[idle] threshold load failed; using default'); }
+}
+
+function _armIdleTimer_love(){
+  if (!_idleArmed_love) return;
+  if (_idleModalOpen_love) return;
+  clearTimeout(_idleTimer_love);
+  _idleTimer_love = setTimeout(_showIdlePrompt_love, _idleMinutes_love * 60 * 1000);
+}
+
+function _resetIdleTimer_love(){ _armIdleTimer_love(); }
+
+function _showIdlePrompt_love(){
+  if (_idleModalOpen_love) return;
+  _idleModalOpen_love = true;
+  clearTimeout(_saveTimer_love);
+  try {
+    const state = _collectFormState_love();
+    localStorage.setItem(_LOVE_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+  } catch(e){}
+  document.querySelectorAll('.love-idle-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'love-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-size:1.2rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">⏸ <span class="tl-text">Hihinto muna?</span><span class="en-text">Pause for now?</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mukhang hindi ka nagsasagot ng ${_idleMinutes_love} minuto na. Na-save na ang lahat ng iyong sagot. Gusto mo bang humintong sandali?</span>
+        <span class="en-text">It looks like there's been no activity for ${_idleMinutes_love} minutes. Your answers are saved. Would you like to pause?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="idleYes" style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          ✓ <span class="tl-text">Oo, hihinto muna ako</span><span class="en-text">Yes — pause now</span>
+        </button>
+        <button id="idleNo" style="padding:11px;background:transparent;color:#5a5a5a;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <span class="tl-text">Ipagpatuloy ko</span><span class="en-text">Keep going</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => { modal.remove(); _idleModalOpen_love = false; _armIdleTimer_love(); };
+  modal.querySelector('#idleYes').onclick = () => { close(); showPauseModal(); };
+  modal.querySelector('#idleNo').onclick = close;
+}
+
+// Wire activity listeners + autosave hook
+(function initIdleAndAutosave(){
+  function start(){
+    loadIdleThreshold();
+    ['mousemove','mousedown','touchstart','keydown','scroll','input','change'].forEach(evt => {
+      document.addEventListener(evt, _resetIdleTimer_love, { passive: true });
+    });
+    document.querySelectorAll('input, textarea, select').forEach(el => {
+      el.addEventListener('change', saveProgress);
+      el.addEventListener('input',  saveProgress);
+    });
+    loadProgress();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// "BEFORE SAVING…" CONFIRMATION MODAL (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+function confirmSaveToDashboard(){
+  if (typeof _scores === 'undefined' || !_scores || Object.keys(_scores).length === 0){
+    alert('Please answer the questions first to see your results.');
+    return;
+  }
+  document.querySelectorAll('.love-save-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'love-save-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-size:1.15rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">📋 <span class="tl-text">Bago mag-save</span><span class="en-text">Before saving</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mawawala ang iyong mga sagot pagkatapos ma-save. Kunin muna ang PDF copy ng iyong resulta?</span>
+        <span class="en-text">Saving will clear your saved progress. Want a PDF copy of your results first?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="ssPdf"    style="padding:11px;background:#1a1612;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">📄 <span class="tl-text">Oo — i-download muna ang PDF</span><span class="en-text">Yes — Download PDF first</span></button>
+        <button id="ssSave"   style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">💾 <span class="tl-text">I-save na lang</span><span class="en-text">Just save</span></button>
+        <button id="ssCancel" style="padding:9px;background:transparent;color:#6b6b6b;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ <span class="tl-text">Kanselahin</span><span class="en-text">Cancel</span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('#ssPdf').onclick    = () => { close(); downloadPDFReport(true); };
+  modal.querySelector('#ssSave').onclick   = () => { close(); saveToDashboard(); };
+  modal.querySelector('#ssCancel').onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF EXPORT (assessment standard, jsPDF)
+// ═══════════════════════════════════════════════════════════════
+async function downloadPDFReport(chainToSave){
+  if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF){
+    alert('PDF library not loaded. Check your internet connection and refresh.');
+    return;
+  }
+  if (typeof _scores === 'undefined' || !_scores || Object.keys(_scores).length === 0){
+    alert('Please answer the questions first to see your results.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 50;
+  let y = margin;
+
+  const ensureSpace = (need) => { if (y + (need || 20) > pageH - margin) { doc.addPage(); y = margin; } };
+  const writeText = (text, opts) => {
+    opts = opts || {};
+    const size = opts.size || 11;
+    const style = opts.style || 'normal';
+    const color = opts.color || [40,40,40];
+    const maxW = pageW - margin*2;
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+    const lines = doc.splitTextToSize(String(text || ''), maxW);
+    lines.forEach(line => { ensureSpace(size + 4); doc.text(line, margin, y); y += size + 4; });
+  };
+  const hr = () => { ensureSpace(10); doc.setDrawColor(220,220,220); doc.line(margin, y, pageW - margin, y); y += 8; };
+
+  // ── HEADER BANNER ──
+  doc.setFillColor(26,22,18);
+  doc.rect(0, 0, pageW, 90, 'F');
+  doc.setTextColor(184,136,42);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.text('Love Language Profile', margin, 38);
+  doc.setTextColor(245,237,216);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  doc.text('Personal Love Language Inventory · Rosehill Christian Church', margin, 58);
+  doc.setFontSize(10);
+  doc.text('Generated ' + new Date().toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}), margin, 76);
+  y = 110;
+
+  // ── MEMBER INFO ──
+  const memberName = document.getElementById('pName')?.value || document.querySelector('input[data-field="name"]')?.value || 'Unknown';
+  const lcGroup    = document.getElementById('pGroup')?.value || '—';
+  const dateTaken  = document.getElementById('pDate')?.value || new Date().toISOString().split('T')[0];
+  const facilitator = document.getElementById('pAdmin')?.value || '—';
+  writeText('Name: ' + memberName, { size:13, style:'bold' });
+  writeText('LC Group: ' + lcGroup);
+  writeText('Date Taken: ' + dateTaken);
+  if (facilitator && facilitator !== '—') writeText('Administered by: ' + facilitator);
+  hr();
+
+  // ── PRIMARY RESULT ──
+  const primary = (typeof _sorted !== 'undefined' && _sorted && _sorted[0]) ? _sorted[0] : null;
+  if (primary){
+    writeText('Primary Result: ' + (primary.name || primary.id), { size:14, style:'bold', color:[26,22,18] });
+    if (primary.desc) writeText(primary.desc, { size:10, color:[80,80,80] });
+    if (_sorted[1]) writeText('Secondary: ' + (_sorted[1].name || _sorted[1].id));
+    hr();
+  }
+
+  // ── SCORE BREAKDOWN ──
+  writeText('Score Breakdown', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  if (typeof LANGUAGES !== 'undefined') {
+    LANGUAGES.forEach(t => {
+      const s = _scores[t.id] || 0;
+      const isPrimary = primary && t.id === primary.id;
+      writeText(t.name + ': ' + s + ' picks', { style: isPrimary ? 'bold' : 'normal' });
+    });
+  }
+  hr();
+
+  // ── ALL ANSWERS (love language uses pick-style, not scale) ──
+  writeText('Detailed Responses', { size:14, style:'bold', color:[26,22,18] });
+  y += 6;
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => {
+    const card = r.closest('.q-card, .question, .q-row');
+    let qText = card ? (card.querySelector('.q-text, .q-en, .q-tl, .question-text')?.textContent.trim() || r.name) : r.name;
+    const lbl = r.closest('label');
+    const choiceText = lbl ? (lbl.querySelector('.choice-en, .choice-tl, .mc-en, .mc-tl')?.textContent.trim() || lbl.textContent.trim()) : r.value;
+    writeText('  • ' + qText, { size:10 });
+    writeText('       Picked: ' + choiceText, { size:9, style:'italic', color:[42,92,64] });
+  });
+
+  // ── FOOTER on every page ──
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++){
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150,150,150);
+    doc.text('Confidential · Love Language Profile · ' + memberName, margin, pageH - 24);
+    doc.text('Page ' + p + ' of ' + pageCount, pageW - margin, pageH - 24, { align:'right' });
+  }
+
+  const safeName = memberName.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40);
+  const filename = 'Love_Language_Profile_' + safeName + '_' + dateTaken + '.pdf';
+  doc.save(filename);
+
+  if (chainToSave){
+    setTimeout(() => { saveToDashboard(); }, 800);
+  }
+}
+
+// Clear localStorage progress AFTER successful save
+(function wrapSave_love(){
+  if (typeof saveToDashboard !== 'function') return;
+  const orig = saveToDashboard;
+  window.saveToDashboard = async function(){
+    const result = await orig.apply(this, arguments);
+    try { localStorage.removeItem(_LOVE_SAVE_KEY); } catch(e){}
+    const pb = document.getElementById('pauseBtn');
+    if (pb) pb.style.display = 'none';
+    return result;
+  };
+})();
 
 </script>
 </body>

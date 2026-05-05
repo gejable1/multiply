@@ -62,6 +62,35 @@ body[data-lang="tl"] .en-block{display:none !important;}
 }
 .lt-btn.active{background:var(--gold);color:white;}
 
+/* ── FONT SIZE CONTROL (assessment standard, May 2026) ── */
+.font-toggle{
+  position:fixed;bottom:18px;right:178px;
+  background:var(--paper);border:1.5px solid var(--border);
+  border-radius:30px;padding:3px;display:flex;align-items:center;gap:2px;
+  z-index:1000;box-shadow:0 4px 16px rgba(0,0,0,.15);
+  font-family:'Karla',sans-serif;
+}
+.ft-btn{
+  border:none;background:transparent;font-family:inherit;font-weight:700;
+  cursor:pointer;border-radius:25px;color:var(--lighter);transition:all .15s;
+  padding:7px 11px;line-height:1;
+}
+.ft-btn.ft-minus{font-size:13px;}
+.ft-btn.ft-plus{font-size:16px;}
+.ft-btn:hover{background:rgba(184,136,42,.10);}
+.ft-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.ft-label{
+  font-size:10.5px;font-weight:700;color:var(--ink);
+  padding:0 6px;min-width:38px;text-align:center;
+}
+@media (max-width:520px){
+  .font-toggle{bottom:56px;right:12px;padding:2px;}
+  .ft-btn{padding:6px 9px;}
+  .ft-btn.ft-minus{font-size:12px;}
+  .ft-btn.ft-plus{font-size:15px;}
+  .ft-label{font-size:10px;min-width:34px;padding:0 4px;}
+}
+
 /* ── PAUSE / RESUME ── */
 .resume-banner{
   background:linear-gradient(135deg,#1a4a6b,#2a5c40);color:white;
@@ -509,10 +538,18 @@ body[data-lang="tl"] .en-block{display:none !important;}
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body data-lang="en">
 
 <!-- LANGUAGE TOGGLE -->
+<!-- Font size control (assessment standard) -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+</div>
+
 <div class="lang-toggle">
   <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
   <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
@@ -747,7 +784,7 @@ body[data-lang="tl"] .en-block{display:none !important;}
   </div>
 
   <div class="action-bar">
-    <button class="btn-primary" id="saveBtn" onclick="saveToDashboard()" style="background:linear-gradient(135deg,#2a5c40 0%,#1f4530 100%);color:#fff;">
+    <button class="btn-primary" id="saveBtn" onclick="confirmSaveToDashboard()" style="background:linear-gradient(135deg,#2a5c40 0%,#1f4530 100%);color:#fff;">
       <span class="en-text">💾 Save to Dashboard</span>
       <span class="tl-text">💾 I-save sa Dashboard</span>
     </button>
@@ -1816,6 +1853,264 @@ autoLinkFromUrl();
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', saveProgress);
 });
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER (assessment standard, May 2026)
+// ═══════════════════════════════════════════════════════════════
+const _GIFTS_FONT_KEY = 'multiply_gifts_fontscale';
+const _GIFTS_FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40];
+let _gifts_fontIdx = 1;
+function applyFontScale(){
+  const scale = _GIFTS_FONT_STEPS[_gifts_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_gifts_fontIdx <= 0);
+  if (up) up.disabled = (_gifts_fontIdx >= _GIFTS_FONT_STEPS.length - 1);
+}
+function changeFontScale(direction){
+  _gifts_fontIdx = Math.max(0, Math.min(_GIFTS_FONT_STEPS.length - 1, _gifts_fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(_GIFTS_FONT_KEY, String(_gifts_fontIdx)); } catch(e){}
+}
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_GIFTS_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _GIFTS_FONT_STEPS.length) _gifts_fontIdx = saved;
+  } catch(e){}
+  applyFontScale();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE DETECTION (assessment standard, threshold from system_settings)
+// ═══════════════════════════════════════════════════════════════
+let _idleMinutes_gifts = 3;
+let _idleTimer_gifts = null;
+let _idleModalOpen_gifts = false;
+let _idleArmed_gifts = false;
+
+async function loadIdleThreshold_gifts(){
+  try {
+    const db = (typeof getDB === 'function') ? getDB() : (typeof supabase !== 'undefined' ? supabase : null);
+    if (!db) return;
+    const { data, error } = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if (typeof v === 'number' && v >= 1 && v <= 30) _idleMinutes_gifts = v;
+  } catch(e){ console.warn('[idle] threshold load failed; using default'); }
+}
+
+function _armIdleTimer_gifts(){
+  if (!_idleArmed_gifts) return;
+  if (_idleModalOpen_gifts) return;
+  clearTimeout(_idleTimer_gifts);
+  _idleTimer_gifts = setTimeout(_showIdlePrompt_gifts, _idleMinutes_gifts * 60 * 1000);
+}
+
+function _showIdlePrompt_gifts(){
+  if (_idleModalOpen_gifts) return;
+  _idleModalOpen_gifts = true;
+  try { if (typeof saveProgress === 'function') saveProgress(); } catch(e){}
+
+  document.querySelectorAll('.gifts-idle-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'gifts-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'Karla',sans-serif">
+      <div style="font-size:1.2rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">⏸ <span class="tl-text">Hihinto muna?</span><span class="en-text">Pause for now?</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mukhang hindi ka nagsasagot ng ${_idleMinutes_gifts} minuto na. Na-save na ang lahat ng iyong sagot. Gusto mo bang humintong sandali?</span>
+        <span class="en-text">It looks like there has been no activity for ${_idleMinutes_gifts} minutes. Your answers are saved. Would you like to pause?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="idleYes" style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          ✓ <span class="tl-text">Oo, hihinto muna ako</span><span class="en-text">Yes — pause now</span>
+        </button>
+        <button id="idleNo" style="padding:11px;background:transparent;color:#5a5a5a;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <span class="tl-text">Ipagpatuloy ko</span><span class="en-text">Keep going</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => { modal.remove(); _idleModalOpen_gifts = false; _armIdleTimer_gifts(); };
+  modal.querySelector('#idleYes').onclick = () => { close(); if (typeof showPauseModal === 'function') showPauseModal(); };
+  modal.querySelector('#idleNo').onclick = close;
+}
+
+// Wrap saveProgress so the idle timer arms after first answer
+(function wrapSaveProgress_gifts(){
+  if (typeof saveProgress !== 'function') return;
+  const orig = saveProgress;
+  window.saveProgress = function(){
+    const result = orig.apply(this, arguments);
+    _idleArmed_gifts = true;
+    _armIdleTimer_gifts();
+    return result;
+  };
+})();
+
+(function initIdleListeners_gifts(){
+  function start(){
+    loadIdleThreshold_gifts();
+    ['mousemove','mousedown','touchstart','keydown','scroll','input','change'].forEach(evt => {
+      document.addEventListener(evt, _armIdleTimer_gifts, { passive: true });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// "BEFORE SAVING…" CONFIRMATION MODAL (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+function confirmSaveToDashboard(){
+  if (!_calculatedScores || !_calculatedScores.scores){
+    alert('Please calculate your results first to see your spiritual gifts.');
+    return;
+  }
+  document.querySelectorAll('.gifts-save-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'gifts-save-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'Karla',sans-serif">
+      <div style="font-size:1.15rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">📋 <span class="tl-text">Bago mag-save</span><span class="en-text">Before saving</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mawawala ang iyong mga sagot pagkatapos ma-save. Kunin muna ang PDF copy ng iyong resulta?</span>
+        <span class="en-text">Saving will clear your saved progress. Want a PDF copy of your results first?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="ssPdf"    style="padding:11px;background:#1a1612;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">📄 <span class="tl-text">Oo — i-download muna ang PDF</span><span class="en-text">Yes — Download PDF first</span></button>
+        <button id="ssSave"   style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">💾 <span class="tl-text">I-save na lang</span><span class="en-text">Just save</span></button>
+        <button id="ssCancel" style="padding:9px;background:transparent;color:#6b6b6b;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ <span class="tl-text">Kanselahin</span><span class="en-text">Cancel</span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('#ssPdf').onclick    = () => { close(); downloadPDFReport(true); };
+  modal.querySelector('#ssSave').onclick   = () => { close(); saveToDashboard(); };
+  modal.querySelector('#ssCancel').onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF EXPORT (assessment standard, jsPDF)
+// ═══════════════════════════════════════════════════════════════
+async function downloadPDFReport(chainToSave){
+  if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF){
+    alert('PDF library not loaded. Check your internet connection and refresh.');
+    return;
+  }
+  if (!_calculatedScores || !_calculatedScores.scores){
+    alert('Please calculate your results first.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 50;
+  let y = margin;
+
+  const ensureSpace = (need) => { if (y + (need || 20) > pageH - margin) { doc.addPage(); y = margin; } };
+  const writeText = (text, opts) => {
+    opts = opts || {};
+    const size = opts.size || 11;
+    const style = opts.style || 'normal';
+    const color = opts.color || [40,40,40];
+    const maxW = pageW - margin*2;
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+    const lines = doc.splitTextToSize(String(text || ''), maxW);
+    lines.forEach(line => { ensureSpace(size + 4); doc.text(line, margin, y); y += size + 4; });
+  };
+  const hr = () => { ensureSpace(10); doc.setDrawColor(220,220,220); doc.line(margin, y, pageW - margin, y); y += 8; };
+
+  // ── HEADER ──
+  doc.setFillColor(26,22,18);
+  doc.rect(0, 0, pageW, 90, 'F');
+  doc.setTextColor(184,136,42);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.text('Spiritual Gifts Diagnostic', margin, 38);
+  doc.setTextColor(245,237,216);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  doc.text('Discovering Your Spiritual Gifts · Rosehill Christian Church', margin, 58);
+  doc.setFontSize(10);
+  doc.text('Generated ' + new Date().toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}), margin, 76);
+  y = 110;
+
+  // ── MEMBER INFO ──
+  const memberName = document.getElementById('pName')?.value || 'Unknown';
+  const lcGroup    = document.getElementById('pGroup')?.value || '—';
+  const dateTaken  = document.getElementById('pDate')?.value || new Date().toISOString().split('T')[0];
+  const years      = document.getElementById('pYears')?.value || '—';
+  writeText('Name: ' + memberName, { size:13, style:'bold' });
+  writeText('LC Group: ' + lcGroup);
+  writeText('Date Taken: ' + dateTaken);
+  if (years && years !== '—') writeText('Years as Christian: ' + years);
+  hr();
+
+  // ── TOP 3 GIFTS ──
+  const sorted = _calculatedScores.sorted;
+  const scores = _calculatedScores.scores;
+  writeText('Your Top 3 Spiritual Gifts', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  sorted.slice(0, 3).forEach((g, i) => {
+    const rank = ['1st', '2nd', '3rd'][i];
+    writeText(rank + ': ' + g.name + ' — ' + scores[g.id] + ' / 25', { size:12, style:'bold', color:[42,92,64] });
+    if (g.descEn) writeText(g.descEn, { size:10, color:[80,80,80] });
+    y += 4;
+  });
+  hr();
+
+  // ── FULL SCORE BREAKDOWN ──
+  writeText('Full Score Breakdown', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  sorted.forEach((g, i) => {
+    const s = scores[g.id];
+    const pct = Math.round(s / 25 * 100);
+    const isTop3 = i < 3;
+    writeText(g.name + ': ' + s + '/25 (' + pct + '%)', { style: isTop3 ? 'bold' : 'normal' });
+  });
+  hr();
+
+  // ── ALL ANSWERS ──
+  writeText('Detailed Responses', { size:14, style:'bold', color:[26,22,18] });
+  writeText('Scale: 1=Never/Not me · 2=Rarely · 3=Sometimes · 4=Often · 5=Consistently/Strongly me', { size:9, style:'italic', color:[120,120,120] });
+  y += 6;
+  const SCALE_LABELS = { '1':'Never/Not me', '2':'Rarely', '3':'Sometimes', '4':'Often', '5':'Consistently/Strongly me' };
+  if (typeof QUESTIONS !== 'undefined') {
+    QUESTIONS.forEach((qText, idx) => {
+      const radio = document.querySelector(`input[name="q${idx}"]:checked`);
+      const val = radio ? radio.value : '';
+      const lbl = val ? (val + ' — ' + SCALE_LABELS[val]) : '(no answer)';
+      writeText('Q' + (idx+1) + '. ' + qText, { size:10 });
+      writeText('       Answer: ' + lbl, { size:9, style:'italic', color: val ? [42,92,64] : [160,160,160] });
+    });
+  }
+
+  // ── FOOTER ──
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++){
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150,150,150);
+    doc.text('Confidential · Spiritual Gifts Diagnostic · ' + memberName, margin, pageH - 24);
+    doc.text('Page ' + p + ' of ' + pageCount, pageW - margin, pageH - 24, { align:'right' });
+  }
+
+  const safeName = memberName.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40);
+  doc.save('Spiritual_Gifts_' + safeName + '_' + dateTaken + '.pdf');
+
+  if (chainToSave){ setTimeout(() => { saveToDashboard(); }, 800); }
+}
+
 </script>
 </body>
 </html>
