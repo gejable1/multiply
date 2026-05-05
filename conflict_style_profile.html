@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Conflict Response Style Inventory · MULTIPLY</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="shortcut icon" href="favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg:#f8f5f0; --paper:#fff; --ink:#1a1612; --muted:#6b5f50; --lighter:#a09080;
+  --border:#e5ddd0; --surface2:#f3efe8; --green:#2a5c40; --green-bg:#eef6f1;
+  --navy:#1b2a4a; --gold:#b8882a; --gold-bg:#fdf6e8;
+  --shadow:0 1px 3px rgba(0,0,0,.08); --shadow2:0 4px 16px rgba(0,0,0,.1);
+
+  /* mode colors */
+  --c-com:#c44a3e;   /* Competing — red */
+  --c-col:#2a7a4c;   /* Collaborating — green */
+  --c-cmp:#b8882a;   /* Compromising — gold */
+  --c-avo:#5b6573;   /* Avoiding — slate */
+  --c-acc:#7a4f9c;   /* Accommodating — purple */
+}
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--ink); font-size:14px; line-height:1.7; }
+
+/* ── BILINGUAL TOGGLE (assessment standard) ── */
+[data-lang="en"] .tl-text { display:none !important; }
+[data-lang="tl"] .en-text { display:none !important; }
+.lang-en .tl-text { display:none !important; }
+.lang-tl .en-text { display:none !important; }
+
+.lang-toggle {
+  position: fixed; bottom: 18px; right: 18px;
+  background: var(--paper); border: 1.5px solid var(--gold);
+  border-radius: 30px; padding: 3px;
+  display: flex; gap: 2px; z-index: 1000;
+  box-shadow: var(--shadow2);
+}
+.lt-btn {
+  padding: 7px 14px; border: none; background: transparent;
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 700;
+  cursor: pointer; border-radius: 25px; color: var(--muted); transition: all .15s;
+}
+.lt-btn.active { background: var(--gold); color:#fff; }
+
+/* ── FONT SIZE CONTROL (assessment standard) ── */
+.font-toggle {
+  position: fixed; bottom: 18px; right: 178px;
+  background: var(--paper); border: 1.5px solid var(--gold);
+  border-radius: 30px; padding: 3px;
+  display: flex; align-items: center; gap: 2px; z-index: 1000;
+  box-shadow: var(--shadow2); font-family: 'DM Sans',sans-serif;
+}
+.ft-btn {
+  border: none; background: transparent; font-family: inherit; font-weight: 700;
+  cursor: pointer; border-radius: 25px; color: var(--muted); transition: all .15s;
+  padding: 7px 11px; line-height: 1;
+}
+.ft-btn.ft-minus { font-size: 13px; }
+.ft-btn.ft-plus { font-size: 16px; }
+.ft-btn:hover { background: rgba(184,136,42,.10); }
+.ft-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ft-label {
+  font-size: 10.5px; font-weight: 700; color: var(--ink);
+  padding: 0 6px; min-width: 38px; text-align: center;
+}
+
+/* ── PAUSE BUTTON ── */
+.pause-btn {
+  position: fixed; top: 14px; right: 14px; z-index: 100;
+  background: var(--paper); border: 1.5px solid var(--gold); color: var(--ink);
+  font-family: 'DM Sans',sans-serif; font-size: 12px; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08); display: none;
+}
+.pause-btn:hover { background: var(--gold-bg); }
+
+/* ── RESUME BANNER ── */
+.resume-banner {
+  display: none;
+  background: linear-gradient(135deg,#fef3c7,#fde68a);
+  border: 1.5px solid var(--gold); border-radius: 12px;
+  padding: 14px 16px; margin: 16px;
+  font-family: 'DM Sans',sans-serif;
+}
+.resume-banner.show { display: block; }
+.resume-banner .rb-title { font-weight: 700; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
+.resume-banner .rb-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
+.resume-banner .rb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.resume-banner button {
+  flex: 1; min-width: 130px;
+  padding: 9px 14px; border-radius: 8px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; border: none;
+}
+.resume-banner .rb-yes { background: var(--green); color: #fff; }
+.resume-banner .rb-no  { background: #fff; color: var(--ink); border: 1px solid var(--border); }
+
+@media (max-width:520px){
+  .lang-toggle{bottom:12px;right:12px;}
+  .lt-btn{font-size:10.5px;padding:6px 12px;}
+  .font-toggle{bottom:56px;right:12px;padding:2px;}
+  .ft-btn{padding:6px 9px;}
+  .ft-btn.ft-minus{font-size:12px;}
+  .ft-btn.ft-plus{font-size:15px;}
+  .ft-label{font-size:10px;min-width:34px;padding:0 4px;}
+  .pause-btn{top:8px;right:8px;font-size:11px;padding:6px 11px;}
+}
+
+/* ── COVER ── */
+.cover {
+  background: linear-gradient(135deg,#1a1612 0%,#2a2419 50%,#1a1612 100%);
+  color: #f5f0e8; padding: 3rem 1.5rem 2.5rem; text-align: center;
+  border-bottom: 3px solid var(--gold);
+}
+.cover-badge {
+  display: inline-block; background: rgba(184,136,42,.18);
+  color: var(--gold); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .12em; padding: 5px 14px; border-radius: 20px;
+  text-transform: uppercase; margin-bottom: 1.25rem;
+}
+.cover-title {
+  font-family: 'Playfair Display', serif; font-size: 2.1rem; font-weight: 700;
+  line-height: 1.15; margin-bottom: .75rem; letter-spacing: -.01em;
+}
+.cover-subtitle {
+  font-style: italic; font-size: 14px; opacity: .85; max-width: 560px; margin: 0 auto;
+  line-height: 1.6;
+}
+.cover-tags {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  margin-top: 1.5rem;
+}
+.ctag {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .04em;
+  padding: 5px 12px; border-radius: 999px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  color: rgba(245,240,232,.85);
+}
+
+/* ── CONTAINER ── */
+.container { max-width: 760px; margin: 0 auto; padding: 1.5rem; padding-bottom: 6rem; }
+
+/* ── SECTION HEADERS ── */
+h2.sec-title {
+  font-family: 'Playfair Display', serif; font-size: 1.45rem; font-weight: 700;
+  margin: 2.25rem 0 .35rem 0; color: var(--ink); line-height: 1.2;
+}
+.sec-sub { font-size: 13px; color: var(--muted); margin-bottom: 1.25rem; line-height: 1.55; }
+
+/* ── PROFILE FIELDS ── */
+.lb-in {
+  background: var(--paper); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.25rem; box-shadow: var(--shadow);
+}
+.pf-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .04em; margin-bottom: 4px; text-transform: uppercase; }
+.pf {
+  font-family: 'DM Sans',sans-serif; font-size: 13.5px;
+  background: var(--surface2); border: 1.5px solid var(--border); border-radius: 7px;
+  padding: 9px 12px; color: var(--ink); width: 100%; margin-bottom: .75rem;
+  transition: border-color .15s;
+}
+.pf:focus { outline: none; border-color: var(--gold); background: #fff; }
+.member-search-wrap { position: relative; }
+.member-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--paper); border: 1px solid var(--border); border-radius: 7px;
+  box-shadow: var(--shadow2); max-height: 240px; overflow-y: auto; z-index: 50;
+  display: none; margin-top: 4px;
+}
+.member-dropdown.show { display: block; }
+
+/* ── INSTRUCTIONS BOX ── */
+.instructions {
+  background: var(--gold-bg); border: 1px solid #e8d5a0; border-radius: 12px;
+  padding: 1.1rem 1.35rem; margin: 1.25rem 0; font-size: 13px; line-height: 1.65;
+}
+.instructions h3 {
+  font-family: 'Playfair Display',serif; font-size: 14px; font-weight: 700;
+  color: var(--gold); margin-bottom: .5rem; letter-spacing: .03em;
+}
+
+/* ── QUESTION CARDS ── */
+.q-card {
+  background: var(--paper); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.1rem 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow);
+  transition: border-color .15s;
+}
+.q-card.answered { border-color: var(--green); }
+.q-num {
+  font-size: 11px; font-weight: 700; color: var(--gold);
+  letter-spacing: .08em; text-transform: uppercase; margin-bottom: .9rem;
+}
+.q-options { display: flex; flex-direction: column; gap: 8px; }
+.q-opt {
+  display: flex; align-items: stretch; gap: 14px;
+  padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 9px;
+  cursor: pointer; transition: all .15s; background: var(--paper);
+}
+.q-opt:hover { border-color: var(--gold); background: var(--gold-bg); }
+.q-opt input { display: none; }
+.q-opt input:checked + .q-letter {
+  background: var(--green); color: #fff; border-color: var(--green);
+}
+.q-opt:has(input:checked) {
+  border-color: var(--green); background: var(--green-bg);
+}
+.q-letter {
+  flex-shrink: 0; width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--surface2); color: var(--muted);
+  border: 1.5px solid var(--border); font-weight: 700; font-size: 13px;
+  transition: all .15s;
+}
+.q-text { flex: 1; line-height: 1.55; font-size: 13.5px; color: var(--ink); }
+.q-text > div { padding: 1px 0; }
+
+/* ── PROGRESS BAR ── */
+.prog-bar {
+  position: sticky; top: 0; background: var(--paper); border-bottom: 1px solid var(--border);
+  padding: .6rem 1.25rem; z-index: 100; display: flex; align-items: center; gap: 10px;
+  box-shadow: var(--shadow);
+}
+.prog-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.prog-fill { height: 100%; background: var(--gold); border-radius: 3px; transition: width .3s; }
+.prog-label { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 500; }
+
+/* ── CALC BUTTON ── */
+.calc-btn {
+  display: block; margin: 2rem auto; padding: 14px 36px;
+  background: linear-gradient(135deg,var(--green) 0%,#1f4530 100%);
+  color: #fff; border: none; border-radius: 10px;
+  font-family: 'DM Sans',sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; box-shadow: var(--shadow2); transition: transform .15s;
+}
+.calc-btn:hover { transform: translateY(-1px); }
+.calc-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* ── RESULTS ── */
+.results-block { display: none; }
+.results-block.show { display: block; }
+
+.primary-result {
+  background: linear-gradient(135deg,#1a1612 0%,#2a2419 100%);
+  color: #f5f0e8; padding: 1.75rem 1.5rem; border-radius: 14px;
+  text-align: center; margin: 1.5rem 0;
+  box-shadow: var(--shadow2);
+}
+.primary-mode-label { font-size: 11px; font-weight: 700; color: var(--gold); letter-spacing: .12em; text-transform: uppercase; margin-bottom: .5rem; }
+.primary-mode-name { font-family: 'Playfair Display',serif; font-size: 2.2rem; font-weight: 700; line-height: 1.1; margin-bottom: .35rem; }
+.primary-mode-score { font-size: 14px; opacity: .8; margin-bottom: 1rem; }
+.primary-mode-desc { font-style: italic; font-size: 13px; max-width: 540px; margin: 0 auto; line-height: 1.65; opacity: .9; }
+
+.score-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: var(--paper);
+  border: 1px solid var(--border); border-radius: 10px;
+  margin-bottom: 8px;
+}
+.score-row .sr-name { flex: 1; font-weight: 600; font-size: 14px; }
+.score-row .sr-bar-track { flex: 2; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+.score-row .sr-bar-fill { height: 100%; border-radius: 4px; transition: width .6s ease-out; }
+.score-row .sr-num { flex-shrink: 0; font-weight: 700; font-size: 13px; color: var(--ink); min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.mode-card {
+  background: var(--paper); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.1rem 1.35rem; margin-bottom: 1rem; box-shadow: var(--shadow);
+}
+.mode-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: .65rem; }
+.mode-pill {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  padding: 4px 10px; border-radius: 999px; color: #fff;
+  text-transform: uppercase;
+}
+.mode-card h3 {
+  font-family: 'Playfair Display', serif; font-size: 1.15rem;
+  font-weight: 700; flex: 1; line-height: 1.2;
+}
+.mode-card .mode-desc { font-size: 13px; color: var(--ink); line-height: 1.65; margin-bottom: .75rem; }
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: .65rem 0; }
+.mode-grid > div {
+  background: var(--surface2); padding: 10px 12px; border-radius: 8px;
+  font-size: 12px; line-height: 1.5;
+}
+.mode-grid .mg-label { font-weight: 700; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 3px; }
+.mode-question {
+  background: var(--gold-bg); border-left: 3px solid var(--gold);
+  padding: 10px 14px; border-radius: 0 8px 8px 0; font-style: italic;
+  font-size: 12.5px; line-height: 1.6; color: var(--ink); margin-top: .65rem;
+}
+.mode-question strong { font-weight: 700; color: var(--gold); font-style: normal; }
+@media (max-width:520px){ .mode-grid { grid-template-columns: 1fr; } }
+
+.lens-card {
+  background: linear-gradient(135deg,#eef6f1 0%,#fffefa 100%);
+  border: 1px solid var(--green-bg); border-radius: 12px;
+  padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow);
+}
+.lens-card h3 {
+  font-family: 'Playfair Display',serif; font-size: 1.05rem; font-weight: 700;
+  color: var(--green); margin-bottom: .35rem;
+}
+.lens-card p { font-size: 13px; line-height: 1.65; color: var(--ink); }
+
+.debrief-list {
+  background: var(--paper); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow);
+}
+.debrief-list ol { padding-left: 1.25rem; }
+.debrief-list li {
+  margin-bottom: .85rem; font-size: 13px; line-height: 1.65; color: var(--ink);
+  padding-left: .35rem;
+}
+.debrief-list li::marker { color: var(--gold); font-weight: 700; }
+
+.closing-block {
+  background: linear-gradient(135deg,#fdf6e8 0%,#fffefa 100%);
+  border: 1.5px solid var(--gold); border-radius: 14px;
+  padding: 1.5rem 1.75rem; text-align: center; margin: 1.5rem 0;
+  font-style: italic; font-size: 14px; line-height: 1.75; color: var(--ink);
+}
+.closing-block strong { font-style: normal; color: var(--gold); font-weight: 700; }
+
+/* ── ACTION BAR ── */
+.action-bar {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 2rem 0 1rem 0;
+}
+.action-bar .save-btn {
+  padding: 14px;
+  background: linear-gradient(135deg,var(--green) 0%,#1f4530 100%);
+  color: #fff; border: none; border-radius: 10px;
+  font-family: 'DM Sans',sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; box-shadow: var(--shadow2);
+}
+.action-bar .pdf-btn {
+  padding: 12px;
+  background: var(--paper); color: var(--ink);
+  border: 1.5px solid var(--border); border-radius: 10px;
+  font-family: 'DM Sans',sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.action-bar .pdf-btn:hover { background: var(--gold-bg); border-color: var(--gold); }
+
+#submitMsg {
+  background: var(--green-bg); border: 1px solid #a0d8b0; border-radius: 7px;
+  padding: .8rem 1.1rem; font-size: 13px; color: #1a5a30;
+  text-align: center; line-height: 1.55; margin-top: .85rem;
+}
+
+/* ── FACILITATOR NOTE ── */
+.facilitator-note {
+  background: var(--surface2); border-left: 3px solid var(--lighter);
+  padding: 12px 16px; border-radius: 0 8px 8px 0;
+  font-size: 12px; color: var(--muted); line-height: 1.6;
+  margin: 1.25rem 0;
+}
+
+/* ── PRINT ── */
+@media print {
+  .lang-toggle, .font-toggle, .pause-btn, .resume-banner,
+  .prog-bar, .calc-btn, .action-bar { display: none !important; }
+}
+</style>
+</head>
+<body class="lang-en" data-lang="en">
+
+<!-- Font size control -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+</div>
+
+<!-- Bilingual toggle -->
+<div class="lang-toggle" role="group" aria-label="Language toggle">
+  <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+</div>
+
+<!-- Pause button -->
+<button class="pause-btn" id="pauseBtn" onclick="showPauseModal()"><span class="tl-text">⏸ I-pause</span><span class="en-text">⏸ Pause</span></button>
+
+<!-- Resume banner -->
+<div class="resume-banner" id="resumeBanner">
+  <div class="rb-title">📋 <span class="tl-text">May hindi pa tapos na test</span><span class="en-text">You have an unfinished test</span></div>
+  <div class="rb-sub"><span class="tl-text">Gusto mo bang ipagpatuloy kung saan ka huminto?</span><span class="en-text">Would you like to continue where you left off?</span></div>
+  <div class="rb-actions">
+    <button class="rb-yes" onclick="resumeTest()">✓ <span class="tl-text">Ituloy</span><span class="en-text">Continue</span></button>
+    <button class="rb-no" onclick="discardProgress()">↻ <span class="tl-text">Magsimula ulit</span><span class="en-text">Start Over</span></button>
+  </div>
+</div>
+
+<!-- Progress bar -->
+<div class="prog-bar">
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="prog-label" id="progLabel">0 / 30</div>
+</div>
+
+<!-- COVER -->
+<div class="cover">
+  <span class="cover-badge"><span class="en-text">MULTIPLY Pipeline · Rosehill Christian Church</span><span class="tl-text">MULTIPLY Pipeline · Rosehill Christian Church</span></span>
+  <div class="cover-title">
+    <span class="en-text">Conflict Response Style Inventory</span>
+    <span class="tl-text">Conflict Response Style Inventory</span>
+  </div>
+  <div class="cover-subtitle">
+    <span class="en-text">Discover your default conflict-handling style — and grow into the leader who chooses what each moment requires.</span>
+    <span class="tl-text">Tuklasin ang iyong likas na pamamaraan sa pagharap sa conflict — at lumago bilang lider na pumipili ng angkop sa bawat sandali.</span>
+  </div>
+  <div class="cover-tags">
+    <span class="ctag">⚙ Competing</span>
+    <span class="ctag">🤝 Collaborating</span>
+    <span class="ctag">⚖ Compromising</span>
+    <span class="ctag">🌫 Avoiding</span>
+    <span class="ctag">💛 Accommodating</span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- PROFILE -->
+<h2 class="sec-title">
+  <span class="en-text">Participant Profile</span>
+  <span class="tl-text">Profile ng Lumalahok</span>
+</h2>
+<div class="sec-sub">
+  <span class="en-text">To be completed by the participant before starting.</span>
+  <span class="tl-text">Sasagutan ng lumalahok bago magsimula.</span>
+</div>
+<div class="lb-in">
+  <div class="member-search-wrap">
+    <div class="pf-label"><span class="en-text">Link to Member (optional)</span><span class="tl-text">I-ugnay sa Miyembro (opsyonal)</span></div>
+    <input type="text" id="memberSearch" class="pf" placeholder="Type a name to search…" data-ph-tl="I-type ang pangalan para hanapin…" data-ph-en="Type a name to search…" oninput="searchMembers()" autocomplete="off">
+    <input type="hidden" id="selectedMemberId">
+    <div class="member-dropdown" id="memberDropdown"></div>
+    <div id="memberSelected" style="display:none;font-size:11.5px;color:var(--green);margin-bottom:.65rem;font-weight:600;"></div>
+  </div>
+
+  <div class="pf-label"><span class="en-text">Full Name</span><span class="tl-text">Buong Pangalan</span></div>
+  <input type="text" id="pName" class="pf" placeholder="Your name" data-ph-tl="Iyong pangalan" data-ph-en="Your name">
+
+  <div class="pf-label"><span class="en-text">LC Group</span><span class="tl-text">LC Group</span></div>
+  <input type="text" id="pGroup" class="pf" placeholder="e.g. Young Pros, Family Builders" data-ph-tl="hal. Young Pros, Family Builders" data-ph-en="e.g. Young Pros, Family Builders">
+
+  <div class="pf-label"><span class="en-text">Date Taken</span><span class="tl-text">Petsa</span></div>
+  <input type="date" id="pDate" class="pf">
+
+  <div class="pf-label"><span class="en-text">Administered by (optional)</span><span class="tl-text">Sinasagutan kasama si (opsyonal)</span></div>
+  <input type="text" id="pAdmin" class="pf" placeholder="Discipler, coach, or pastor's name" data-ph-tl="Pangalan ng discipler, coach, o pastor" data-ph-en="Discipler, coach, or pastor's name">
+</div>
+
+<!-- INSTRUCTIONS -->
+<div class="instructions">
+  <h3><span class="en-text">How to Use This Inventory</span><span class="tl-text">Paano Gamitin ang Inventory na Ito</span></h3>
+  <div class="en-text">
+    <p>Think of how you usually respond when there is disagreement, tension, misunderstanding, or conflict.</p>
+    <p style="margin-top:.5rem">For each item, choose <strong>A or B</strong> — whichever is <strong>more like you</strong>, even if both are somewhat true or neither is perfect.</p>
+    <p style="margin-top:.5rem">Do not answer based on what you think is "best." Answer based on what you are <strong>most likely to do</strong>.</p>
+  </div>
+  <div class="tl-text">
+    <p>Isipin kung paano ka karaniwang tumutugon kapag may hindi pagkakasundo, tensyon, misunderstanding, o conflict.</p>
+    <p style="margin-top:.5rem">Sa bawat item, pumili ng <strong>A o B</strong> — alinmang <strong>mas malapit sa iyo</strong>, kahit pareho silang medyo totoo o walang perpektong sagot.</p>
+    <p style="margin-top:.5rem">Huwag sumagot batay sa "pinakamabuti." Sumagot batay sa <strong>pinakamalamang mong gawin</strong>.</p>
+  </div>
+</div>
+
+<!-- QUESTIONS -->
+<h2 class="sec-title">
+  <span class="en-text">30 Paired Questions</span>
+  <span class="tl-text">30 Paris ng Tanong</span>
+</h2>
+<div class="sec-sub">
+  <span class="en-text">Choose A or B for each pair — whichever is more like you.</span>
+  <span class="tl-text">Pumili ng A o B sa bawat paris — alinmang mas malapit sa iyo.</span>
+</div>
+
+<div id="questions">
+  <div class="q-card" id="q1" data-q="1">
+    <div class="q-num">Q1 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q1" value="A" onchange="onAnswer(1)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I press for a clear decision when I believe the issue is important.</div>
+          <div class="tl-text">Ipinipilit kong magkaroon ng malinaw na pasya kapag naniniwala akong mahalaga ang isyu.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q1" value="B" onchange="onAnswer(1)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I try to understand everyone’s concerns before deciding what should happen.</div>
+          <div class="tl-text">Sinisikap kong unawain ang mga alalahanin ng lahat bago magpasya kung ano ang dapat mangyari.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q2" data-q="2">
+    <div class="q-num">Q2 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q2" value="A" onchange="onAnswer(2)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I push for the solution I believe is right, even if others disagree.</div>
+          <div class="tl-text">Iginigiit ko ang solusyong pinaniniwalaan kong tama, kahit hindi sang-ayon ang iba.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q2" value="B" onchange="onAnswer(2)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I look for a middle ground that everyone can accept.</div>
+          <div class="tl-text">Naghahanap ako ng gitnang solusyon na maaaring tanggapin ng lahat.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q3" data-q="3">
+    <div class="q-num">Q3 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q3" value="A" onchange="onAnswer(3)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I stand firm when I believe the matter affects standards, values, or results.</div>
+          <div class="tl-text">Naninindigan ako kapag naniniwala akong ang usapin ay may kinalaman sa pamantayan, pagpapahalaga, o resulta.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q3" value="B" onchange="onAnswer(3)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may step back from the issue to avoid unnecessary tension.</div>
+          <div class="tl-text">Maaari akong umatras muna sa usapin upang maiwasan ang hindi kailangang tensyon.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q4" data-q="4">
+    <div class="q-num">Q4 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q4" value="A" onchange="onAnswer(4)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I argue for my position when I believe delay will make things worse.</div>
+          <div class="tl-text">Ipinaglalaban ko ang aking paninindigan kapag naniniwala akong lalala ang sitwasyon kung maaantala.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q4" value="B" onchange="onAnswer(4)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may give way if preserving the relationship matters more than winning the point.</div>
+          <div class="tl-text">Maaari akong magparaya kung mas mahalaga ang pagpapanatili ng relasyon kaysa maipilit ang aking punto.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q5" data-q="5">
+    <div class="q-num">Q5 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q5" value="A" onchange="onAnswer(5)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I invite others to work with me until we find a solution that satisfies the deeper concerns.</div>
+          <div class="tl-text">Inaanyayahan ko ang iba na makipagtulungan sa akin hanggang makahanap kami ng solusyong tumutugon sa mas malalalim na alalahanin.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q5" value="B" onchange="onAnswer(5)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I suggest that each side give up something so we can move forward.</div>
+          <div class="tl-text">Iminumungkahi kong may isuko ang bawat panig upang makausad kami.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q6" data-q="6">
+    <div class="q-num">Q6 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q6" value="A" onchange="onAnswer(6)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I want to talk through the issue thoroughly so we solve the real problem.</div>
+          <div class="tl-text">Gusto kong pag-usapan nang mabuti ang isyu upang malutas namin ang tunay na problema.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q6" value="B" onchange="onAnswer(6)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I sometimes postpone the discussion until emotions are calmer.</div>
+          <div class="tl-text">Minsan ipinagpapaliban ko ang pag-uusap hanggang mas kalmado na ang damdamin ng mga kasangkot.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q7" data-q="7">
+    <div class="q-num">Q7 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q7" value="A" onchange="onAnswer(7)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I try to create a solution where both sides feel genuinely heard and served.</div>
+          <div class="tl-text">Sinisikap kong makabuo ng solusyon kung saan tunay na nararamdaman ng dalawang panig na sila ay napakinggan at napaglingkuran.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q7" value="B" onchange="onAnswer(7)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may yield to the other person’s preference if the issue matters more to them.</div>
+          <div class="tl-text">Maaari akong magparaya sa kagustuhan ng kausap kung mas mahalaga sa kanya ang isyu.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q8" data-q="8">
+    <div class="q-num">Q8 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q8" value="A" onchange="onAnswer(8)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I am willing to settle for a fair partial solution rather than prolong the disagreement.</div>
+          <div class="tl-text">Handa akong tanggapin ang patas na bahagyang solusyon kaysa pahabain pa ang hindi pagkakasundo.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q8" value="B" onchange="onAnswer(8)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may avoid the issue if addressing it seems likely to create more harm than good.</div>
+          <div class="tl-text">Maaari kong iwasan ang isyu kung tila mas makakasama kaysa makakabuti ang pagharap dito.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q9" data-q="9">
+    <div class="q-num">Q9 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q9" value="A" onchange="onAnswer(9)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I look for a practical trade-off where each person gains something and gives something.</div>
+          <div class="tl-text">Naghahanap ako ng praktikal na palitan kung saan bawat isa ay may nakukuha at may isinusuko.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q9" value="B" onchange="onAnswer(9)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I sometimes let the other person have their way to keep peace.</div>
+          <div class="tl-text">Minsan hinahayaan kong masunod ang gusto ng kausap upang mapanatili ang kapayapaan.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q10" data-q="10">
+    <div class="q-num">Q10 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q10" value="A" onchange="onAnswer(10)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I prefer not to engage when the issue seems too small to be worth the conflict.</div>
+          <div class="tl-text">Mas pinipili kong huwag nang makisangkot kapag tila napakaliit ng isyu para pag-awayan pa.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q10" value="B" onchange="onAnswer(10)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may adjust my preference to support the other person.</div>
+          <div class="tl-text">Maaari kong baguhin ang aking kagustuhan upang suportahan ang ibang tao.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q11" data-q="11">
+    <div class="q-num">Q11 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q11" value="A" onchange="onAnswer(11)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I am direct about what I believe should be done.</div>
+          <div class="tl-text">Direkta kong sinasabi kung ano ang pinaniniwalaan kong dapat gawin.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q11" value="B" onchange="onAnswer(11)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I ask questions so we can discover what each person is really trying to protect.</div>
+          <div class="tl-text">Nagtatanong ako upang matuklasan namin kung ano talaga ang sinusubukang pangalagaan ng bawat isa.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q12" data-q="12">
+    <div class="q-num">Q12 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q12" value="A" onchange="onAnswer(12)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I am comfortable taking charge when a decision needs to be made.</div>
+          <div class="tl-text">Komportable akong manguna kapag kailangang gumawa ng pasya.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q12" value="B" onchange="onAnswer(12)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I propose a solution that gives both sides part of what they want.</div>
+          <div class="tl-text">Nagmumungkahi ako ng solusyon na nagbibigay sa bawat panig ng bahagi ng kanilang nais.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q13" data-q="13">
+    <div class="q-num">Q13 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q13" value="A" onchange="onAnswer(13)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I defend my view firmly when I think the group is moving in the wrong direction.</div>
+          <div class="tl-text">Matatag kong ipinagtatanggol ang aking pananaw kapag sa tingin ko ay papunta sa maling direksyon ang grupo.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q13" value="B" onchange="onAnswer(13)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I avoid taking a strong position when the disagreement seems unproductive.</div>
+          <div class="tl-text">Iniiwasan kong magkaroon ng matibay na posisyon kapag tila walang magandang bunga ang hindi pagkakasundo.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q14" data-q="14">
+    <div class="q-num">Q14 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q14" value="A" onchange="onAnswer(14)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I push back when I believe someone’s proposal is unwise or unfair.</div>
+          <div class="tl-text">Tinututulan ko ang mungkahi ng iba kapag naniniwala akong ito ay hindi marunong o hindi makatarungan.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q14" value="B" onchange="onAnswer(14)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I sometimes let others decide so the relationship remains warm.</div>
+          <div class="tl-text">Minsan hinahayaan kong ang iba ang magpasya upang manatiling maganda ang relasyon.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q15" data-q="15">
+    <div class="q-num">Q15 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q15" value="A" onchange="onAnswer(15)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I try to bring all concerns into the open so we can solve the issue well.</div>
+          <div class="tl-text">Sinisikap kong mailabas ang lahat ng alalahanin upang maayos naming malutas ang isyu.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q15" value="B" onchange="onAnswer(15)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I look for a quick agreement that both sides can live with.</div>
+          <div class="tl-text">Naghahanap ako ng mabilis na kasunduang parehong panig ay maaaring tanggapin.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q16" data-q="16">
+    <div class="q-num">Q16 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q16" value="A" onchange="onAnswer(16)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I want to discuss the disagreement until the root issue becomes clear.</div>
+          <div class="tl-text">Gusto kong pag-usapan ang hindi pagkakasundo hanggang maging malinaw ang pinakaugat ng isyu.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q16" value="B" onchange="onAnswer(16)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may leave the matter alone if the timing does not seem right.</div>
+          <div class="tl-text">Maaari kong ipagpaliban o huwag munang galawin ang usapin kung tila hindi pa tamang panahon.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q17" data-q="17">
+    <div class="q-num">Q17 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q17" value="A" onchange="onAnswer(17)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I work to find an answer that honors both the task and the relationship.</div>
+          <div class="tl-text">Sinisikap kong makahanap ng sagot na nagbibigay-halaga kapwa sa gawain at sa relasyon.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q17" value="B" onchange="onAnswer(17)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may set aside my own preference to support harmony.</div>
+          <div class="tl-text">Maaari kong isantabi ang sarili kong kagustuhan upang suportahan ang pagkakaisa.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q18" data-q="18">
+    <div class="q-num">Q18 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q18" value="A" onchange="onAnswer(18)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I suggest splitting the difference when both sides have valid concerns.</div>
+          <div class="tl-text">Iminumungkahi kong magtagpo kami sa gitna kapag parehong may makatuwirang alalahanin ang dalawang panig.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q18" value="B" onchange="onAnswer(18)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may choose silence when speaking up seems unlikely to help.</div>
+          <div class="tl-text">Maaari kong piliing manahimik kapag tila hindi makakatulong ang pagsasalita.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q19" data-q="19">
+    <div class="q-num">Q19 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q19" value="A" onchange="onAnswer(19)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I offer concessions if the other person is also willing to adjust.</div>
+          <div class="tl-text">Handa akong magbigay o magparaya kung handa rin ang kausap na mag-adjust.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q19" value="B" onchange="onAnswer(19)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may agree with the other person’s plan to avoid straining the relationship.</div>
+          <div class="tl-text">Maaari akong sumang-ayon sa plano ng kausap upang maiwasang masira o mabigatan ang relasyon.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q20" data-q="20">
+    <div class="q-num">Q20 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q20" value="A" onchange="onAnswer(20)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I withdraw from conflicts that seem unlikely to produce anything useful.</div>
+          <div class="tl-text">Umaatras ako sa mga conflict na tila walang kapaki-pakinabang na ibubunga.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q20" value="B" onchange="onAnswer(20)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I give priority to the other person’s wishes when the issue is not crucial to me.</div>
+          <div class="tl-text">Inuuna ko ang kagustuhan ng ibang tao kapag hindi naman napakahalaga sa akin ang isyu.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q21" data-q="21">
+    <div class="q-num">Q21 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q21" value="A" onchange="onAnswer(21)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I insist on action when I believe the situation requires courage and clarity.</div>
+          <div class="tl-text">Iginigiit kong kumilos kapag naniniwala akong kailangan ng sitwasyon ang tapang at kalinawan.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q21" value="B" onchange="onAnswer(21)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I try to build a solution that addresses the concerns of all involved.</div>
+          <div class="tl-text">Sinisikap kong bumuo ng solusyong tumutugon sa alalahanin ng lahat ng kasangkot.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q22" data-q="22">
+    <div class="q-num">Q22 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q22" value="A" onchange="onAnswer(22)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I hold my ground when I believe compromise would weaken the outcome.</div>
+          <div class="tl-text">Naninindigan ako kapag naniniwala akong ang kompromiso ay magpapahina sa magiging resulta.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q22" value="B" onchange="onAnswer(22)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I look for a fair exchange so no one feels completely defeated.</div>
+          <div class="tl-text">Naghahanap ako ng patas na palitan upang walang makaramdam na lubos siyang natalo.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q23" data-q="23">
+    <div class="q-num">Q23 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q23" value="A" onchange="onAnswer(23)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I take a strong stand when principle or responsibility is at stake.</div>
+          <div class="tl-text">Naninindigan ako nang matatag kapag prinsipyo o pananagutan ang nakataya.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q23" value="B" onchange="onAnswer(23)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may delay responding until I have more time to think.</div>
+          <div class="tl-text">Maaari kong ipagpaliban ang pagtugon hanggang magkaroon ako ng mas maraming oras para mag-isip.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q24" data-q="24">
+    <div class="q-num">Q24 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q24" value="A" onchange="onAnswer(24)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I am willing to be firm, even if it makes the conversation uncomfortable.</div>
+          <div class="tl-text">Handa akong maging matatag, kahit maging hindi komportable ang pag-uusap.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q24" value="B" onchange="onAnswer(24)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may accept the other person’s choice to preserve goodwill.</div>
+          <div class="tl-text">Maaari kong tanggapin ang pasya ng kausap upang mapanatili ang magandang samahan.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q25" data-q="25">
+    <div class="q-num">Q25 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q25" value="A" onchange="onAnswer(25)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I try to create a solution better than either side’s first proposal.</div>
+          <div class="tl-text">Sinisikap kong makabuo ng solusyong mas mabuti kaysa sa unang mungkahi ng alinmang panig.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q25" value="B" onchange="onAnswer(25)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I aim for a balanced settlement that allows us to move on.</div>
+          <div class="tl-text">Layunin kong magkaroon ng balanseng kasunduan upang makapagpatuloy na kami.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q26" data-q="26">
+    <div class="q-num">Q26 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q26" value="A" onchange="onAnswer(26)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I encourage honest discussion so hidden concerns can surface.</div>
+          <div class="tl-text">Hinihikayat ko ang tapat na pag-uusap upang lumitaw ang mga nakatagong alalahanin.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q26" value="B" onchange="onAnswer(26)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may avoid discussing the issue if the relationship feels too fragile.</div>
+          <div class="tl-text">Maaari kong iwasang pag-usapan ang isyu kung tila masyadong marupok ang relasyon.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q27" data-q="27">
+    <div class="q-num">Q27 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q27" value="A" onchange="onAnswer(27)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I want both sides to leave the conversation feeling respected and satisfied.</div>
+          <div class="tl-text">Gusto kong matapos ang pag-uusap na parehong panig ay nakakaramdam na sila ay iginalang at nasiyahan.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q27" value="B" onchange="onAnswer(27)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may give in when the other person’s need seems stronger than mine.</div>
+          <div class="tl-text">Maaari akong magparaya kapag tila mas matindi ang pangangailangan ng kausap kaysa sa akin.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q28" data-q="28">
+    <div class="q-num">Q28 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q28" value="A" onchange="onAnswer(28)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I negotiate toward a workable middle option.</div>
+          <div class="tl-text">Nakikipag-usap ako upang makarating sa isang praktikal na gitnang opsyon.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q28" value="B" onchange="onAnswer(28)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may let the issue pass if the cost of addressing it seems too high.</div>
+          <div class="tl-text">Maaari kong palampasin ang isyu kung tila masyadong malaki ang magiging kapalit ng pagharap dito.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q29" data-q="29">
+    <div class="q-num">Q29 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q29" value="A" onchange="onAnswer(29)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I try to reach an agreement where both sides sacrifice about equally.</div>
+          <div class="tl-text">Sinisikap kong makarating sa kasunduang halos pantay ang isinasakripisyo ng dalawang panig.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q29" value="B" onchange="onAnswer(29)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I may put the other person’s preference ahead of my own.</div>
+          <div class="tl-text">Maaari kong unahin ang kagustuhan ng ibang tao kaysa sa sarili kong kagustuhan.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  <div class="q-card" id="q30" data-q="30">
+    <div class="q-num">Q30 <span style="color:var(--lighter);font-size:11px;font-weight:500;">/ 30</span></div>
+    <div class="q-options">
+      <label class="q-opt">
+        <input type="radio" name="q30" value="A" onchange="onAnswer(30)">
+        <div class="q-letter">A</div>
+        <div class="q-text">
+          <div class="en-text">I avoid getting involved when the conflict does not seem worth the energy.</div>
+          <div class="tl-text">Iniiwasan kong makisangkot kapag tila hindi sulit paglaanan ng lakas ang conflict.</div>
+        </div>
+      </label>
+      <label class="q-opt">
+        <input type="radio" name="q30" value="B" onchange="onAnswer(30)">
+        <div class="q-letter">B</div>
+        <div class="q-text">
+          <div class="en-text">I yield when keeping peace is more important than getting my way.</div>
+          <div class="tl-text">Nagpaparaya ako kapag mas mahalaga ang pagpapanatili ng kapayapaan kaysa masunod ang gusto ko.</div>
+        </div>
+      </label>
+    </div>
+  </div>
+</div>
+
+<button class="calc-btn" id="calcBtn" onclick="calcResults()" disabled>
+  <span class="en-text">View My Results</span>
+  <span class="tl-text">Tingnan ang Aking Resulta</span>
+</button>
+
+<!-- RESULTS BLOCK -->
+<div class="results-block" id="resultsBlock">
+
+  <h2 class="sec-title">
+    <span class="en-text">Your Results</span>
+    <span class="tl-text">Ang Iyong Resulta</span>
+  </h2>
+
+  <div class="primary-result">
+    <div class="primary-mode-label"><span class="en-text">Primary Conflict Style</span><span class="tl-text">Pangunahing Estilo sa Conflict</span></div>
+    <div class="primary-mode-name" id="primaryModeName"></div>
+    <div class="primary-mode-score" id="primaryModeScore"></div>
+    <div class="primary-mode-desc" id="primaryModeDesc"></div>
+  </div>
+
+  <h3 style="font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;margin:1.5rem 0 .65rem 0;">
+    <span class="en-text">Score Breakdown</span>
+    <span class="tl-text">Buong Resulta</span>
+  </h3>
+  <div id="scoreBreakdown"></div>
+
+  <!-- INTERPRETATION GUIDE -->
+  <h2 class="sec-title">
+    <span class="en-text">Understanding Each Style</span>
+    <span class="tl-text">Pag-unawa sa Bawat Estilo</span>
+  </h2>
+  <div class="sec-sub">
+    <span class="en-text">No style is automatically right or wrong — each has healthy uses, possible overuses, and possible underuses.</span>
+    <span class="tl-text">Walang estilong awtomatikong tama o mali — bawat isa ay may angkop na paggamit, maaaring malabis, at maaaring kulang.</span>
+  </div>
+
+  <!-- COMPETING -->
+  <div class="mode-card">
+    <div class="mode-card-head">
+      <span class="mode-pill" style="background:var(--c-com)">⚙ <span class="en-text">Competing</span><span class="tl-text">Pakikipagtagisan</span></span>
+    </div>
+    <h3>
+      <span class="en-text">Competing</span>
+      <span class="tl-text">Pakikipagtagisan</span>
+    </h3>
+    <div class="mode-desc">
+      <span class="en-text"><strong>High concern for your position, low concern for the other person's concern.</strong> Pursues your own goals at the other's expense — direct, decisive, willing to take a stand.</span>
+      <span class="tl-text"><strong>Mataas ang pagpapahalaga sa sariling posisyon, mababa sa kausap.</strong> Itinutulak ang sariling layunin kahit sa pagpipigil sa iba — direkta, mapagdesisyon, handang manindigan.</span>
+    </div>
+    <div class="mode-grid">
+      <div>
+        <div class="mg-label">✓ <span class="en-text">Healthy use</span><span class="tl-text">Angkop na paggamit</span></div>
+        <span class="en-text">When truth, safety, urgency, justice, or clear leadership is required.</span>
+        <span class="tl-text">Kapag kailangan ang katotohanan, kaligtasan, dali ng pagkilos, katarungan, o malinaw na pamumuno.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible overuse</span><span class="tl-text">Maaaring labis</span></div>
+        <span class="en-text">May become controlling, harsh, or dismissive of others.</span>
+        <span class="tl-text">Maaaring maging kontrolado, magaspang, o pumapansin lamang ng sarili.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible underuse</span><span class="tl-text">Maaaring kulang</span></div>
+        <span class="en-text">May avoid the courage needed to stand for what is right.</span>
+        <span class="tl-text">Maaaring mawalan ng tapang na manindigan sa tama.</span>
+      </div>
+      <div>
+        <div class="mg-label">🌱 <span class="en-text">Leadership growth question</span><span class="tl-text">Tanong para sa paglago</span></div>
+        <span class="en-text">When was the last time my firmness served the mission, not just my preference?</span>
+        <span class="tl-text">Kailan huling nagsilbi ang aking katatagan sa misyon, hindi lang sa aking kagustuhan?</span>
+      </div>
+    </div>
+    <div class="mode-question">
+      <strong><span class="en-text">Discipleship reflection:</span><span class="tl-text">Reflection sa pagdidisipulo:</span></strong>
+      <span class="en-text"> Where does Christ call me to confront — and where does He call me to surrender my position for the sake of love?</span>
+      <span class="tl-text"> Saan ako tinatawag ni Kristo na harapin — at saan Niya ako tinatawag na isuko ang aking posisyon alang-alang sa pag-ibig?</span>
+    </div>
+  </div>
+
+  <!-- COLLABORATING -->
+  <div class="mode-card">
+    <div class="mode-card-head">
+      <span class="mode-pill" style="background:var(--c-col)">🤝 <span class="en-text">Collaborating</span><span class="tl-text">Pakikipagtulungan</span></span>
+    </div>
+    <h3>
+      <span class="en-text">Collaborating</span>
+      <span class="tl-text">Pakikipagtulungan</span>
+    </h3>
+    <div class="mode-desc">
+      <span class="en-text"><strong>High concern for your position AND high concern for the other person.</strong> Works to find solutions that address everyone's deeper concerns — the "win-win" approach.</span>
+      <span class="tl-text"><strong>Mataas ang pagpapahalaga sa sariling posisyon AT mataas din sa kausap.</strong> Naghahanap ng solusyong tumutugon sa malalim na pangangailangan ng lahat — "win-win" approach.</span>
+    </div>
+    <div class="mode-grid">
+      <div>
+        <div class="mg-label">✓ <span class="en-text">Healthy use</span><span class="tl-text">Angkop na paggamit</span></div>
+        <span class="en-text">When the issue is important, complex, relational, and worth the time.</span>
+        <span class="tl-text">Kapag mahalaga ang isyu, masalimuot, may kinalaman sa relasyon, at sulit ang panahon.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible overuse</span><span class="tl-text">Maaaring labis</span></div>
+        <span class="en-text">May over-process every issue. "Not every ant needs a board meeting."</span>
+        <span class="tl-text">Maaaring sobrang pinag-aaralan ang bawat isyu. "Hindi lahat ng langgam ay nangangailangan ng pulong."</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible underuse</span><span class="tl-text">Maaaring kulang</span></div>
+        <span class="en-text">May miss deeper unity and better solutions worth pursuing.</span>
+        <span class="tl-text">Maaaring mawalan ng mas malalim na pagkakaisa at mas magagandang solusyon.</span>
+      </div>
+      <div>
+        <div class="mg-label">🌱 <span class="en-text">Leadership growth question</span><span class="tl-text">Tanong para sa paglago</span></div>
+        <span class="en-text">Am I willing to invest the time to find solutions that honor both task and relationship?</span>
+        <span class="tl-text">Handa ba akong maglaan ng oras para sa solusyong nagbibigay-halaga sa gawain at relasyon?</span>
+      </div>
+    </div>
+    <div class="mode-question">
+      <strong><span class="en-text">Discipleship reflection:</span><span class="tl-text">Reflection sa pagdidisipulo:</span></strong>
+      <span class="en-text"> Whose voice am I overlooking when I race toward a quick decision instead of toward genuine understanding?</span>
+      <span class="tl-text"> Kanino ang boses na hindi ko napapansin kapag nagmamadali ako sa desisyon imbes na sa tunay na pang-unawa?</span>
+    </div>
+  </div>
+
+  <!-- COMPROMISING -->
+  <div class="mode-card">
+    <div class="mode-card-head">
+      <span class="mode-pill" style="background:var(--c-cmp)">⚖ <span class="en-text">Compromising</span><span class="tl-text">Pagtatagpo sa Gitna</span></span>
+    </div>
+    <h3>
+      <span class="en-text">Compromising</span>
+      <span class="tl-text">Pagtatagpo sa Gitna</span>
+    </h3>
+    <div class="mode-desc">
+      <span class="en-text"><strong>Moderate concern for both sides.</strong> Seeks fair, expedient solutions that partially satisfy each side. The "split the difference" approach.</span>
+      <span class="tl-text"><strong>Katamtamang pagpapahalaga sa magkabilang panig.</strong> Naghahanap ng patas na solusyong bahagyang tumutugon sa bawat panig. "Maghati sa gitna" approach.</span>
+    </div>
+    <div class="mode-grid">
+      <div>
+        <div class="mg-label">✓ <span class="en-text">Healthy use</span><span class="tl-text">Angkop na paggamit</span></div>
+        <span class="en-text">When time is limited and both sides can fairly give and take.</span>
+        <span class="tl-text">Kapag limitado ang oras at parehong panig ay handang magbigay at tumanggap.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible overuse</span><span class="tl-text">Maaaring labis</span></div>
+        <span class="en-text">May settle too quickly for half-solutions when better answers exist.</span>
+        <span class="tl-text">Maaaring tanggapin agad ang kalahating solusyon kahit may mas magandang sagot.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible underuse</span><span class="tl-text">Maaaring kulang</span></div>
+        <span class="en-text">May create unnecessary stalemates by refusing reasonable trade-offs.</span>
+        <span class="tl-text">Maaaring magdulot ng walang katapusang hindi pagkakaintindihan dahil ayaw magparaya.</span>
+      </div>
+      <div>
+        <div class="mg-label">🌱 <span class="en-text">Leadership growth question</span><span class="tl-text">Tanong para sa paglago</span></div>
+        <span class="en-text">Am I settling for "half" because of wisdom — or because I'm avoiding the harder work of true alignment?</span>
+        <span class="tl-text">Tinatanggap ko ba ang "kalahati" dahil sa karunungan — o iniiwasan ko ang mas mahirap na trabaho ng tunay na pagkakasundo?</span>
+      </div>
+    </div>
+    <div class="mode-question">
+      <strong><span class="en-text">Discipleship reflection:</span><span class="tl-text">Reflection sa pagdidisipulo:</span></strong>
+      <span class="en-text"> Where in my life have I traded godly conviction for easy peace?</span>
+      <span class="tl-text"> Saan sa buhay ko ipinagpalit ang banal na paninindigan para sa madaling kapayapaan?</span>
+    </div>
+  </div>
+
+  <!-- AVOIDING -->
+  <div class="mode-card">
+    <div class="mode-card-head">
+      <span class="mode-pill" style="background:var(--c-avo)">🌫 <span class="en-text">Avoiding</span><span class="tl-text">Pag-iwas</span></span>
+    </div>
+    <h3>
+      <span class="en-text">Avoiding</span>
+      <span class="tl-text">Pag-iwas</span>
+    </h3>
+    <div class="mode-desc">
+      <span class="en-text"><strong>Low immediate pursuit of your concern AND the other person's concern.</strong> Sidesteps, postpones, or withdraws from the conflict.</span>
+      <span class="tl-text"><strong>Mababa ang agarang paghahangad sa sariling alalahanin AT sa kausap.</strong> Iniiwasan, ipinagpapaliban, o umiiwas sa conflict.</span>
+    </div>
+    <div class="mode-grid">
+      <div>
+        <div class="mg-label">✓ <span class="en-text">Healthy use</span><span class="tl-text">Angkop na paggamit</span></div>
+        <span class="en-text">When the issue is trivial, timing is poor, emotions are hot, or more information is needed.</span>
+        <span class="tl-text">Kapag walang halaga ang isyu, masama ang panahon, mainit ang damdamin, o kailangan pa ng karagdagang impormasyon.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible overuse</span><span class="tl-text">Maaaring labis</span></div>
+        <span class="en-text">May produce unresolved tension and passive distance in relationships.</span>
+        <span class="tl-text">Maaaring magdulot ng hindi nareresolbang tensyon at malayong relasyon.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible underuse</span><span class="tl-text">Maaaring kulang</span></div>
+        <span class="en-text">May force unnecessary confrontation when stepping back was wiser.</span>
+        <span class="tl-text">Maaaring pumipilit ng hindi kailangang harapan kapag mas matalino sana ang umatras.</span>
+      </div>
+      <div>
+        <div class="mg-label">🌱 <span class="en-text">Leadership growth question</span><span class="tl-text">Tanong para sa paglago</span></div>
+        <span class="en-text">Am I waiting wisely — or simply avoiding what God is asking me to face?</span>
+        <span class="tl-text">Naghihintay ba akong may karunungan — o iniiwasan ko lang ang ipinakikita ng Diyos na harapin?</span>
+      </div>
+    </div>
+    <div class="mode-question">
+      <strong><span class="en-text">Discipleship reflection:</span><span class="tl-text">Reflection sa pagdidisipulo:</span></strong>
+      <span class="en-text"> What conversation have I been avoiding that the Spirit has been nudging me toward?</span>
+      <span class="tl-text"> Anong pag-uusap ang iniiwasan ko na matagal nang itinutulak ng Espiritu na harapin?</span>
+    </div>
+  </div>
+
+  <!-- ACCOMMODATING -->
+  <div class="mode-card">
+    <div class="mode-card-head">
+      <span class="mode-pill" style="background:var(--c-acc)">💛 <span class="en-text">Accommodating</span><span class="tl-text">Pagpaparaya</span></span>
+    </div>
+    <h3>
+      <span class="en-text">Accommodating</span>
+      <span class="tl-text">Pagpaparaya</span>
+    </h3>
+    <div class="mode-desc">
+      <span class="en-text"><strong>Low concern for your own preference, high concern for the other person.</strong> Yields to others — gracious, generous, peace-keeping.</span>
+      <span class="tl-text"><strong>Mababa ang pagpapahalaga sa sariling kagustuhan, mataas sa kausap.</strong> Nagpaparaya — magalang, mapagbigay, mapanatili ng kapayapaan.</span>
+    </div>
+    <div class="mode-grid">
+      <div>
+        <div class="mg-label">✓ <span class="en-text">Healthy use</span><span class="tl-text">Angkop na paggamit</span></div>
+        <span class="en-text">When the issue matters more to the other person, when you were wrong, or when love calls for yielding.</span>
+        <span class="tl-text">Kapag mas mahalaga sa kausap ang isyu, kapag ikaw ang mali, o kapag inuutos ng pag-ibig ang pagparaya.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible overuse</span><span class="tl-text">Maaaring labis</span></div>
+        <span class="en-text">May produce resentment, people-pleasing, or weak boundaries.</span>
+        <span class="tl-text">Maaaring magdulot ng sama ng loob, pagiging nag-pa-please, o mahinang hangganan.</span>
+      </div>
+      <div>
+        <div class="mg-label">⚠ <span class="en-text">Possible underuse</span><span class="tl-text">Maaaring kulang</span></div>
+        <span class="en-text">May make a person seem rigid, ungracious, or unwilling to defer to others.</span>
+        <span class="tl-text">Maaaring magpakita ng pagiging matigas, walang grasya, o ayaw magparaya.</span>
+      </div>
+      <div>
+        <div class="mg-label">🌱 <span class="en-text">Leadership growth question</span><span class="tl-text">Tanong para sa paglago</span></div>
+        <span class="en-text">When I yield, am I serving love — or avoiding the cost of speaking truth?</span>
+        <span class="tl-text">Kapag nagpaparaya ako, naglilingkod ba ako sa pag-ibig — o iniiwasan ang halaga ng pagsasalita ng katotohanan?</span>
+      </div>
+    </div>
+    <div class="mode-question">
+      <strong><span class="en-text">Discipleship reflection:</span><span class="tl-text">Reflection sa pagdidisipulo:</span></strong>
+      <span class="en-text"> Where has my niceness become a substitute for godly courage?</span>
+      <span class="tl-text"> Saan naging kapalit ng banal na tapang ang aking pagiging mabait lang?</span>
+    </div>
+  </div>
+
+  <!-- MAC LAKE LEADERSHIP LENS -->
+  <h2 class="sec-title">
+    <span class="en-text">Leadership Coaching Lens</span>
+    <span class="tl-text">Lens ng Pamumuno</span>
+  </h2>
+  <div class="sec-sub">
+    <span class="en-text">Using Mac Lake's five levels of leadership development. Conflict maturity grows as leaders grow.</span>
+    <span class="tl-text">Gamit ang limang antas ng pamumuno ni Mac Lake. Lumalago ang pagkamulat sa conflict habang lumalago ang lider.</span>
+  </div>
+
+  <div class="lens-card">
+    <h3>1. <span class="en-text">Lead Yourself</span><span class="tl-text">Pamunuan ang Sarili</span></h3>
+    <p>
+      <span class="en-text">Know your default conflict reflex. Your strongest score is your "first move" under pressure. Self-awareness is the foundation — you cannot lead others through what you have not faced in yourself.</span>
+      <span class="tl-text">Kilalanin ang likas mong reflex sa conflict. Ang pinakamataas mong score ay ang "unang galaw" mo sa ilalim ng presyon. Ang pagkakilala sa sarili ang pundasyon — hindi mo madadala ang iba sa hindi mo pa nahaharap sa sarili.</span>
+    </p>
+  </div>
+
+  <div class="lens-card">
+    <h3>2. <span class="en-text">Lead Another</span><span class="tl-text">Pamunuan ang Iba</span></h3>
+    <p>
+      <span class="en-text">Do not disciple or coach everyone the same way. A Competing person may need tenderness. An Avoiding person may need courage. An Accommodating person may need permission to set boundaries.</span>
+      <span class="tl-text">Huwag dispisipuluhin o i-coach ang lahat sa pareho-parehong paraan. Ang taong Competing ay maaaring mangailangan ng kalumanayan. Ang taong Avoiding ay maaaring mangailangan ng tapang. Ang taong Accommodating ay maaaring mangailangan ng pahintulot na maglagay ng hangganan.</span>
+    </p>
+  </div>
+
+  <div class="lens-card">
+    <h3>3. <span class="en-text">Lead Leaders</span><span class="tl-text">Pamunuan ang mga Lider</span></h3>
+    <p>
+      <span class="en-text">Train leaders not just to ask "What is my style?" but "What does this moment require?" Style is the starting point; wisdom is asking what love, truth, and mission are calling for here and now.</span>
+      <span class="tl-text">Sanayin ang mga lider na huwag lang itanong na "Ano ang estilo ko?" kundi "Anong kailangan ng sandaling ito?" Ang estilo ang panimulang punto; ang karunungan ay pagtatanong kung ano ang itinatawag ng pag-ibig, katotohanan, at misyon dito ngayon.</span>
+    </p>
+  </div>
+
+  <div class="lens-card">
+    <h3>4. <span class="en-text">Lead a Team or Ministry</span><span class="tl-text">Pamunuan ang Team o Ministry</span></h3>
+    <p>
+      <span class="en-text">A healthy team does not eliminate conflict — it sanctifies it. Conflict becomes a furnace where clarity, trust, and wisdom are formed. Leaders create cultures where disagreement strengthens, rather than fractures, the team.</span>
+      <span class="tl-text">Hindi inaalis ng malusog na team ang conflict — pinabanal nila ito. Ang conflict ay nagiging hurnong kung saan nabubuo ang linaw, tiwala, at karunungan. Lumilikha ang mga lider ng kulturang kung saan pinatatatag, hindi nababasag, ng hindi pagkakasundo ang team.</span>
+    </p>
+  </div>
+
+  <div class="lens-card">
+    <h3>5. <span class="en-text">Lead a Movement</span><span class="tl-text">Pamunuan ang Kilusan</span></h3>
+    <p>
+      <span class="en-text">Movements die when conflict becomes gossip, silence, or domination. They grow when leaders disagree without dividing and confront without condemning. Mature conflict-handling becomes one of the most contagious leadership virtues.</span>
+      <span class="tl-text">Namamatay ang mga kilusan kapag naging tsismis, katahimikan, o pananakop ang conflict. Lumalago sila kapag hindi pagkakasundo ng mga lider ay walang dibisyon, at kapag may harapan na walang panghuhusga. Ang matured na pagharap sa conflict ay isa sa pinakanakahahawang birtud ng pamumuno.</span>
+    </p>
+  </div>
+
+  <!-- DEBRIEF QUESTIONS -->
+  <h2 class="sec-title">
+    <span class="en-text">Group Debrief Questions</span>
+    <span class="tl-text">Mga Tanong para sa Talakayan</span>
+  </h2>
+  <div class="sec-sub">
+    <span class="en-text">For use in LC groups, leadership cohorts, ministry teams, or one-on-one coaching.</span>
+    <span class="tl-text">Para gamitin sa LC group, leadership cohort, ministry team, o one-on-one coaching.</span>
+  </div>
+  <div class="debrief-list">
+    <ol>
+      <li>
+        <span class="en-text">Looking at your top score, when does this style serve you well — and when does it cost you something?</span>
+        <span class="tl-text">Tingnan ang iyong pinakamataas na score: kailan ito naglilingkod sa iyo nang maayos — at kailan may kapalit ito?</span>
+      </li>
+      <li>
+        <span class="en-text">Which style is your lowest? Is that a strength (boundary) or a weakness (avoidance) for you?</span>
+        <span class="tl-text">Aling estilo ang pinakamababa mo? Lakas ba iyon (hangganan) o kahinaan (pag-iwas) para sa iyo?</span>
+      </li>
+      <li>
+        <span class="en-text">Tell a story of a recent conflict. Looking back, which style did you actually use? Which would have served better?</span>
+        <span class="tl-text">Magkwento ng isang kamakailan na conflict. Kung titingnan mo, anong estilo ang ginamit mo? Anong sana ay mas nakatulong?</span>
+      </li>
+      <li>
+        <span class="en-text">Who in your life has the opposite style of yours? What can they teach you?</span>
+        <span class="tl-text">Sino sa buhay mo ang may kabaligtaran na estilo? Anong matututunan mo sa kanila?</span>
+      </li>
+      <li>
+        <span class="en-text">When you see Jesus engage conflict in the Gospels, which styles do you see Him use? Why?</span>
+        <span class="tl-text">Kapag nakikita mo si Hesus sa conflict sa Ebanghelyo, anong mga estilo ang ginagamit Niya? Bakit?</span>
+      </li>
+      <li>
+        <span class="en-text">Which conflict in your home, ministry, or workplace is the Spirit asking you to face right now?</span>
+        <span class="tl-text">Aling conflict sa tahanan, ministry, o trabaho ang sinasabi ng Espiritu na harapin mo ngayon?</span>
+      </li>
+      <li>
+        <span class="en-text">Which style do you most need to grow into this season — and what would that growth look like in practice?</span>
+        <span class="tl-text">Aling estilo ang pinaka kailangan mong palaguin sa panahong ito — at anong magiging hitsura nito sa pang-araw-araw?</span>
+      </li>
+      <li>
+        <span class="en-text">In conflict, what do you tend to protect first — yourself, the relationship, the truth, the mission, or the peace? Why?</span>
+        <span class="tl-text">Sa conflict, anong unang ipinagtatanggol mo — ang sarili, ang relasyon, ang katotohanan, ang misyon, o ang kapayapaan? Bakit?</span>
+      </li>
+      <li>
+        <span class="en-text">Whom do you need to seek forgiveness from for an unhealthy conflict response? Whom do you need to forgive?</span>
+        <span class="tl-text">Kanino mo kailangang humingi ng tawad sa hindi malusog na pagharap sa conflict? Kanino mo kailangang magpatawad?</span>
+      </li>
+      <li>
+        <span class="en-text">If your team or family adopted one new conflict habit this year, which one would change everything?</span>
+        <span class="tl-text">Kung ang team o pamilya mo ay magkakaroon ng isang bagong conflict habit ngayong taon, alin ang magbabago ng lahat?</span>
+      </li>
+    </ol>
+  </div>
+
+  <!-- CLOSING -->
+  <div class="closing-block">
+    <span class="en-text">No style is always right. No style is always wrong. <strong>The mature leader learns to ask:</strong><br>"What does love, truth, wisdom, and mission require in this moment?"</span>
+    <span class="tl-text">Walang estilong palaging tama. Walang estilong palaging mali. <strong>Ang matured na lider ay natutong magtanong:</strong><br>"Anong kailangan ng pag-ibig, katotohanan, karunungan, at misyon sa sandaling ito?"</span>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div class="action-bar">
+    <button class="save-btn" id="saveBtn" onclick="confirmSaveToDashboard()">
+      💾 <span class="en-text">Save to MULTIPLY Dashboard</span><span class="tl-text">I-save sa MULTIPLY Dashboard</span>
+    </button>
+    <button class="pdf-btn" onclick="downloadPDFReport(false)">
+      📄 <span class="en-text">Download PDF Report</span><span class="tl-text">I-download ang PDF Report</span>
+    </button>
+  </div>
+  <div id="submitMsg" style="display:none;"></div>
+
+  <div class="facilitator-note">
+    <span class="en-text"><strong>Note:</strong> This is an original TKI-inspired training instrument and is not the official Thomas-Kilmann Conflict Mode Instrument (TKI). It is intended as a coaching and self-awareness tool for ministry, leadership, and discipleship — not as a clinical or formal psychological assessment.</span>
+    <span class="tl-text"><strong>Paalala:</strong> Ito ay orihinal na training instrument na hango sa istruktura ng TKI. Hindi ito ang opisyal na Thomas-Kilmann Conflict Mode Instrument (TKI). Layon nito bilang coaching at self-awareness na kagamitan sa ministry, pamumuno, at pagdidisipulo — hindi bilang klinikal o pormal na psychological assessment.</span>
+  </div>
+
+</div><!-- /results-block -->
+
+</div><!-- /container -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════════════════════════════════
+const SB_URL = "https://hgjvhyqvugesqfvqxasn.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhnanZoeXF2dWdlc3FmdnF4YXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1MjkyMjIsImV4cCI6MjA3MjEwNTIyMn0.6S1AwjvKn0n-_IjFOvbOj11cGJExf1t4pTavJtFJUbI";
+let _db = null;
+function getDB(){
+  if(!_db){
+    try { _db = supabase.createClient(SB_URL, SB_KEY, { auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}); } catch(e){console.error(e);}
+  }
+  return _db;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCORING KEY (Items 1-30)
+// ═══════════════════════════════════════════════════════════════
+const SCORING_KEY = {
+  1: { A: "Competing", B: "Collaborating" },
+  2: { A: "Competing", B: "Compromising" },
+  3: { A: "Competing", B: "Avoiding" },
+  4: { A: "Competing", B: "Accommodating" },
+  5: { A: "Collaborating", B: "Compromising" },
+  6: { A: "Collaborating", B: "Avoiding" },
+  7: { A: "Collaborating", B: "Accommodating" },
+  8: { A: "Compromising", B: "Avoiding" },
+  9: { A: "Compromising", B: "Accommodating" },
+  10: { A: "Avoiding", B: "Accommodating" },
+  11: { A: "Competing", B: "Collaborating" },
+  12: { A: "Competing", B: "Compromising" },
+  13: { A: "Competing", B: "Avoiding" },
+  14: { A: "Competing", B: "Accommodating" },
+  15: { A: "Collaborating", B: "Compromising" },
+  16: { A: "Collaborating", B: "Avoiding" },
+  17: { A: "Collaborating", B: "Accommodating" },
+  18: { A: "Compromising", B: "Avoiding" },
+  19: { A: "Compromising", B: "Accommodating" },
+  20: { A: "Avoiding", B: "Accommodating" },
+  21: { A: "Competing", B: "Collaborating" },
+  22: { A: "Competing", B: "Compromising" },
+  23: { A: "Competing", B: "Avoiding" },
+  24: { A: "Competing", B: "Accommodating" },
+  25: { A: "Collaborating", B: "Compromising" },
+  26: { A: "Collaborating", B: "Avoiding" },
+  27: { A: "Collaborating", B: "Accommodating" },
+  28: { A: "Compromising", B: "Avoiding" },
+  29: { A: "Compromising", B: "Accommodating" },
+  30: { A: "Avoiding", B: "Accommodating" },
+};
+
+const MODES = ['Competing','Collaborating','Compromising','Avoiding','Accommodating'];
+const MODE_TL = {
+  'Competing':'Pakikipagtagisan',
+  'Collaborating':'Pakikipagtulungan',
+  'Compromising':'Pagtatagpo sa Gitna',
+  'Avoiding':'Pag-iwas',
+  'Accommodating':'Pagpaparaya'
+};
+const MODE_COLORS = {
+  'Competing':'#c44a3e',
+  'Collaborating':'#2a7a4c',
+  'Compromising':'#b8882a',
+  'Avoiding':'#5b6573',
+  'Accommodating':'#7a4f9c'
+};
+const MODE_DESC_EN = {
+  'Competing':'Direct, decisive, willing to take a stand. You bring courage and clarity to the moment.',
+  'Collaborating':'You seek win-win answers that honor everyone — willing to invest the time and dialogue it takes.',
+  'Compromising':'You find practical middle ground where everyone gives and receives. Fair, expedient, peaceful.',
+  'Avoiding':'You step back, postpone, or sidestep. You bring restraint and protect against premature conflict.',
+  'Accommodating':'You yield gracefully, especially when the issue matters more to others. You prioritize peace and care.'
+};
+const MODE_DESC_TL = {
+  'Competing':'Direkta, mapagdesisyon, handang manindigan. May tapang at linaw ka sa sandali.',
+  'Collaborating':'Naghahanap ka ng win-win na sagot na nagbibigay-halaga sa lahat — handang maglaan ng oras at usapan.',
+  'Compromising':'Naghahanap ka ng praktikal na gitnang punto kung saan bawat isa ay nagbibigay at tumatanggap. Patas, mabilis, mapayapa.',
+  'Avoiding':'Umaatras ka, ipinagpapaliban, o iniiwasan. May pagpipigil ka at proteksyon laban sa maagang conflict.',
+  'Accommodating':'Nagpaparaya ka nang maganda, lalo na kapag mas mahalaga sa iba ang isyu. Inuuna mo ang kapayapaan at pagmamalasakit.'
+};
+
+// ═══════════════════════════════════════════════════════════════
+// BILINGUAL TOGGLE (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+const _CONFLICT_LANG_KEY = 'multiply_conflict_lang';
+function setLang(lang){
+  if (lang !== 'tl' && lang !== 'en') lang = 'en';
+  document.body.setAttribute('data-lang', lang);
+  document.body.className = 'lang-' + lang;
+  ['tl','en'].forEach(l => {
+    const b = document.getElementById('lt-' + l);
+    if (b) b.classList.toggle('active', l === lang);
+  });
+  document.documentElement.setAttribute('lang', lang);
+  document.querySelectorAll('[data-ph-tl][data-ph-en]').forEach(el => {
+    const v = el.dataset['ph' + (lang === 'tl' ? 'Tl' : 'En')];
+    if (v != null) el.setAttribute('placeholder', v);
+  });
+  document.querySelectorAll('option[data-opt-tl][data-opt-en]').forEach(el => {
+    const v = el.dataset['opt' + (lang === 'tl' ? 'Tl' : 'En')];
+    if (v != null) el.textContent = v;
+  });
+  try { localStorage.setItem(_CONFLICT_LANG_KEY, lang); } catch(e){}
+}
+(function initLang(){
+  let saved = 'en';
+  try { saved = localStorage.getItem(_CONFLICT_LANG_KEY) || 'en'; } catch(e){}
+  if (saved !== 'tl' && saved !== 'en') saved = 'en';
+  setLang(saved);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+const _CONFLICT_FONT_KEY = 'multiply_conflict_fontscale';
+const _CONFLICT_FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40];
+let _conflict_fontIdx = 1;
+function applyFontScale(){
+  const scale = _CONFLICT_FONT_STEPS[_conflict_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_conflict_fontIdx <= 0);
+  if (up) up.disabled = (_conflict_fontIdx >= _CONFLICT_FONT_STEPS.length - 1);
+}
+function changeFontScale(direction){
+  _conflict_fontIdx = Math.max(0, Math.min(_CONFLICT_FONT_STEPS.length - 1, _conflict_fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(_CONFLICT_FONT_KEY, String(_conflict_fontIdx)); } catch(e){}
+}
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_CONFLICT_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _CONFLICT_FONT_STEPS.length) _conflict_fontIdx = saved;
+  } catch(e){}
+  applyFontScale();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// PROGRESS + ANSWERING
+// ═══════════════════════════════════════════════════════════════
+function onAnswer(qNum){
+  const card = document.getElementById('q'+qNum);
+  if (card) card.classList.add('answered');
+  updateProgress();
+  saveProgress();
+}
+
+function updateProgress(){
+  const total = 30;
+  let answered = 0;
+  for (let i = 1; i <= total; i++){
+    if (document.querySelector(`input[name="q${i}"]:checked`)) answered++;
+  }
+  const pct = Math.round(answered / total * 100);
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progLabel').textContent = answered + ' / ' + total;
+  const btn = document.getElementById('calcBtn');
+  if (btn) btn.disabled = (answered < total);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALCULATE RESULTS
+// ═══════════════════════════════════════════════════════════════
+let _scores = null;
+let _sorted = null;
+
+function calcResults(){
+  // Tally points
+  const scores = { 'Competing':0, 'Collaborating':0, 'Compromising':0, 'Avoiding':0, 'Accommodating':0 };
+  for (let i = 1; i <= 30; i++){
+    const r = document.querySelector(`input[name="q${i}"]:checked`);
+    if (!r) continue;
+    const mode = SCORING_KEY[i][r.value];
+    if (mode) scores[mode]++;
+  }
+  _scores = scores;
+
+  // Sort modes by score descending
+  const sorted = MODES.map(m => ({ mode: m, score: scores[m] })).sort((a,b) => b.score - a.score);
+  _sorted = sorted;
+
+  const primary = sorted[0];
+
+  // Render primary block
+  const primaryName = document.getElementById('primaryModeName');
+  primaryName.innerHTML =
+    `<span class="en-text">${primary.mode}</span><span class="tl-text">${MODE_TL[primary.mode]}</span>`;
+  document.getElementById('primaryModeScore').innerHTML =
+    `<span class="en-text">${primary.score} / 12 points</span><span class="tl-text">${primary.score} / 12 puntos</span>`;
+  document.getElementById('primaryModeDesc').innerHTML =
+    `<span class="en-text">${MODE_DESC_EN[primary.mode]}</span><span class="tl-text">${MODE_DESC_TL[primary.mode]}</span>`;
+
+  // Render score breakdown bars
+  const breakdownEl = document.getElementById('scoreBreakdown');
+  breakdownEl.innerHTML = sorted.map(s => {
+    const pct = Math.round(s.score / 12 * 100);
+    return `<div class="score-row">
+      <div class="sr-name">
+        <span class="en-text">${s.mode}</span><span class="tl-text">${MODE_TL[s.mode]}</span>
+      </div>
+      <div class="sr-bar-track"><div class="sr-bar-fill" style="background:${MODE_COLORS[s.mode]};width:${pct}%"></div></div>
+      <div class="sr-num">${s.score} / 12</div>
+    </div>`;
+  }).join('');
+
+  // Show results block
+  const block = document.getElementById('resultsBlock');
+  block.classList.add('show');
+  block.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-SAVE & RESUME (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+const _CONFLICT_SAVE_KEY = 'multiply_conflict_progress';
+const _CONFLICT_AUTOSAVE_DEBOUNCE = 600;
+
+function _collectFormState(){
+  const state = { radios:{}, fields:{}, member:{} };
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => {
+    if (r.name) state.radios[r.name] = r.value;
+  });
+  document.querySelectorAll('input[type="text"], input[type="date"]').forEach(i => {
+    const key = i.id || i.name;
+    if (key && i.value) state.fields[key] = i.value;
+  });
+  const memId = document.getElementById('selectedMemberId');
+  if (memId && memId.value) state.member.id = memId.value;
+  const memName = document.getElementById('memberSearch');
+  if (memName && memName.value) state.member.name = memName.value;
+  return state;
+}
+
+function _applyFormState(state){
+  if (!state || typeof state !== 'object') return;
+  Object.keys(state.radios || {}).forEach(name => {
+    const val = state.radios[name];
+    const el = document.querySelector(`input[type="radio"][name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+    if (el) {
+      el.checked = true;
+      const card = el.closest('.q-card');
+      if (card) card.classList.add('answered');
+    }
+  });
+  Object.keys(state.fields || {}).forEach(key => {
+    const el = document.getElementById(key);
+    if (el) el.value = state.fields[key];
+  });
+  if (state.member && state.member.id){
+    document.getElementById('selectedMemberId').value = state.member.id;
+    if (state.member.name){
+      document.getElementById('memberSearch').value = state.member.name;
+      const sel = document.getElementById('memberSelected');
+      if (sel) {
+        sel.style.display = 'block';
+        sel.textContent = '✓ Linked: ' + state.member.name;
+      }
+    }
+  }
+  updateProgress();
+}
+
+let _saveTimer = null;
+function saveProgress(){
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try {
+      const state = _collectFormState();
+      const hasAny = Object.keys(state.radios).length > 0;
+      if (!hasAny){
+        localStorage.removeItem(_CONFLICT_SAVE_KEY);
+        return;
+      }
+      localStorage.setItem(_CONFLICT_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+      const pb = document.getElementById('pauseBtn');
+      if (pb) pb.style.display = 'block';
+      _idleArmed = true;
+      _armIdleTimer();
+    } catch(e){ console.warn('saveProgress failed:', e); }
+  }, _CONFLICT_AUTOSAVE_DEBOUNCE);
+}
+
+function loadProgress(){
+  try {
+    const raw = localStorage.getItem(_CONFLICT_SAVE_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload || !payload.state) return;
+    document.getElementById('resumeBanner').classList.add('show');
+    window._pendingResume = payload.state;
+  } catch(e){ console.warn('loadProgress failed:', e); }
+}
+
+function resumeTest(){
+  if (window._pendingResume){
+    _applyFormState(window._pendingResume);
+  }
+  document.getElementById('resumeBanner').classList.remove('show');
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.style.display = 'block';
+  _idleArmed = true;
+  _armIdleTimer();
+}
+
+function discardProgress(){
+  if (!confirm('Sigurado ka bang gusto mong burahin ang lahat at magsimula ulit?\n\nDelete saved progress and start over?')) return;
+  try { localStorage.removeItem(_CONFLICT_SAVE_KEY); } catch(e){}
+  window._pendingResume = null;
+  document.getElementById('resumeBanner').classList.remove('show');
+  document.querySelectorAll('input[type="radio"]:checked').forEach(r => r.checked = false);
+  document.querySelectorAll('.q-card.answered').forEach(c => c.classList.remove('answered'));
+  updateProgress();
+  const pb = document.getElementById('pauseBtn');
+  if (pb) pb.style.display = 'none';
+}
+
+function showPauseModal(){
+  clearTimeout(_saveTimer);
+  try {
+    const state = _collectFormState();
+    localStorage.setItem(_CONFLICT_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+  } catch(e){}
+  alert('✓ Na-save ang progreso mo.\n\nIsara mo na ang tab — pagbalik mo, ibibigay namin ang opsyon na ipagpatuloy.\n\n— — —\n\n✓ Your progress is saved.\n\nYou can close this tab now — when you return, we will offer to resume where you left off.');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE DETECTION (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+let _idleMinutes = 3;
+let _idleTimer = null;
+let _idleModalOpen = false;
+let _idleArmed = false;
+
+async function loadIdleThreshold(){
+  try {
+    const db = getDB();
+    if (!db) return;
+    const { data, error } = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if (typeof v === 'number' && v >= 1 && v <= 30) _idleMinutes = v;
+  } catch(e){ console.warn('[idle] threshold load failed; using default'); }
+}
+
+function _armIdleTimer(){
+  if (!_idleArmed) return;
+  if (_idleModalOpen) return;
+  clearTimeout(_idleTimer);
+  _idleTimer = setTimeout(_showIdlePrompt, _idleMinutes * 60 * 1000);
+}
+
+function _showIdlePrompt(){
+  if (_idleModalOpen) return;
+  _idleModalOpen = true;
+  clearTimeout(_saveTimer);
+  try {
+    const state = _collectFormState();
+    localStorage.setItem(_CONFLICT_SAVE_KEY, JSON.stringify({ state, t: Date.now() }));
+  } catch(e){}
+
+  document.querySelectorAll('.conflict-idle-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'conflict-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-size:1.2rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">⏸ <span class="tl-text">Hihinto muna?</span><span class="en-text">Pause for now?</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mukhang hindi ka nagsasagot ng ${_idleMinutes} minuto na. Na-save na ang lahat ng iyong sagot. Gusto mo bang humintong sandali?</span>
+        <span class="en-text">It looks like there's been no activity for ${_idleMinutes} minutes. Your answers are saved. Would you like to pause?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="idleYes" style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          ✓ <span class="tl-text">Oo, hihinto muna ako</span><span class="en-text">Yes — pause now</span>
+        </button>
+        <button id="idleNo" style="padding:11px;background:transparent;color:#5a5a5a;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <span class="tl-text">Ipagpatuloy ko</span><span class="en-text">Keep going</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => { modal.remove(); _idleModalOpen = false; _armIdleTimer(); };
+  modal.querySelector('#idleYes').onclick = () => { close(); showPauseModal(); };
+  modal.querySelector('#idleNo').onclick = close;
+}
+
+(function initIdleAndAutosave(){
+  function start(){
+    loadIdleThreshold();
+    ['mousemove','mousedown','touchstart','keydown','scroll','input','change'].forEach(evt => {
+      document.addEventListener(evt, _armIdleTimer, { passive: true });
+    });
+    document.querySelectorAll('input').forEach(el => {
+      el.addEventListener('change', saveProgress);
+      el.addEventListener('input',  saveProgress);
+    });
+    loadProgress();
+    // Set today's date if empty
+    const dateEl = document.getElementById('pDate');
+    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// MEMBER SEARCH
+// ═══════════════════════════════════════════════════════════════
+let _memberId = null;
+let _searchTimer = null;
+function searchMembers(){
+  clearTimeout(_searchTimer);
+  const q = document.getElementById('memberSearch').value.trim();
+  if (q.length < 2){
+    document.getElementById('memberDropdown').classList.remove('show');
+    return;
+  }
+  _searchTimer = setTimeout(async () => {
+    try {
+      const { data } = await getDB().from('members').select('id,name').ilike('name', '%'+q+'%').limit(8);
+      const dd = document.getElementById('memberDropdown');
+      if (!data || !data.length){ dd.classList.remove('show'); return; }
+      dd.innerHTML = data.map(m =>
+        `<div onclick="selectMember('${m.id}','${m.name.replace(/'/g,"\\'")}')" style="padding:.6rem 1rem;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''"><span style="font-weight:500">${m.name}</span></div>`
+      ).join('');
+      dd.classList.add('show');
+    } catch(e){ console.warn(e); }
+  }, 300);
+}
+
+function selectMember(id, name){
+  _memberId = id;
+  document.getElementById('memberSearch').value = name;
+  document.getElementById('selectedMemberId').value = id;
+  document.getElementById('memberDropdown').classList.remove('show');
+  const sel = document.getElementById('memberSelected');
+  sel.style.display = 'block';
+  sel.textContent = '✓ Linked: ' + name;
+  if (!document.getElementById('pName').value) document.getElementById('pName').value = name;
+  saveProgress();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE TO DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+async function saveToDashboard(){
+  if (!_scores || !_sorted){
+    alert('Please complete the assessment first.');
+    return;
+  }
+  const name = document.getElementById('pName').value.trim() || 'Unknown';
+  const memberId = _memberId || document.getElementById('selectedMemberId').value || null;
+  const lcGroup = document.getElementById('pGroup').value.trim() || null;
+  const dateTaken = document.getElementById('pDate').value || new Date().toISOString().split('T')[0];
+  const primary = _sorted[0];
+
+  const btn = document.getElementById('saveBtn');
+  if (btn){ btn.disabled = true; btn.innerHTML = '⏳ Saving…'; }
+  const msg = document.getElementById('submitMsg');
+
+  try {
+    const { error } = await getDB().from('member_profiles').insert({
+      member_id: memberId,
+      member_name: name,
+      lc_group: lcGroup,
+      profile_type: 'conflict_style',
+      results: _scores,
+      top_result: primary.mode,
+      second_result: _sorted[1]?.mode || null,
+      third_result: _sorted[2]?.mode || null,
+      summary: 'Primary: ' + primary.mode + ' (' + primary.score + '/12)',
+      date_taken: dateTaken
+    });
+    if (error) throw error;
+
+    if (msg){
+      msg.style.display = 'block';
+      msg.innerHTML = `✅ Saved! <strong>${name}</strong> · Primary: ${primary.mode} (${primary.score}/12)${memberId ? ' · Dashboard updated.' : ' · Not linked to member record.'}`;
+    }
+    if (btn){ btn.innerHTML = '✓ Saved'; }
+    // Clear local storage
+    try { localStorage.removeItem(_CONFLICT_SAVE_KEY); } catch(e){}
+    const pb = document.getElementById('pauseBtn');
+    if (pb) pb.style.display = 'none';
+  } catch(e){
+    if (msg){
+      msg.style.display = 'block';
+      msg.style.background = '#fde2e2';
+      msg.style.color = '#a62020';
+      msg.style.borderColor = '#f5a3a3';
+      msg.innerHTML = '❌ Save failed: ' + (e.message || 'Unknown error');
+    }
+    if (btn){ btn.disabled = false; btn.innerHTML = '💾 Try Again'; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// "BEFORE SAVING…" MODAL (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+function confirmSaveToDashboard(){
+  if (!_scores){
+    alert('Please calculate your results first.');
+    return;
+  }
+  document.querySelectorAll('.conflict-save-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'conflict-save-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-size:1.15rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">📋 <span class="tl-text">Bago mag-save</span><span class="en-text">Before saving</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mawawala ang iyong mga sagot pagkatapos ma-save. Kunin muna ang PDF copy ng iyong resulta?</span>
+        <span class="en-text">Saving will clear your saved progress. Want a PDF copy of your results first?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="ssPdf"    style="padding:11px;background:#1a1612;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">📄 <span class="tl-text">Oo — i-download muna ang PDF</span><span class="en-text">Yes — Download PDF first</span></button>
+        <button id="ssSave"   style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">💾 <span class="tl-text">I-save na lang</span><span class="en-text">Just save</span></button>
+        <button id="ssCancel" style="padding:9px;background:transparent;color:#6b6b6b;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ <span class="tl-text">Kanselahin</span><span class="en-text">Cancel</span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('#ssPdf').onclick    = () => { close(); downloadPDFReport(true); };
+  modal.querySelector('#ssSave').onclick   = () => { close(); saveToDashboard(); };
+  modal.querySelector('#ssCancel').onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF EXPORT (assessment standard, jsPDF)
+// ═══════════════════════════════════════════════════════════════
+async function downloadPDFReport(chainToSave){
+  if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF){
+    alert('PDF library not loaded. Check your internet connection and refresh.');
+    return;
+  }
+  if (!_scores || !_sorted){
+    alert('Please calculate your results first.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 50;
+  let y = margin;
+
+  const ensureSpace = (need) => { if (y + (need || 20) > pageH - margin) { doc.addPage(); y = margin; } };
+  const writeText = (text, opts) => {
+    opts = opts || {};
+    const size = opts.size || 11;
+    const style = opts.style || 'normal';
+    const color = opts.color || [40,40,40];
+    const maxW = pageW - margin*2;
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+    const lines = doc.splitTextToSize(String(text || ''), maxW);
+    lines.forEach(line => { ensureSpace(size + 4); doc.text(line, margin, y); y += size + 4; });
+  };
+  const hr = () => { ensureSpace(10); doc.setDrawColor(220,220,220); doc.line(margin, y, pageW - margin, y); y += 8; };
+
+  // ── HEADER ──
+  doc.setFillColor(26,22,18);
+  doc.rect(0, 0, pageW, 90, 'F');
+  doc.setTextColor(184,136,42);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.text('Conflict Response Style Inventory', margin, 38);
+  doc.setTextColor(245,237,216);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  doc.text('Leadership & Discipleship Tool · Rosehill Christian Church', margin, 58);
+  doc.setFontSize(10);
+  doc.text('Generated ' + new Date().toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}), margin, 76);
+  y = 110;
+
+  // ── MEMBER INFO ──
+  const memberName = document.getElementById('pName')?.value || 'Unknown';
+  const lcGroup    = document.getElementById('pGroup')?.value || '—';
+  const dateTaken  = document.getElementById('pDate')?.value || new Date().toISOString().split('T')[0];
+  const facilitator = document.getElementById('pAdmin')?.value || '—';
+  writeText('Name: ' + memberName, { size:13, style:'bold' });
+  writeText('LC Group: ' + lcGroup);
+  writeText('Date Taken: ' + dateTaken);
+  if (facilitator && facilitator !== '—') writeText('Administered by: ' + facilitator);
+  hr();
+
+  // ── PRIMARY RESULT ──
+  const primary = _sorted[0];
+  writeText('Primary Conflict Style: ' + primary.mode + ' (' + primary.score + '/12)', { size:14, style:'bold', color:[26,22,18] });
+  writeText(MODE_DESC_EN[primary.mode], { size:10, color:[80,80,80] });
+  if (_sorted[1]) writeText('Secondary: ' + _sorted[1].mode + ' (' + _sorted[1].score + '/12)');
+  hr();
+
+  // ── FULL SCORE BREAKDOWN ──
+  writeText('Full Score Breakdown', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  _sorted.forEach((s, i) => {
+    const pct = Math.round(s.score / 12 * 100);
+    writeText(s.mode + ': ' + s.score + '/12 (' + pct + '%)', { style: i === 0 ? 'bold' : 'normal' });
+  });
+  hr();
+
+  // ── INTERPRETATION GUIDE (top 2 only to keep PDF concise) ──
+  writeText('Top Style — In Depth', { size:14, style:'bold', color:[26,22,18] });
+  writeText(primary.mode, { size:12, style:'bold', color:[42,92,64] });
+  writeText(MODE_DESC_EN[primary.mode], { size:10, color:[60,60,60] });
+  hr();
+
+  // ── ALL ANSWERS ──
+  writeText('Detailed Responses', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  for (let i = 1; i <= 30; i++){
+    const r = document.querySelector(`input[name="q${i}"]:checked`);
+    if (!r) continue;
+    const card = document.getElementById('q'+i);
+    const opt = r.closest('.q-opt');
+    const text = opt ? opt.querySelector('.en-text')?.textContent.trim() : '';
+    const mode = SCORING_KEY[i][r.value];
+    writeText('Q' + i + '. (' + r.value + ' = ' + mode + ')', { size:10, style:'bold' });
+    writeText('       ' + text, { size:9, color:[60,60,60] });
+  }
+
+  // ── MAC LAKE LENS (concise) ──
+  doc.addPage(); y = margin;
+  writeText('Mac Lake Leadership Lens', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  const LENS = [
+    ['1. Lead Yourself', 'Know your default conflict reflex. Your strongest score is your "first move" under pressure.'],
+    ['2. Lead Another', 'Different people need different approaches — Competing may need tenderness, Avoiding may need courage, Accommodating may need permission to set boundaries.'],
+    ['3. Lead Leaders', 'Train leaders not just to ask "What is my style?" but "What does this moment require?"'],
+    ['4. Lead a Team or Ministry', 'A healthy team does not eliminate conflict — it sanctifies it. Conflict becomes a furnace where clarity, trust, and wisdom are formed.'],
+    ['5. Lead a Movement', 'Movements grow when leaders disagree without dividing and confront without condemning.']
+  ];
+  LENS.forEach(([h, p]) => {
+    writeText(h, { size:11, style:'bold', color:[42,92,64] });
+    writeText(p, { size:10, color:[60,60,60] });
+    y += 3;
+  });
+  hr();
+
+  // ── DEBRIEF QUESTIONS ──
+  writeText('Group Debrief Questions', { size:14, style:'bold', color:[26,22,18] });
+  y += 4;
+  const DEBRIEF = [
+    'Looking at your top score, when does this style serve you well — and when does it cost you something?',
+    'Which style is your lowest? Is that a strength (boundary) or a weakness (avoidance) for you?',
+    'Tell a story of a recent conflict. Looking back, which style did you actually use? Which would have served better?',
+    'Who in your life has the opposite style of yours? What can they teach you?',
+    'When you see Jesus engage conflict in the Gospels, which styles do you see Him use? Why?',
+    'Which conflict in your home, ministry, or workplace is the Spirit asking you to face right now?',
+    'Which style do you most need to grow into this season — and what would that growth look like in practice?',
+    'In conflict, what do you tend to protect first — yourself, the relationship, the truth, the mission, or the peace? Why?',
+    'Whom do you need to seek forgiveness from for an unhealthy conflict response? Whom do you need to forgive?',
+    'If your team or family adopted one new conflict habit this year, which one would change everything?'
+  ];
+  DEBRIEF.forEach((q, i) => {
+    writeText((i+1) + '. ' + q, { size:10 });
+    y += 3;
+  });
+  hr();
+
+  // ── CLOSING ──
+  writeText('Closing Reminder', { size:13, style:'bold', color:[184,136,42] });
+  writeText('No style is always right. No style is always wrong.', { size:11, style:'italic' });
+  writeText('The mature leader learns to ask: "What does love, truth, wisdom, and mission require in this moment?"', { size:11, style:'italic', color:[60,60,60] });
+  y += 8;
+  writeText('Note: This is an original TKI-inspired training instrument and is not the official Thomas-Kilmann Conflict Mode Instrument (TKI). It is intended as a coaching and self-awareness tool for ministry, leadership, and discipleship — not as a clinical or formal psychological assessment.',
+    { size:9, style:'italic', color:[120,120,120] });
+
+  // ── FOOTER ──
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++){
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150,150,150);
+    doc.text('Confidential · Conflict Response Style Inventory · ' + memberName, margin, pageH - 24);
+    doc.text('Page ' + p + ' of ' + pageCount, pageW - margin, pageH - 24, { align:'right' });
+  }
+
+  const safeName = memberName.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40);
+  doc.save('Conflict_Style_' + safeName + '_' + dateTaken + '.pdf');
+
+  if (chainToSave){ setTimeout(() => saveToDashboard(), 800); }
+}
+
+// Close member dropdown on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.member-search-wrap')) {
+    document.getElementById('memberDropdown').classList.remove('show');
+  }
+});
+</script>
+</body>
+</html>
