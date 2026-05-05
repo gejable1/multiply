@@ -678,6 +678,18 @@ function buildGroups(allMembers, attRows){
       }
     }
     if(!matchedLeader) return;  // attendance row that doesn't match any current leader
+
+    // ── GUARD: drop stale attendance rows.
+    //   A row is "stale" if the member it points to is no longer in this
+    //   leader's current flock (transferred away, re-assigned, removed).
+    //   Without this check, old rows pad bag.total and inflate sumCardTotals
+    //   above the real liveMembers count — that's the dashboard/LCAR
+    //   discrepancy we hunted in May 2026 (Pastor Gerry's 201 vs 206).
+    //   Note: the MLT itself only allows logging of current flock; this
+    //   guard catches HISTORICAL rows that became stale after the fact.
+    const memberInCurrentFlock = matchedLeader.members.some(m => m.id === r.member_id);
+    if(!memberInCurrentFlock) return;
+
     if(!matchedLeader.attResolved){
       matchedLeader.attResolved = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null};
     }
@@ -711,8 +723,11 @@ function buildGroups(allMembers, attRows){
         lcKey: g.leader.id
       });
     } else {
-      const denominator = Math.max(att.total, memberCount); // be safe if extras logged
-      const pct = Math.round((att.present / denominator) * 100);
+      // Use real memberCount as denominator (not att.total). Stale rows
+      // have already been dropped by the guard above, so att.total now
+      // never exceeds memberCount.
+      const denominator = memberCount;
+      const pct = denominator > 0 ? Math.round((att.present / denominator) * 100) : 0;
       const card = {
         displayName, leaderName,
         present: att.present,
@@ -732,9 +747,8 @@ function buildGroups(allMembers, attRows){
   runners.sort((a,b) => b.pct - a.pct);
   awaiting.sort((a,b) => a.displayName.localeCompare(b.displayName));
 
-  // Totals for header — sum from what's actually displayed on the cards
-  // (card denominators may include logged extras like substitutes/visitors,
-  // which is what users see and expect the headline to match).
+  // Totals for header — derived from real member counts so the headline
+  // always reconciles with the dashboard's "All Members" KPI.
   const totalLcGroups = Object.keys(lcMap).length;
   const sumChampions = champions.reduce((s,c) => s + (c.total||0), 0);
   const sumRunners   = runners.reduce((s,c) => s + (c.total||0), 0);
@@ -742,9 +756,11 @@ function buildGroups(allMembers, attRows){
   const totalMembersInLcs = sumChampions + sumRunners + sumAwaiting;
   const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
   const totalUnassigned = unassigned.length;
-  // Church total reconciles with dashboard: members in LCs + unassigned.
-  // (Leaders are naturally counted as members of their own discipler's group.)
-  const totalAllMembers = totalMembersInLcs + totalUnassigned;
+  // Church total comes straight from liveMembers — single source of truth,
+  // matches the dashboard's "All Members" pill exactly. (Previously this
+  // was sumCardTotals + unassigned, which inflated when stale attendance
+  // rows existed.  See attRows guard above.)
+  const totalAllMembers = liveMembers.length;
 
   // ── Diagnostic logging (browser console) — helps spot silent member drops.
   //    If `liveMembers.length` doesn't equal `totalAllMembers`, something is
