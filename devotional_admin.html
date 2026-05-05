@@ -468,9 +468,13 @@ body{
 
     <div class="bulk-info">
       <strong>📥 Bulk Paste Mode.</strong> Copy your devotional document text (from Word, PDF, etc.) and paste below.
-      The parser looks for <code>Month Day, Year</code> headers and standard sections (<code>Title:</code>, <code>Passage:</code>, <code>Story:</code>, <code>Expository Explanation:</code>, <code>Response:</code>, <code>Prayer:</code>).
+      The parser handles both formats:
+      <br>• <strong>Plain:</strong> <code>May 1, 2025</code> with section labels like <code>Title:</code>, <code>Passage:</code>, <code>Prayer:</code>
+      <br>• <strong>Decorated:</strong> <code>☀️ Friday, May 1, 2026: My Title</code> with emoji-prefixed labels like <code>🌱 Illustrative Story</code>, <code>📜 Passage</code>, <code>🙏 Prayer</code>
       <br><br>
-      <strong>Tip:</strong> If pasting from PDF, copy entire pages as plain text. Section headers should be on their own lines.
+      <strong>Skipped automatically:</strong> "Week N" headers and "Weekly Summary" sections.
+      <br>
+      <strong>Tip:</strong> Copy entire pages/document as plain text. Section headers should be on their own lines.
     </div>
 
     <textarea id="bulkText" class="bulk-textarea" placeholder="Paste your full month's devotional content here…&#10;&#10;Example format:&#10;&#10;May 1, 2025&#10;Title: The Dusty Carousel: Chasing the Wind&#10;&#10;Illustrative Story:&#10;…&#10;&#10;Passage:&#10;Ecclesiastes 1:1-11 (ESV)&#10;1 The words of the Preacher…&#10;&#10;Expository Explanation:&#10;…&#10;&#10;Response:&#10;…&#10;&#10;Prayer:&#10;…&#10;&#10;May 2, 2025&#10;Title: …&#10;…"></textarea>
@@ -780,14 +784,14 @@ function confirmDelete(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BULK PASTE PARSER
+// BULK PASTE PARSER (v2 — handles BOTH formats)
 // ───────────────────────────────────────────────────────────────
-// Mirror of the validated Python prototype. Handles:
-//   - "Month Day, Year" date headers (any year, with optional notes)
-//   - Section labels: Title:, Story:/Illustrative Story:, Passage:/Scripture Passage:,
-//     Expository Explanation:, Response:, Prayer:
-//   - Form-feed (\f) page breaks treated as paragraph breaks
-//   - Empty/whitespace-only lines collapsed
+// Formats supported:
+//   OLD (2025): "May 1, 2025"          / "Title:"        / "Passage:"        / "Prayer:"
+//   NEW (2026): "☀️ Friday, May 1, 2026: Title here"     / "🌱 Illustrative Story" / "📜 Passage" / "🙏 Prayer"
+//
+// Skips entirely: "Week N" header lines, "Weekly Summary" sections.
+// Verified against both real PDFs by Python prototype before porting.
 // ═══════════════════════════════════════════════════════════════
 
 function parseBulk(){
@@ -801,36 +805,77 @@ function parseBulk(){
 }
 
 function parseDevoText(rawText){
-  // Date pattern: optional formfeed, "Month Day, Year" + optional trailing note
   const MONTHS_RE = '(?:January|February|March|April|May|June|July|August|September|October|November|December)';
-  const DATE_RE = new RegExp(
-    '(?:^|\\f)\\s*(' + MONTHS_RE + ')\\s+(\\d{1,2}),\\s*(\\d{4})([^\\n]*)',
+  const DAYS_RE   = '(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)';
+
+  // Date line: optional emoji/whitespace prefix, optional "Day, ", Month Day, Year, optional trailing extras
+  // Example matches:
+  //   "May 1, 2025"
+  //   "May 1, 2025 (Rewritten)"
+  //   "☀️ Friday, May 1, 2026: The Trap That Felt Like Victory"
+  //   "Friday, May 1, 2026"
+  // [\s\S\W_]*? at start matches emoji and whitespace BUT we use a more conservative
+  // [^A-Za-z\d]* to avoid swallowing into the previous line's text.
+  // We anchor with ^ in multiline mode.
+  const DATE_LINE_RE = new RegExp(
+    '^[^A-Za-z\\d\\n]*' +                  // optional non-alphanum/non-newline prefix (emoji, whitespace, punctuation)
+      '(?:' + DAYS_RE + ',\\s+)?' +         // optional day-of-week prefix
+      '(' + MONTHS_RE + ')' +
+      '\\s+(\\d{1,2}),\\s*(\\d{4})' +
+      '(.*)$',
     'gmi'
   );
 
-  // Collect all date positions
+  // Section labels — emoji-tolerant. We strip leading emojis/punct/whitespace before
+  // matching the canonical word.
+  const SECTION_LABEL_REGEXES = [
+    { key:'story',       re: /^[^A-Za-z\n]*(?:Illustrative\s+Story|Story)\s*:?\s*$/gmi },
+    { key:'passage',     re: /^[^A-Za-z\n]*(?:Scripture\s+Passage|Passage|Scripture)\s*:?\s*$/gmi },
+    { key:'explanation', re: /^[^A-Za-z\n]*Expository\s+Explanation\s*:?\s*$/gmi },
+    { key:'response',    re: /^[^A-Za-z\n]*Response\s*:?\s*$/gmi },
+    { key:'prayer',      re: /^[^A-Za-z\n]*Prayer\s*:?\s*$/gmi },
+  ];
+
+  const TITLE_LINE_RE = /^[^A-Za-z\n]*Title\s*:\s*(.+?)\s*$/im;
+
+  // Sections to strip before parsing per-day
+  const WEEK_HEADER_RE_GLOBAL    = /^[^A-Za-z\n]*Week\s+\d+\s*:?\s*$/gmi;
+  const WEEKLY_SUMMARY_RE_SEARCH = /^[^A-Za-z\n]*(?:Weekly\s+Summary|Week\s+(?:in\s+)?Review)\s*:?\s*$/im;
+
+  // Find all date headers
   const matches = [];
   let m;
-  while((m = DATE_RE.exec(rawText)) !== null){
-    const [full, monthName, day, year, note] = m;
+  while((m = DATE_LINE_RE.exec(rawText)) !== null){
+    const [full, monthName, day, year, extras] = m;
     const monthIdx = MONTH_NAMES.findIndex(x => x.toLowerCase() === monthName.toLowerCase());
     if(monthIdx < 0) continue;
-    const iso = `${year}-${pad(monthIdx+1)}-${pad(parseInt(day,10))}`;
+    const dayN = parseInt(day, 10);
+    const yearN = parseInt(year, 10);
+    if(!(dayN >= 1 && dayN <= 31)) continue;
+    if(yearN < 2020 || yearN > 2099) continue;
+    const iso = `${yearN}-${pad(monthIdx+1)}-${pad(dayN)}`;
+    const { title: titleFromLine, note } = parseDateLineExtras(extras);
     matches.push({
       iso,
-      note: (note || '').trim(),
+      titleFromLine,
+      note,
       start: m.index,
       headerEnd: m.index + full.length
     });
   }
 
-  // Slice text between dates and parse each chunk
+  // Slice + parse each chunk between dates
   const entries = [];
   for(let i=0; i<matches.length; i++){
     const cur = matches[i];
     const nextStart = (i+1 < matches.length) ? matches[i+1].start : rawText.length;
-    const chunk = rawText.substring(cur.headerEnd, nextStart);
-    const parsed = parseChunk(chunk);
+    let chunk = rawText.substring(cur.headerEnd, nextStart);
+    const parsed = parseChunk(chunk, cur.titleFromLine, {
+      WEEK_HEADER_RE: WEEK_HEADER_RE_GLOBAL,
+      WEEKLY_SUMMARY_RE: WEEKLY_SUMMARY_RE_SEARCH,
+      TITLE_LINE_RE,
+      SECTION_LABEL_REGEXES
+    });
     parsed.entry_date = cur.iso;
     parsed.source_note = cur.note || null;
     entries.push(parsed);
@@ -838,48 +883,73 @@ function parseDevoText(rawText){
   return entries;
 }
 
-function parseChunk(chunk){
-  // Section regexes — labels on their own line (or with leading whitespace)
-  const labels = [
-    { key:'title',       re: /^\s*Title\s*:\s*(.*)$/im, capturesRest:true },
-    { key:'story',       re: /^\s*(?:Illustrative\s+)?Story\s*:?\s*$/im },
-    { key:'passage',     re: /^\s*(?:Scripture\s+)?Passage\s*:?\s*$/im },
-    { key:'explanation', re: /^\s*Expository\s+Explanation\s*:?\s*$/im },
-    { key:'response',    re: /^\s*Response\s*:?\s*$/im },
-    { key:'prayer',      re: /^\s*Prayer\s*:?\s*$/im },
-  ];
+// Parse the trailing portion of a date line (after "Year") to extract title and/or note.
+// Examples:
+//   ""                            → {title:null, note:null}
+//   " (Rewritten)"                → {title:null, note:"Rewritten"}
+//   ": The Trap That Felt Like…"  → {title:"The Trap That Felt Like…", note:null}
+//   ": Title (with note)"         → {title:"Title", note:"with note"}
+function parseDateLineExtras(extras){
+  let title = null, note = null;
+  if(!extras) return { title, note };
+  let s = extras.trim();
+  if(!s) return { title, note };
+  // Pull trailing parenthetical
+  const parenMatch = s.match(/\(([^)]+)\)\s*$/);
+  if(parenMatch){
+    note = parenMatch[1].trim();
+    s = s.substring(0, parenMatch.index).trimEnd();
+  }
+  // If what remains starts with ":", everything after is the title
+  if(s.startsWith(':')){
+    title = s.substring(1).trim() || null;
+  }
+  return { title, note };
+}
 
+function parseChunk(chunk, titleFromDateLine, regs){
   const out = {
-    title:null, scripture_ref:null, scripture_text:null,
-    story:null, explanation:null, response:null, prayer:null
+    title: titleFromDateLine,
+    scripture_ref: null,
+    scripture_text: null,
+    story: null,
+    explanation: null,
+    response: null,
+    prayer: null
   };
 
-  // Extract Title separately (it often has the title on the same line as the label)
-  const titleMatch = chunk.match(labels[0].re);
-  if(titleMatch){
-    out.title = (titleMatch[1] || '').trim() || null;
+  // If no title yet, look for "Title: ..." line (old format)
+  if(!out.title){
+    const tm = chunk.match(regs.TITLE_LINE_RE);
+    if(tm) out.title = tm[1].trim() || null;
   }
 
-  // Find positions of each section label in the chunk
+  // Cut everything from "Weekly Summary" label onward (it always follows the day's prayer)
+  const ws = chunk.match(regs.WEEKLY_SUMMARY_RE);
+  if(ws && ws.index !== undefined){
+    chunk = chunk.substring(0, ws.index);
+  }
+
+  // Strip "Week N" header lines (just remove them — keep surrounding text)
+  chunk = chunk.replace(regs.WEEK_HEADER_RE, '');
+
+  // Find all section label positions
   const hits = [];
-  for(const lbl of labels.slice(1)){ // skip Title (already captured)
-    const re = new RegExp(lbl.re.source, 'gmi');
+  for(const { key, re } of regs.SECTION_LABEL_REGEXES){
+    const localRe = new RegExp(re.source, re.flags);
     let mm;
-    while((mm = re.exec(chunk)) !== null){
-      hits.push({ key: lbl.key, start: mm.index, end: mm.index + mm[0].length });
+    while((mm = localRe.exec(chunk)) !== null){
+      hits.push({ key, start: mm.index, end: mm.index + mm[0].length });
     }
   }
-  // Sort by start
   hits.sort((a,b) => a.start - b.start);
 
-  // For each hit, body is chunk[hit.end : next_hit.start or end of chunk]
   for(let i=0; i<hits.length; i++){
     const h = hits[i];
     const nextStart = (i+1 < hits.length) ? hits[i+1].start : chunk.length;
     const body = cleanBody(chunk.substring(h.end, nextStart));
     if(!body) continue;
     if(h.key === 'passage'){
-      // First non-empty line is the ref, rest is the text
       const lines = body.split('\n').filter(ln => ln.trim());
       if(lines.length){
         out.scripture_ref = lines[0].trim();
@@ -897,22 +967,15 @@ function parseChunk(chunk){
 
 function cleanBody(s){
   if(!s) return '';
-  // Replace form-feeds with paragraph breaks
   s = s.replace(/\f/g, '\n\n');
-  // Trim each line
   let lines = s.split('\n').map(ln => ln.replace(/\s+$/,''));
-  // Collapse multiple blank lines
   const out = [];
   let blankRun = false;
   for(const ln of lines){
     if(ln.trim() === ''){
-      if(!blankRun){
-        out.push('');
-        blankRun = true;
-      }
+      if(!blankRun){ out.push(''); blankRun = true; }
     } else {
-      out.push(ln);
-      blankRun = false;
+      out.push(ln); blankRun = false;
     }
   }
   return out.join('\n').trim();
