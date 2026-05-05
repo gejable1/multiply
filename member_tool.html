@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MULTIPLY — Member Tool</title>
+<link rel="manifest" href="manifest_member.json">
+<meta name="theme-color" content="#0e3a2c">
+<link rel="apple-touch-icon" href="icon_member_192.png">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+
+<style>
+:root{
+  --cream:#f5f0e6;
+  --cream-2:#ede5d3;
+  --paper:#fbf7ef;
+  --ink:#1c1810;
+  --ink-soft:#3d342a;
+  --muted:#6b5f4f;
+  --gold:#b8882a;
+  --gold-bright:#d4af37;
+  --gold-soft:#f5e8c4;
+  --forest:#0e3a2c;
+  --forest-2:#1a5547;
+  --forest-3:#2d6e5a;
+  --leaf:#34d399;
+  --coral:#e07856;
+  --line:#e2d8c6;
+  --line-strong:#cdc0a3;
+  --red:#b03a2e;
+  --red-bg:#fdecea;
+  --shadow: 0 1px 3px rgba(28,24,16,.08), 0 8px 24px -8px rgba(28,24,16,.12);
+
+  /* Font scale for the A−/A+ slider */
+  --fs:1;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+html{font-size:calc(16px * var(--fs));}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:var(--cream);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  /* Safe-area insets so PWA doesn't get clipped behind notch/home-indicator */
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+
+/* ───── TL/EN visibility (bilingual standard) ───── */
+.tl-text{display:none;}
+body.lang-tl .en-text{display:none;}
+body.lang-tl .tl-text{display:inline;}
+
+/* ═══════════════ TOP APP BAR ═══════════════ */
+.topbar{
+  flex-shrink:0;
+  padding:14px 20px 12px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--cream);
+  border-bottom:1px solid var(--line);
+  position:relative;z-index:5;
+}
+.greeting{
+  font-family:'Fraunces',serif;
+  font-size:19px;font-weight:600;color:var(--ink);
+  line-height:1.15;letter-spacing:-.01em;
+}
+.greeting .sub{
+  display:block;font-family:'Caveat',cursive;font-weight:600;
+  font-size:14px;color:var(--gold);margin-top:1px;letter-spacing:.01em;
+}
+.avatar{
+  width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg,var(--forest-2),var(--forest));
+  color:#fef9ec;font-family:'Fraunces',serif;
+  font-weight:700;font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(14,58,44,.3);
+  cursor:pointer;border:none;
+}
+
+/* ═══════════════ CONTENT AREA ═══════════════ */
+.content-wrap{
+  flex:1;overflow:hidden;
+  position:relative;
+}
+.screen-page{
+  display:none;flex-direction:column;
+  height:100%;
+}
+.screen-page.active{display:flex;}
+.content{
+  flex:1;overflow-y:auto;
+  padding:18px 20px 100px;
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+}
+.content::-webkit-scrollbar{width:0;}
+
+/* ═══════════════ BOTTOM TABS ═══════════════ */
+.tabbar{
+  flex-shrink:0;
+  height:64px;
+  background:var(--paper);
+  border-top:1px solid var(--line);
+  display:flex;justify-content:space-around;align-items:flex-start;
+  padding:6px 8px 0;
+  position:relative;
+  z-index:10;
+}
+.tab{
+  flex:1;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 4px;cursor:pointer;
+  border:none;background:none;
+  font-family:'DM Sans',sans-serif;
+  position:relative;
+  transition:transform .15s;
+}
+.tab:active{transform:scale(.95);}
+.tab .icon{
+  font-size:20px;line-height:1;
+  filter:grayscale(.6);opacity:.55;
+  transition:all .2s;
+}
+.tab .label{
+  font-size:9.5px;font-weight:600;
+  color:var(--muted);letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.tab.active .icon{filter:none;opacity:1;}
+.tab.active .label{color:var(--forest-2);}
+.tab.active::before{
+  content:'';position:absolute;top:0;
+  width:32px;height:3px;background:var(--gold);
+  border-radius:0 0 3px 3px;
+}
+
+/* ═══════════════ HOME SCREEN ═══════════════ */
+
+.anchor-card{
+  background:linear-gradient(135deg,#0e3a2c 0%,#1a5547 60%,#2d6e5a 100%);
+  border-radius:18px;
+  padding:18px 16px 20px;
+  color:#fef9ec;
+  position:relative;overflow:hidden;
+  margin-bottom:18px;
+  box-shadow:var(--shadow);
+}
+.anchor-card::before{
+  content:'✦';position:absolute;top:14px;right:18px;
+  font-size:18px;color:#d4af37;opacity:.6;
+}
+.anchor-card .day{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:11px;letter-spacing:.35em;
+  color:#86efac;margin-bottom:8px;
+}
+.anchor-card .reading-title{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:16px;color:#fef9ec;margin-bottom:4px;
+}
+.anchor-card .reading-snippet{
+  font-family:'Fraunces',serif;font-style:italic;
+  font-weight:400;font-size:13.5px;line-height:1.5;
+  color:rgba(254,249,236,.85);margin-bottom:14px;
+}
+.anchor-card .ref{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:12px;letter-spacing:.2em;
+  color:#fbbf24;margin-bottom:14px;
+}
+.anchor-actions{display:flex;gap:10px;}
+.anchor-btn{
+  flex:1;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.18);
+  color:#fef9ec;
+  padding:10px;border-radius:11px;
+  font-family:'DM Sans',sans-serif;
+  font-size:12px;font-weight:600;
+  letter-spacing:.02em;cursor:pointer;
+  backdrop-filter:blur(4px);
+  transition:all .15s;
+}
+.anchor-btn.primary{
+  background:linear-gradient(135deg,#fbbf24,#d4af37);
+  color:#1c1810;border-color:transparent;
+}
+.anchor-btn:active{transform:scale(.97);}
+.streak{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(0,0,0,.25);
+  padding:4px 10px;border-radius:99px;
+  font-size:11px;font-weight:600;
+  margin-bottom:12px;
+}
+
+.section-label{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:18px 4px 10px;
+}
+.section-label .title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:12.5px;letter-spacing:.25em;
+  color:var(--ink);
+}
+
+.verse-card{
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-left:3px solid var(--gold);
+  border-radius:12px;
+  padding:14px 16px;
+  margin-bottom:14px;
+}
+.verse-card .verse-text{
+  font-family:'Fraunces',serif;font-style:italic;
+  font-size:13.5px;line-height:1.55;
+  color:var(--ink-soft);margin-bottom:8px;
+}
+.verse-card .verse-ref{
+  font-family:'Bebas Neue',sans-serif;font-size:11px;
+  letter-spacing:.2em;color:var(--gold);
+}
+
+.next-step-card{
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:13px 14px;
+  display:flex;gap:12px;align-items:center;
+  margin-bottom:10px;
+  cursor:pointer;
+  transition:transform .15s;
+  border:none;
+  width:100%;
+  text-align:left;
+  font-family:inherit;
+}
+.next-step-card{border:1px solid var(--line);}
+.next-step-card:active{transform:scale(.98);}
+.next-step-card .step-icon{
+  width:40px;height:40px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--gold-soft),#f5dc8c);
+  border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;
+}
+.next-step-card .step-body{flex:1;min-width:0;}
+.next-step-card .step-title{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:13.5px;color:var(--ink);margin-bottom:2px;
+}
+.next-step-card .step-meta{
+  font-size:11px;color:var(--muted);
+}
+.next-step-card .step-arrow{
+  color:var(--muted);font-size:18px;
+}
+
+/* ═══════════════ PIPELINE SCREEN ═══════════════ */
+
+.pipeline-hero{
+  background:linear-gradient(135deg,#fef3c7,#f5e8c4);
+  border:1px solid #e8d49c;
+  border-radius:16px;
+  padding:18px 16px;
+  margin-bottom:18px;
+  text-align:center;
+}
+.pipeline-hero .label{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:11px;letter-spacing:.35em;
+  color:var(--gold);margin-bottom:4px;
+}
+.pipeline-hero .level{
+  font-family:'Fraunces',serif;font-weight:700;
+  font-size:24px;color:var(--ink);margin-bottom:4px;
+  letter-spacing:-.01em;
+}
+.pipeline-hero .scope{
+  font-family:'Caveat',cursive;font-weight:600;
+  font-size:17px;color:var(--forest);
+}
+
+.ladder{position:relative;padding:0 0 8px;}
+.ladder::before{
+  content:'';position:absolute;left:24px;top:18px;bottom:18px;
+  width:2px;background:var(--line-strong);
+  border-radius:2px;
+}
+.rung{
+  display:flex;gap:14px;align-items:flex-start;
+  padding:10px 0;position:relative;
+}
+.rung .dot{
+  width:14px;height:14px;border-radius:50%;
+  background:var(--cream-2);border:2px solid var(--line-strong);
+  margin-left:17px;margin-top:14px;flex-shrink:0;
+  z-index:2;
+}
+.rung.done .dot{background:var(--leaf);border-color:var(--forest);}
+.rung.current .dot{
+  background:var(--gold);border-color:var(--gold);
+  box-shadow:0 0 0 4px rgba(212,175,55,.2);
+  width:18px;height:18px;margin-left:15px;margin-top:12px;
+}
+.rung.future .dot{opacity:.5;}
+.rung-card{
+  flex:1;
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:11px 13px;
+}
+.rung.current .rung-card{
+  background:linear-gradient(135deg,#fef9ec,#fef3c7);
+  border-color:var(--gold);
+  box-shadow:0 4px 14px -4px rgba(184,136,42,.3);
+}
+.rung-card .rung-num{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:10px;letter-spacing:.2em;
+  color:var(--muted);margin-bottom:2px;
+}
+.rung-card .rung-name{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:14.5px;color:var(--ink);margin-bottom:3px;
+}
+.rung-card .rung-desc{
+  font-size:11.5px;color:var(--muted);line-height:1.4;
+}
+.rung-card .badge{
+  display:inline-block;
+  background:var(--leaf);color:#0e3a2c;
+  font-size:9.5px;font-weight:700;letter-spacing:.05em;
+  padding:2px 7px;border-radius:99px;
+  margin-top:6px;
+}
+.rung-card .badge.next{background:var(--gold);color:#1c1810;}
+.rung-card .badge.here{background:var(--gold-bright);color:#1c1810;}
+
+.next-milestone{
+  background:#0e3a2c;
+  color:#fef9ec;
+  border-radius:14px;
+  padding:16px;
+  margin-top:18px;
+}
+.next-milestone .m-label{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:10.5px;letter-spacing:.3em;
+  color:#86efac;margin-bottom:6px;
+}
+.next-milestone .m-title{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:15px;line-height:1.3;margin-bottom:10px;
+}
+.next-milestone .m-list{
+  list-style:none;font-size:12px;line-height:1.7;
+}
+.next-milestone .m-list li{
+  display:flex;gap:8px;align-items:flex-start;
+}
+.next-milestone .m-list .check{
+  color:#86efac;flex-shrink:0;
+}
+
+/* ═══════════════ ASSESSMENTS SCREEN ═══════════════ */
+
+.assess-intro{
+  font-family:'Fraunces',serif;font-style:italic;
+  font-size:13px;line-height:1.55;
+  color:var(--ink-soft);
+  margin-bottom:16px;padding:0 4px;
+}
+.assess-card{
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:13px;
+  padding:13px 14px;
+  margin-bottom:10px;
+  display:flex;gap:12px;align-items:center;
+  cursor:pointer;
+  transition:transform .15s;
+  border:1px solid var(--line);
+  width:100%;text-align:left;
+  font-family:inherit;
+}
+.assess-card:active{transform:scale(.98);}
+.assess-card .ico{
+  width:42px;height:42px;flex-shrink:0;
+  border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:21px;
+}
+.ico.gold{background:#f5e8c4;}
+.ico.green{background:#d1f5e3;}
+.ico.coral{background:#fde2d3;}
+.ico.purple{background:#e7dcf5;}
+.ico.sky{background:#d4ecf5;}
+.ico.rose{background:#fad9d9;}
+.ico.amber{background:#fde7c4;}
+
+.assess-card .body{flex:1;min-width:0;}
+.assess-card .a-title{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:14px;color:var(--ink);
+  line-height:1.2;margin-bottom:3px;
+}
+.assess-card .a-meta{
+  font-size:11px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.pill{
+  font-size:9.5px;font-weight:700;letter-spacing:.04em;
+  padding:2px 7px;border-radius:99px;
+  text-transform:uppercase;
+}
+.pill.done{background:#d1f5e3;color:#0e3a2c;}
+.pill.todo{background:#fde2d3;color:#9a3412;}
+.pill.suggest{background:#f5e8c4;color:#7a5c0d;}
+
+/* ═══════════════ PROFILE SCREEN ═══════════════ */
+
+.profile-hero{
+  text-align:center;
+  padding:8px 0 18px;
+  border-bottom:1px solid var(--line);
+  margin-bottom:18px;
+}
+.profile-hero .big-avatar{
+  width:78px;height:78px;border-radius:50%;
+  margin:0 auto 12px;
+  background:linear-gradient(135deg,var(--forest-2),var(--forest));
+  color:#fef9ec;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-weight:700;font-size:28px;
+  box-shadow:0 4px 14px -4px rgba(14,58,44,.4);
+}
+.profile-hero .name{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:19px;color:var(--ink);margin-bottom:3px;
+}
+.profile-hero .role{
+  font-family:'Caveat',cursive;font-weight:600;
+  font-size:16px;color:var(--gold);
+}
+.profile-hero .meta-row{
+  display:inline-flex;align-items:center;gap:14px;
+  font-size:11px;color:var(--muted);margin-top:8px;
+  flex-wrap:wrap;justify-content:center;
+}
+.profile-hero .meta-row .dot-sep{
+  width:3px;height:3px;border-radius:50%;background:var(--line-strong);
+}
+
+.field-group{
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:13px;
+  margin-bottom:14px;
+  overflow:hidden;
+}
+.field-group .group-label{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:11px;letter-spacing:.25em;
+  color:var(--gold);
+  padding:11px 16px 5px;
+}
+.field{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 16px;
+  border-top:1px solid var(--line);
+  cursor:pointer;
+  transition:background .15s;
+  background:none;border-left:none;border-right:none;border-bottom:none;
+  width:100%;font-family:inherit;text-align:left;
+}
+.field:active{background:var(--cream-2);}
+.field .label{font-size:12px;color:var(--muted);font-weight:500;}
+.field .value{
+  font-size:13px;color:var(--ink);font-weight:500;text-align:right;
+  max-width:60%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:flex;align-items:center;gap:6px;
+}
+.field .edit-icon{color:var(--muted);font-size:13px;}
+.field .value.locked{color:var(--muted);font-style:italic;}
+.field .value.locked::after{content:' 🔒';font-size:9px;}
+
+.signout{
+  width:100%;
+  background:var(--paper);
+  border:1px solid var(--line);
+  color:var(--red);
+  padding:13px;border-radius:11px;
+  font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:600;
+  cursor:pointer;margin-top:6px;
+  transition:transform .15s;
+}
+.signout:active{transform:scale(.98);}
+
+/* ═══════════════ MODAL (edit field) ═══════════════ */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(28,24,16,.55);
+  display:none;align-items:flex-end;justify-content:center;
+  z-index:100;padding:16px;
+}
+.modal-backdrop.show{display:flex;}
+.modal{
+  background:var(--paper);
+  border-radius:18px 18px 12px 12px;
+  width:100%;max-width:420px;
+  padding:20px 18px;
+  box-shadow:0 -10px 40px rgba(0,0,0,.3);
+  animation:slideUp .2s ease;
+}
+@keyframes slideUp{
+  from{transform:translateY(20px);opacity:0;}
+  to{transform:translateY(0);opacity:1;}
+}
+.modal h3{
+  font-family:'Fraunces',serif;font-weight:600;font-size:17px;
+  color:var(--ink);margin-bottom:6px;
+}
+.modal .modal-sub{
+  font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;
+}
+.modal input,.modal textarea,.modal select{
+  width:100%;padding:11px 13px;font-family:inherit;font-size:14px;
+  border:1.5px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);
+  outline:none;margin-bottom:12px;transition:border-color .15s;
+}
+.modal input:focus,.modal textarea:focus,.modal select:focus{border-color:var(--forest);}
+.modal-actions{display:flex;gap:10px;}
+.modal-btn{
+  flex:1;padding:11px;font-family:inherit;font-size:13px;font-weight:600;
+  border-radius:9px;border:none;cursor:pointer;transition:transform .15s;
+}
+.modal-btn:active{transform:scale(.98);}
+.modal-btn.primary{background:var(--forest);color:#fff;}
+.modal-btn.secondary{background:var(--cream);color:var(--ink-soft);border:1px solid var(--line);}
+
+/* ═══════════════ TOAST ═══════════════ */
+.toast{
+  position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--forest);color:#fef9ec;
+  padding:10px 16px;border-radius:99px;
+  font-size:12.5px;font-weight:600;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);
+  opacity:0;pointer-events:none;
+  transition:all .25s;z-index:200;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.error{background:var(--red);}
+
+/* ═══════════════ LOADING ═══════════════ */
+.loading-screen{
+  position:fixed;inset:0;background:var(--cream);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  gap:14px;z-index:1000;
+}
+.loading-screen .lspin{
+  width:36px;height:36px;border-radius:50%;
+  border:3px solid var(--line);border-top-color:var(--forest);
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-screen .ltext{
+  font-family:'Fraunces',serif;font-style:italic;
+  font-size:14px;color:var(--muted);
+}
+
+/* ═══════════════ FAB CONTROLS (bilingual + font slider) ═══════════════ */
+.fab-controls{
+  position:fixed;bottom:80px;right:14px;z-index:50;
+  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
+}
+.lang-pill{
+  display:inline-flex;background:var(--paper);
+  border:1px solid var(--line);border-radius:99px;
+  overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+.lang-pill button{
+  background:none;border:none;padding:6px 11px;
+  font-family:inherit;font-size:11px;font-weight:600;
+  color:var(--muted);cursor:pointer;letter-spacing:.02em;
+}
+.lang-pill button.active{background:var(--gold);color:var(--ink);}
+.font-pill{
+  display:inline-flex;background:var(--paper);
+  border:1px solid var(--line);border-radius:99px;
+  overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+.font-pill button{
+  background:none;border:none;padding:6px 10px;
+  font-family:'Fraunces',serif;font-weight:700;
+  color:var(--ink);cursor:pointer;
+}
+.font-pill button.minus{font-size:11px;}
+.font-pill button.plus{font-size:14px;}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LOADING ═══════════════ -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="lspin"></div>
+  <div class="ltext">
+    <span class="en-text">Loading your tool…</span>
+    <span class="tl-text">Naghahanda ng iyong tool…</span>
+  </div>
+</div>
+
+<!-- ═══════════════ TOP APP BAR ═══════════════ -->
+<div class="topbar" id="topbar" style="display:none">
+  <div class="greeting" id="greetingTxt">
+    <span class="en-text">Magandang umaga,</span>
+    <span class="tl-text">Magandang umaga,</span>
+    <span class="sub" id="memberFirstName">…</span>
+  </div>
+  <button class="avatar" id="avatarBtn" onclick="goTo('profile')">M</button>
+</div>
+
+<!-- ═══════════════ CONTENT ═══════════════ -->
+<div class="content-wrap" id="appWrap" style="display:none">
+
+  <!-- ─── HOME ─── -->
+  <div class="screen-page active" id="page-home">
+    <div class="content">
+
+      <!-- Today's Anchor -->
+      <div class="anchor-card">
+        <div class="streak" id="streakBadge" style="display:none">🔥 <span id="streakDays">0</span><span class="en-text">-day streak</span><span class="tl-text">-araw streak</span></div>
+        <div class="day" id="anchorDay">…</div>
+        <div class="reading-title" id="anchorTitle">
+          <span class="en-text">Today's reading</span>
+          <span class="tl-text">Ang araw na ito</span>
+        </div>
+        <div class="reading-snippet" id="anchorSnippet">
+          <span class="en-text">"This is the day that the LORD has made; let us rejoice and be glad in it."</span>
+          <span class="tl-text">"Ito ang araw na ginawa ng Panginoon; magalak tayo at magsaya."</span>
+        </div>
+        <div class="ref">PSALM 118:24</div>
+        <div class="anchor-actions">
+          <button class="anchor-btn primary" onclick="markDevoRead()">📖 <span class="en-text">Mark read</span><span class="tl-text">Nabasa na</span></button>
+          <button class="anchor-btn" onclick="openJournal()">✎ <span class="en-text">Journal</span><span class="tl-text">Talaarawan</span></button>
+        </div>
+      </div>
+
+      <!-- Verse of the week -->
+      <div class="section-label">
+        <div class="title">
+          <span class="en-text">Verse of the week</span>
+          <span class="tl-text">Talata ng linggo</span>
+        </div>
+      </div>
+      <div class="verse-card" id="weeklyVerseCard">
+        <div class="verse-text" id="weeklyVerseText">
+          <span class="en-text">"For we are his workmanship, created in Christ Jesus for good works, which God prepared beforehand."</span>
+          <span class="tl-text">"Tayo'y kanyang gawa, nilikha kay Cristo Jesus para sa mabubuting gawa…"</span>
+        </div>
+        <div class="verse-ref" id="weeklyVerseRef">EPHESIANS 2:10</div>
+      </div>
+
+      <!-- Next steps -->
+      <div class="section-label">
+        <div class="title">
+          <span class="en-text">Your next steps</span>
+          <span class="tl-text">Susunod na hakbang</span>
+        </div>
+      </div>
+      <div id="nextStepsContainer">
+        <!-- Populated dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── JOURNEY (PIPELINE) ─── -->
+  <div class="screen-page" id="page-pipeline">
+    <div class="content">
+
+      <div class="pipeline-hero">
+        <div class="label">
+          <span class="en-text">YOU ARE HERE</span>
+          <span class="tl-text">NASA YO TAYO</span>
+        </div>
+        <div class="level" id="pipeCurrentLevel">…</div>
+        <div class="scope" id="pipeCurrentScope">…</div>
+      </div>
+
+      <div class="ladder" id="ladderContainer">
+        <!-- Populated dynamically -->
+      </div>
+
+      <div class="next-milestone" id="nextMilestoneBox">
+        <!-- Populated dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── DISCOVER (ASSESSMENTS) ─── -->
+  <div class="screen-page" id="page-assess">
+    <div class="content">
+
+      <p class="assess-intro">
+        <span class="en-text">Each one helps you understand a different facet of who you are. Take them at your pace — your discipler will see your results.</span>
+        <span class="tl-text">Bawat isa ay tutulong sa iyo na maunawaan ang sarili mo. Gawin sa sarili mong bilis — makikita ng iyong discipler ang resulta.</span>
+      </p>
+
+      <div id="assessContainer">
+        <!-- Populated dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── PROFILE ─── -->
+  <div class="screen-page" id="page-profile">
+    <div class="content">
+
+      <div class="profile-hero">
+        <div class="big-avatar" id="profileAvatar">M</div>
+        <div class="name" id="profileName">…</div>
+        <div class="role" id="profileRole">…</div>
+        <div class="meta-row">
+          <span id="profileLcGroup">…</span>
+          <span class="dot-sep"></span>
+          <span id="profileDiscipler">…</span>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <div class="group-label">
+          <span class="en-text">PERSONAL</span>
+          <span class="tl-text">PERSONAL</span>
+        </div>
+        <button class="field" onclick="editField('name','Full name','Pangalan','text')">
+          <span class="label"><span class="en-text">Full name</span><span class="tl-text">Buong pangalan</span></span>
+          <span class="value" id="fName">…<span class="edit-icon">✎</span></span>
+        </button>
+        <button class="field" onclick="editField('contact','Phone (WhatsApp)','Telepono (WhatsApp)','tel')">
+          <span class="label"><span class="en-text">Phone</span><span class="tl-text">Telepono</span></span>
+          <span class="value" id="fPhone">…<span class="edit-icon">✎</span></span>
+        </button>
+        <button class="field" onclick="editField('birthday','Birthday','Kaarawan','date')">
+          <span class="label"><span class="en-text">Birthday</span><span class="tl-text">Kaarawan</span></span>
+          <span class="value" id="fBirthday">…<span class="edit-icon">✎</span></span>
+        </button>
+        <button class="field" onclick="editField('address','Address','Tirahan','text')">
+          <span class="label"><span class="en-text">Address</span><span class="tl-text">Tirahan</span></span>
+          <span class="value" id="fAddress">…<span class="edit-icon">✎</span></span>
+        </button>
+      </div>
+
+      <div class="field-group">
+        <div class="group-label">
+          <span class="en-text">CHURCH (PASTOR-MANAGED)</span>
+          <span class="tl-text">SIMBAHAN (PASTOR ANG NAG-MA-MANAGE)</span>
+        </div>
+        <div class="field" style="cursor:default">
+          <span class="label"><span class="en-text">LC Group</span><span class="tl-text">LC Group</span></span>
+          <span class="value locked" id="fLcGroup">…</span>
+        </div>
+        <div class="field" style="cursor:default">
+          <span class="label"><span class="en-text">Discipler</span><span class="tl-text">Discipler</span></span>
+          <span class="value locked" id="fDiscipler">…</span>
+        </div>
+        <div class="field" style="cursor:default">
+          <span class="label"><span class="en-text">Pipeline level</span><span class="tl-text">Antas sa pipeline</span></span>
+          <span class="value locked" id="fLevel">…</span>
+        </div>
+        <div class="field" style="cursor:default">
+          <span class="label"><span class="en-text">Ministry</span><span class="tl-text">Ministeryo</span></span>
+          <span class="value locked" id="fMinistry">…</span>
+        </div>
+      </div>
+
+      <button class="signout" onclick="signOut()">
+        <span class="en-text">Sign out</span>
+        <span class="tl-text">Mag-sign out</span>
+      </button>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ BOTTOM TABS ═══════════════ -->
+<div class="tabbar" id="tabbar" style="display:none">
+  <button class="tab active" data-page="home" onclick="goTo('home')">
+    <span class="icon">🏡</span>
+    <span class="label"><span class="en-text">Home</span><span class="tl-text">Tahanan</span></span>
+  </button>
+  <button class="tab" data-page="pipeline" onclick="goTo('pipeline')">
+    <span class="icon">🪜</span>
+    <span class="label"><span class="en-text">Journey</span><span class="tl-text">Paglalakbay</span></span>
+  </button>
+  <button class="tab" data-page="assess" onclick="goTo('assess')">
+    <span class="icon">🌱</span>
+    <span class="label"><span class="en-text">Discover</span><span class="tl-text">Tuklasin</span></span>
+  </button>
+  <button class="tab" data-page="profile" onclick="goTo('profile')">
+    <span class="icon">👤</span>
+    <span class="label"><span class="en-text">Profile</span><span class="tl-text">Profile</span></span>
+  </button>
+</div>
+
+<!-- ═══════════════ FAB CONTROLS ═══════════════ -->
+<div class="fab-controls" id="fabControls" style="display:none">
+  <div class="lang-pill">
+    <button id="langEn" class="active" onclick="setLang('en')">🇺🇸 EN</button>
+    <button id="langTl" onclick="setLang('tl')">🇵🇭 TL</button>
+  </div>
+  <div class="font-pill">
+    <button class="minus" onclick="adjustFont(-1)">A−</button>
+    <button class="plus" onclick="adjustFont(1)">A+</button>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL ═══════════════ -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalBox">
+    <h3 id="modalTitle">…</h3>
+    <p class="modal-sub" id="modalSub"></p>
+    <input id="modalInput" type="text">
+    <div class="modal-actions">
+      <button class="modal-btn secondary" onclick="closeModal()">
+        <span class="en-text">Cancel</span><span class="tl-text">I-cancel</span>
+      </button>
+      <button class="modal-btn primary" onclick="saveModalField()">
+        <span class="en-text">Save</span><span class="tl-text">I-save</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TOAST ═══════════════ -->
+<div class="toast" id="toast">…</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// BOOT — gate the page on a valid member session, then load data.
+// ═══════════════════════════════════════════════════════════════
+if(!MultiplyShared.gateMemberOrRedirect('member_login.html')){
+  // gateMemberOrRedirect already replaced location; nothing else to do.
+} else {
+  // Has a valid session. window.MEMBER is set.
+  document.addEventListener('DOMContentLoaded', initMMT);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const LN = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Executive Leader'];
+const LN_TL = ['Pre-Pipeline','Team Member','Lider','Coach','Direktor','Executive Leader'];
+const SCOPE_BY_LEVEL = {
+  0: { en: 'exploring, getting to know Jesus', tl: 'naghahanap, kumikilala kay Hesus' },
+  1: { en: 'faithfully serving, growing in Christ', tl: 'tapat na naglilingkod, lumalago kay Cristo' },
+  2: { en: 'leading a small team in ministry', tl: 'namumuno sa maliit na grupo' },
+  3: { en: 'coaching leaders, equipping disciplers', tl: 'nagko-coach ng mga lider' },
+  4: { en: 'directing a department of ministries', tl: 'namumuno ng kabuuang ministeryo' },
+  5: { en: 'leading the whole church', tl: 'namumuno sa buong simbahan' }
+};
+
+// ───── Assessment registry (mirrors MLT's ASSESSMENTS array) ─────
+// `field` = denormalized column on members table to check completion fast.
+const ASSESSMENTS = [
+  { key:'salvation',       name_en:'Salvation Assurance', name_tl:'Salvation Assurance',
+    file:'salvation_assurance_diagnostic.html', field:'diagnostic_zone', icon:'✝️', icoClass:'gold',  mins:'~10 min' },
+  { key:'spiritual_gifts', name_en:'Spiritual Gifts',     name_tl:'Mga Espiritwal na Kaloob',
+    file:'spiritual_gifts_diagnostic.html',     field:'spiritual_gifts', icon:'🎁', icoClass:'green', mins:'~12 min' },
+  { key:'strengths',       name_en:'Strengths Profile',   name_tl:'Mga Lakas',
+    file:'strengths_profile.html',              field:'strengths_top5',  icon:'⭐', icoClass:'amber', mins:'~25 min' },
+  { key:'disc',            name_en:'DISC · Working Style',name_tl:'DISC · Pamamaraan',
+    file:'disc_profile.html',                   field:'disc_primary',    icon:'🧭', icoClass:'sky',   mins:'~8 min' },
+  { key:'enneagram',       name_en:'Enneagram',           name_tl:'Enneagram',
+    file:'enneagram_profile.html',              field:'enneagram_type',  icon:'🌀', icoClass:'purple',mins:'~15 min' },
+  { key:'love_language',   name_en:'Love Language',       name_tl:'Wika ng Pagmamahal',
+    file:'love_language.html',                  field:'love_language_primary', icon:'💝', icoClass:'rose', mins:'~6 min' },
+  { key:'conflict',        name_en:'Conflict Style',      name_tl:'Estilo sa Hidwaan',
+    file:'conflict_style_profile.html',         field:'conflict_primary',icon:'⚖️', icoClass:'coral', mins:'~10 min' },
+];
+
+// Pipeline rungs (mirrors preservice_slides.html)
+const RUNGS = [
+  { lvl:5, name_en:'Executive Leader', name_tl:'Executive Leader',
+    desc_en:'Pastor · Church Planter · Missionary',
+    desc_tl:'Pastor · Tagapagtatag ng Simbahan · Missionary',
+    tag:'05 · LEAD AN ORGANIZATION' },
+  { lvl:4, name_en:'Director', name_tl:'Direktor',
+    desc_en:'Ministry Director · Life Coach · Core Group',
+    desc_tl:'Ministry Director · Life Coach · Core Group',
+    tag:'04 · LEAD A DEPARTMENT' },
+  { lvl:3, name_en:'Coach', name_tl:'Coach',
+    desc_en:'Sunday Preacher · Council Member · BTLI Lecturer',
+    desc_tl:'Sunday Preacher · Council Member · BTLI Lecturer',
+    tag:'03 · LEAD LEADERS' },
+  { lvl:2, name_en:'Leader', name_tl:'Lider',
+    desc_en:'LC Leader · Worship · Sunday School',
+    desc_tl:'LC Leader · Worship · Sunday School',
+    tag:'02 · LEAD OTHERS' },
+  { lvl:1, name_en:'Team Member', name_tl:'Team Member',
+    desc_en:'Faithfully serving in a ministry — growing in Christ',
+    desc_tl:'Tapat na naglilingkod sa ministeryo — lumalago kay Cristo',
+    tag:'01 · LEAD YOURSELF' },
+  { lvl:0, name_en:'Pre-Pipeline', name_tl:'Pre-Pipeline',
+    desc_en:'Seeker · New believer · Exploring',
+    desc_tl:'Naghahanap · Bagong mananampalataya',
+    tag:'00 · BEGINNING' },
+];
+
+// Milestone ladder per level (what to do to advance)
+const MILESTONES = {
+  1: { // To reach Leader (Lvl 2)
+    label_en: "TO REACH 'LEADER'", label_tl: "PARA MAGING 'LIDER'",
+    title_en: 'Three things await you, kapatid:', title_tl: 'Tatlong bagay ang naghihintay, kapatid:',
+    items_en: [
+      'Complete BTLI 102 & 103',
+      'Faithfully serve in your ministry for 6 months',
+      'Be invited by a coach (FATS evident)'
+    ],
+    items_tl: [
+      'Tapusin ang BTLI 102 at 103',
+      'Tapat na maglingkod sa ministeryo nang 6 na buwan',
+      'Ma-invite ng coach (FATS ay nakikita)'
+    ]
+  },
+  2: { // To reach Coach
+    label_en: "TO REACH 'COACH'", label_tl: "PARA MAGING 'COACH'",
+    title_en: 'Continue growing as a leader:', title_tl: 'Patuloy na lumago bilang lider:',
+    items_en: [
+      'Complete BTLI 104 + IDC + APIIS',
+      'Lead an LC group for at least 1 year',
+      'Identify and disciple your replacement'
+    ],
+    items_tl: [
+      'Tapusin ang BTLI 104 + IDC + APIIS',
+      'Pamunuan ang LC group ng hindi bababa sa 1 taon',
+      'Hanapin at i-disciple ang iyong kapalit'
+    ]
+  },
+  3: { // To reach Director
+    label_en: "TO REACH 'DIRECTOR'", label_tl: "PARA MAGING 'DIRECTOR'",
+    title_en: 'Greater scope of leadership:', title_tl: 'Mas malawak na pamumuno:',
+    items_en: [
+      'Complete BTLI 105 + Coaching Training',
+      'Coach multiple LC leaders effectively',
+      'Demonstrate department-level vision casting'
+    ],
+    items_tl: [
+      'Tapusin ang BTLI 105 + Coaching Training',
+      'Epektibong i-coach ang maraming LC leaders',
+      'Magpakita ng vision para sa department'
+    ]
+  },
+  4: { // To reach Exec
+    label_en: "TO REACH 'EXEC. LEADER'", label_tl: "PARA MAGING 'EXEC. LEADER'",
+    title_en: 'Final step in the pipeline:', title_tl: 'Huling hakbang sa pipeline:',
+    items_en: [
+      'Complete BTLI 106 + Church Planting Training',
+      'Direct a department for 2+ years',
+      'Sense a clear calling to lead an organization'
+    ],
+    items_tl: [
+      'Tapusin ang BTLI 106 + Church Planting Training',
+      'Mamuno ng department nang 2+ taon',
+      'Maramdaman ang malinaw na calling'
+    ]
+  }
+};
+
+const MEMBER = window.MEMBER;
+const db = MultiplyShared.getDB();
+let memberRow = null;       // fresh row from members table
+let weeklyVerseConfig = null;
+let devoStreak = 0;
+let currentEditField = null;
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function initMMT(){
+  // Apply saved language + font scale early to avoid flash
+  applySavedLang();
+  applySavedFontScale();
+
+  try{
+    await loadMember();
+    await loadDevoStreak();
+    await loadWeeklyVerse();
+    renderHome();
+    renderPipeline();
+    renderAssessments();
+    renderProfile();
+    showApp();
+  }catch(e){
+    console.error('initMMT failed:', e);
+    showToast('Could not load. Try again.', true);
+    showApp(); // show anyway, even if some pieces failed
+  }
+}
+
+function showApp(){
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('topbar').style.display = '';
+  document.getElementById('appWrap').style.display = '';
+  document.getElementById('tabbar').style.display = '';
+  document.getElementById('fabControls').style.display = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════════════════
+async function loadMember(){
+  const {data, error} = await db.from('members')
+    .select('*')
+    .eq('id', MEMBER.memberId)
+    .maybeSingle();
+  if(error) throw error;
+  if(!data) throw new Error('Member record not found');
+  memberRow = data;
+
+  // Update topbar greeting
+  const first = (memberRow.name||'').split(' ')[0] || 'kapatid';
+  document.getElementById('memberFirstName').textContent = first + ' ✦';
+
+  // Avatar initials
+  const initials = (memberRow.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('avatarBtn').textContent = initials;
+}
+
+// ───── Devotional streak ─────
+// Counts consecutive days that this member has logged a "devotional" attendance row.
+// We use the existing `attendance` table with event_type='devotional' as the marker —
+// no new table needed for Phase 1. Future Phase 2 can split this out.
+async function loadDevoStreak(){
+  try{
+    const {data, error} = await db.from('attendance')
+      .select('event_date')
+      .eq('member_id', MEMBER.memberId)
+      .eq('event_type', 'devotional')
+      .eq('present', true)
+      .order('event_date', { ascending:false })
+      .limit(60);
+    if(error) throw error;
+    devoStreak = computeStreak(data || []);
+  }catch(e){
+    console.warn('streak load failed (non-fatal):', e);
+    devoStreak = 0;
+  }
+}
+
+function computeStreak(rows){
+  if(!rows.length) return 0;
+  // Walk back from today; only count if today or yesterday has an entry
+  // (allowing for "haven't checked in yet today")
+  const dates = new Set(rows.map(r => r.event_date));
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const fmt = d => d.toISOString().slice(0,10);
+
+  // Find the most recent date that's in the set (today or yesterday)
+  let cursor = dates.has(fmt(today)) ? today : (dates.has(fmt(yesterday)) ? yesterday : null);
+  if(!cursor) return 0;
+
+  let streak = 0;
+  while(dates.has(fmt(cursor))){
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+// ───── Weekly verse (from system_settings.meta) ─────
+async function loadWeeklyVerse(){
+  try{
+    const {data, error} = await db.from('system_settings')
+      .select('meta')
+      .eq('id', 1)
+      .maybeSingle();
+    if(error) throw error;
+    weeklyVerseConfig = (data && data.meta && data.meta.weekly_verse) || null;
+  }catch(e){
+    console.warn('weekly verse load failed (non-fatal):', e);
+    weeklyVerseConfig = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOME RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderHome(){
+  // Streak badge
+  if(devoStreak > 0){
+    document.getElementById('streakBadge').style.display = '';
+    document.getElementById('streakDays').textContent = devoStreak;
+  }
+
+  // Day label
+  const today = new Date();
+  const dayName = today.toLocaleDateString(undefined, { weekday:'long' }).toUpperCase();
+  document.getElementById('anchorDay').textContent = dayName;
+
+  // Weekly verse override (from system_settings)
+  if(weeklyVerseConfig && weeklyVerseConfig.text_en){
+    const card = document.getElementById('weeklyVerseCard');
+    card.querySelector('#weeklyVerseText .en-text').textContent = '"' + weeklyVerseConfig.text_en + '"';
+    if(weeklyVerseConfig.text_tl){
+      card.querySelector('#weeklyVerseText .tl-text').textContent = '"' + weeklyVerseConfig.text_tl + '"';
+    }
+    if(weeklyVerseConfig.ref){
+      document.getElementById('weeklyVerseRef').textContent = weeklyVerseConfig.ref;
+    }
+  }
+
+  // Next steps — dynamically suggest based on what's missing
+  const container = document.getElementById('nextStepsContainer');
+  container.innerHTML = '';
+
+  const suggestions = computeNextSteps();
+  suggestions.slice(0,3).forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'next-step-card';
+    btn.onclick = s.onclick;
+    btn.innerHTML = `
+      <div class="step-icon">${s.icon}</div>
+      <div class="step-body">
+        <div class="step-title">
+          <span class="en-text">${MultiplyShared.escapeHTML(s.title_en)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(s.title_tl)}</span>
+        </div>
+        <div class="step-meta">
+          <span class="en-text">${MultiplyShared.escapeHTML(s.meta_en)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(s.meta_tl)}</span>
+        </div>
+      </div>
+      <div class="step-arrow">›</div>
+    `;
+    container.appendChild(btn);
+  });
+
+  if(!suggestions.length){
+    container.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:14px;font-style:italic;">
+      <span class="en-text">You've completed all suggested steps. ✨</span>
+      <span class="tl-text">Natapos mo na ang lahat ng mungkahi. ✨</span>
+    </div>`;
+  }
+}
+
+function computeNextSteps(){
+  const out = [];
+
+  // 1. If salvation diagnostic not done, suggest it first
+  if(memberRow.diagnostic_zone == null || memberRow.diagnostic_zone === ''){
+    out.push({
+      icon:'✝️',
+      title_en:'Take the Salvation Assurance diagnostic',
+      title_tl:'Sagutan ang Salvation Assurance',
+      meta_en:'Foundational · ~10 min',
+      meta_tl:'Pundasyon · ~10 min',
+      onclick: () => goTo('assess')
+    });
+  }
+
+  // 2. If spiritual gifts not done, suggest next
+  if(!memberRow.spiritual_gifts){
+    out.push({
+      icon:'🌱',
+      title_en:'Discover your Spiritual Gifts',
+      title_tl:'Tuklasin ang iyong Spiritual Gifts',
+      meta_en:'Suggested · ~12 min',
+      meta_tl:'Mungkahi · ~12 min',
+      onclick: () => goTo('assess')
+    });
+  }
+
+  // 3. If neither DISC nor strengths done, suggest one of them
+  if(!memberRow.disc_primary && !(memberRow.strengths_top5 && memberRow.strengths_top5.length)){
+    out.push({
+      icon:'🧭',
+      title_en:'Learn your working style (DISC)',
+      title_tl:'Alamin ang iyong working style (DISC)',
+      meta_en:'~8 min',
+      meta_tl:'~8 min',
+      onclick: () => goTo('assess')
+    });
+  }
+
+  // 4. Pipeline next milestone
+  const lvl = memberRow.pipeline_level || 0;
+  if(MILESTONES[lvl]){
+    out.push({
+      icon:'🪜',
+      title_en:'See your next milestone',
+      title_tl:'Tingnan ang iyong susunod na hakbang',
+      meta_en:'On the Journey screen',
+      meta_tl:'Nasa Paglalakbay screen',
+      onclick: () => goTo('pipeline')
+    });
+  }
+
+  return out;
+}
+
+function markDevoRead(){
+  // Insert a 'devotional' attendance row for today (idempotent check first)
+  const today = new Date().toISOString().slice(0,10);
+  (async () => {
+    try{
+      // Check if already marked today
+      const {data: existing} = await db.from('attendance')
+        .select('id')
+        .eq('member_id', MEMBER.memberId)
+        .eq('event_type', 'devotional')
+        .eq('event_date', today)
+        .maybeSingle();
+      if(existing){
+        showToast('Already marked for today ✓');
+        return;
+      }
+      const {error} = await db.from('attendance').insert({
+        member_id: MEMBER.memberId,
+        member_name: memberRow.name,
+        event_type: 'devotional',
+        event_date: today,
+        event_name: 'Daily devotional',
+        present: true,
+        member_lc_group: memberRow.lc_group || null,
+        member_zone: memberRow.diagnostic_zone || null,
+        member_level: memberRow.pipeline_level || null,
+        logged_by: memberRow.name,
+        logged_by_id: MEMBER.memberId
+      });
+      if(error) throw error;
+      // Refresh streak and re-render
+      await loadDevoStreak();
+      renderHome();
+      showToast('🔥 ' + (devoStreak === 1 ? 'Started a new streak!' : 'Day '+devoStreak+' — keep going!'));
+    }catch(e){
+      console.error(e);
+      showToast('Could not save: '+e.message, true);
+    }
+  })();
+}
+
+function openJournal(){
+  // Phase 1: just a placeholder. Phase 2 will have a real journal table.
+  showToast('Journal coming in Phase 2 ✨');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PIPELINE RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderPipeline(){
+  const lvl = memberRow.pipeline_level || 0;
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  const levelName = (lang === 'tl' ? LN_TL : LN)[lvl] || LN[0];
+  document.getElementById('pipeCurrentLevel').textContent = levelName;
+  const scope = SCOPE_BY_LEVEL[lvl] || SCOPE_BY_LEVEL[1];
+  document.getElementById('pipeCurrentScope').textContent = scope[lang] || scope.en;
+
+  // Render rungs
+  const ladder = document.getElementById('ladderContainer');
+  ladder.innerHTML = '';
+
+  RUNGS.forEach(r => {
+    let state = 'future';
+    if(r.lvl < lvl) state = 'done';
+    else if(r.lvl === lvl) state = 'current';
+
+    let badgeHtml = '';
+    if(state === 'done'){
+      badgeHtml = `<span class="badge"><span class="en-text">COMPLETED</span><span class="tl-text">TAPOS NA</span></span>`;
+    } else if(state === 'current'){
+      badgeHtml = `<span class="badge here"><span class="en-text">YOU ARE HERE</span><span class="tl-text">NASA DITO KA</span></span>`;
+    } else if(r.lvl === lvl + 1){
+      badgeHtml = `<span class="badge next"><span class="en-text">YOUR NEXT MILESTONE</span><span class="tl-text">SUSUNOD NA HAKBANG</span></span>`;
+    }
+
+    const div = document.createElement('div');
+    div.className = 'rung ' + state;
+    div.innerHTML = `
+      <div class="dot"></div>
+      <div class="rung-card">
+        <div class="rung-num">${MultiplyShared.escapeHTML(r.tag)}</div>
+        <div class="rung-name">
+          <span class="en-text">${MultiplyShared.escapeHTML(r.name_en)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(r.name_tl)}</span>
+        </div>
+        <div class="rung-desc">
+          <span class="en-text">${MultiplyShared.escapeHTML(r.desc_en)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(r.desc_tl)}</span>
+        </div>
+        ${badgeHtml}
+      </div>
+    `;
+    ladder.appendChild(div);
+  });
+
+  // Next milestone box
+  const box = document.getElementById('nextMilestoneBox');
+  const ms = MILESTONES[lvl];
+  if(ms){
+    box.style.display = '';
+    box.innerHTML = `
+      <div class="m-label">
+        <span class="en-text">${MultiplyShared.escapeHTML(ms.label_en)}</span>
+        <span class="tl-text">${MultiplyShared.escapeHTML(ms.label_tl)}</span>
+      </div>
+      <div class="m-title">
+        <span class="en-text">${MultiplyShared.escapeHTML(ms.title_en)}</span>
+        <span class="tl-text">${MultiplyShared.escapeHTML(ms.title_tl)}</span>
+      </div>
+      <ul class="m-list">
+        ${ms.items_en.map((it,i) => `
+          <li><span class="check">✓</span>
+            <span class="en-text">${MultiplyShared.escapeHTML(it)}</span>
+            <span class="tl-text">${MultiplyShared.escapeHTML(ms.items_tl[i] || it)}</span>
+          </li>
+        `).join('')}
+      </ul>
+    `;
+  } else {
+    // At max level — celebrate instead of nag
+    box.innerHTML = `
+      <div class="m-label">
+        <span class="en-text">YOU ARE AT THE TOP</span>
+        <span class="tl-text">NASA TAAS KA NA</span>
+      </div>
+      <div class="m-title">
+        <span class="en-text">Now: multiply yourself, kapatid.</span>
+        <span class="tl-text">Ngayon: dumami ka, kapatid.</span>
+      </div>
+    `;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ASSESSMENTS RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderAssessments(){
+  const container = document.getElementById('assessContainer');
+  container.innerHTML = '';
+
+  // Suggest the next un-done one (first found in priority order)
+  let suggestedKey = null;
+  for(const a of ASSESSMENTS){
+    if(!isAssessmentDone(a)){ suggestedKey = a.key; break; }
+  }
+
+  ASSESSMENTS.forEach(a => {
+    const done = isAssessmentDone(a);
+    const isSuggested = !done && a.key === suggestedKey;
+
+    let pillHtml;
+    if(done){
+      pillHtml = `<span class="pill done">✓ <span class="en-text">Done</span><span class="tl-text">Tapos</span></span>`;
+    } else if(isSuggested){
+      pillHtml = `<span class="pill suggest"><span class="en-text">Suggested next</span><span class="tl-text">Susunod</span></span>`;
+    } else {
+      pillHtml = `<span class="pill todo"><span class="en-text">Not started</span><span class="tl-text">Hindi pa</span></span>`;
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'assess-card';
+    btn.onclick = () => openAssessment(a);
+    btn.innerHTML = `
+      <div class="ico ${a.icoClass}">${a.icon}</div>
+      <div class="body">
+        <div class="a-title">
+          <span class="en-text">${MultiplyShared.escapeHTML(a.name_en)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(a.name_tl)}</span>
+        </div>
+        <div class="a-meta">
+          ${pillHtml} <span style="color:var(--line-strong)">·</span> <span>${MultiplyShared.escapeHTML(a.mins)}</span>
+        </div>
+      </div>
+      <div style="color:var(--muted);font-size:18px">›</div>
+    `;
+    container.appendChild(btn);
+  });
+}
+
+function isAssessmentDone(a){
+  const v = memberRow[a.field];
+  if(v == null) return false;
+  if(Array.isArray(v)) return v.length > 0;
+  if(typeof v === 'string') return v.trim() !== '';
+  return true; // numbers, etc.
+}
+
+function openAssessment(a){
+  // Open with member id query param so the assessment page knows whose data to load
+  location.href = a.file + '?id=' + encodeURIComponent(MEMBER.memberId);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROFILE RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderProfile(){
+  const initials = (memberRow.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('profileAvatar').textContent = initials;
+  document.getElementById('profileName').textContent = memberRow.name || '—';
+  const lvl = memberRow.pipeline_level || 0;
+  const role = memberRow.facilitator_role || LN[lvl];
+  const ministry = memberRow.ministry ? (' · ' + memberRow.ministry) : '';
+  document.getElementById('profileRole').textContent = role + ministry;
+  document.getElementById('profileLcGroup').textContent = memberRow.lc_group ? ('📍 ' + memberRow.lc_group) : '—';
+  document.getElementById('profileDiscipler').textContent = memberRow.discipler_name ? ('with ' + memberRow.discipler_name) : 'No discipler yet';
+
+  // Editable fields
+  document.getElementById('fName').innerHTML = MultiplyShared.escapeHTML(memberRow.name || '—') + ' <span class="edit-icon">✎</span>';
+  document.getElementById('fPhone').innerHTML = MultiplyShared.escapeHTML(maskPhone(memberRow.contact)) + ' <span class="edit-icon">✎</span>';
+  document.getElementById('fBirthday').innerHTML = MultiplyShared.escapeHTML(formatBirthday(memberRow.birthday)) + ' <span class="edit-icon">✎</span>';
+  document.getElementById('fAddress').innerHTML = MultiplyShared.escapeHTML(memberRow.address || '—') + ' <span class="edit-icon">✎</span>';
+
+  // Locked fields
+  document.getElementById('fLcGroup').textContent = memberRow.lc_group || '—';
+  document.getElementById('fDiscipler').textContent = memberRow.discipler_name || '—';
+  document.getElementById('fLevel').textContent = LN[lvl] || '—';
+  document.getElementById('fMinistry').textContent = memberRow.ministry || '—';
+}
+
+function maskPhone(p){
+  if(!p) return '—';
+  // Show first 4 + last 4, mask middle
+  const s = String(p).replace(/\s/g,'');
+  if(s.length < 8) return s;
+  return s.slice(0,4) + ' ••• ' + s.slice(-4);
+}
+function formatBirthday(b){
+  if(!b) return '—';
+  try{
+    const d = new Date(b);
+    return d.toLocaleDateString(undefined, { month:'long', day:'numeric' });
+  }catch(e){ return b; }
+}
+
+// ───── Field edit modal ─────
+function editField(field, label_en, label_tl, type){
+  currentEditField = { field, label_en, label_tl, type };
+  document.getElementById('modalTitle').textContent =
+    document.body.classList.contains('lang-tl') ? label_tl : label_en;
+  document.getElementById('modalSub').textContent = '';
+  const input = document.getElementById('modalInput');
+  input.type = type;
+  // Populate with current value
+  let cur = memberRow[field] || '';
+  if(field === 'birthday' && cur){
+    cur = String(cur).slice(0,10); // YYYY-MM-DD format for date input
+  }
+  input.value = cur;
+  document.getElementById('modalBackdrop').classList.add('show');
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeModal(){
+  document.getElementById('modalBackdrop').classList.remove('show');
+  currentEditField = null;
+}
+
+async function saveModalField(){
+  if(!currentEditField) return;
+  const val = document.getElementById('modalInput').value.trim();
+  const field = currentEditField.field;
+  // Don't allow blank for name
+  if(field === 'name' && !val){
+    showToast('Name cannot be empty', true);
+    return;
+  }
+  try{
+    const update = {};
+    update[field] = val || null;
+    update.updated_at = new Date().toISOString();
+    const {error} = await db.from('members').update(update).eq('id', MEMBER.memberId);
+    if(error) throw error;
+    // Update local state and re-render
+    memberRow[field] = val || null;
+    renderProfile();
+    if(field === 'name'){
+      // Update topbar greeting too
+      const first = (val || '').split(' ')[0] || 'kapatid';
+      document.getElementById('memberFirstName').textContent = first + ' ✦';
+      const initials = (val||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      document.getElementById('avatarBtn').textContent = initials;
+    }
+    closeModal();
+    showToast('Saved ✓');
+  }catch(e){
+    showToast('Could not save: '+e.message, true);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function goTo(pageName){
+  document.querySelectorAll('.screen-page').forEach(p => p.classList.remove('active'));
+  const page = document.getElementById('page-'+pageName);
+  if(page) page.classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const tab = document.querySelector('[data-page="'+pageName+'"]');
+  if(tab) tab.classList.add('active');
+  // Scroll to top
+  if(page){
+    const content = page.querySelector('.content');
+    if(content) content.scrollTop = 0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIGN OUT
+// ═══════════════════════════════════════════════════════════════
+function signOut(){
+  if(!confirm('Sign out of MMT?')) return;
+  MultiplyShared.logoutMember('member_login.html');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LANGUAGE TOGGLE (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+function setLang(lang){
+  document.body.classList.toggle('lang-tl', lang === 'tl');
+  document.getElementById('langEn').classList.toggle('active', lang === 'en');
+  document.getElementById('langTl').classList.toggle('active', lang === 'tl');
+  try{ localStorage.setItem('multiply_mmt_lang', lang); }catch(e){}
+  // Re-render pipeline (level name uses lang) and home (some labels use lang)
+  if(memberRow){
+    renderPipeline();
+  }
+}
+function applySavedLang(){
+  let lang = 'en';
+  try{ lang = localStorage.getItem('multiply_mmt_lang') || 'en'; }catch(e){}
+  setLang(lang);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SCALE (assessment standard)
+// ═══════════════════════════════════════════════════════════════
+const FONT_STEPS = [0.9, 1.0, 1.1, 1.25, 1.4];
+let fontStep = 1; // index into FONT_STEPS
+
+function adjustFont(delta){
+  fontStep = Math.max(0, Math.min(FONT_STEPS.length - 1, fontStep + delta));
+  document.documentElement.style.setProperty('--fs', FONT_STEPS[fontStep]);
+  try{ localStorage.setItem('multiply_mmt_fontscale', String(fontStep)); }catch(e){}
+}
+function applySavedFontScale(){
+  let saved = 1;
+  try{
+    const v = parseInt(localStorage.getItem('multiply_mmt_fontscale'));
+    if(!isNaN(v) && v >= 0 && v < FONT_STEPS.length) saved = v;
+  }catch(e){}
+  fontStep = saved;
+  document.documentElement.style.setProperty('--fs', FONT_STEPS[fontStep]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+let toastTimer = null;
+function showToast(msg, isError){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PWA — register service worker
+// ═══════════════════════════════════════════════════════════════
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('service-worker-member.js').catch(err => {
+    console.warn('SW registration failed (non-fatal):', err);
+  });
+}
+</script>
+</body>
+</html>
