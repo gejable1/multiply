@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strengths Profile — MULTIPLY Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f8f5ef;--paper:#fff;--ink:#1a1612;--muted:#6b5f50;--lighter:#a09080;
+  --border:#e5ddd0;--surface2:#f3efe8;
+  --ex:#7a2020;--ex-bg:#fdecea;--ex-light:#f09090;
+  --in:#1a4a6b;--in-bg:#e8f0f8;--in-light:#80b0e0;
+  --rb:#2a5c40;--rb-bg:#eef6f1;--rb-light:#80d0a0;
+  --st:#b8882a;--st-bg:#fdf6e8;--st-light:#f0c060;
+  --gold:#b8882a;--green:#2a5c40;--navy:#1b2a4a;
+  --shadow:0 1px 4px rgba(0,0,0,.09);--shadow2:0 4px 20px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
+[data-lang="tl"] .en-text{display:none;}
+[data-lang="en"] .tl-text{display:none;}
+
+/* COVER */
+.cover{background:linear-gradient(135deg,#1a0a0a 0%,#2a1a0a 50%,#0a1a2a 100%);padding:2.5rem 1.5rem 2rem;text-align:center;border-bottom:3px solid var(--gold);}
+.cover-badge{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);display:block;margin-bottom:.65rem;}
+.cover-title{font-family:'Playfair Display',serif;font-size:clamp(1.6rem,5vw,2.8rem);font-weight:700;color:#f5edd8;margin-bottom:.35rem;}
+.cover-sub-tl,.cover-sub-en{font-size:13px;color:rgba(255,255,255,.7);max-width:560px;margin:.3rem auto .85rem;}
+.cover-sub-en{font-size:11px;color:rgba(255,255,255,.4);font-style:italic;}
+.domain-pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:.65rem;}
+.dp{font-size:10px;font-weight:700;padding:3px 12px;border-radius:20px;}
+.dp-ex{background:rgba(122,32,32,.3);color:#f09090;}
+.dp-in{background:rgba(26,74,107,.3);color:#80b0e0;}
+.dp-rb{background:rgba(42,92,64,.3);color:#80d0a0;}
+.dp-st{background:rgba(184,136,42,.3);color:#f0c060;}
+.cover-tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.ct{font-size:10px;padding:3px 12px;border-radius:20px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.45);}
+
+/* LANGUAGE TOGGLE */
+.lang-toggle{position:fixed;bottom:18px;right:18px;background:var(--paper);border:1.5px solid var(--border);border-radius:30px;padding:3px;display:flex;gap:2px;z-index:1000;box-shadow:var(--shadow2);}
+
+/* ── FONT SIZE CONTROL (assessment standard, May 2026) ── */
+.font-toggle{position:fixed;bottom:18px;right:178px;background:var(--paper);border:1.5px solid var(--border);border-radius:30px;padding:3px;display:flex;align-items:center;gap:2px;z-index:1000;box-shadow:var(--shadow2);font-family:'DM Sans',sans-serif;}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:25px;color:var(--lighter);transition:all .15s;padding:7px 11px;line-height:1;}
+.ft-btn.ft-minus{font-size:13px;}
+.ft-btn.ft-plus{font-size:16px;}
+.ft-btn:hover{background:rgba(184,136,42,.10);}
+.ft-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.ft-label{font-size:10.5px;font-weight:700;color:var(--ink);padding:0 6px;min-width:38px;text-align:center;}
+@media (max-width:520px){
+  .font-toggle{bottom:56px;right:12px;padding:2px;}
+  .ft-btn{padding:6px 9px;}
+  .ft-btn.ft-minus{font-size:12px;}
+  .ft-btn.ft-plus{font-size:15px;}
+  .ft-label{font-size:10px;min-width:34px;padding:0 4px;}
+}
+.lt-btn{padding:7px 14px;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;border-radius:25px;color:var(--lighter);transition:all .15s;}
+.lt-btn.active{background:var(--green);color:white;}
+
+/* PROGRESS BAR */
+.prog-bar{position:sticky;top:0;background:var(--paper);border-bottom:1.5px solid var(--border);padding:.65rem 1rem;display:flex;align-items:center;gap:10px;z-index:50;box-shadow:0 1px 0 rgba(0,0,0,.03);}
+.prog-track{flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--gold));transition:width .3s;border-radius:3px;}
+.prog-label{font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap;}
+.prog-pct{font-size:11px;font-weight:800;color:var(--green);min-width:34px;text-align:right;}
+
+/* CONTAINER */
+.container{max-width:720px;margin:0 auto;padding:1.5rem 1rem 6rem;}
+
+/* MEMBER LINK CARD */
+.link-box{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-bottom:1.25rem;}
+.auto-linked{display:flex;align-items:center;gap:10px;}
+.auto-av{width:36px;height:36px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;}
+.auto-eyebrow{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;color:var(--green);margin-bottom:2px;}
+.auto-name{font-size:14px;font-weight:700;color:var(--ink);}
+.auto-meta{font-size:11px;color:var(--muted);}
+
+/* NAME FORM */
+.intro-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.25rem 1rem;margin-bottom:1.25rem;}
+.intro-title{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:var(--ink);margin-bottom:.5rem;}
+.intro-text{font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:.85rem;}
+.pf-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.5rem;}
+.pf-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--lighter);margin-bottom:4px;}
+.pf{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:13.5px;color:var(--ink);outline:none;}
+.pf:focus{border-color:var(--green);}
+@media(max-width:540px){.pf-row{grid-template-columns:1fr;}}
+
+/* PAIR CARD */
+.pair-card{background:var(--paper);border:1.5px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;box-shadow:var(--shadow);transition:border-color .2s,box-shadow .2s;}
+.pair-card.answered{border-color:rgba(42,92,64,.3);box-shadow:0 2px 8px rgba(42,92,64,.08);}
+.pair-num{display:flex;justify-content:space-between;align-items:center;padding:.55rem 1rem .35rem;background:var(--surface2);border-bottom:1px solid var(--border);gap:8px;}
+.pn-text{font-size:9.5px;font-weight:800;color:var(--lighter);letter-spacing:.1em;text-transform:uppercase;}
+.pn-status{font-size:9.5px;font-weight:700;color:var(--lighter);}
+.pn-status.done{color:var(--green);}
+
+/* TIMER */
+.timer-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:auto;}
+.timer-arc{width:22px;height:22px;flex-shrink:0;}
+.timer-txt{font-size:11px;font-weight:700;color:var(--muted);}
+.timer-txt.urgent{color:#c0392b;}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+.choice{padding:1.1rem 1rem;cursor:pointer;background:var(--paper);border:none;text-align:left;font-family:'DM Sans',sans-serif;transition:background .12s;position:relative;display:flex;flex-direction:column;gap:6px;}
+.choice:first-child{border-right:1px solid var(--border);}
+.choice:hover{background:var(--bg);}
+.choice .ch-letter{font-size:9.5px;font-weight:800;letter-spacing:.18em;color:var(--lighter);}
+.choice .ch-tl{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.55;}
+.choice .ch-en{font-size:11.5px;color:var(--muted);font-style:italic;line-height:1.5;}
+.choice.selected{background:rgba(42,92,64,.08);}
+.choice.selected .ch-letter{color:var(--green);}
+.choice.selected::after{content:'✓';position:absolute;top:8px;right:10px;width:22px;height:22px;border-radius:50%;background:var(--green);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;}
+@media(max-width:540px){
+  .choices{grid-template-columns:1fr;}
+  .choice:first-child{border-right:none;border-bottom:1px solid var(--border);}
+}
+
+/* CALCULATE BUTTON */
+.calc-wrap{position:sticky;bottom:0;background:linear-gradient(to top,var(--bg) 0%,var(--bg) 70%,transparent 100%);padding:1.25rem .25rem 1rem;margin-top:1rem;}
+.calc-btn{width:100%;padding:14px;background:var(--green);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14.5px;font-weight:700;cursor:pointer;transition:all .15s;box-shadow:0 4px 14px rgba(42,92,64,.25);}
+.calc-btn:hover:not(:disabled){background:#1f4730;transform:translateY(-1px);}
+.calc-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* MESSAGE */
+.msg{margin-top:.75rem;padding:.75rem 1rem;border-radius:8px;font-size:12.5px;font-weight:600;display:none;}
+
+/* RESULTS */
+.results-wrap{display:none;}
+.results-wrap.visible{display:block;}
+.results-cover{background:linear-gradient(135deg,#0f1318 0%,#1a1228 50%,#0f1318 100%);padding:2.25rem 1.25rem 1.75rem;text-align:center;border-radius:14px 14px 0 0;border:1.5px solid var(--gold);border-bottom:none;margin-top:1.5rem;}
+.rc-eyebrow{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:.5rem;}
+.rc-name{font-family:'Playfair Display',serif;font-size:1.4rem;color:#f5edd8;font-weight:700;font-style:italic;margin-bottom:.25rem;}
+.rc-sub{font-size:11px;color:rgba(255,255,255,.4);}
+
+.results-body{background:var(--paper);border:1.5px solid var(--gold);border-top:none;border-radius:0 0 14px 14px;padding:1.5rem 1.25rem;}
+
+.section-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--ink);margin-bottom:.65rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);}
+.top5-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1.5rem;}
+.t5-card{background:var(--surface2);border-radius:9px;padding:.65rem .35rem;text-align:center;border:1px solid var(--border);}
+.t5-rank{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--lighter);}
+.t5-name{font-size:11px;font-weight:700;color:var(--ink);margin:3px 0;line-height:1.2;}
+.t5-dom{font-size:8.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:10px;display:inline-block;}
+.t5-ex{background:var(--ex-bg);color:var(--ex);}
+.t5-in{background:var(--in-bg);color:var(--in);}
+.t5-rb{background:var(--rb-bg);color:var(--rb);}
+.t5-st{background:var(--st-bg);color:var(--st);}
+@media(max-width:540px){.top5-grid{grid-template-columns:repeat(3,1fr);}.t5-card:nth-child(n+4){grid-column:span 1;}}
+
+.domain-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1.5rem;}
+.ds-card{padding:.65rem .55rem;border-radius:9px;text-align:center;}
+.ds-num{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;line-height:1;}
+.ds-label{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;margin-top:3px;}
+.ds-ex{background:var(--ex-bg);color:var(--ex);}
+.ds-in{background:var(--in-bg);color:var(--in);}
+.ds-rb{background:var(--rb-bg);color:var(--rb);}
+.ds-st{background:var(--st-bg);color:var(--st);}
+
+.theme-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:.75rem;overflow:hidden;}
+.tc-head{padding:.7rem 1rem;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.tc-rank{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--lighter);width:30px;}
+.tc-info{flex:1;}
+.tc-name{font-size:14px;font-weight:700;color:var(--ink);}
+.tc-dom{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--lighter);}
+.tc-score{font-size:11px;font-weight:700;color:var(--muted);background:var(--paper);padding:3px 9px;border-radius:12px;border:1px solid var(--border);}
+.tc-chev{color:var(--lighter);font-size:14px;transition:transform .2s;}
+.theme-card.open .tc-chev{transform:rotate(180deg);}
+.tc-body{display:none;padding:0 1rem 1rem;}
+.theme-card.open .tc-body{display:block;}
+.tc-section{margin-top:.85rem;}
+.tc-section-title{font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.35rem;}
+.tc-section-body{font-size:13px;color:var(--ink);line-height:1.65;}
+
+/* INTERPRETATION RANK NOTE */
+.rank-note{background:var(--bg);border-left:3px solid var(--gold);padding:.85rem 1rem;border-radius:6px;margin-top:1.25rem;}
+.rank-note-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem;}
+.rank-note-text{font-size:12.5px;color:var(--muted);line-height:1.65;}
+
+/* SAVE BUTTON */
+.save-wrap{margin-top:1.5rem;}
+.save-btn{width:100%;padding:13px;background:var(--gold);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;}
+.save-btn:hover{background:#9c7421;}
+.save-btn:disabled{opacity:.5;cursor:not-allowed;}
+
+/* PAUSE MODAL */
+.pause-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:1.25rem;}
+.pause-modal.open{display:flex;}
+.pm-card{background:var(--paper);border-radius:14px;padding:1.5rem;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);text-align:center;}
+.pm-icon{font-size:2.25rem;margin-bottom:.5rem;}
+.pm-title{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:var(--ink);margin-bottom:.25rem;}
+.pm-sub{font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:.85rem;}
+.pm-saved-badge{font-size:11px;color:var(--green);font-weight:700;margin-bottom:.65rem;}
+.pm-url-label{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--lighter);font-weight:700;text-align:left;margin-bottom:4px;}
+.pm-url{background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;padding:.55rem .75rem;font-size:11px;color:var(--ink);word-break:break-all;margin-bottom:.85rem;text-align:left;font-family:monospace;line-height:1.4;}
+.pm-btns{display:flex;gap:8px;flex-direction:column;}
+.pm-btn{padding:11px;border-radius:9px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:filter .15s;}
+.pm-btn-primary{background:var(--green);color:white;}
+.pm-btn-copy{background:var(--gold);color:white;}
+.pm-btn-close{background:var(--surface2);color:var(--muted);border:1.5px solid var(--border);}
+.pm-btn:hover{filter:brightness(1.1);}
+
+/* RESUME BANNER */
+.resume-banner{background:linear-gradient(135deg,#1a4a6b,#2a5c40);color:white;padding:1rem 1.25rem;border-radius:12px;margin-bottom:1.25rem;display:none;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow2);}
+.resume-banner.show{display:flex;}
+.rb-icon{font-size:1.65rem;}
+.rb-info{flex:1;min-width:200px;}
+.rb-title{font-size:13px;font-weight:700;margin-bottom:2px;}
+.rb-sub{font-size:11px;color:rgba(255,255,255,.75);}
+.rb-btns{display:flex;gap:8px;}
+.rb-btn{padding:8px 14px;border-radius:7px;border:none;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
+.rb-btn-yes{background:var(--gold);color:white;}
+.rb-btn-no{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.25);}
+
+/* PAUSE BUTTON */
+.pause-btn{background:transparent;border:1.5px solid var(--border);color:var(--muted);font-size:11px;font-weight:700;padding:5px 12px;border-radius:18px;cursor:pointer;font-family:'DM Sans',sans-serif;display:none;transition:all .15s;}
+.pause-btn.show{display:inline-flex;align-items:center;gap:4px;}
+.pause-btn:hover{border-color:var(--gold);color:var(--gold);}
+
+/* TOAST */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);color:white;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.25);}
+.toast.show{opacity:1;}
+
+@media print{
+  .prog-bar,.calc-wrap,.lang-toggle,.save-wrap{display:none!important;}
+  .results-wrap{display:block!important;}
+  .theme-card .tc-body{display:block!important;}
+  body{background:white;}
+}
+</style>
+</head>
+<body data-lang="en">
+
+<!-- Font size control (assessment standard, May 2026) -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+</div>
+
+<!-- LANGUAGE TOGGLE -->
+<div class="lang-toggle">
+  <button class="lt-btn" id="lt-tl" onclick="setLang('tl')">Filipino</button>
+  <button class="lt-btn active" id="lt-en" onclick="setLang('en')">English</button>
+</div>
+
+<!-- COVER -->
+<div class="cover">
+  <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
+  <div class="cover-title">Strengths Profile</div>
+  <div class="cover-sub-tl tl-text">Tuklasin ang iyong mga dominanteng talent themes. Sa bawat tanong, pumili ng A o B — alinmang mas natural sa iyo karamihan ng oras.</div>
+  <div class="cover-sub-en en-text">Discover your dominant talent themes. For each question, choose A or B — whichever feels more naturally like you most of the time.</div>
+  <div class="domain-pills">
+    <span class="dp dp-ex">⚙ Executing</span>
+    <span class="dp dp-in">📣 Influencing</span>
+    <span class="dp dp-rb">🤝 Relationship Building</span>
+    <span class="dp dp-st">💡 Strategic Thinking</span>
+  </div>
+  <div class="cover-tags">
+    <span class="ct tl-text">102 Tanong</span>
+    <span class="ct en-text">102 Questions</span>
+    <span class="ct tl-text">~15–20 Minuto</span>
+    <span class="ct en-text">~15–20 Minutes</span>
+    <span class="ct tl-text">Forced Choice</span>
+    <span class="ct en-text">Forced Choice</span>
+  </div>
+</div>
+
+<!-- PROGRESS -->
+<div class="prog-bar">
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="prog-label" id="progLabel"><span class="tl-text">0 sa 102</span><span class="en-text">0 of 102</span></div>
+  <div class="prog-pct" id="progPct">0%</div>
+  <button class="pause-btn" id="pauseBtn" onclick="showPauseModal()">⏸ <span class="tl-text">I-pause</span><span class="en-text">Pause</span></button>
+</div>
+
+<div class="container">
+
+  <!-- RESUME BANNER -->
+  <div class="resume-banner" id="resumeBanner">
+    <div class="rb-icon">⏸</div>
+    <div class="rb-info">
+      <div class="rb-title">
+        <span class="tl-text">May hindi pa tapos na test</span>
+        <span class="en-text">You have an unfinished test</span>
+      </div>
+      <div class="rb-sub" id="rbSub">
+        <span class="tl-text">Gusto mo bang ipagpatuloy?</span>
+        <span class="en-text">Would you like to continue where you left off?</span>
+      </div>
+    </div>
+    <div class="rb-btns">
+      <button class="rb-btn rb-btn-yes" onclick="resumeTest()">
+        <span class="tl-text">Ituloy</span><span class="en-text">Continue</span>
+      </button>
+      <button class="rb-btn rb-btn-no" onclick="discardProgress()">
+        <span class="tl-text">Magsimula ulit</span><span class="en-text">Start over</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MEMBER LINK -->
+  <div class="link-box" id="linkBox">
+    <div id="autoLinked" style="display:none">
+      <div class="auto-linked">
+        <div class="auto-av" id="autoAv">?</div>
+        <div>
+          <div class="auto-eyebrow"><span class="tl-text">✅ Naka-link sa Dashboard</span><span class="en-text">✅ Linked to Dashboard</span></div>
+          <div class="auto-name" id="autoName"></div>
+          <div class="auto-meta" id="autoMeta"></div>
+        </div>
+      </div>
+    </div>
+    <div id="manualLink">
+      <div style="font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:700;color:var(--navy);margin-bottom:.4rem">
+        <span class="tl-text">🔗 I-link sa miyembro (opsyonal)</span>
+        <span class="en-text">🔗 Link to a member (optional)</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);">
+        <span class="tl-text">Buksan ang link sa iyong dashboard para awtomatikong i-link.</span>
+        <span class="en-text">Open this assessment from the dashboard to auto-link your results.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAME FORM -->
+  <div class="intro-card">
+    <div class="intro-title"><span class="tl-text">Bago tayo magsimula</span><span class="en-text">Before we begin</span></div>
+    <div class="intro-text">
+      <span class="tl-text">Para sa bawat pares ng pahayag, piliin ang A o B — alinmang <strong>mas natural sa iyo karamihan ng oras</strong> (hindi yung gusto mo lang). Walang tama o maling sagot.</span>
+      <span class="en-text">For each pair, choose A or B — whichever <strong>feels more naturally like you most of the time</strong> (not the one you merely admire). There are no right or wrong answers.</span>
+    </div>
+    <div class="pf-row">
+      <div>
+        <div class="pf-label"><span class="tl-text">Pangalan *</span><span class="en-text">Name *</span></div>
+        <input class="pf" id="pName" placeholder="Juan Dela Cruz" autocomplete="off">
+      </div>
+      <div>
+        <div class="pf-label"><span class="tl-text">LC Group (opsyonal)</span><span class="en-text">LC Group (optional)</span></div>
+        <input class="pf" id="pGroup" placeholder="LC Group" autocomplete="off">
+      </div>
+    </div>
+  </div>
+
+  <!-- PAIRS WILL BE INSERTED HERE -->
+  <div id="pairsWrap"></div>
+
+  <!-- CALCULATE -->
+  <div class="calc-wrap">
+    <button class="calc-btn" id="calcBtn" onclick="calculate()" disabled>
+      <span class="tl-text">📊 Tingnan ang aking Top 5 Themes</span>
+      <span class="en-text">📊 See My Top 5 Themes</span>
+    </button>
+    <div class="msg" id="calcMsg"></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results-wrap" id="resultsWrap">
+    <div class="results-cover">
+      <div class="rc-eyebrow">Personal Strengths Profile</div>
+      <div class="rc-name" id="rcName"></div>
+      <div class="rc-sub" id="rcSub"></div>
+    </div>
+    <div class="results-body">
+
+      <div class="section-title"><span class="tl-text">Iyong Top 5 Themes</span><span class="en-text">Your Top 5 Themes</span></div>
+      <div class="top5-grid" id="top5Grid"></div>
+
+      <div class="section-title"><span class="tl-text">Domain Distribution</span><span class="en-text">Domain Distribution</span></div>
+      <div class="domain-strip" id="domainStrip"></div>
+
+      <div class="section-title"><span class="tl-text">Lahat ng 34 Themes — Ranked</span><span class="en-text">All 34 Themes — Ranked</span></div>
+      <div id="allThemes"></div>
+
+      <div class="rank-note">
+        <div class="rank-note-title"><span class="tl-text">📖 Pagkaintindi sa iyong ranking</span><span class="en-text">📖 Understanding your ranking</span></div>
+        <div class="rank-note-text">
+          <span class="tl-text">Ang assessment na ito ay <strong>hindi nagsasabi</strong> na "wala kang ganitong lakas." Mas mabuti: <em>"Ang theme na ito ay mas hindi-instinctive kumpara sa iba mong patterns."</em> Ang strengths ay hindi mga hangganan — sila ay mga pahiwatig kung paano ka ginawa ng Diyos.</span>
+          <span class="en-text">This assessment <strong>does not say</strong> "you don't have this strength." Better: <em>"This theme is less instinctive compared with your other patterns."</em> Strengths are not cages — they are clues to how God has wired you.</span>
+        </div>
+      </div>
+
+      <div class="save-wrap">
+        <div style="display:flex;gap:8px;margin-bottom:.6rem">
+          <button class="save-btn" id="pdfBtn" onclick="downloadPDFReport(false)"
+            style="background:var(--navy);flex:1">
+            <span class="tl-text">📄 I-download na PDF</span>
+            <span class="en-text">📄 Download PDF</span>
+          </button>
+          <button class="save-btn" id="saveBtn" onclick="confirmSave()" style="flex:1">
+            <span class="tl-text">💾 I-save sa Dashboard</span>
+            <span class="en-text">💾 Save to Dashboard</span>
+          </button>
+        </div>
+        <div class="msg" id="saveMsg"></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- PAUSE MODAL -->
+<div class="pause-modal" id="pauseModal">
+  <div class="pm-card">
+    <div class="pm-icon" id="pmIcon">⏸</div>
+    <div class="pm-title" id="pmTitle"><span class="tl-text">Na-save ang Iyong Progreso</span><span class="en-text">Your Progress is Saved</span></div>
+    <div class="pm-sub" id="pmSub"><span class="tl-text">Maaari mong ituloy ang test mamaya sa parehong device. I-bookmark o i-copy ang link sa ibaba para makabalik ka kahit kailan.</span><span class="en-text">You can continue this test later on the same device. Bookmark or copy the link below to return anytime.</span></div>
+    <div class="pm-saved-badge" id="pmSavedCount"></div>
+    <div class="pm-url-label"><span class="tl-text">🔗 Resume Link</span><span class="en-text">🔗 Resume Link</span></div>
+    <div class="pm-url" id="pmUrl"></div>
+    <div class="pm-btns">
+      <button class="pm-btn pm-btn-copy" onclick="copyPauseUrl()">📋 <span class="tl-text">I-copy ang Link</span><span class="en-text">Copy Link</span></button>
+      <button class="pm-btn pm-btn-primary" onclick="closePauseModal()">▶ <span class="tl-text">Ituloy ang Test</span><span class="en-text">Continue Test</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// PAIRS DATA (102 paired-choice questions)
+// Theme labels stored internally for scoring; never shown to user
+// ═══════════════════════════════════════════════════════
+const PAIRS = [{"a":"I feel satisfied when I finish a full day of meaningful work.","ak":"achiever","b":"I feel energized when I can begin quickly and build momentum.","bk":"activator","atl":"Masaya ako kapag tapos na ang isang araw na may natapos akong makabuluhan.","btl":"Energized ako kapag mabilis akong nakakapagsimula at nakakabuo ng momentum."},{"a":"I would rather start now and adjust as I go.","ak":"activator","b":"I prefer to stay flexible and respond to what the moment requires.","bk":"adaptability","atl":"Mas gusto kong magsimula na ngayon at mag-adjust habang tumatakbo.","btl":"Mas gusto kong manatiling flexible at tumugon sa anumang kailangan sa sandaling iyon."},{"a":"I can shift direction easily when plans change.","ak":"adaptability","b":"I need things to make logical sense before I trust them.","bk":"analytical","atl":"Madali akong makapag-iba ng direksyon kapag nagbago ang plano.","btl":"Kailangan kong logical sense ang isang bagay bago ko ito pagkatiwalaan."},{"a":"I naturally ask for evidence before accepting a conclusion.","ak":"analytical","b":"I enjoy coordinating many moving parts into one workable plan.","bk":"arranger","atl":"Likas akong humihingi ng ebidensya bago tumanggap ng konklusyon.","btl":"Mahilig akong pag-isahin ang maraming bahagi sa iisang gumaganang plano."},{"a":"I like arranging people, resources, and timing until everything works.","ak":"arranger","b":"I need my work to connect with deeply held values.","bk":"belief","atl":"Gustung-gusto kong i-ayos ang mga tao, resources, at timing hanggang gumana ang lahat.","btl":"Kailangang konektado ang trabaho ko sa malalalim na pinapahalagahan ko."},{"a":"I am guided by convictions that give my life direction.","ak":"belief","b":"I am willing to speak directly when a situation needs clarity.","bk":"command","atl":"Ginagabayan ako ng mga paniniwala na nagbibigay direksyon sa buhay ko.","btl":"Handa akong magsalita nang diretso kapag kailangan ng linaw sa sitwasyon."},{"a":"I can name the hard issue even when others avoid it.","ak":"command","b":"I enjoy turning thoughts into words people can understand and remember.","bk":"communication","atl":"Kaya kong banggitin ang mahirap na isyu kahit iniiwasan ng iba.","btl":"Mahilig akong gawing salitang naiintindihan at naaalala ng mga tao ang mga iniisip ko."},{"a":"I like explaining ideas in ways that make people listen.","ak":"communication","b":"I become more motivated when I can measure myself against a standard or opponent.","bk":"competition","atl":"Gusto kong ipaliwanag ang mga ideya sa paraang pinapakinggan ng mga tao.","btl":"Mas nagiging motivated ako kapag may pamantayan o kalaban akong masusukat."},{"a":"I am driven when I know how my performance compares with others.","ak":"competition","b":"I often sense that events and people are connected in meaningful ways.","bk":"connectedness","atl":"Driven ako kapag alam ko kung paano kumumpara ang performance ko sa iba.","btl":"Madalas kong nararamdaman na may makabuluhang koneksyon ang mga pangyayari at tao."},{"a":"I believe things happen within a larger purpose or pattern.","ak":"connectedness","b":"I value fairness and want rules applied consistently.","bk":"consistency","atl":"Naniniwala akong nangyayari ang mga bagay sa loob ng mas malaking layunin o pattern.","btl":"Pinapahalagahan ko ang patas na pagtrato at gustong i-apply ang patakaran nang pareho sa lahat."},{"a":"I prefer systems that treat people fairly and predictably.","ak":"consistency","b":"I understand the present better when I know the history behind it.","bk":"context","atl":"Mas gusto ko ang mga sistemang patas at predictable sa pagtrato sa mga tao.","btl":"Mas naiintindihan ko ang kasalukuyan kapag alam ko ang kasaysayan sa likod nito."},{"a":"I naturally look backward to understand why things are the way they are.","ak":"context","b":"I pause to identify risks before moving forward.","bk":"deliberative","atl":"Likas akong tumitingin sa nakaraan para maintindihan kung bakit ganito ang mga bagay.","btl":"Humihinto muna ako para tukuyin ang mga panganib bago sumulong."},{"a":"I prefer careful decisions over fast decisions.","ak":"deliberative","b":"I enjoy helping people grow little by little.","bk":"developer","atl":"Mas gusto ko ang maingat na desisyon kaysa mabilisan.","btl":"Masaya akong tumulong sa mga tao na unti-unting lumago."},{"a":"I notice small signs of growth in people and want to encourage them.","ak":"developer","b":"I work best when life has clear order, structure, and routine.","bk":"discipline","atl":"Napapansin ko ang maliliit na palatandaan ng paglago sa mga tao at gusto kong palakasin sila.","btl":"Pinakamaganda ang trabaho ko kapag may malinaw na ayos, estraktura, at rutina ang buhay."},{"a":"I like predictable systems, schedules, and careful preparation.","ak":"discipline","b":"I quickly sense what others are feeling.","bk":"empathy","atl":"Gusto ko ang predictable na sistema, schedule, at maingat na paghahanda.","btl":"Mabilis kong nararamdaman ang nararamdaman ng iba."},{"a":"I often feel the emotional tone in a room before others name it.","ak":"empathy","b":"I like setting a clear goal and staying locked on it.","bk":"focus","atl":"Madalas kong nararamdaman ang emotional na tono ng kuwarto bago ito mabanggit ng iba.","btl":"Gusto kong magtakda ng malinaw na layunin at manatiling nakatutok dito."},{"a":"I concentrate best when I know the main priority.","ak":"focus","b":"I am energized by imagining what the future could become.","bk":"futuristic","atl":"Pinakamaganda ang konsentrasyon ko kapag alam ko ang pangunahing prayoridad.","btl":"Energized ako sa pag-iisip kung ano ang maaaring maging hinaharap."},{"a":"I often picture possibilities before they exist.","ak":"futuristic","b":"I look for common ground when people disagree.","bk":"harmony","atl":"Madalas kong inaasahan ang mga posibilidad bago pa ito mangyari.","btl":"Naghahanap ako ng common ground kapag hindi nagkakasundo ang mga tao."},{"a":"I prefer reducing unnecessary conflict and helping people agree.","ak":"harmony","b":"I enjoy producing fresh ideas and unusual connections.","bk":"ideation","atl":"Mas gusto kong bawasan ang hindi kailangang sigalot at tulungan ang mga tao na magkasundo.","btl":"Masaya akong gumawa ng bagong ideya at hindi karaniwang koneksyon."},{"a":"I like discovering new angles, concepts, or possibilities.","ak":"ideation","b":"I notice who is being left out and want to bring them in.","bk":"includer","atl":"Gusto kong tumuklas ng bagong anggulo, konsepto, o posibilidad.","btl":"Napapansin ko kung sino ang naiiwan at gusto ko silang isali."},{"a":"I instinctively make room for people who might be overlooked.","ak":"includer","b":"I notice what makes each person unique.","bk":"individualization","atl":"Likas akong gumagawa ng lugar para sa mga taong maaaring napalampas.","btl":"Napapansin ko kung ano ang nagpapakaiba sa bawat tao."},{"a":"I adjust my approach depending on the person in front of me.","ak":"individualization","b":"I enjoy collecting useful information, examples, resources, or stories.","bk":"input","atl":"Inaadjust ko ang aking approach depende sa taong nasa harap ko.","btl":"Mahilig akong mangolekta ng kapaki-pakinabang na impormasyon, halimbawa, resources, o kuwento."},{"a":"I like gathering information that may become useful later.","ak":"input","b":"I enjoy thinking deeply and spending time with ideas.","bk":"intellection","atl":"Gusto kong magtipon ng impormasyon na maaaring maging kapaki-pakinabang sa hinaharap.","btl":"Masaya akong mag-isip nang malalim at gumugol ng oras sa mga ideya."},{"a":"I need time to reflect, examine, and think things through.","ak":"intellection","b":"I am energized by learning something new, even before I use it.","bk":"learner","atl":"Kailangan ko ng oras para mag-reflect, suriin, at pag-isipang mabuti ang mga bagay.","btl":"Energized ako sa pagkatuto ng bagong bagay, kahit bago ko pa gamitin."},{"a":"I enjoy the process of learning and improving.","ak":"learner","b":"I am drawn to making something good become excellent.","bk":"maximizer","atl":"Masaya ako sa proseso ng pagkatuto at pagpapabuti.","btl":"Naaakit akong gawing kahanga-hanga ang isang bagay na mabuti."},{"a":"I prefer refining strengths rather than spending too much time on weaknesses.","ak":"maximizer","b":"I naturally bring encouragement and positive energy to others.","bk":"positivity","atl":"Mas gusto kong pakinisin ang mga lakas kaysa magtagal sa mga kahinaan.","btl":"Likas akong nagdadala ng pampatibay at positibong enerhiya sa iba."},{"a":"I like lifting the atmosphere when people feel discouraged.","ak":"positivity","b":"I prefer deep, trusted relationships over many casual connections.","bk":"relator","atl":"Gusto kong itaas ang atmosphere kapag nawawalan ng pag-asa ang mga tao.","btl":"Mas gusto ko ang malalalim at pinagkakatiwalaang relasyon kaysa sa maraming casual na koneksyon."},{"a":"I am most comfortable with people who really know me.","ak":"relator","b":"Once I commit, I feel personally responsible to follow through.","bk":"responsibility","atl":"Pinaka-komportable ako sa mga taong tunay na nakakakilala sa akin.","btl":"Kapag nangako na ako, may personal akong pananagutan na tuparin ito."},{"a":"I take promises seriously and want others to know they can count on me.","ak":"responsibility","b":"I am drawn to fixing what is broken or solving what is not working.","bk":"restorative","atl":"Sineseryoso ko ang mga pangako at gusto kong malaman ng iba na mapapagkatiwalaan nila ako.","btl":"Naaakit akong ayusin ang sira o lutasin ang hindi gumagana."},{"a":"I enjoy diagnosing problems and finding practical solutions.","ak":"restorative","b":"I usually trust my own judgment in uncertain situations.","bk":"self_assurance","atl":"Masaya akong mag-diagnose ng problema at humanap ng praktikal na solusyon.","btl":"Karaniwang pinagkakatiwalaan ko ang sariling paghuhusga ko sa hindi tiyak na sitwasyon."},{"a":"I can move forward with confidence even when others are unsure.","ak":"self_assurance","b":"I want my life and work to make a meaningful, visible impact.","bk":"significance","atl":"Kaya kong sumulong nang may tiwala kahit hindi sigurado ang iba.","btl":"Gusto kong magkaroon ng makabuluhan at nakikitang epekto ang aking buhay at trabaho."},{"a":"I want to do work that matters and is recognized as important.","ak":"significance","b":"I quickly see possible paths through a complicated situation.","bk":"strategic","atl":"Gusto kong gawin ang trabahong mahalaga at kinikilalang importante.","btl":"Mabilis kong nakikita ang mga posibleng landas sa isang komplikadong sitwasyon."},{"a":"I can sort through options and sense the best route forward.","ak":"strategic","b":"I enjoy meeting new people and winning them over.","bk":"woo","atl":"Kaya kong pag-aralan ang mga opsyon at maramdaman ang pinakamabuting daan pasulong.","btl":"Masaya akong makilala ang mga bagong tao at mapasayo sila."},{"a":"I like starting conversations with new people.","ak":"woo","b":"I feel satisfied when I complete what I set out to do.","bk":"achiever","atl":"Gusto kong magsimula ng usapan sa mga bagong tao.","btl":"Masaya ako kapag natapos ko ang itinakda kong gawin."},{"a":"I feel productive when I check important things off my list.","ak":"achiever","b":"I need my actions to reflect my deepest convictions.","bk":"belief","atl":"Pakiramdam ko productive ako kapag may na-check off akong mahalaga sa listahan ko.","btl":"Kailangang ipakita ng aksyon ko ang pinakamalalim kong paniniwala."},{"a":"I move quickly from idea to action.","ak":"activator","b":"I am comfortable naming what others are hesitant to say.","bk":"command","atl":"Mabilis akong lumipat mula sa ideya patungo sa aksyon.","btl":"Komportable akong banggitin ang ayaw sabihin ng iba."},{"a":"I can stay calm and useful when circumstances suddenly change.","ak":"adaptability","b":"I enjoy helping people understand through stories, examples, or words.","bk":"communication","atl":"Nananatili akong kalmado at kapaki-pakinabang kapag biglang nagbago ang sitwasyon.","btl":"Masaya akong tumulong sa mga tao na umintindi sa pamamagitan ng kuwento, halimbawa, o salita."},{"a":"I question assumptions and look for proof.","ak":"analytical","b":"I am motivated by winning or measuring my performance.","bk":"competition","atl":"Tinatanong ko ang mga assumption at humahanap ako ng patunay.","btl":"Motivated ako sa panalo o sa pagsukat ng performance ko."},{"a":"I can rearrange resources when conditions change.","ak":"arranger","b":"I see meaning in how people, events, and timing connect.","bk":"connectedness","atl":"Kaya kong i-rearrange ang resources kapag nagbago ang kondisyon.","btl":"Nakikita ko ang kahulugan sa pagkakakonekta ng tao, pangyayari, at timing."},{"a":"I want my life anchored in purpose and values.","ak":"belief","b":"I believe people should receive fair and consistent treatment.","bk":"consistency","atl":"Gusto kong nakaangkla ang buhay ko sa layunin at mga halaga.","btl":"Naniniwala akong dapat patas at pareho ang pagtrato sa lahat ng tao."},{"a":"I step forward when someone needs to take charge.","ak":"command","b":"I look to the past to understand present decisions.","bk":"context","atl":"Sumusulong ako kapag may kailangang mamuno.","btl":"Tumitingin ako sa nakaraan para maintindihan ang mga desisyon sa kasalukuyan."},{"a":"I enjoy presenting ideas in a compelling way.","ak":"communication","b":"I take time to evaluate risks before acting.","bk":"deliberative","atl":"Mahilig akong magpresenta ng ideya sa kapanapanabik na paraan.","btl":"Naglalaan ako ng oras para suriin ang mga panganib bago kumilos."},{"a":"I push harder when I can compare results.","ak":"competition","b":"I enjoy helping others make progress.","bk":"developer","atl":"Mas pinipilit ko kapag may makukumpara akong resulta.","btl":"Masaya akong tumulong sa pagsulong ng iba."},{"a":"I often sense a larger design behind life’s events.","ak":"connectedness","b":"I prefer organized routines and clear procedures.","bk":"discipline","atl":"Madalas kong nararamdaman ang mas malaking disenyo sa likod ng mga pangyayari sa buhay.","btl":"Mas gusto ko ang organisadong rutina at malinaw na pamamaraan."},{"a":"I believe fairness requires clear and consistent standards.","ak":"consistency","b":"I can sense when someone is hurting even before they say it.","bk":"empathy","atl":"Naniniwala akong nangangailangan ng malinaw at pareho-pareho na mga pamantayan ang katarungan.","btl":"Nararamdaman ko kapag may nasasaktan kahit hindi pa nito sinasabi."},{"a":"I appreciate knowing the background before making conclusions.","ak":"context","b":"I stay directed when I have a clear target.","bk":"focus","atl":"Pinapahalagahan kong malaman ang background bago bumuo ng konklusyon.","btl":"Nananatili akong direktado kapag may malinaw na target."},{"a":"I am careful because I can see what might go wrong.","ak":"deliberative","b":"I enjoy describing a better future that others can move toward.","bk":"futuristic","atl":"Maingat ako dahil nakikita ko kung ano ang maaaring mali.","btl":"Masaya akong ilarawan ang mas magandang hinaharap na maaaring puntahan ng iba."},{"a":"I like investing in people’s gradual improvement.","ak":"developer","b":"I try to reduce conflict and preserve unity.","bk":"harmony","atl":"Gusto kong mag-invest sa unti-unting pag-unlad ng mga tao.","btl":"Sinusubukan kong bawasan ang sigalot at panatilihin ang pagkakaisa."},{"a":"I prefer structure, order, and preparation.","ak":"discipline","b":"I enjoy playing with possibilities and new concepts.","bk":"ideation","atl":"Mas gusto ko ang estraktura, ayos, at paghahanda.","btl":"Mahilig akong maglaro sa mga posibilidad at bagong konsepto."},{"a":"I naturally pick up on people’s emotions.","ak":"empathy","b":"I want everyone to have a place at the table.","bk":"includer","atl":"Likas akong nakakapansin ng emosyon ng mga tao.","btl":"Gusto kong may puwesto ang lahat sa hapag."},{"a":"I work best when distractions are removed and priorities are clear.","ak":"focus","b":"I notice the distinct needs and gifts of each person.","bk":"individualization","atl":"Pinakamaganda ang trabaho ko kapag walang distraksyon at malinaw ang prayoridad.","btl":"Napapansin ko ang natatanging pangangailangan at regalo ng bawat tao."},{"a":"I am pulled forward by a picture of what could be.","ak":"futuristic","b":"I collect ideas, facts, quotes, and resources for future use.","bk":"input","atl":"Hinihila ako sa unahan ng larawan ng maaaring maging.","btl":"Nangongolekta ako ng ideya, katotohanan, quotes, at resources para sa pang-hinaharap na paggamit."},{"a":"I search for agreement before pushing forward.","ak":"harmony","b":"I enjoy thinking deeply about life, ideas, and meaning.","bk":"intellection","atl":"Naghahanap muna ako ng pagkakasundo bago sumulong.","btl":"Masaya akong mag-isip nang malalim tungkol sa buhay, ideya, at kahulugan."},{"a":"I often connect unrelated ideas in fresh ways.","ak":"ideation","b":"I enjoy learning even when there is no immediate reward.","bk":"learner","atl":"Madalas akong magkonekta ng hindi magkaugnay na ideya sa bagong paraan.","btl":"Masaya akong matuto kahit walang agarang gantimpala."},{"a":"I notice outsiders and try to include them.","ak":"includer","b":"I prefer improving excellence rather than merely fixing weakness.","bk":"maximizer","atl":"Napapansin ko ang mga taong outsider at sinusubukan kong isama sila.","btl":"Mas gusto kong pagbutihin ang kahusayan kaysa basta lutasin ang kahinaan."},{"a":"I see each person as one-of-a-kind.","ak":"individualization","b":"I naturally encourage hope, joy, and optimism.","bk":"positivity","atl":"Tinitingnan ko ang bawat tao bilang one-of-a-kind.","btl":"Likas akong naghihikayat ng pag-asa, kagalakan, at optimismo."},{"a":"I gather information because it may become valuable later.","ak":"input","b":"I value close relationships built on trust.","bk":"relator","atl":"Nangangalap ako ng impormasyon dahil maaaring magkahalaga ito sa hinaharap.","btl":"Pinapahalagahan ko ang malalapit na relasyong nakabase sa tiwala."},{"a":"I need space to think and reflect.","ak":"intellection","b":"I feel bound to fulfill what I promised.","bk":"responsibility","atl":"Kailangan ko ng espasyo para mag-isip at mag-reflect.","btl":"Nakatali ako sa pagtupad ng aking mga ipinangako."},{"a":"I enjoy mastering new knowledge or skills.","ak":"learner","b":"I like finding what is broken and restoring it.","bk":"restorative","atl":"Masaya akong matuto nang lubos sa bagong kaalaman o kasanayan.","btl":"Gusto kong hanapin kung ano ang sira at ibalik ito sa ayos."},{"a":"I instinctively look for the strongest path to excellence.","ak":"maximizer","b":"I trust myself to make decisions in unclear situations.","bk":"self_assurance","atl":"Likas akong naghahanap ng pinakamatibay na landas patungo sa kahusayan.","btl":"Pinagkakatiwalaan ko ang sarili kong gumawa ng desisyon sa hindi malinaw na sitwasyon."},{"a":"I bring energy and encouragement to people.","ak":"positivity","b":"I want my contribution to be meaningful and significant.","bk":"significance","atl":"Nagdadala ako ng enerhiya at pampatibay sa mga tao.","btl":"Gusto kong maging makabuluhan at mahalaga ang aking kontribusyon."},{"a":"I prefer a small circle of deep relationships.","ak":"relator","b":"I quickly see alternative routes when one path is blocked.","bk":"strategic","atl":"Mas gusto ko ang maliit na bilog ng malalalim na relasyon.","btl":"Mabilis kong nakikita ang ibang ruta kapag may isang landas na hadlang."},{"a":"I keep my commitments even when it costs me.","ak":"responsibility","b":"I enjoy connecting with new people.","bk":"woo","atl":"Tinutupad ko ang aking pangako kahit nagkakahalaga ito sa akin.","btl":"Masaya akong makakonekta sa mga bagong tao."},{"a":"I like solving problems others find frustrating.","ak":"restorative","b":"I keep going until the work is done.","bk":"achiever","atl":"Gusto kong lutasin ang mga problema na nakakapagod sa iba.","btl":"Nagpapatuloy ako hanggang matapos ang trabaho."},{"a":"I have confidence in my inner compass.","ak":"self_assurance","b":"I like turning thought into movement quickly.","bk":"activator","atl":"May tiwala ako sa aking inner compass.","btl":"Gusto kong agad gawing aksyon ang mga iniisip ko."},{"a":"I want to be part of something important and lasting.","ak":"significance","b":"I can adjust easily when the day does not go as planned.","bk":"adaptability","atl":"Gusto kong maging bahagi ng isang bagay na importante at pangmatagalan.","btl":"Madali akong makapag-adjust kapag hindi sumunod sa plano ang araw."},{"a":"I can quickly identify the best option among many possibilities.","ak":"strategic","b":"I trust conclusions that are supported by facts and evidence.","bk":"analytical","atl":"Kaya kong mabilis na tukuyin ang pinakamabuting opsyon sa maraming posibilidad.","btl":"Pinagkakatiwalaan ko ang mga konklusyon na sinusuportahan ng katotohanan at ebidensya."},{"a":"I enjoy creating new connections with people I do not yet know.","ak":"woo","b":"I enjoy coordinating complex details into a workable whole.","bk":"arranger","atl":"Masaya akong gumawa ng bagong koneksyon sa mga taong hindi ko pa kilala.","btl":"Masaya akong i-coordinate ang mga komplikadong detalye sa isang gumaganang kabuuan."},{"a":"I feel restless when a day passes without meaningful accomplishment.","ak":"achiever","b":"I look backward to understand what led to the present.","bk":"context","atl":"Hindi ako mapakali kapag lumipas ang araw na walang nagawang makabuluhan.","btl":"Tumitingin ako sa nakaraan para maintindihan kung ano ang humantong sa kasalukuyan."},{"a":"I would rather launch the work than talk about it endlessly.","ak":"activator","b":"I slow down to avoid unnecessary mistakes.","bk":"deliberative","atl":"Mas gusto kong simulan na ang trabaho kaysa pag-usapan ito nang walang katapusan.","btl":"Bumabagal ako para iwasan ang hindi kailangang mali."},{"a":"I can make the best of whatever happens next.","ak":"adaptability","b":"I notice small improvements in people and want to build on them.","bk":"developer","atl":"Kaya kong gawing pinakamabuti ang anumang mangyari sa susunod.","btl":"Napapansin ko ang maliliit na pag-unlad ng mga tao at gustong dagdagan pa ito."},{"a":"I enjoy separating facts from assumptions.","ak":"analytical","b":"I function best with clear systems and order.","bk":"discipline","atl":"Mahilig akong paghiwalayin ang mga katotohanan mula sa mga assumption.","btl":"Pinaka-epektibo ako kapag may malinaw na sistema at ayos."},{"a":"I enjoy adjusting plans so people and resources fit together well.","ak":"arranger","b":"I can feel what others are going through.","bk":"empathy","atl":"Masaya akong i-adjust ang mga plano para magkasundo ang mga tao at resources.","btl":"Naramdaman ko ang pinagdadaanan ng iba."},{"a":"I want my decisions to align with my core values.","ak":"belief","b":"I keep my attention fixed on the main objective.","bk":"focus","atl":"Gusto kong tumutugma ang mga desisyon ko sa pinakamahalagang halaga ko.","btl":"Tumutuon ako sa pangunahing objektibo."},{"a":"I am comfortable taking charge in a tense moment.","ak":"command","b":"I often imagine what could become possible in the future.","bk":"futuristic","atl":"Komportable akong manguna sa tense na sandali.","btl":"Madalas kong iniisip kung ano ang maaaring maging posible sa hinaharap."},{"a":"I enjoy making ideas clear, memorable, and persuasive.","ak":"communication","b":"I prefer peace and agreement over unnecessary debate.","bk":"harmony","atl":"Mahilig akong gawing malinaw, memorable, at convincing ang mga ideya.","btl":"Mas gusto ko ang kapayapaan at pagkakasundo kaysa sa hindi kailangang debate."},{"a":"I perform better when there is a clear score or comparison.","ak":"competition","b":"I enjoy exploring original ideas and fresh possibilities.","bk":"ideation","atl":"Mas maganda ang performance ko kapag may malinaw na score o comparison.","btl":"Masaya akong galugarin ang orihinal na ideya at sariwang posibilidad."},{"a":"I sense that people and events are part of a larger story.","ak":"connectedness","b":"I notice who may feel excluded.","bk":"includer","atl":"Nararamdaman ko na bahagi ng mas malaking istorya ang mga tao at pangyayari.","btl":"Napapansin ko kung sino ang maaaring nakakaramdam ng pagiging hindi kasali."},{"a":"I believe people should be treated by fair standards.","ak":"consistency","b":"I study people’s differences and adjust accordingly.","bk":"individualization","atl":"Naniniwala akong dapat tratuhin ang mga tao base sa patas na pamantayan.","btl":"Pinag-aaralan ko ang pagkakaiba ng mga tao at nag-aadjust nang ayon dito."},{"a":"I value history because it explains the present.","ak":"context","b":"I enjoy collecting useful knowledge, examples, and tools.","bk":"input","atl":"Pinapahalagahan ko ang kasaysayan dahil ipinapaliwanag nito ang kasalukuyan.","btl":"Masaya akong mangolekta ng kapaki-pakinabang na kaalaman, halimbawa, at kasangkapan."},{"a":"I think carefully about danger before committing.","ak":"deliberative","b":"I enjoy time alone with my thoughts.","bk":"intellection","atl":"Maingat akong nag-iisip tungkol sa panganib bago mangako.","btl":"Masaya akong mag-isa kasama ang aking mga iniisip."},{"a":"I enjoy helping others take the next step in their growth.","ak":"developer","b":"I love learning for its own sake.","bk":"learner","atl":"Masaya akong tumulong sa iba na gawin ang susunod na hakbang ng kanilang paglago.","btl":"Mahilig akong matuto para lang sa pagkatuto mismo."},{"a":"I prefer planned routines and clear expectations.","ak":"discipline","b":"I like taking something strong and making it stronger.","bk":"maximizer","atl":"Mas gusto ko ang planadong rutina at malinaw na inaasahan.","btl":"Gusto kong gawing mas matatag pa ang isang bagay na matatag na."},{"a":"I can sense emotional needs in others.","ak":"empathy","b":"I naturally bring enthusiasm and encouragement.","bk":"positivity","atl":"Nararamdaman ko ang emotional na pangangailangan ng iba.","btl":"Likas akong nagdadala ng sigla at pampatibay."},{"a":"I am disciplined by a clear goal.","ak":"focus","b":"I prefer genuine depth in relationships.","bk":"relator","atl":"Dinidisiplina ako ng malinaw na layunin.","btl":"Mas gusto ko ang totoong lalim sa relasyon."},{"a":"I am inspired by what could exist years from now.","ak":"futuristic","b":"I take ownership of what I promise.","bk":"responsibility","atl":"Inspirado ako sa kung ano ang maaaring umiiral makaraan ang mga taon.","btl":"Inaako ko ang pagmamay-ari ng aking ipinangako."},{"a":"I look for the agreement that can hold people together.","ak":"harmony","b":"I enjoy repairing what is broken or ineffective.","bk":"restorative","atl":"Hinahanap ko ang pagkakasunduang makapagbubuklod sa mga tao.","btl":"Masaya akong magkumpuni ng sira o hindi gumaganang bagay."},{"a":"I often generate ideas others have not considered.","ak":"ideation","b":"I trust my ability to choose the right direction.","bk":"self_assurance","atl":"Madalas akong gumagawa ng ideyang hindi naisip ng iba.","btl":"Pinagkakatiwalaan ko ang aking kakayahang piliin ang tamang direksyon."},{"a":"I want people on the margins to feel welcomed.","ak":"includer","b":"I want my life to count for something meaningful.","bk":"significance","atl":"Gusto kong maramdaman ng mga taong nasa gilid na malugod silang tinatanggap.","btl":"Gusto kong magkaroon ng halaga ang buhay ko sa isang bagay na makabuluhan."},{"a":"I notice the unique design of each person.","ak":"individualization","b":"I can quickly see several possible paths forward.","bk":"strategic","atl":"Napapansin ko ang natatanging disenyo ng bawat tao.","btl":"Kaya kong agad makita ang ilang posibleng landas pasulong."},{"a":"I enjoy gathering resources, facts, and references.","ak":"input","b":"I enjoy winning people over and building new connections.","bk":"woo","atl":"Mahilig akong magtipon ng resources, katotohanan, at sanggunian.","btl":"Masaya akong mapasayo ang mga tao at bumuo ng bagong koneksyon."},{"a":"I like thinking deeply before speaking or acting.","ak":"intellection","b":"I feel driven to complete productive work.","bk":"achiever","atl":"Gusto kong mag-isip nang malalim bago magsalita o kumilos.","btl":"May udyok ako na tapusin ang produktibong trabaho."},{"a":"I am energized by the learning journey itself.","ak":"learner","b":"I prefer to move from discussion into action.","bk":"activator","atl":"Energized ako sa mismong paglalakbay ng pagkatuto.","btl":"Mas gusto kong lumipat mula sa pag-uusap patungo sa aksyon."},{"a":"I am drawn to excellence and high standards.","ak":"maximizer","b":"I can adapt without becoming frustrated when plans shift.","bk":"adaptability","atl":"Naaakit ako sa kahusayan at mataas na pamantayan.","btl":"Kaya akong mag-adapt nang hindi nakakaramdam ng frustration kapag nagbago ang mga plano."},{"a":"I naturally bring hope and positive emotion.","ak":"positivity","b":"I need reasons and evidence before I am convinced.","bk":"analytical","atl":"Likas akong nagdadala ng pag-asa at positibong emosyon.","btl":"Kailangan ko ng dahilan at ebidensya bago ako ma-kumbinsi."},{"a":"I prefer investing in trusted relationships over broad networking.","ak":"relator","b":"I enjoy organizing many parts into a workable arrangement.","bk":"arranger","atl":"Mas gusto kong mag-invest sa pinagkakatiwalaang relasyon kaysa sa malawakang networking.","btl":"Mahilig akong mag-ayos ng maraming bahagi sa isang gumaganang arrangement."},{"a":"I feel personally accountable for what I agree to do.","ak":"responsibility","b":"I live from convictions that guide my choices.","bk":"belief","atl":"Nararamdaman kong personal akong may pananagutan sa kung anong pumayag akong gawin.","btl":"Namumuhay ako batay sa mga paniniwalang gumagabay sa aking pagpili."},{"a":"I enjoy identifying problems and fixing them.","ak":"restorative","b":"I can speak directly and firmly when needed.","bk":"command","atl":"Masaya akong tumukoy ng problema at ayusin ito.","btl":"Kaya kong magsalita nang diretso at matatag kapag kailangan."},{"a":"I trust myself to act even when the path is uncertain.","ak":"self_assurance","b":"I enjoy expressing ideas in ways people remember.","bk":"communication","atl":"Pinagkakatiwalaan ko ang sariling kumilos kahit hindi tiyak ang landas.","btl":"Masaya akong magpahayag ng ideya sa paraang naaalala ng mga tao."},{"a":"I want my contribution to be seen as important and worthwhile.","ak":"significance","b":"I become more motivated when results can be compared.","bk":"competition","atl":"Gusto kong makitang importante at karapat-dapat ang aking kontribusyon.","btl":"Mas nagiging motivated ako kapag pwedeng pag-kumparahin ang mga resulta."},{"a":"I quickly recognize possible routes through complexity.","ak":"strategic","b":"I sense meaningful connections between people, events, and purpose.","bk":"connectedness","atl":"Mabilis kong nakikilala ang mga posibleng ruta sa komplikasyon.","btl":"Nararamdaman ko ang makabuluhang koneksyon ng tao, pangyayari, at layunin."},{"a":"I enjoy meeting new people and opening relational doors.","ak":"woo","b":"I value fair rules and consistent treatment for everyone.","bk":"consistency","atl":"Masaya akong makilala ang mga bagong tao at magbukas ng pinto sa relasyon.","btl":"Pinapahalagahan ko ang patas na patakaran at parehong pagtrato para sa lahat."}];
+
+// ═══════════════════════════════════════════════════════
+// THEMES KNOWLEDGE BASE (34 themes)
+// ═══════════════════════════════════════════════════════
+const THEMES = {
+  achiever:{name:'Achiever',domain:'Executing',
+    tl:'Mayroon kang malaking tibay at nagtatrabaho nang husto. Hindi ka masisiyahan sa isang araw na walang nagawang konkretong bagay.',
+    en:'You have great stamina and work hard. You take great satisfaction from being busy and productive — and feel restless when nothing tangible was achieved.',
+    ministry:'Kitchen Ministry, Building Administration, Documentation — roles requiring sustained output and follow-through.'},
+  activator:{name:'Activator',domain:'Influencing',
+    tl:'Hindi mo gusto ang puro pag-uusap — gusto mong magsimula. "Kailan natin ito gagawin?" ang madalas mong tanong.',
+    en:'You make things happen by turning thoughts into action. "When can we start?" is a recurring question for you.'},
+  adaptability:{name:'Adaptability',domain:'Relationship Building',
+    tl:'Tumutugon ka sa kasalukuyan. Mas gusto mong manatiling flexible at hahayaan mo ang mga pangyayari na magbukas ng landas.',
+    en:'You live in the moment. You stay productive when demands pull you in many directions at once.'},
+  analytical:{name:'Analytical',domain:'Strategic Thinking',
+    tl:'Naghahanap ka ng mga dahilan at sanhi. Gusto mong patunayan o pabulaanan ang mga hypothesis bago ka magpasya.',
+    en:'You search for reasons and causes. You think about all the factors that might affect a situation.'},
+  arranger:{name:'Arranger',domain:'Executing',
+    tl:'Kayang-kaya mong i-organize ang mga komplikadong sitwasyon at panatilihin ang flexibility para mas makamit ang produktibidad.',
+    en:'You can organize, but you also have a flexibility that complements this ability. You like to figure out how all the pieces and resources can be arranged for maximum productivity.'},
+  belief:{name:'Belief',domain:'Executing',
+    tl:'May mga core values ka na hindi nagbabago. Ang mga halagang ito ay nagbibigay ng kahulugan at kasiyahan sa iyong buhay.',
+    en:'You have certain core values that are unchanging. Out of these values emerges a defined purpose for your life.'},
+  command:{name:'Command',domain:'Influencing',
+    tl:'Kaya mong i-take charge. Sa hindi malinaw na sitwasyon, hindi ka komportable mag-iwas — hahanapin mo ang katotohanan at sasabihin.',
+    en:'You have presence. You take control of a situation and make decisions. You can confront others when needed.'},
+  communication:{name:'Communication',domain:'Influencing',
+    tl:'Madali kang makapaglagay ng iniisip sa salita. Ikaw ay magaling magkuwento at presentor.',
+    en:'You generally find it easy to put your thoughts into words. You are a good conversationalist and presenter.'},
+  competition:{name:'Competition',domain:'Influencing',
+    tl:'Sinusukat mo ang iyong progreso laban sa performance ng iba. Sa iyo, ang pangalawang puwesto ay hindi sapat.',
+    en:'You measure your progress against the performance of others. You strive to win first place and revel in contests.'},
+  connectedness:{name:'Connectedness',domain:'Relationship Building',
+    tl:'Naniniwala kang lahat ng mga bagay ay konektado. Konting mga pangyayari lang ang pwedeng tawaging "aksidente."',
+    en:'You have faith in the links among all things. You believe there are few coincidences and that almost every event has meaning.'},
+  consistency:{name:'Consistency',domain:'Executing',
+    tl:'Mahalaga sa iyo na pareho ang pagtrato sa lahat ng tao. Naniniwala ka sa malinaw at patas na mga panuntunan.',
+    en:'You are keenly aware of the need to treat people the same. You crave stable routines and clear rules and procedures that everyone can follow.'},
+  context:{name:'Context',domain:'Strategic Thinking',
+    tl:'Gusto mong mag-isip ng nakaraan. Naiintindihan mo ang kasalukuyan sa pamamagitan ng paghahanap ng kasaysayan nito.',
+    en:'You enjoy thinking about the past. You understand the present by researching its history.'},
+  deliberative:{name:'Deliberative',domain:'Executing',
+    tl:'Maingat ka. Inaasahan mo ang mga balakid. Ang iyong dedikasyon ay sa pagpili ng tamang landas.',
+    en:'You are best described by the serious care you take in making decisions or choices. You anticipate obstacles.'},
+  developer:{name:'Developer',domain:'Relationship Building',
+    tl:'Kaya mong tumukoy at magtanim ng potensyal sa iba. Kapag may konting progreso, nakakakita ka ng signal — at ito ay mga signal na nagpaparami pa.',
+    en:'You recognize and cultivate the potential in others. You spot the signs of each small improvement and derive satisfaction from these improvements.'},
+  discipline:{name:'Discipline',domain:'Executing',
+    tl:'Kailangan mong maging maayos at planado ang mundo. Ikaw mismo ang nagtatatag ng structure sa iyong buhay.',
+    en:'You enjoy routine and structure. Your world is best described by the order you create.'},
+  empathy:{name:'Empathy',domain:'Relationship Building',
+    tl:'Nararamdaman mo ang nararamdaman ng iba sa pamamagitan ng pag-imagine sa iyong sarili sa kanilang buhay o sitwasyon.',
+    en:'You can sense other people\'s feelings by imagining yourself in others\' lives or situations.'},
+  focus:{name:'Focus',domain:'Executing',
+    tl:'Kayang mong pumili ng direksyon, sumunod dito, at maayos ang iyong landas patungo sa target. Ang prioridad ang gabay mo.',
+    en:'You can take a direction, follow through, and make the corrections necessary to stay on track. You prioritize, then act.'},
+  futuristic:{name:'Futuristic',domain:'Strategic Thinking',
+    tl:'Inspired ka ng hinaharap at kung ano ang maaaring maging. Pinapainspire mo ang iba sa iyong mga pangitain ng kinabukasan.',
+    en:'You are inspired by the future and what could be. You inspire others with your visions of the future.'},
+  harmony:{name:'Harmony',domain:'Relationship Building',
+    tl:'Naghahanap ka ng pagkakasundo. Sa halip na sigalot, gusto mong hanapin ang mga puntong agree ang lahat.',
+    en:'You look for consensus. You don\'t enjoy conflict; rather, you seek areas of agreement.'},
+  ideation:{name:'Ideation',domain:'Strategic Thinking',
+    tl:'Mahilig ka sa mga ideya. Kaya mong mag-isip ng mga bagong koneksyon sa hindi pa nakikitang paraan.',
+    en:'You are fascinated by ideas. You are able to find connections between seemingly disparate phenomena.'},
+  includer:{name:'Includer',domain:'Relationship Building',
+    tl:'Tinatanggap mo ang lahat. Sensitive ka sa mga taong nararamdamang naiiwan, at ginagawa mo ang lahat para isama sila.',
+    en:'You accept others. You show awareness of those who feel left out and make an effort to include them.'},
+  individualization:{name:'Individualization',domain:'Relationship Building',
+    tl:'Inteligente ka sa mga natatanging katangian ng bawat tao. May regalo ka sa pagsama-sama ng mga taong may iba\'t ibang likas na talento.',
+    en:'You are intrigued with the unique qualities of each person. You have a gift for figuring out how different people can work together productively.'},
+  input:{name:'Input',domain:'Strategic Thinking',
+    tl:'Gusto mong magkaroon ng marami. Maaaring impormasyon, mga ideya, mga bagay-bagay — kahit ano. Lahat ay maaaring maging kapaki-pakinabang balang araw.',
+    en:'You have a craving to know more. Often you like to collect and archive all kinds of information.'},
+  intellection:{name:'Intellection',domain:'Strategic Thinking',
+    tl:'Naka-pokus ka sa intellectual activity. Introspective ka at gustung-gusto ang intellectual discussions.',
+    en:'You are characterized by your intellectual activity. You are introspective and appreciate intellectual discussions.'},
+  learner:{name:'Learner',domain:'Strategic Thinking',
+    tl:'May malaking pagnanais kang matuto at gusto mong tuloy-tuloy na umunlad. Hindi pinapahalagahan ang resulta — ang mismong proseso ng pag-aaral ang nagbibigay sayo ng excitement.',
+    en:'You have a great desire to learn and want to continuously improve. The process of learning, rather than the outcome, excites you.'},
+  maximizer:{name:'Maximizer',domain:'Influencing',
+    tl:'Naghahanap ka ng kahusayan, hindi ng karaniwan. Mas gusto mong gawing kahanga-hanga ang isang malakas na bagay kaysa ayusin ang mahina.',
+    en:'You focus on strengths as a way to stimulate personal and group excellence. You seek to transform something strong into something superb.'},
+  positivity:{name:'Positivity',domain:'Relationship Building',
+    tl:'May enthusiasm kang nakakahawa. Optimistiko ka at madali kang makapagpasaya sa iba — masaya kang ipagdiwang ang lahat.',
+    en:'You have contagious enthusiasm. You are upbeat and can get others excited about what they are going to do.'},
+  relator:{name:'Relator',domain:'Relationship Building',
+    tl:'Nasa mga taong matalik mong kaibigan ang iyong kasiyahan. Mahalaga sa iyo ang pakikipagkaibigan sa malalim na antas.',
+    en:'You enjoy close relationships with others. You find deep satisfaction in working hard with friends to achieve a goal.'},
+  responsibility:{name:'Responsibility',domain:'Executing',
+    tl:'Dinadala mo ang sariling pananagutan sa kung anuman ang iyong ipinangako. May commitment ka sa pagiging matapat at maaasahan.',
+    en:'You take psychological ownership of what you say you will do. You are committed to stable values such as honesty and loyalty.'},
+  restorative:{name:'Restorative',domain:'Executing',
+    tl:'Kaya mong tumukoy ng problema at maghanap ng solusyon. Naghihilom ka ng sira.',
+    en:'You are adept at dealing with problems. You are good at figuring out what is wrong and resolving it.'},
+  self_assurance:{name:'Self-Assurance',domain:'Influencing',
+    tl:'Tiwala ka sa sariling kakayahang gumawa ng desisyon. May internal compass ka na nagbibigay ng kumpiyansa.',
+    en:'You feel confident in your ability to manage your own life. You possess an inner compass that gives you confidence.'},
+  significance:{name:'Significance',domain:'Influencing',
+    tl:'Gusto mong maging mahalaga sa paningin ng iba. Ikaw ay independent at gusto mong makilala.',
+    en:'You want to be very important in others\' eyes. You are independent and want to be recognized.'},
+  strategic:{name:'Strategic',domain:'Strategic Thinking',
+    tl:'Lumilikha ka ng mga alternatibong landas. Sa harap ng anumang sitwasyon, mabilis mong nakikita ang mga pattern at piniling ang pinakamabuting daan.',
+    en:'You create alternative ways to proceed. Faced with any given scenario, you can quickly spot the relevant patterns and issues.'},
+  woo:{name:'Woo',domain:'Influencing',
+    tl:'Mahilig kang makakilala ng bagong tao at mapasayo sila. Kasiyahan mo ang break the ice at gumawa ng koneksyon.',
+    en:'You love the challenge of meeting new people and winning them over. You derive satisfaction from breaking the ice.'},
+};
+
+const DOMAIN_META={
+  Executing:{color:'var(--ex)',bg:'var(--ex-bg)',t5:'t5-ex',ds:'ds-ex',label:'Executing',labelTl:'Pagsasagawa'},
+  Influencing:{color:'var(--in)',bg:'var(--in-bg)',t5:'t5-in',ds:'ds-in',label:'Influencing',labelTl:'Pag-impluwensya'},
+  'Relationship Building':{color:'var(--rb)',bg:'var(--rb-bg)',t5:'t5-rb',ds:'ds-rb',label:'Rel. Building',labelTl:'Pagbuo ng Relasyon'},
+  'Strategic Thinking':{color:'var(--st)',bg:'var(--st-bg)',t5:'t5-st',ds:'ds-st',label:'Strategic',labelTl:'Estratehiko'},
+};
+
+// ═══════════════════════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════════════════════
+const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+let db=null;
+function getDB(){if(!db){try{db=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});}catch(e){console.error(e);}}return db;}
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let _lang='en';
+let _memberId=null;
+let responses={}; // {pairIdx: 'a' | 'b'}
+let _scores={};
+let _sortedThemes=[];
+const SAVE_KEY='strengths102_progress';
+
+// TIMER STATE
+const TIMER_SECS = 25;
+const AUTO_PAUSE_AFTER = 5;  // consecutive timeouts → auto-pause
+let _activeTimer = null;
+let _timerPairIdx = null;
+let _consecutiveTimeouts = 0;
+
+// ═══════════════════════════════════════════════════════
+// LANGUAGE TOGGLE
+// ═══════════════════════════════════════════════════════
+function setLang(lang){
+  if (lang !== 'tl' && lang !== 'en') lang = 'en';
+  _lang=lang;
+  document.body.setAttribute('data-lang',lang);
+  document.getElementById('lt-tl').classList.toggle('active',lang==='tl');
+  document.getElementById('lt-en').classList.toggle('active',lang==='en');
+  updateProgressLabel();
+  try { localStorage.setItem('multiply_strengths_lang', lang); } catch(e){}
+}
+// Restore on load (assessment standard)
+(function initLang(){
+  let saved = 'en';
+  try { saved = localStorage.getItem('multiply_strengths_lang') || 'en'; } catch(e){}
+  if (saved !== 'tl' && saved !== 'en') saved = 'en';
+  setLang(saved);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER (assessment standard, May 2026)
+// ═══════════════════════════════════════════════════════════════
+const _STR_FONT_KEY = 'multiply_strengths_fontscale';
+const _STR_FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40];
+let _str_fontIdx = 1;
+function applyFontScale(){
+  const scale = _STR_FONT_STEPS[_str_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_str_fontIdx <= 0);
+  if (up) up.disabled = (_str_fontIdx >= _STR_FONT_STEPS.length - 1);
+}
+function changeFontScale(direction){
+  _str_fontIdx = Math.max(0, Math.min(_STR_FONT_STEPS.length - 1, _str_fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(_STR_FONT_KEY, String(_str_fontIdx)); } catch(e){}
+}
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_STR_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _STR_FONT_STEPS.length) _str_fontIdx = saved;
+  } catch(e){}
+  applyFontScale();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE DETECTION (assessment standard, May 2026)
+// Threshold from system_settings.meta.salvation_idle_minutes (shared)
+// ═══════════════════════════════════════════════════════════════
+let _idleMinutes_str = 3;
+let _idleTimer_str = null;
+let _idleModalOpen_str = false;
+let _idleArmed_str = false;
+
+async function loadIdleThreshold_str(){
+  try {
+    const sb = (typeof getDB === 'function') ? getDB() : null;
+    if (!sb) return;
+    const { data, error } = await sb.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    const v = data?.meta?.salvation_idle_minutes;
+    if (typeof v === 'number' && v >= 1 && v <= 30) _idleMinutes_str = v;
+  } catch(e){ console.warn('[idle] threshold load failed; using default'); }
+}
+
+function _armIdleTimer_str(){
+  if (!_idleArmed_str) return;
+  if (_idleModalOpen_str) return;
+  clearTimeout(_idleTimer_str);
+  _idleTimer_str = setTimeout(_showIdlePrompt_str, _idleMinutes_str * 60 * 1000);
+}
+
+function _showIdlePrompt_str(){
+  if (_idleModalOpen_str) return;
+  _idleModalOpen_str = true;
+  // Force a save first
+  try { if (typeof saveProgress === 'function') saveProgress(); } catch(e){}
+
+  document.querySelectorAll('.str-idle-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'str-idle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-size:1.2rem;font-weight:700;color:#1a1612;margin-bottom:.5rem">⏸ <span class="tl-text">Hihinto muna?</span><span class="en-text">Pause for now?</span></div>
+      <div style="font-size:13px;color:#5a5a5a;line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mukhang hindi ka nagsasagot ng ${_idleMinutes_str} minuto na. Na-save na ang lahat ng iyong sagot. Gusto mo bang humintong sandali?</span>
+        <span class="en-text">It looks like there has been no activity for ${_idleMinutes_str} minutes. Your answers are saved. Would you like to pause?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="idleYes" style="padding:11px;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          ✓ <span class="tl-text">Oo, hihinto muna ako</span><span class="en-text">Yes — pause now</span>
+        </button>
+        <button id="idleNo" style="padding:11px;background:transparent;color:#5a5a5a;border:1px solid #ddd;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <span class="tl-text">Ipagpatuloy ko</span><span class="en-text">Keep going</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => { modal.remove(); _idleModalOpen_str = false; _armIdleTimer_str(); };
+  modal.querySelector('#idleYes').onclick = () => { close(); if (typeof showPauseModal === 'function') showPauseModal(); };
+  modal.querySelector('#idleNo').onclick = close;
+}
+
+// Wrap existing saveProgress so the idle timer arms after first answer
+(function wrapSaveProgress_str(){
+  if (typeof saveProgress !== 'function') return;
+  const orig = saveProgress;
+  window.saveProgress = function(){
+    const result = orig.apply(this, arguments);
+    _idleArmed_str = true;
+    _armIdleTimer_str();
+    return result;
+  };
+})();
+
+// Wire activity listeners + threshold loader
+(function initIdleListeners_str(){
+  function start(){
+    loadIdleThreshold_str();
+    ['mousemove','mousedown','touchstart','keydown','scroll','input','change'].forEach(evt => {
+      document.addEventListener(evt, _armIdleTimer_str, { passive: true });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+// ═══════════════════════════════════════════════════════
+// BUILD PAIRS
+// ═══════════════════════════════════════════════════════
+function buildPairs(){
+  const wrap=document.getElementById('pairsWrap');
+  wrap.innerHTML='';
+  PAIRS.forEach((p,idx)=>{
+    const card=document.createElement('div');
+    card.className='pair-card';
+    card.id=`pair-${idx}`;
+    card.innerHTML=`
+      <div class="pair-num">
+        <div class="pn-text"><span class="tl-text">Tanong ${idx+1} ng 102</span><span class="en-text">Question ${idx+1} of 102</span></div>
+        <div class="pn-status" id="pn-status-${idx}"><span class="tl-text">Hindi pa nasagot</span><span class="en-text">Not answered</span></div>
+        <div class="timer-wrap" id="tw-${idx}"></div>
+      </div>
+      <div class="choices">
+        <button class="choice" id="ch-${idx}-a" onclick="answer(${idx},'a')">
+          <span class="ch-letter">A</span>
+          <span class="ch-tl tl-text">${escapeHTML(p.atl)}</span>
+          <span class="ch-en en-text">${escapeHTML(p.a)}</span>
+        </button>
+        <button class="choice" id="ch-${idx}-b" onclick="answer(${idx},'b')">
+          <span class="ch-letter">B</span>
+          <span class="ch-tl tl-text">${escapeHTML(p.btl)}</span>
+          <span class="ch-en en-text">${escapeHTML(p.b)}</span>
+        </button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+}
+
+function escapeHTML(s){
+  return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+// ═══════════════════════════════════════════════════════
+// TIMER
+// ═══════════════════════════════════════════════════════
+function startTimer(idx){
+  if(_activeTimer){ clearInterval(_activeTimer); _activeTimer=null; }
+  if(responses[idx] !== undefined) return; // already answered
+  _timerPairIdx = idx;
+  let remaining = TIMER_SECS;
+  const wrap = document.getElementById(`tw-${idx}`);
+  if(!wrap) return;
+
+  function render(secs){
+    const pct = secs / TIMER_SECS;
+    const r = 10; const circ = 2 * Math.PI * r;
+    const dash = circ * pct;
+    const urgent = secs <= 8;
+    wrap.innerHTML = `
+      <svg class="timer-arc" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="${r}" fill="none" stroke="#e0e0e0" stroke-width="2.5"/>
+        <circle cx="12" cy="12" r="${r}" fill="none" stroke="${urgent?'#c0392b':'#2a5c40'}" stroke-width="2.5"
+          stroke-dasharray="${dash} ${circ}" stroke-dashoffset="${circ/4}" stroke-linecap="round"
+          style="transition:stroke-dasharray .9s linear"/>
+      </svg>
+      <span class="timer-txt ${urgent?'urgent':''}">${secs}s</span>`;
+  }
+
+  render(remaining);
+  _activeTimer = setInterval(()=>{
+    remaining--;
+    if(responses[_timerPairIdx] !== undefined){
+      // Already answered — stop
+      clearInterval(_activeTimer); _activeTimer=null;
+      wrap.innerHTML='<span style="font-size:11px;color:var(--green);font-weight:700">✓</span>';
+      return;
+    }
+    if(remaining <= 0){
+      clearInterval(_activeTimer); _activeTimer=null;
+      wrap.innerHTML='<span style="font-size:9px;color:var(--lighter)">—</span>';
+      _consecutiveTimeouts++;
+      // Auto-pause if user has missed too many in a row
+      if(_consecutiveTimeouts >= AUTO_PAUSE_AFTER){
+        _consecutiveTimeouts = 0;
+        autoPause();
+        return;
+      }
+      // Otherwise scroll to next unanswered and start its timer
+      scrollToNextUnanswered(_timerPairIdx, true);
+      return;
+    }
+    render(remaining);
+  }, 1000);
+}
+
+function scrollToNextUnanswered(fromIdx, withTimer){
+  const next = findNextUnanswered(fromIdx);
+  if(next === -1) return;
+  const target = document.getElementById(`pair-${next}`);
+  if(target){
+    setTimeout(()=>{
+      target.scrollIntoView({behavior:'smooth',block:'center'});
+      if(withTimer) startTimer(next);
+    }, 80);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// ANSWER
+// ═══════════════════════════════════════════════════════
+function answer(idx,side){
+  responses[idx]=side;
+  _consecutiveTimeouts = 0;  // user is here — reset streak
+  // Reveal pause button after first answer
+  const pb=document.getElementById('pauseBtn');
+  if(pb && !pb.classList.contains('show')) pb.classList.add('show');
+  // UI update
+  document.getElementById(`ch-${idx}-a`).classList.toggle('selected',side==='a');
+  document.getElementById(`ch-${idx}-b`).classList.toggle('selected',side==='b');
+  document.getElementById(`pair-${idx}`).classList.add('answered');
+  const statusEl=document.getElementById(`pn-status-${idx}`);
+  statusEl.classList.add('done');
+  statusEl.innerHTML='<span class="tl-text">✓ Nasagot</span><span class="en-text">✓ Answered</span>';
+  updateProgress();
+  saveProgress();
+
+  // Stop current timer for this pair
+  if(_activeTimer && _timerPairIdx === idx){
+    clearInterval(_activeTimer); _activeTimer=null;
+    const wrap=document.getElementById(`tw-${idx}`);
+    if(wrap) wrap.innerHTML='<span style="font-size:11px;color:var(--green);font-weight:700">✓</span>';
+  }
+
+  // Auto-scroll to next unanswered and start its timer
+  scrollToNextUnanswered(idx, true);
+}
+
+function findNextUnanswered(fromIdx){
+  for(let i=fromIdx+1;i<PAIRS.length;i++) if(responses[i]===undefined) return i;
+  for(let i=0;i<fromIdx;i++) if(responses[i]===undefined) return i;
+  return -1;
+}
+
+// ═══════════════════════════════════════════════════════
+// PAUSE / RESUME
+// ═══════════════════════════════════════════════════════
+function showPauseModal(manual){
+  saveProgress();
+  if(_activeTimer){ clearInterval(_activeTimer); _activeTimer=null; }
+  const ans=Object.keys(responses).length;
+  const pct=Math.round(ans/PAIRS.length*100);
+  // Default copy (manual pause)
+  document.getElementById('pmIcon').textContent='⏸';
+  const titleTl=document.querySelector('#pauseModal .pm-title .tl-text');
+  const titleEn=document.querySelector('#pauseModal .pm-title .en-text');
+  const subTl=document.querySelector('#pauseModal .pm-sub .tl-text');
+  const subEn=document.querySelector('#pauseModal .pm-sub .en-text');
+  if(titleTl) titleTl.textContent='Na-save ang Iyong Progreso';
+  if(titleEn) titleEn.textContent='Your Progress is Saved';
+  if(subTl) subTl.textContent='Maaari mong ituloy ang test mamaya sa parehong device. I-bookmark o i-copy ang link sa ibaba para makabalik ka kahit kailan.';
+  if(subEn) subEn.textContent='You can continue this test later on the same device. Bookmark or copy the link below to return anytime.';
+  document.getElementById('pmSavedCount').textContent =
+    _lang==='tl'
+      ? `✅ ${ans} sa ${PAIRS.length} nasagot na-save (${pct}%)`
+      : `✅ ${ans} of ${PAIRS.length} answers saved (${pct}%)`;
+  document.getElementById('pmUrl').textContent=window.location.href.split('#')[0];
+  document.getElementById('pauseModal').classList.add('open');
+}
+
+function autoPause(){
+  saveProgress();
+  if(_activeTimer){ clearInterval(_activeTimer); _activeTimer=null; }
+  const ans=Object.keys(responses).length;
+  const pct=Math.round(ans/PAIRS.length*100);
+  // Special copy for auto-pause
+  document.getElementById('pmIcon').textContent='👋';
+  const titleTl=document.querySelector('#pauseModal .pm-title .tl-text');
+  const titleEn=document.querySelector('#pauseModal .pm-title .en-text');
+  const subTl=document.querySelector('#pauseModal .pm-sub .tl-text');
+  const subEn=document.querySelector('#pauseModal .pm-sub .en-text');
+  if(titleTl) titleTl.textContent='Na-pause Awtomatiko!';
+  if(titleEn) titleEn.textContent='Auto-Paused!';
+  if(subTl) subTl.textContent='Tila nalayo ka — na-save ang iyong mga sagot. I-copy ang link para matuloy ang test kahit kailan sa parehong device.';
+  if(subEn) subEn.textContent='It looks like you stepped away — your answers have been saved. Copy the link below to continue the test anytime on the same device.';
+  document.getElementById('pmSavedCount').textContent =
+    _lang==='tl'
+      ? `✅ ${ans} sa ${PAIRS.length} nasagot na-save (${pct}%) — Auto-paused`
+      : `✅ ${ans} of ${PAIRS.length} answers saved (${pct}%) — Auto-paused`;
+  document.getElementById('pmUrl').textContent=window.location.href.split('#')[0];
+  document.getElementById('pauseModal').classList.add('open');
+}
+
+function closePauseModal(){
+  document.getElementById('pauseModal').classList.remove('open');
+  _consecutiveTimeouts=0;
+  // Scroll to first unanswered (no timer until user answers)
+  const next=findNextUnanswered(-1);
+  if(next!==-1){
+    setTimeout(()=>{
+      const el=document.getElementById(`pair-${next}`);
+      if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+    },200);
+  }
+}
+
+function copyPauseUrl(){
+  const url=document.getElementById('pmUrl').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(()=>{
+      toast(_lang==='tl'?'📋 Na-copy ang link!':'📋 Link copied!');
+    }).catch(()=>{fallbackCopy(url);});
+  } else {
+    fallbackCopy(url);
+  }
+}
+function fallbackCopy(url){
+  const el=document.getElementById('pmUrl');
+  const range=document.createRange();
+  range.selectNode(el);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  toast(_lang==='tl'?'I-highlight at i-copy ang link.':'Highlight and copy the link above.');
+}
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  if(!t) return;
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ═══════════════════════════════════════════════════════
+// RESUME BANNER (offered at page load if saved progress exists)
+// ═══════════════════════════════════════════════════════
+function maybeShowResumeBanner(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw) return;
+    const data=JSON.parse(raw);
+    const ans=data?.responses?Object.keys(data.responses).length:0;
+    if(ans===0) return;
+    if(ans>=PAIRS.length) return;  // already complete — no need to resume
+    const sub=document.getElementById('rbSub');
+    if(sub){
+      const pct=Math.round(ans/PAIRS.length*100);
+      sub.innerHTML=
+        `<span class="tl-text">${ans} sa ${PAIRS.length} nasagot na (${pct}%). Gusto mo bang ipagpatuloy?</span>` +
+        `<span class="en-text">${ans} of ${PAIRS.length} answered (${pct}%). Would you like to continue where you left off?</span>`;
+    }
+    document.getElementById('resumeBanner').classList.add('show');
+  }catch(e){}
+}
+
+function resumeTest(){
+  // Just hide the banner — answers are already loaded by loadProgress on init
+  document.getElementById('resumeBanner').classList.remove('show');
+  // Reveal pause button (they have answered before)
+  const pb=document.getElementById('pauseBtn');
+  if(pb) pb.classList.add('show');
+  // Scroll to first unanswered
+  const next=findNextUnanswered(-1);
+  if(next!==-1){
+    setTimeout(()=>{
+      const el=document.getElementById(`pair-${next}`);
+      if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+    },200);
+  }
+  toast(_lang==='tl'?'✅ Ipinagpapatuloy ang test.':'✅ Resuming where you left off.');
+}
+
+function discardProgress(){
+  const ok=confirm(
+    _lang==='tl'
+      ? 'Sigurado ka? Mawawala lahat ng iyong nai-save na sagot.'
+      : 'Are you sure? All saved answers will be cleared.');
+  if(!ok) return;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  // Clear in-memory state and re-render UI
+  responses={};
+  document.querySelectorAll('.choice.selected').forEach(c=>c.classList.remove('selected'));
+  document.querySelectorAll('.pair-card').forEach(c=>c.classList.remove('answered'));
+  document.querySelectorAll('.pn-status').forEach(s=>{
+    s.classList.remove('done');
+    s.innerHTML='<span class="tl-text">Hindi pa nasagot</span><span class="en-text">Not answered</span>';
+  });
+  document.querySelectorAll('[id^="tw-"]').forEach(t=>{ t.innerHTML=''; });
+  document.getElementById('pName').value='';
+  document.getElementById('pGroup').value='';
+  updateProgress();
+  document.getElementById('resumeBanner').classList.remove('show');
+  toast(_lang==='tl'?'🔄 Nagsimula ulit.':'🔄 Started fresh.');
+}
+
+// ═══════════════════════════════════════════════════════
+// PROGRESS
+// ═══════════════════════════════════════════════════════
+function updateProgress(){
+  const ans=Object.keys(responses).length;
+  const pct=Math.round(ans/PAIRS.length*100);
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('progPct').textContent=pct+'%';
+  updateProgressLabel();
+  document.getElementById('calcBtn').disabled=ans<PAIRS.length;
+}
+function updateProgressLabel(){
+  const ans=Object.keys(responses).length;
+  const el=document.getElementById('progLabel');
+  el.innerHTML=`<span class="tl-text">${ans} sa ${PAIRS.length}</span><span class="en-text">${ans} of ${PAIRS.length}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SAVE / LOAD PROGRESS (localStorage)
+// ═══════════════════════════════════════════════════════
+function saveProgress(){
+  try{
+    const name=document.getElementById('pName')?.value||'';
+    const grp=document.getElementById('pGroup')?.value||'';
+    localStorage.setItem(SAVE_KEY,JSON.stringify({responses,name,grp,memberId:_memberId,t:Date.now()}));
+  }catch(e){}
+}
+function loadProgress(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw) return;
+    const data=JSON.parse(raw);
+    if(!data||!data.responses) return;
+    responses=data.responses;
+    Object.entries(responses).forEach(([idx,side])=>{
+      const i=parseInt(idx);
+      const a=document.getElementById(`ch-${i}-a`);
+      const b=document.getElementById(`ch-${i}-b`);
+      if(a&&b){
+        if(side==='a') a.classList.add('selected');
+        if(side==='b') b.classList.add('selected');
+        document.getElementById(`pair-${i}`).classList.add('answered');
+        const st=document.getElementById(`pn-status-${i}`);
+        if(st){st.classList.add('done');st.innerHTML='<span class="tl-text">✓ Nasagot</span><span class="en-text">✓ Answered</span>';}
+        const tw=document.getElementById(`tw-${i}`);
+        if(tw) tw.innerHTML='<span style="font-size:11px;color:var(--green);font-weight:700">✓</span>';
+      }
+    });
+    if(data.name) document.getElementById('pName').value=data.name;
+    if(data.grp) document.getElementById('pGroup').value=data.grp;
+    updateProgress();
+  }catch(e){console.warn('Load progress failed:',e);}
+}
+
+// ═══════════════════════════════════════════════════════
+// CALCULATE
+// ═══════════════════════════════════════════════════════
+function calculate(){
+  const name=document.getElementById('pName').value.trim();
+  const msg=document.getElementById('calcMsg');
+  if(!name){
+    msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';
+    msg.textContent=_lang==='tl'?'⚠️ Pakisulat ang iyong pangalan.':'⚠️ Please enter your name.';
+    document.getElementById('pName').focus();return;
+  }
+  const ans=Object.keys(responses).length;
+  if(ans<PAIRS.length){
+    const missing=PAIRS.length-ans;
+    msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';
+    msg.textContent=_lang==='tl'?`⚠️ May ${missing} pang tanong na hindi nasagot.`:`⚠️ ${missing} questions still unanswered.`;
+    return;
+  }
+
+  // Score: each chosen side gets +1 to its theme
+  _scores={};
+  Object.keys(THEMES).forEach(t=>{_scores[t]=0;});
+  Object.entries(responses).forEach(([idx,side])=>{
+    const p=PAIRS[parseInt(idx)];
+    const themeKey=side==='a'?p.ak:p.bk;
+    _scores[themeKey]=(_scores[themeKey]||0)+1;
+  });
+
+  // Sort themes desc by score
+  _sortedThemes=Object.keys(THEMES).sort((a,b)=>(_scores[b]||0)-(_scores[a]||0));
+
+  msg.style.display='none';
+  showResults(name);
+}
+
+// ═══════════════════════════════════════════════════════
+// SHOW RESULTS
+// ═══════════════════════════════════════════════════════
+function showResults(name){
+  const wrap=document.getElementById('resultsWrap');
+  wrap.classList.add('visible');
+  document.getElementById('rcName').textContent=name+(_lang==='tl'?'\u2019s Strengths Profile':"'s Strengths Profile");
+  document.getElementById('rcSub').textContent=(_lang==='tl'?'102 Paired-Choice · Rosehill Christian Church':'102 Paired-Choice · Rosehill Christian Church');
+
+  // Top 5 grid
+  const top5=_sortedThemes.slice(0,5);
+  const g=document.getElementById('top5Grid');
+  g.innerHTML=top5.map((tid,i)=>{
+    const t=THEMES[tid];const dm=DOMAIN_META[t.domain];
+    return `<div class="t5-card">
+      <div class="t5-rank">#${i+1}</div>
+      <div class="t5-name">${t.name}</div>
+      <div class="t5-dom ${dm.t5}">${_lang==='tl'?dm.labelTl:dm.label}</div>
+    </div>`;
+  }).join('');
+
+  // Domain strip — count of themes in top 5 by domain
+  const domainCount={Executing:0,Influencing:0,'Relationship Building':0,'Strategic Thinking':0};
+  top5.forEach(tid=>{domainCount[THEMES[tid].domain]++;});
+  const ds=document.getElementById('domainStrip');
+  ds.innerHTML=Object.entries(domainCount).map(([dom,c])=>{
+    const dm=DOMAIN_META[dom];
+    return `<div class="ds-card ${dm.ds}">
+      <div class="ds-num">${c}</div>
+      <div class="ds-label">${_lang==='tl'?dm.labelTl:dm.label}</div>
+    </div>`;
+  }).join('');
+
+  // All 34 themes ranked
+  const all=document.getElementById('allThemes');
+  all.innerHTML=_sortedThemes.map((tid,i)=>{
+    const t=THEMES[tid];const dm=DOMAIN_META[t.domain];
+    const score=_scores[tid]||0;
+    const desc=_lang==='tl'?t.tl:t.en;
+    const ministry=t.ministry||'';
+    return `<div class="theme-card" onclick="this.classList.toggle('open')">
+      <div class="tc-head">
+        <div class="tc-rank">#${i+1}</div>
+        <div class="tc-info">
+          <div class="tc-name">${t.name}</div>
+          <div class="tc-dom" style="color:${dm.color}">${_lang==='tl'?dm.labelTl:dm.label}</div>
+        </div>
+        <div class="tc-score">${score}/6</div>
+        <div class="tc-chev">▼</div>
+      </div>
+      <div class="tc-body">
+        <div class="tc-section">
+          <div class="tc-section-title">${_lang==='tl'?'Paglalarawan':'Description'}</div>
+          <div class="tc-section-body">${desc}</div>
+        </div>
+        ${ministry?`<div class="tc-section">
+          <div class="tc-section-title">${_lang==='tl'?'Ministry Fit':'Ministry Fit'}</div>
+          <div class="tc-section-body">${ministry}</div>
+        </div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Auto-open top 5
+  setTimeout(()=>{
+    document.querySelectorAll('.theme-card').forEach((c,i)=>{if(i<5) c.classList.add('open');});
+  },100);
+
+  // Scroll to results
+  setTimeout(()=>{
+    wrap.scrollIntoView({behavior:'smooth',block:'start'});
+  },300);
+}
+
+// ═══════════════════════════════════════════════════════
+// PDF REPORT (jsPDF) + SAVE CONFIRMATION
+// ═══════════════════════════════════════════════════════
+function confirmSave(){
+  // If results not calculated or no name, just route to saveResults so it shows the proper warning
+  const name=(document.getElementById('pName')?.value||'').trim();
+  if(!name || !_sortedThemes.length){ saveResults(); return; }
+
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:1.5rem 1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif">
+      <div style="font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:var(--ink);margin-bottom:.5rem">📋 Before saving…</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.1rem">
+        <span class="tl-text">Mawawala ang iyong mga sagot pagkatapos ma-save. Kunin muna ang PDF copy ng lahat ng iyong sagot at resulta?</span>
+        <span class="en-text">Saving will clear your saved progress. Want a PDF copy of all your answers and results first?</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="csPdf" style="padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          📄 <span class="tl-text">Oo — i-download muna ang PDF</span><span class="en-text">Yes — Download PDF first</span>
+        </button>
+        <button id="csSave" style="padding:11px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          💾 <span class="tl-text">I-save na lang (skip PDF)</span><span class="en-text">Just save (skip PDF)</span>
+        </button>
+        <button id="csCancel" style="padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">
+          ✕ <span class="tl-text">Kanselahin</span><span class="en-text">Cancel</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.querySelector('#csPdf').onclick=()=>{ close(); downloadPDFReport(true); };
+  modal.querySelector('#csSave').onclick=()=>{ close(); saveResults(); };
+  modal.querySelector('#csCancel').onclick=close;
+  modal.onclick=(e)=>{ if(e.target===modal) close(); };
+}
+
+async function downloadPDFReport(saveAfter){
+  if(typeof window.jspdf==='undefined' || !window.jspdf.jsPDF){
+    alert('PDF library not loaded — check your internet connection and refresh.');
+    return;
+  }
+  if(!_sortedThemes||!_sortedThemes.length){
+    alert(_lang==='tl'?'⚠️ I-calculate muna ang resulta.':'⚠️ Please calculate results first.');
+    return;
+  }
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});
+  const pageW=doc.internal.pageSize.getWidth();
+  const pageH=doc.internal.pageSize.getHeight();
+  const margin=50;
+  let y=margin;
+
+  const name=(document.getElementById('pName')?.value||'Member').trim();
+  const lcGroup=(document.getElementById('pGroup')?.value||'—').trim()||'—';
+  const today=new Date().toISOString().split('T')[0];
+
+  const checkPage=(need)=>{
+    if(y+(need||20) > pageH-margin){ doc.addPage(); y=margin; }
+  };
+
+  // ── HEADER BANNER ──────────────────────────────
+  doc.setFillColor(26,10,10);
+  doc.rect(0,0,pageW,90,'F');
+  doc.setTextColor(245,237,216);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.text('Strengths Profile Report',margin,38);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.setTextColor(184,136,42);
+  doc.text('Rosehill Christian Church · MULTIPLY Pipeline',margin,56);
+  doc.setTextColor(200,200,200);
+  doc.setFontSize(9);
+  doc.text(`Name: ${name}   |   LC Group: ${lcGroup}   |   Date: ${today}`,margin,76);
+  y=110;
+
+  // ── TOP 5 THEMES ───────────────────────────────
+  doc.setTextColor(26,22,18);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(13);
+  doc.text('Top 5 Strengths',margin,y);
+  y+=8;
+  doc.setDrawColor(184,136,42);
+  doc.setLineWidth(1);
+  doc.line(margin,y,margin+110,y);
+  y+=18;
+
+  const top5=_sortedThemes.slice(0,5);
+  top5.forEach((tk,i)=>{
+    checkPage(20);
+    const t=THEMES[tk]||{name:tk,domain:'—'};
+    const score=_scores[tk]||0;
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(26,22,18);
+    doc.setFontSize(11);
+    doc.text(`${i+1}. ${t.name||tk}`,margin,y);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(107,95,80);
+    doc.setFontSize(9);
+    doc.text(`${t.domain||'—'}  ·  Score: ${score}/6`,margin+170,y);
+    y+=16;
+  });
+
+  y+=10;
+
+  // ── DOMAIN BREAKDOWN ───────────────────────────
+  checkPage(70);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(26,22,18);
+  doc.setFontSize(13);
+  doc.text('Domain Breakdown (Top 5)',margin,y);
+  y+=8;
+  doc.line(margin,y,margin+170,y);
+  y+=18;
+
+  const domCount={Executing:0,Influencing:0,'Relationship Building':0,'Strategic Thinking':0};
+  top5.forEach(tk=>{
+    const d=(THEMES[tk]||{}).domain;
+    if(d && domCount[d]!==undefined) domCount[d]++;
+  });
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  Object.entries(domCount).forEach(([d,c])=>{
+    checkPage(15);
+    doc.setTextColor(26,22,18);
+    doc.text(`${d}:`,margin,y);
+    doc.setFont('helvetica','bold');
+    doc.text(`${c} of 5`,margin+170,y);
+    doc.setFont('helvetica','normal');
+    y+=14;
+  });
+
+  y+=12;
+
+  // ── ALL 34 THEMES RANKED ───────────────────────
+  checkPage(40);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(26,22,18);
+  doc.setFontSize(13);
+  doc.text('All 34 Themes — Ranked by Score',margin,y);
+  y+=8;
+  doc.line(margin,y,margin+220,y);
+  y+=18;
+
+  doc.setFontSize(10);
+  _sortedThemes.forEach((tk,i)=>{
+    checkPage(13);
+    const t=THEMES[tk]||{name:tk,domain:'—'};
+    const score=_scores[tk]||0;
+    if(i<5){ doc.setFont('helvetica','bold'); doc.setTextColor(184,136,42); }
+    else   { doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80); }
+    doc.text(`${(i+1).toString().padStart(2,' ')}. ${t.name||tk}`,margin,y);
+    doc.text(`${score}/6`,margin+220,y);
+    doc.text(`(${t.domain||'—'})`,margin+260,y);
+    y+=13;
+  });
+
+  doc.setTextColor(26,22,18);
+
+  // ── ALL 102 ANSWERS ────────────────────────────
+  doc.addPage();
+  y=margin;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14);
+  doc.text('Your 102 Answers',margin,y);
+  y+=8;
+  doc.setDrawColor(184,136,42);
+  doc.line(margin,y,margin+200,y);
+  y+=18;
+  doc.setFont('helvetica','italic');
+  doc.setFontSize(9);
+  doc.setTextColor(107,95,80);
+  doc.text('✓ in green = your choice. (A=top option, B=bottom option)',margin,y);
+  y+=18;
+
+  PAIRS.forEach((p,i)=>{
+    const ans=responses[i];
+    const aStmt=p.a||'(missing)';
+    const bStmt=p.b||'(missing)';
+    const aLines=doc.splitTextToSize(aStmt,pageW-margin*2-30);
+    const bLines=doc.splitTextToSize(bStmt,pageW-margin*2-30);
+    const need=14 + aLines.length*11 + bLines.length*11 + 10;
+    checkPage(need);
+
+    // Question number
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.setTextColor(184,136,42);
+    doc.text(`Q${i+1}`,margin,y);
+    y+=13;
+
+    // A statement
+    if(ans==='a'){
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(42,92,64);
+      doc.text('✓ A:',margin+10,y);
+    } else {
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(150,150,150);
+      doc.text('  A:',margin+10,y);
+    }
+    doc.text(aLines,margin+34,y);
+    y+=aLines.length*11+2;
+
+    // B statement
+    if(ans==='b'){
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(42,92,64);
+      doc.text('✓ B:',margin+10,y);
+    } else {
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(150,150,150);
+      doc.text('  B:',margin+10,y);
+    }
+    doc.text(bLines,margin+34,y);
+    y+=bLines.length*11+10;
+
+    doc.setTextColor(26,22,18);
+  });
+
+  // ── FOOTER ─────────────────────────────────────
+  y+=10;
+  checkPage(50);
+  doc.setDrawColor(220,210,190);
+  doc.line(margin,y,pageW-margin,y);
+  y+=14;
+  doc.setFont('helvetica','italic');
+  doc.setFontSize(9);
+  doc.setTextColor(107,95,80);
+  const footer=doc.splitTextToSize(
+    'This is your personal strengths assessment record. Keep it for your reference. May the Lord guide you in stewarding these gifts for His glory and the good of His Church.',
+    pageW-margin*2
+  );
+  doc.text(footer,margin,y);
+
+  // Save the PDF
+  const safeName=name.replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  const fname=`strengths_${safeName}_${today}.pdf`;
+  doc.save(fname);
+
+  // Toast
+  try{
+    const t=document.createElement('div');
+    t.style.cssText='position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1a1612;color:#fff;padding:.7rem 1.1rem;border-radius:9px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+    t.textContent='📄 PDF downloaded — check your Downloads folder';
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(),3500);
+  }catch(e){}
+
+  // If saveAfter, fire saveResults shortly after PDF starts downloading
+  if(saveAfter){
+    setTimeout(()=>saveResults(),900);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SAVE TO DASHBOARD
+// ═══════════════════════════════════════════════════════
+async function saveResults(){
+  const btn=document.getElementById('saveBtn');
+  const msg=document.getElementById('saveMsg');
+  const name=document.getElementById('pName').value.trim();
+  if(!name){msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='⚠️ Name required.';return;}
+  if(!_sortedThemes.length){msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='⚠️ Calculate first.';return;}
+
+  btn.textContent='⏳ Saving...';btn.disabled=true;
+  msg.style.display='none';
+
+  const top5=_sortedThemes.slice(0,5);
+  const top5Names=top5.map(t=>THEMES[t].name);
+
+  // FIX: Normalize theme keys for dashboard compatibility.
+  // Dashboard + profile_results_viewer expect 'self-assurance' (hyphen),
+  // but PAIRS data uses 'self_assurance' (underscore). Remap on save only.
+  const resultsForDB={};
+  Object.entries(_scores).forEach(([k,v])=>{
+    resultsForDB[k==='self_assurance'?'self-assurance':k]=v;
+  });
+
+  try{
+    const sb=getDB();
+    if(!sb) throw new Error('Supabase not loaded.');
+
+    const payload={
+      member_id:_memberId||null,
+      member_name:name,
+      lc_group:document.getElementById('pGroup').value||null,
+      profile_type:'strengths',
+      results:resultsForDB,
+      top_result:top5Names[0]||null,
+      second_result:top5Names[1]||null,
+      third_result:top5Names[2]||null,
+      summary:top5Names.slice(0,3).join(', '),
+      date_taken:new Date().toISOString().split('T')[0],
+    };
+
+    const {error}=await sb.from('member_profiles').insert(payload);
+    if(error) throw new Error(error.message);
+
+    if(_memberId){
+      try{
+        await sb.from('members').update({
+          strengths_top5:top5Names,
+          strengths_domain:_topDomain(top5),
+          updated_at:new Date().toISOString(),
+        }).eq('id',_memberId);
+      }catch(e){console.warn('members update non-fatal:',e);}
+    }
+
+    btn.style.display='none';
+    msg.style.display='block';msg.style.background='#d4edda';msg.style.color='#1a5a30';
+    msg.innerHTML=`✅ ${_lang==='tl'?'Na-save!':'Saved!'} <strong>${escapeHTML(name)}</strong> · Top 3: ${escapeHTML(top5Names.slice(0,3).join(', '))}${_memberId?(_lang==='tl'?' · Naka-update sa dashboard.':' · Dashboard updated.'):''}`;
+    localStorage.removeItem(SAVE_KEY);
+
+  }catch(e){
+    console.error('Save error:',e);
+    btn.textContent=_lang==='tl'?'💾 I-save sa MULTIPLY Dashboard':'💾 Save to MULTIPLY Dashboard';
+    btn.disabled=false;
+    msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';
+    msg.textContent='❌ '+e.message;
+  }
+}
+
+function _topDomain(top5){
+  const c={Executing:0,Influencing:0,'Relationship Building':0,'Strategic Thinking':0};
+  top5.forEach(t=>{c[THEMES[t].domain]++;});
+  return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTO-LINK FROM URL
+// ═══════════════════════════════════════════════════════
+async function autoLinkFromUrl(){
+  const id=new URLSearchParams(location.search).get('id');
+  if(!id) return;
+  try{
+    const {data}=await getDB().from('members').select('id,name,pipeline_level,discipler_name,lc_group').eq('id',id).single();
+    if(!data) return;
+    _memberId=data.id;
+    document.getElementById('autoLinked').style.display='block';
+    document.getElementById('manualLink').style.display='none';
+    document.getElementById('autoAv').textContent=(data.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    document.getElementById('autoName').textContent=data.name;
+    const LN=['Pre-Pipeline','Team Member','Leader','Coach','Director','Executive Leader'];
+    const meta=[LN[data.pipeline_level||0]];
+    if(data.discipler_name) meta.push((_lang==='tl'?'Discipler: ':'Discipler: ')+data.discipler_name);
+    document.getElementById('autoMeta').textContent=meta.join(' · ');
+    document.getElementById('pName').value=data.name;
+    if(data.lc_group) document.getElementById('pGroup').value=data.lc_group;
+    document.title='Strengths — '+data.name;
+  }catch(e){console.warn('Auto-link failed:',e);}
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  buildPairs();
+  loadProgress();
+  maybeShowResumeBanner();  // offer to continue if unfinished test exists
+  autoLinkFromUrl();
+  // Save on name/group input
+  document.getElementById('pName').addEventListener('input',saveProgress);
+  document.getElementById('pGroup').addEventListener('input',saveProgress);
+});
+</script>
+</body>
+</html>
