@@ -698,7 +698,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <div class="detail-sections" id="detailSections"></div>
   <div class="detail-actions">
-    <button class="da-btn da-secondary" id="markPresentBtn" onclick="logQuickAttendance()">✓ Mark Present</button>
+    <button class="da-btn da-secondary" id="markPresentBtn" onclick="logQuickAttendance()">✓ Mark present</button>
     <button class="da-btn da-primary" onclick="openSalvationDiag()">📋 Salvation Diag</button>
   </div>
 </div>
@@ -1445,36 +1445,62 @@ function sendAssessmentLink(file, name){
 
 // ─────────────────────────────────────────────────────────────
 // Mark Present button — visual state helper
-// Reflects whether currentMember has a Sunday Service row for today.
-// Called when opening detail and after a successful mark.
+// The button always logs against the MOST RECENT SUNDAY (today if Sunday,
+// else the past Sunday). Label reflects that target date so the leader
+// always sees exactly which Sunday is being logged. Works any day of week.
 // ─────────────────────────────────────────────────────────────
+
+// Returns ISO date (YYYY-MM-DD) of the most recent Sunday — today if today
+// is Sunday, otherwise the prior Sunday. Always returns a real Sunday.
+function _getMostRecentSunday(){
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  const dow = d.getDay(); // 0 = Sunday
+  if(dow !== 0) d.setDate(d.getDate() - dow);
+  // Build ISO from local-date components to avoid timezone shifting
+  return d.getFullYear() + '-' +
+         String(d.getMonth()+1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+
+// "Sun, May 3" — short friendly label for buttons/toasts
+function _fmtShortSunday(iso){
+  if(!iso) return '';
+  try {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+  } catch(e){ return iso; }
+}
+
 function _setMarkPresentBtn(state){
   const btn = document.getElementById('markPresentBtn');
   if(!btn) return;
+  const targetIso = _getMostRecentSunday();
+  const targetLbl = _fmtShortSunday(targetIso);
   if(state === 'marked'){
-    btn.textContent = '✓ Marked Present';
+    btn.textContent = '✓ Marked (' + targetLbl + ')';
     btn.disabled = true;
     btn.style.opacity = '0.55';
     btn.style.cursor = 'default';
   } else {
-    btn.textContent = '✓ Mark Present';
+    btn.textContent = '✓ Mark present for ' + targetLbl;
     btn.disabled = false;
     btn.style.opacity = '';
     btn.style.cursor = '';
   }
 }
 
-// Check if currentMember already has a Sunday Service attendance for today
-// and reflect that on the button. Fire-and-forget; never throws.
+// Check if currentMember already has a Sunday Service attendance for the
+// most recent Sunday and reflect that on the button. Fire-and-forget.
 async function _refreshMarkPresentBtn(){
   _setMarkPresentBtn('idle'); // optimistic reset while we check
   if(!currentMember) return;
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const targetSunday = _getMostRecentSunday();
     const { data, error } = await db.from('attendance')
       .select('id')
       .eq('member_id', currentMember.id)
-      .eq('event_date', today)
+      .eq('event_date', targetSunday)
       .eq('event_type', 'Sunday Service')
       .eq('present', true)
       .limit(1);
@@ -1490,20 +1516,23 @@ async function logQuickAttendance(){
   if(btn && btn.disabled) return; // already marked — no-op
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
 
-  const today = new Date().toISOString().split('T')[0];
+  // Always target the most recent Sunday — works whether tapped on
+  // Sunday itself or any later day in the week.
+  const targetSunday = _getMostRecentSunday();
+  const targetLbl    = _fmtShortSunday(targetSunday);
 
   // Duplicate guard — check first so we don't insert a second row.
   try {
     const { data: existing, error: chkErr } = await db.from('attendance')
       .select('id')
       .eq('member_id', currentMember.id)
-      .eq('event_date', today)
+      .eq('event_date', targetSunday)
       .eq('event_type', 'Sunday Service')
       .eq('present', true)
       .limit(1);
     if(chkErr) throw chkErr;
     if(existing && existing.length){
-      toast('Already marked present today', 'success');
+      toast('Already marked present for ' + targetLbl, 'success');
       _setMarkPresentBtn('marked');
       return;
     }
@@ -1515,7 +1544,7 @@ async function logQuickAttendance(){
   const { error } = await db.from('attendance').insert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
-    event_date:      today,
+    event_date:      targetSunday,                 // ← the Sunday, not today
     event_type:      'Sunday Service',
     present:         true,
     member_lc_group: currentMember.lc_group || '',
@@ -1530,7 +1559,7 @@ async function logQuickAttendance(){
     _setMarkPresentBtn('idle');
     return;
   }
-  toast('✓ Marked present for today','success');
+  toast('✓ Marked present for ' + targetLbl, 'success');
   _setMarkPresentBtn('marked');
 }
 
