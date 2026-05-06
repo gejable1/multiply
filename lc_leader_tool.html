@@ -475,6 +475,30 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 
   <div id="alertsWrap"></div>
 
+  <!-- ════ L5 SELF-ATTEST CARD (hidden unless leaderLevel >= 5) ════ -->
+  <div id="l5SelfAttestCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
+       background:linear-gradient(135deg, #fdfaf3, #f7f1e1);
+       border:1px solid var(--border); border-radius:var(--r);">
+    <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;">
+      <span style="font-size:22px;">📋</span>
+      <div style="font-weight:700;font-size:14.5px;color:var(--text);">My Attendance</div>
+      <div style="margin-left:auto;font-size:10.5px;color:var(--muted);font-style:italic;">
+        For Pastoral Staff
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:.65rem;line-height:1.5;">
+      Mark yourself present at events you attended. Walang nag-loglog para sa Pastoral Staff
+      so this keeps your attendance record honest. 🙏
+    </div>
+    <div id="l5AttestPickerRow" style="display:flex;flex-wrap:wrap;gap:.45rem;">
+      <!-- Buttons inserted by renderL5AttestCard() -->
+    </div>
+    <div id="l5LastMarkedRow" style="margin-top:.7rem;font-size:11px;color:var(--muted);min-height:14px;">
+      <!-- Last marked status -->
+    </div>
+  </div>
+  <!-- ════ END L5 SELF-ATTEST CARD ════ -->
+
   <div class="section-head">
     <div class="section-title">Quick Actions</div>
   </div>
@@ -1037,6 +1061,167 @@ function renderHome(){
 
   const alertsWrap = document.getElementById('alertsWrap');
   alertsWrap.innerHTML = alerts + renderTransferAlerts();
+
+  // L5 self-attest card (Pastor + Pastoral Staff only)
+  renderL5AttestCard();
+}
+
+// ═══════════════════════════════════════════════════════
+// L5 SELF-ATTEST  (Pastor + Pastoral Staff)
+// Walang nag-loglog para sa Level 5 leaders, kaya self-report.
+// Reads attendance_event_types from system_settings.meta.
+// ═══════════════════════════════════════════════════════
+let _l5EventTypes = null;
+let _l5LastMarkedCache = {};
+
+async function _loadL5EventTypes(){
+  if (_l5EventTypes) return _l5EventTypes;
+  try {
+    const {data} = await db.from('system_settings').select('meta').eq('id', 1).limit(1);
+    const meta = (data && data[0] && data[0].meta) || {};
+    _l5EventTypes = Array.isArray(meta.attendance_event_types) ? meta.attendance_event_types : [];
+  } catch(e) {
+    console.error('Failed to load attendance_event_types:', e);
+    _l5EventTypes = [];
+  }
+  return _l5EventTypes;
+}
+
+// Compute the most recent occurrence of a typical_day (1=Mon..7=Sun)
+// relative to today. If today IS that day, returns today.
+function _l5LastTypicalDay(typicalDay){
+  const d = new Date();
+  // JS getDay: 0=Sun..6=Sat → convert to ISO 1=Mon..7=Sun
+  const todayIso = d.getDay() === 0 ? 7 : d.getDay();
+  let offset = todayIso - typicalDay;
+  if (offset < 0) offset += 7;
+  d.setDate(d.getDate() - offset);
+  return d.toISOString().slice(0,10);
+}
+
+function _l5FmtShort(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+async function renderL5AttestCard(){
+  const card = document.getElementById('l5SelfAttestCard');
+  if (!card) return;
+  const isL5 = LEADER && (LEADER.leaderLevel || 0) >= 5;
+  if (!isL5) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const types = await _loadL5EventTypes();
+  const row = document.getElementById('l5AttestPickerRow');
+  if (!row) return;
+
+  if (!types.length) {
+    row.innerHTML = '<div style="font-size:11.5px;color:var(--muted);">No event types configured.</div>';
+    return;
+  }
+
+  // Render buttons
+  row.innerHTML = types.map(et => {
+    const targetDate = _l5LastTypicalDay(et.typical_day || 7);
+    return `<button onclick="l5MarkSelfPresent('${et.key}', ${et.typical_day || 7})"
+              style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
+                     background:var(--surface); border:1px solid var(--border);
+                     border-radius:var(--r); cursor:pointer; font-size:12px;
+                     display:flex; align-items:center; gap:.4rem; justify-content:center;
+                     line-height:1.25; color:var(--text);">
+        <span style="font-size:15px;">${et.icon || '✓'}</span>
+        <span style="font-weight:600;">${MultiplyShared.escapeHTML(et.label)}</span>
+      </button>`;
+  }).join('');
+
+  // Refresh "last marked" status
+  await _l5RefreshLastMarked();
+}
+
+async function _l5RefreshLastMarked(){
+  const row = document.getElementById('l5LastMarkedRow');
+  if (!row) return;
+  try {
+    const {data, error} = await db.from('attendance')
+      .select('event_type, event_date')
+      .eq('member_id', LEADER.leaderId)
+      .eq('present', true)
+      .order('event_date', {ascending: false})
+      .limit(5);
+    if (error) throw error;
+    if (!data || !data.length) {
+      row.innerHTML = 'No attendance recorded yet.';
+      return;
+    }
+    // Show most recent per event_type (max 3)
+    const latestByType = {};
+    data.forEach(r => {
+      if (!latestByType[r.event_type]) latestByType[r.event_type] = r.event_date;
+    });
+    const parts = Object.entries(latestByType).slice(0,3).map(([t,d]) =>
+      `${MultiplyShared.escapeHTML(t)} → ${_l5FmtShort(d)}`
+    );
+    row.innerHTML = '<strong style="color:var(--text);">Last:</strong> ' + parts.join(' &nbsp;·&nbsp; ');
+  } catch(e) {
+    row.innerHTML = '';
+  }
+}
+
+async function l5MarkSelfPresent(eventTypeKey, typicalDay){
+  const targetDate = _l5LastTypicalDay(typicalDay || 7);
+  const targetLbl = _l5FmtShort(targetDate);
+
+  // Confirm
+  if (!confirm(`Mark yourself present for ${eventTypeKey} on ${targetLbl}?`)) return;
+
+  // Duplicate check
+  try {
+    const {data: existing} = await db.from('attendance')
+      .select('id, present')
+      .eq('member_id', LEADER.leaderId)
+      .eq('event_type', eventTypeKey)
+      .eq('event_date', targetDate)
+      .limit(1);
+    if (existing && existing.length) {
+      if (existing[0].present === true) {
+        toast(`Already marked present for ${targetLbl}`, 'info');
+        return;
+      }
+      // Update existing absent → present
+      const {error: uErr} = await db.from('attendance')
+        .update({present: true, logged_by: LEADER.leaderName || 'Self', logged_by_id: LEADER.leaderId})
+        .eq('id', existing[0].id);
+      if (uErr) throw uErr;
+      toast(`✓ Marked present for ${targetLbl}`, 'success');
+      _l5RefreshLastMarked();
+      return;
+    }
+  } catch(e) {
+    console.warn('Dup-check failed; proceeding with insert:', e);
+  }
+
+  // Insert new row
+  const {error} = await db.from('attendance').insert({
+    member_id:       LEADER.leaderId,
+    member_name:     LEADER.leaderName || currentLeader?.name || 'Unknown',
+    event_date:      targetDate,
+    event_type:      eventTypeKey,
+    present:         true,
+    member_lc_group: currentLeader?.lc_group || '',
+    member_zone:     currentLeader?.diagnostic_zone ?? null,
+    member_level:    currentLeader?.pipeline_level ?? null,
+    event_lc_group:  '',
+    logged_by:       LEADER.leaderName || currentLeader?.name || 'Self',
+    logged_by_id:    LEADER.leaderId,
+  });
+  if (error) {
+    toast('Error: ' + error.message, 'error');
+    return;
+  }
+  toast(`✓ Marked present for ${targetLbl}`, 'success');
+  _l5RefreshLastMarked();
 }
 
 // ═══════════════════════════════════════════════════════
