@@ -356,6 +356,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <button class="nb" onclick="showPanel('interventions',this)">Interventions</button>
     <button class="nb" onclick="showPanel('eolo',this)">EOLO</button>
     <button class="nb" onclick="showPanel('alerts',this)">Alerts</button>
+    <button class="nb" onclick="showPanel('disputes',this);loadDisputeQueue()">⚠️ Disputes <span id="navDisputeBadge" style="display:none;background:#9a2727;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="openTransfers()">🔄 Transfers <span id="navTxBadge" style="display:none;background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="showPanel('reports',this)">Reports</button>
     <button class="nb" onclick="showPanel('settings',this)">Settings</button>
@@ -485,6 +486,17 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 
 <!-- ALERTS -->
 <div id="panel-alerts" class="panel"><div class="pw"><div id="al"></div></div></div>
+
+<div id="panel-disputes" class="panel"><div class="pw">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <h2 style="margin:0;">⚠️ Disputed Attendance Review</h2>
+    <button onclick="loadDisputeQueue()" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.45rem .8rem;font-weight:700;cursor:pointer;">↻ Refresh</button>
+  </div>
+  <div style="background:#fef9ed;border:1px solid #f0d680;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;font-size:13px;line-height:1.5;color:#7a5800;">
+    Members marked themselves present and their LCL disputed the record. Resolve each by either <strong>confirming</strong> (counts as 1.0 in SVI) or <strong>rejecting</strong> (counts as 0.0). Available to leaders L3 and above.
+  </div>
+  <div id="disputeQueue"></div>
+</div></div>
 
 <!-- REPORTS -->
 <div id="panel-reports" class="panel"><div class="pw">
@@ -4840,6 +4852,137 @@ async function dismissAllNotifs(){
 // Initial load + poll every 60 seconds for fresh notifications.
 loadNotifications();
 setInterval(loadNotifications, 60000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// DISPUTED ATTENDANCE REVIEW QUEUE  (Pastor + L3+)
+// ─────────────────────────────────────────────────────────────────────
+// Lists attendance rows where LCL disputed the member's self-attest.
+// Resolver options: Confirm (1.0 weight) or Reject (0.0 weight).
+// Pastor decision is binary by design (HANDOFF spec).
+// ═══════════════════════════════════════════════════════════════════════
+
+let _disputeQueue = [];
+
+async function loadDisputeQueue(){
+  if (!LEADER || (LEADER.leaderLevel || 0) < 3) {
+    const wrap = document.getElementById('disputeQueue');
+    if (wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Disputed Attendance Review is restricted to leaders L3+.</div>';
+    return;
+  }
+  try {
+    const {data, error} = await db.from('attendance')
+      .select('id,member_id,member_name,event_date,event_type,event_name,disputed_at,dispute_reason,disputed_by,member_lc_group,nudge_count')
+      .eq('disputed', true)
+      .eq('pastor_resolved', false)
+      .order('disputed_at', {ascending: false})
+      .limit(100);
+    if (error) throw error;
+    _disputeQueue = data || [];
+    // Resolve disputed_by → name (single batch query)
+    const disputerIds = [...new Set(_disputeQueue.map(r => r.disputed_by).filter(Boolean))];
+    const disputerNameById = new Map();
+    if (disputerIds.length) {
+      const {data: ppl} = await db.from('members').select('id,name').in('id', disputerIds);
+      (ppl || []).forEach(p => disputerNameById.set(p.id, p.name));
+    }
+    _disputeQueue.forEach(r => { r._disputer_name = disputerNameById.get(r.disputed_by) || 'Unknown'; });
+
+    renderDisputeQueue();
+    updateDisputeBadge();
+  } catch(e) {
+    console.error('[dispute-queue] load failed:', e);
+    const wrap = document.getElementById('disputeQueue');
+    if (wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:#9a2727;">Error loading disputes: ' + e.message + '</div>';
+  }
+}
+
+function updateDisputeBadge(){
+  const badge = document.getElementById('navDisputeBadge');
+  if (!badge) return;
+  if (_disputeQueue.length > 0) {
+    badge.textContent = String(_disputeQueue.length);
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function _disputeFmtDate(dateStr){
+  const d = new Date(dateStr);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+function renderDisputeQueue(){
+  const wrap = document.getElementById('disputeQueue');
+  if (!wrap) return;
+  if (!_disputeQueue.length) {
+    wrap.innerHTML = '<div style="padding:3rem 1rem;text-align:center;color:var(--muted);font-size:14px;">✓ No disputes pending.</div>';
+    return;
+  }
+  wrap.innerHTML = _disputeQueue.map(r => `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem;display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;">
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.3rem;">
+          <strong style="font-size:14.5px;">${r.member_name || '—'}</strong>
+          <span style="font-size:11.5px;color:var(--muted);">${r.member_lc_group || ''}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--text);margin-bottom:.4rem;">
+          📍 ${r.event_type} · ${_disputeFmtDate(r.event_date)}
+          ${r.nudge_count ? `<span style="margin-left:.5rem;background:#fef0c7;color:#7a5800;border-radius:8px;padding:1px 6px;font-size:10.5px;">nudged ${r.nudge_count}×</span>` : ''}
+        </div>
+        <div style="font-size:11.5px;color:#9a2727;background:#fde8e8;border-left:3px solid #c14545;padding:.4rem .6rem;border-radius:4px;">
+          <strong>${r._disputer_name}</strong> disputed ${r.disputed_at ? _disputeFmtDate(r.disputed_at) : ''}: "${r.dispute_reason || '(no reason)'}"
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.4rem;min-width:140px;">
+        <button onclick="resolveDispute('${r.id}','confirmed')" 
+          style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+          ✓ Confirm (1.0)
+        </button>
+        <button onclick="resolveDispute('${r.id}','rejected')"
+          style="background:#9a2727;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+          ✕ Reject (0.0)
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function resolveDispute(attendanceId, decision){
+  const lbl = decision === 'confirmed' ? 'CONFIRM' : 'REJECT';
+  const weight = decision === 'confirmed' ? '1.0' : '0.0';
+  if (!confirm(`${lbl} this attendance? It will count as ${weight} in the member's SVI.`)) return;
+  try {
+    const updates = {
+      pastor_resolved: true,
+      pastor_resolved_by: LEADER.leaderId,
+      pastor_resolved_at: new Date().toISOString(),
+      pastor_decision: decision,
+    };
+    // If pastor confirms, also un-dispute and confirm
+    if (decision === 'confirmed') {
+      updates.disputed = false;
+      updates.confirmed_by = LEADER.leaderId;
+      updates.confirmed_at = new Date().toISOString();
+    }
+    const {error} = await db.from('attendance')
+      .update(updates)
+      .eq('id', attendanceId);
+    if (error) throw error;
+    _disputeQueue = _disputeQueue.filter(r => r.id !== attendanceId);
+    renderDisputeQueue();
+    updateDisputeBadge();
+  } catch(e) {
+    console.error('[dispute-queue] resolve failed:', e);
+    alert('Error: ' + e.message);
+  }
+}
+
+// Load badge count on dashboard boot, refresh every 5 min
+setTimeout(() => { loadDisputeQueue(); }, 1500);
+setInterval(loadDisputeQueue, 300000);
 </script>
 </body>
 </html>

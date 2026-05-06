@@ -499,6 +499,26 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <!-- ════ END L5 SELF-ATTEST CARD ════ -->
 
+  <!-- ════ PENDING CONFIRMATIONS CARD (LCL-side; visible if any pending) ════ -->
+  <div id="pendingConfirmCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
+       background:linear-gradient(135deg, #fff8e6, #fef0c7);
+       border:1px solid #f0d680; border-radius:var(--r);">
+    <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;">
+      <span style="font-size:22px;">⏳</span>
+      <div style="font-weight:700;font-size:14.5px;color:#7a5800;">
+        Pending Confirmations
+        <span id="pendingConfirmBadge" style="background:#d97706;color:#fff;border-radius:10px;padding:1px 7px;font-size:10.5px;margin-left:4px;">0</span>
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:#7a5800;margin-bottom:.7rem;line-height:1.5;">
+      Members marked themselves present. Confirm if you saw them, or dispute if not.
+    </div>
+    <div id="pendingConfirmList" style="display:flex;flex-direction:column;gap:.4rem;">
+      <!-- Rows inserted by renderPendingConfirmations() -->
+    </div>
+  </div>
+  <!-- ════ END PENDING CONFIRMATIONS CARD ════ -->
+
   <div class="section-head">
     <div class="section-title">Quick Actions</div>
   </div>
@@ -3385,6 +3405,193 @@ async function acknowledgeHeadsUp(noticeId){
 setTimeout(loadHeadsUps, 800);
 // Re-poll every 2 minutes so leaders see new notices without manual refresh
 setInterval(loadHeadsUps, 120000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// PENDING CONFIRMATIONS  (LCL-side)
+// ─────────────────────────────────────────────────────────────────────
+// Lists self-attest rows from this leader's flock that need confirm/dispute.
+// Scope: members whose discipler_id === LEADER.leaderId (direct disciples).
+// We deliberately do NOT use the full tree here — disciplers should only
+// confirm their direct disciples to keep accountability clear.
+// ═══════════════════════════════════════════════════════════════════════
+
+let _pendingConfirms = [];
+
+async function loadPendingConfirmations(){
+  if (!LEADER || !LEADER.leaderId) return;
+  try {
+    // Step 1: get my direct disciples' IDs
+    const {data: disciples, error: dErr} = await db.from('members')
+      .select('id,name,phone,whatsapp_phone,lc_group')
+      .eq('discipler_id', LEADER.leaderId);
+    if (dErr) throw dErr;
+    if (!disciples || !disciples.length) {
+      _pendingConfirms = [];
+      renderPendingConfirmations();
+      return;
+    }
+    const ids = disciples.map(d => d.id);
+    const memberById = new Map(disciples.map(d => [d.id, d]));
+
+    // Step 2: pending self-attest rows for those members
+    const {data, error} = await db.from('attendance')
+      .select('id,member_id,member_name,event_date,event_type,event_name,nudge_count,last_nudged_at,created_at')
+      .in('member_id', ids)
+      .eq('source', 'self_attest')
+      .eq('present', true)
+      .is('confirmed_by', null)
+      .eq('disputed', false)
+      .order('event_date', {ascending: false})
+      .limit(20);
+    if (error) throw error;
+
+    _pendingConfirms = (data || []).map(r => ({
+      ...r,
+      _member: memberById.get(r.member_id) || {}
+    }));
+    renderPendingConfirmations();
+  } catch(e) {
+    console.error('[pending-confirm] load failed:', e);
+    _pendingConfirms = [];
+    renderPendingConfirmations();
+  }
+}
+
+function _confirmFmtShort(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+function renderPendingConfirmations(){
+  const card = document.getElementById('pendingConfirmCard');
+  const list = document.getElementById('pendingConfirmList');
+  const badge = document.getElementById('pendingConfirmBadge');
+  if (!card || !list) return;
+
+  if (!_pendingConfirms.length) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  if (badge) badge.textContent = String(_pendingConfirms.length);
+
+  list.innerHTML = _pendingConfirms.map(r => {
+    const nudges = r.nudge_count || 0;
+    const nudgeBadge = nudges >= 2
+      ? `<span style="background:#d97706;color:#fff;border-radius:8px;padding:1px 5px;font-size:9.5px;margin-left:4px;">${nudges}× nudged</span>`
+      : '';
+    return `<div style="background:#fff;border:1px solid #f0d680;border-radius:8px;padding:.6rem .75rem;display:flex;align-items:center;gap:.6rem;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:13px;color:var(--text);">
+          ${MultiplyShared.escapeHTML(r.member_name)}${nudgeBadge}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:.15rem;">
+          ${MultiplyShared.escapeHTML(r.event_type)} · ${_confirmFmtShort(r.event_date)}
+        </div>
+      </div>
+      <button onclick="confirmAttendance('${r.id}')"
+        style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.4rem .65rem;font-size:11.5px;font-weight:700;cursor:pointer;">
+        ✓ Confirm
+      </button>
+      <button onclick="openDisputeModal('${r.id}','${MultiplyShared.escapeHTML(r.member_name)}')"
+        style="background:transparent;color:#9a2727;border:1px solid #f5b5b5;border-radius:6px;padding:.4rem .55rem;font-size:11.5px;font-weight:700;cursor:pointer;">
+        ✕ Dispute
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function confirmAttendance(attendanceId){
+  if (!confirm('Confirm this member was actually present?')) return;
+  try {
+    const {error} = await db.from('attendance')
+      .update({
+        confirmed_by: LEADER.leaderId,
+        confirmed_at: new Date().toISOString(),
+      })
+      .eq('id', attendanceId);
+    if (error) throw error;
+    toast('✓ Confirmed', 'success');
+    _pendingConfirms = _pendingConfirms.filter(r => r.id !== attendanceId);
+    renderPendingConfirmations();
+  } catch(e) {
+    console.error('[pending-confirm] confirm failed:', e);
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+function openDisputeModal(attendanceId, memberName){
+  let modal = document.getElementById('disputeModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'disputeModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:9999;padding:1rem;';
+    modal.innerHTML = `<div id="disputeModalBody" style="background:var(--bg);max-width:420px;width:100%;border-radius:12px;padding:1.25rem;"></div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  document.getElementById('disputeModalBody').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+      <h3 style="margin:0;font-size:15px;">Dispute attendance</h3>
+      <button onclick="document.getElementById('disputeModal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">×</button>
+    </div>
+    <div style="font-size:12.5px;color:var(--text);margin-bottom:.8rem;line-height:1.5;">
+      Disputing <strong>${memberName}</strong>'s self-attest. This sends it to Pastor for review.
+      Please give a brief reason:
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.4rem;margin-bottom:1rem;">
+      <button onclick="submitDispute('${attendanceId}','Wasn\\'t actually there')"
+        style="text-align:left;padding:.55rem .7rem;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12.5px;">
+        🚫 Wasn't actually there
+      </button>
+      <button onclick="submitDispute('${attendanceId}','Came to a different service/date')"
+        style="text-align:left;padding:.55rem .7rem;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12.5px;">
+        📅 Came to a different service/date
+      </button>
+      <button onclick="submitDispute('${attendanceId}','Came too late to count')"
+        style="text-align:left;padding:.55rem .7rem;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12.5px;">
+        ⏰ Came too late to count
+      </button>
+      <div style="display:flex;gap:.4rem;align-items:stretch;">
+        <input id="disputeCustomReason" type="text" placeholder="Other reason..." 
+          style="flex:1;padding:.55rem .7rem;background:#fff;border:1px solid var(--border);border-radius:6px;font-size:12.5px;">
+        <button onclick="submitDispute('${attendanceId}', document.getElementById('disputeCustomReason').value)"
+          style="padding:.55rem .85rem;background:#9a2727;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:700;">
+          Submit
+        </button>
+      </div>
+    </div>
+  `;
+  document.getElementById('disputeModal').style.display = 'flex';
+}
+
+async function submitDispute(attendanceId, reason){
+  if (!reason || !reason.trim()) { toast('Please give a reason', 'error'); return; }
+  try {
+    const {error} = await db.from('attendance')
+      .update({
+        disputed: true,
+        dispute_reason: reason.trim(),
+        disputed_by: LEADER.leaderId,
+        disputed_at: new Date().toISOString(),
+      })
+      .eq('id', attendanceId);
+    if (error) throw error;
+    document.getElementById('disputeModal').style.display = 'none';
+    toast('✕ Dispute logged. Pastor will review.', 'success');
+    _pendingConfirms = _pendingConfirms.filter(r => r.id !== attendanceId);
+    renderPendingConfirmations();
+  } catch(e) {
+    console.error('[pending-confirm] dispute failed:', e);
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// Initial load + poll every 90s
+setTimeout(loadPendingConfirmations, 1000);
+setInterval(loadPendingConfirmations, 90000);
 </script>
 </body>
 </html>
