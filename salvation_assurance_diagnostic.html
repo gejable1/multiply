@@ -2298,22 +2298,34 @@ async function submitToDashboard() {
 
   try {
     // Save diagnostic result
+    console.log('[salvation-save] inserting diagnostic_results:', diagRecord);
     const { data: diagData, error: diagErr } = await getDB()
       .from('diagnostic_results').insert(diagRecord).select().single();
-    if (diagErr) throw diagErr;
+    if (diagErr) {
+      console.error('[salvation-save] diagnostic_results INSERT failed:', diagErr);
+      throw diagErr;
+    }
+    console.log('[salvation-save] diagnostic_results inserted OK:', diagData?.id);
 
     // Update member record if linked
     if (memberId) {
-      const { error: memErr } = await getDB().from('members').update({
+      const memberPatch = {
         diagnostic_score: scores.pct,
         diagnostic_zone: scores.zone,
         diagnostic_date: new Date().toISOString().split('T')[0],
-        diag_zone: scores.zone,
         intervention_track: diagRecord.intervention_assigned,
         intervention_status: scores.zone >= 2 ? 'pending' : null,
         updated_at: new Date().toISOString()
-      }).eq('id', memberId);
-      if (memErr) console.warn('Member update warning:', memErr.message);
+      };
+      console.log('[salvation-save] updating members:', memberId, memberPatch);
+      const { error: memErr } = await getDB().from('members').update(memberPatch).eq('id', memberId);
+      if (memErr) {
+        console.error('[salvation-save] members UPDATE failed:', memErr);
+        // Surface to UI but don't fail the whole save (the diagnostic_results
+        // insert already succeeded, so we have the record).
+      } else {
+        console.log('[salvation-save] members updated OK');
+      }
     }
 
     // Success
