@@ -342,7 +342,7 @@ async function loadAttendance(){
 
   try{
     const {data, error} = await db.from('attendance')
-      .select('id,member_id,member_name,present,event_date,event_type,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at')
+      .select('id,member_id,member_name,present,event_date,event_type,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,source,confirmed_by,confirmed_at,disputed,dispute_reason,pastor_resolved,pastor_decision,nudge_count')
       .gte('event_date', from)
       .lte('event_date', to)
       .order('event_date', {ascending:false})
@@ -427,6 +427,7 @@ function renderTable(){
           <th class="sortable" onclick="setSort('event_lc_group')">LC Group${arrow('event_lc_group')}</th>
           <th class="sortable" onclick="setSort('member_name')">Member${arrow('member_name')}</th>
           <th class="sortable" onclick="setSort('present')">Status${arrow('present')}</th>
+          <th class="sortable" onclick="setSort('source')">Source${arrow('source')}</th>
           <th class="sortable" onclick="setSort('logged_by')">Logged By${arrow('logged_by')}</th>
           <th>Saved</th>
         </tr>
@@ -440,6 +441,27 @@ function renderTable(){
           const presBadge = r.present ? 'present' : 'absent';
           const presLabel = r.present ? '✓ Present' : '✗ Absent';
           const created = r.created_at ? new Date(r.created_at).toLocaleString('en-PH', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+          // Source + state badges (added for self-attest visibility)
+          const src = r.source || 'lcl_logged';
+          let srcIcon, srcLbl, srcColor;
+          if (src === 'self_attest')      { srcIcon='📍'; srcLbl='self'; srcColor='#7a5800'; }
+          else if (src === 'pastor_admin'){ srcIcon='🛠'; srcLbl='admin'; srcColor='#5a3a8a'; }
+          else if (src === 'stand_in')    { srcIcon='🤝'; srcLbl='stand-in'; srcColor='#1f6b3a'; }
+          else if (src === 'backfill')    { srcIcon='⏪'; srcLbl='backfill'; srcColor='#666'; }
+          else                            { srcIcon='👤'; srcLbl='LCL'; srcColor='#1a4d80'; }
+          let stateBadge = '';
+          if (r.disputed && !r.pastor_resolved) {
+            stateBadge = ` <span style="background:#fde8e8;color:#9a2727;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;" title="${escapeHtml(r.dispute_reason||'')}">⚠️ disputed</span>`;
+          } else if (r.pastor_resolved) {
+            const dec = r.pastor_decision === 'confirmed' ? '✓ pastor-confirmed' : '✕ pastor-rejected';
+            const decColor = r.pastor_decision === 'confirmed' ? '#1f6b3a' : '#9a2727';
+            stateBadge = ` <span style="background:${decColor}20;color:${decColor};padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;">${dec}</span>`;
+          } else if (src === 'self_attest' && !r.confirmed_by) {
+            const nudge = r.nudge_count ? ` (${r.nudge_count}×)` : '';
+            stateBadge = ` <span style="background:#fff7e0;color:#8a6a00;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;">🟡 pending${nudge}</span>`;
+          } else if (src === 'self_attest' && r.confirmed_by) {
+            stateBadge = ` <span style="background:#e7f5ec;color:#1f6b3a;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;">🟢 confirmed</span>`;
+          }
           return `
             <tr class="${isSel?'selected':''}">
               <td class="cb-cell"><input type="checkbox" ${isSel?'checked':''} onchange="toggleRow('${r.id}', this.checked)"></td>
@@ -447,7 +469,8 @@ function renderTable(){
               <td><span class="badge ${typeBadge}">${escapeHtml(r.event_type||'')}</span></td>
               <td>${escapeHtml(lc)}</td>
               <td>${escapeHtml(r.member_name||'—')}</td>
-              <td><span class="badge ${presBadge}">${presLabel}</span></td>
+              <td><span class="badge ${presBadge}">${presLabel}</span>${stateBadge}</td>
+              <td><span style="color:${srcColor};font-weight:700;font-size:11px;">${srcIcon} ${srcLbl}</span></td>
               <td class="muted">${escapeHtml(r.logged_by||'—')}</td>
               <td class="muted mono">${escapeHtml(created)}</td>
             </tr>
@@ -535,9 +558,26 @@ async function deleteSelected(){
   rows.forEach(r => { byType[r.event_type||'?'] = (byType[r.event_type||'?']||0) + 1; });
   const breakdown = Object.entries(byType).map(([t,c]) => `  • ${c} × ${t}`).join('\n');
 
+  // Self-attest safety check: count disputed + pending rows
+  const disputedRows = rows.filter(r => r.disputed && !r.pastor_resolved);
+  const pendingRows = rows.filter(r => r.source === 'self_attest' && !r.confirmed_by && !r.disputed);
+  const resolvedRows = rows.filter(r => r.pastor_resolved);
+
+  let safetyWarning = '';
+  if (disputedRows.length || pendingRows.length || resolvedRows.length) {
+    const parts = [];
+    if (disputedRows.length) parts.push(`  ⚠️ ${disputedRows.length} disputed (awaiting Pastor review)`);
+    if (pendingRows.length)  parts.push(`  🟡 ${pendingRows.length} pending self-attest (awaiting LCL confirm)`);
+    if (resolvedRows.length) parts.push(`  ✓ ${resolvedRows.length} already pastor-resolved`);
+    safetyWarning = '\n\n🚨 SELF-ATTEST FLAGS:\n' + parts.join('\n') +
+      '\n\nDeleting disputed rows removes them from the Pastor review queue WITHOUT resolution. ' +
+      'Deleting pending rows breaks members\' status badges. ' +
+      'Consider resolving via the Disputes panel first.\n';
+  }
+
   const ok = confirm(
     `⚠️ DELETE ${n} attendance record${n===1?'':'s'}?\n\n` +
-    breakdown + '\n\n' +
+    breakdown + safetyWarning + '\n\n' +
     'This permanently removes these rows from the attendance table. ' +
     'Reports built from this data will recalculate immediately.\n\n' +
     'This action CANNOT be undone from inside the app.\n' +
