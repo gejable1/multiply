@@ -2043,13 +2043,17 @@ function calcScore() {
   var banner = document.getElementById('incompleteBanner');
   var detail = document.getElementById('incompleteDetail');
   var sb     = document.getElementById('submitBtn');
+  var sm     = document.getElementById('submitMsg');
+  // Don't re-show submit button if a successful save was already displayed —
+  // the user is just viewing the score panel again, not re-saving.
+  var alreadySaved = sm && sm.style.display === 'block' && sm.innerHTML.indexOf('Saved successfully') >= 0;
   if (!cs.isComplete) {
     if (banner) { banner.style.display = 'block'; }
     if (detail) { detail.textContent = (cs.total - cs.done) + ' of ' + cs.total + ' questions still unanswered. Scores are based on ' + cs.done + ' answered items and may not be accurate.'; }
     if (sb) sb.style.display = 'none';
   } else {
     if (banner) banner.style.display = 'none';
-    if (sb) sb.style.display = 'block';
+    if (sb && !alreadySaved) sb.style.display = 'block';
   }
 
   var panel = document.getElementById('scorePanel');
@@ -2330,6 +2334,8 @@ async function submitToDashboard() {
 
     // Success
     btn.style.display = 'none';
+    btn.disabled = false;
+    btn.innerHTML = '💾 <span class="tl-text">I-save ang Resulta sa Dashboard</span><span class="en-text">Save Results to Dashboard</span>';
     msg.style.display = 'block';
     const zoneLabels = {1:'Zone 1 — Clear Assurance ✅',2:'Zone 2 — Uncertain 🟡',3:'Zone 3 — Formation Gap 🟠',4:'Zone 4 — Unresolved 🔴'};
     msg.innerHTML = `✅ Saved successfully!<br>
