@@ -4859,7 +4859,29 @@ async function dismissRetractionNotice(annId){
 function _annAudienceMatchesMember(filter, member){
   if (!filter) return false;
   if (filter.all === true) return true;
-  if (filter.lc_groups?.includes(member.lc_group)) return true;
+
+  // ── LC group match — must mirror MD's _annAudienceMatchesMemberMD logic ──
+  // The audience picker stores TWO kinds of LC group ids in filter.lc_groups:
+  //   1. Real names like "VALSPIRE"           → match against member.lc_group
+  //   2. Virtual keys like "lcl:<discipler_id>" → for members with no lc_group
+  //      who are bucketed under a Life-Community-Leader. These appear in the
+  //      picker as "Unassigned (LCL: <name>)".
+  // The previous implementation only checked #1, so any member with a null
+  // lc_group never received announcements targeted to their virtual group.
+  // Both sides are also trimmed to defend against trailing-whitespace mismatches.
+  if (filter.lc_groups?.length) {
+    const myGroup = (member.lc_group || '').trim();
+    if (myGroup) {
+      const wanted = filter.lc_groups.map(g => (typeof g === 'string' ? g.trim() : g));
+      if (wanted.includes(myGroup)) return true;
+    }
+    // Virtual "Unassigned (LCL: ...)" bucket for members without a real LC group.
+    if (!myGroup && member.discipler_id) {
+      const virtKey = 'lcl:' + member.discipler_id;
+      if (filter.lc_groups.includes(virtKey)) return true;
+    }
+  }
+
   if (filter.levels?.includes(member.pipeline_level)) return true;
   if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
   if (filter.member_ids?.includes(member.id)) return true;
@@ -5373,6 +5395,134 @@ function _dismissInstallBanner(appKey){
   if (b) b.remove();
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// IN-APP BROWSER DETECTION  (Messenger, Facebook, Instagram, TikTok, LINE…)
+// ─────────────────────────────────────────────────────────────────────
+// Different problem from the install banner. When members tap a MULTIPLY
+// link from inside Messenger/Facebook/etc, the OS opens the link in
+// THAT app's in-app browser — never the installed PWA, never even
+// regular Chrome. The page works, but features like the home-screen
+// icon, offline cache, and Add-to-Homescreen are inaccessible.
+//
+// We detect this and surface a persistent banner with a one-tap action
+// to open in the proper browser. Banner is dismissible per-session
+// (sessionStorage, not localStorage) so it reappears on the next link
+// click — that's intentional. If they're dismissing it every time, the
+// problem is real and they should see it again.
+// ═══════════════════════════════════════════════════════════════════════
+
+function _detectInAppBrowser(){
+  const ua = navigator.userAgent || '';
+  // Order: most common first
+  if (/FBAN|FBAV|FB_IAB|FBIOS|Messenger/i.test(ua))  return 'Messenger / Facebook';
+  if (/Instagram/i.test(ua))                          return 'Instagram';
+  if (/Line\//i.test(ua))                             return 'LINE';
+  if (/BytedanceWebview|TikTok/i.test(ua))            return 'TikTok';
+  if (/Twitter/i.test(ua))                            return 'Twitter / X';
+  // WeChat, WhatsApp in-app, Snapchat — less common in PH context but covered
+  if (/MicroMessenger/i.test(ua))                     return 'WeChat';
+  if (/WhatsApp/i.test(ua))                           return 'WhatsApp';
+  if (/Snapchat/i.test(ua))                           return 'Snapchat';
+  return null;
+}
+
+function _maybeShowInAppBrowserBanner(){
+  // Skip entirely if running as installed PWA — they're already in the right place
+  if (_isStandalonePwa()) return;
+  const which = _detectInAppBrowser();
+  if (!which) return;
+  // Per-session dismissal (sessionStorage so it returns on next link tap)
+  if (sessionStorage.getItem('mmt_iab_banner_dismissed') === 'true') return;
+
+  const banner = document.createElement('div');
+  banner.id = 'iabBanner';
+  banner.style.cssText = 'background:linear-gradient(135deg,#fdecea,#fad9d4);border:1px solid #c44a3e;border-radius:10px;padding:.8rem 1rem;margin:0 0 1rem;display:flex;align-items:flex-start;gap:.7rem;';
+  banner.innerHTML = `
+    <span style="font-size:22px;flex-shrink:0;line-height:1.1;">⚠️</span>
+    <div style="flex:1;min-width:0;font-size:12.5px;color:#7a2020;line-height:1.45;">
+      <strong>Opened from ${which}.</strong>
+      <span class="en-text"> For the best experience, open MULTIPLY from your home screen icon or in your browser.</span>
+      <span class="tl-text"> Para sa pinakamagandang karanasan, buksan ang MULTIPLY mula sa home screen icon o sa browser.</span>
+      <div style="margin-top:.55rem;display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="_iabCopyLink(this)"
+          style="background:#c44a3e;color:#fff;border:none;border-radius:6px;padding:.4rem .75rem;font-weight:600;font-size:11.5px;cursor:pointer;font-family:inherit;">
+          📋 <span class="en-text">Copy link</span><span class="tl-text">Kopyahin link</span>
+        </button>
+        <button onclick="_iabHowTo()"
+          style="background:transparent;color:#7a2020;border:1px solid #c44a3e;border-radius:6px;padding:.4rem .75rem;font-weight:600;font-size:11.5px;cursor:pointer;font-family:inherit;">
+          <span class="en-text">How?</span><span class="tl-text">Paano?</span>
+        </button>
+      </div>
+    </div>
+    <button onclick="_dismissIabBanner()"
+      style="background:transparent;border:none;font-size:18px;cursor:pointer;color:#7a2020;line-height:1;flex-shrink:0;padding:0 .2rem;">×</button>
+  `;
+  let target = document.querySelector('#screenHome .content, #screenHome');
+  if (!target) target = document.querySelector('.content');
+  if (!target) target = document.body;
+  if (target) target.insertBefore(banner, target.firstChild);
+}
+
+function _dismissIabBanner(){
+  sessionStorage.setItem('mmt_iab_banner_dismissed', 'true');
+  const b = document.getElementById('iabBanner');
+  if (b) b.remove();
+}
+
+async function _iabCopyLink(btnEl){
+  const url = window.location.href;
+  try {
+    await navigator.clipboard.writeText(url);
+    if (btnEl){
+      const orig = btnEl.innerHTML;
+      btnEl.innerHTML = '✓ <span class="en-text">Copied!</span><span class="tl-text">Nakopya!</span>';
+      setTimeout(() => { btnEl.innerHTML = orig; }, 2000);
+    }
+    if (typeof showToast === 'function') showToast('Link copied — paste it in Chrome or Safari.');
+  } catch(e){
+    // Fallback: select-and-prompt for older browsers
+    prompt('Copy this link and paste it in your browser:', url);
+  }
+}
+
+function _iabHowTo(){
+  // Lightweight how-to modal (one screen, OS-aware)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+  const stepsEn = isIOS
+    ? ['Tap the ⋯ menu (three dots) in this in-app browser', 'Choose "Open in Safari" or "Open in Browser"', 'Once in Safari, tap Share → "Add to Home Screen" to install MULTIPLY']
+    : ['Tap the ⋮ menu (three dots) at the top of this in-app browser', 'Choose "Open in Chrome" or "Open in Browser"', 'Once in Chrome, tap menu → "Install app" or "Add to Home screen"'];
+  const stepsTl = isIOS
+    ? ['I-tap ang ⋯ menu (tatlong tuldok) sa in-app browser na ito', 'Piliin ang "Open in Safari" o "Open in Browser"', 'Sa Safari, i-tap ang Share → "Add to Home Screen" para i-install ang MULTIPLY']
+    : ['I-tap ang ⋮ menu (tatlong tuldok) sa itaas ng in-app browser na ito', 'Piliin ang "Open in Chrome" o "Open in Browser"', 'Sa Chrome, i-tap ang menu → "Install app" o "Add to Home screen"'];
+
+  const modal = document.createElement('div');
+  modal.id = 'iabHowModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+  const stepsHtmlEn = stepsEn.map((s,i) => `<li style="margin-bottom:.55rem;line-height:1.5"><strong>${i+1}.</strong> ${s}</li>`).join('');
+  const stepsHtmlTl = stepsTl.map((s,i) => `<li style="margin-bottom:.55rem;line-height:1.5"><strong>${i+1}.</strong> ${s}</li>`).join('');
+
+  modal.innerHTML = `
+    <div style="background:var(--paper);border-radius:14px;padding:1.4rem 1.3rem 1.2rem;max-width:380px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.3);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:var(--ink);margin-bottom:.3rem;">
+        <span class="en-text">Open in your browser</span><span class="tl-text">Buksan sa iyong browser</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:1rem;">
+        <span class="en-text">${isIOS ? 'iOS / Safari' : 'Android / Chrome'}</span><span class="tl-text">${isIOS ? 'iOS / Safari' : 'Android / Chrome'}</span>
+      </div>
+      <ol class="en-text" style="font-size:13px;color:var(--ink-soft);padding-left:.5rem;list-style:none;">${stepsHtmlEn}</ol>
+      <ol class="tl-text" style="font-size:13px;color:var(--ink-soft);padding-left:.5rem;list-style:none;">${stepsHtmlTl}</ol>
+      <button onclick="document.getElementById('iabHowModal').remove()"
+        style="margin-top:1rem;width:100%;background:var(--forest);color:#fef9ec;border:none;border-radius:9px;padding:.7rem;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;">
+        <span class="en-text">Got it</span><span class="tl-text">Sige</span>
+      </button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
 // ─── Modal with platform-specific instructions ───
 function openInstallGuide(){
   let modal = document.getElementById('installGuideModal');
@@ -5481,8 +5631,13 @@ function _installStepsHtmlFor(platform){
 }
 
 
-// Show install banner on first visit (auto-skips if already installed)
-setTimeout(() => { try { _maybeShowInstallBanner('mmt'); } catch(e){} }, 1500);
+// Show install banner on first visit (auto-skips if already installed).
+// In-app browser banner runs first because it's a more specific problem
+// (the user is in the WRONG environment, not just lacking install).
+setTimeout(() => {
+  try { _maybeShowInAppBrowserBanner(); } catch(e){}
+  try { _maybeShowInstallBanner('mmt'); } catch(e){}
+}, 1500);
 </script>
 </body>
 </html>

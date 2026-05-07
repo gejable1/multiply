@@ -5668,11 +5668,16 @@ async function openAnnAckDetails(annId){
 function _annAudienceMatchesMemberMD(filter, member){
   if (!filter) return false;
   if (filter.all === true) return true;
-  // Real LC group match
+  // Real LC group match (whitespace-tolerant — picker stores trimmed names but
+  // raw member.lc_group may have stray spaces from imports or manual edits).
   if (filter.lc_groups?.length) {
-    if (member.lc_group && filter.lc_groups.includes(member.lc_group)) return true;
+    const myGroup = (member.lc_group || '').trim();
+    if (myGroup) {
+      const wanted = filter.lc_groups.map(g => (typeof g === 'string' ? g.trim() : g));
+      if (wanted.includes(myGroup)) return true;
+    }
     // Virtual "Unassigned (LCL: ...)" — id format "lcl:<discipler_id>"
-    if (!member.lc_group && member.discipler_id) {
+    if (!myGroup && member.discipler_id) {
       const virtKey = 'lcl:' + member.discipler_id;
       if (filter.lc_groups.includes(virtKey)) return true;
     }
