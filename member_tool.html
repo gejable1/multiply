@@ -1406,6 +1406,12 @@ body.lang-tl .tl-text{display:inline;}
           </div>
         </div>
         <div id="attestPickerRow" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;"></div>
+        <button onclick="openAttestHistory()" 
+          style="display:flex;align-items:center;gap:.4rem;margin:.3rem auto 0;padding:.4rem .8rem;background:transparent;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:11.5px;cursor:pointer;">
+          <span>📊</span>
+          <span class="en-text">My attendance record</span>
+          <span class="tl-text">Aking attendance record</span>
+        </button>
       </div>
 
       <!-- Heads-up to leader button -->
@@ -4136,6 +4142,284 @@ async function manualRenudge(attendanceId, eventTypeKey, eventDate){
   await renderAttestCard();
   showToast('🔔 Nudge sent', false);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MY ATTENDANCE RECORD  (modal — opened from "📊 My attendance record" pill)
+// ─────────────────────────────────────────────────────────────────────
+// Personal ledger for this member only. Three time-range tabs:
+//   • This Month
+//   • Last 90 Days  (matches SVI lookback)
+//   • All-Time
+//
+// Visualization:
+//   • Hero count: "You showed up X times"
+//   • Per-service dot-bars (●●●●○ pattern)
+//   • Streak callout (🔥 N weeks straight at <event>)
+//   • Recent dates list with status emoji
+//
+// Tone is celebratory, never judgmental — counts only, no "% expected".
+// All sources (LCL-logged, self-attest, pastor-admin) treated equally.
+// ═══════════════════════════════════════════════════════════════════════
+
+let _attestHistoryRange = '30';   // '30' | '90' | 'all'
+let _attestHistoryRows = [];
+
+async function openAttestHistory(){
+  // Build modal shell once
+  let modal = document.getElementById('attestHistoryModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'attestHistoryModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = `<div id="attestHistoryBody" style="background:var(--bg);max-width:480px;width:100%;border-radius:16px;padding:1.25rem;margin-top:2rem;margin-bottom:2rem;"></div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  await _renderAttestHistory();
+}
+
+function _setAttestHistoryRange(r){
+  _attestHistoryRange = r;
+  _renderAttestHistory();
+}
+
+async function _renderAttestHistory(){
+  const body = document.getElementById('attestHistoryBody');
+  if (!body) return;
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+
+  // Loading state
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;font-size:16px;">📊 ${lang==='tl'?'Aking Attendance':'My Attendance'}</h3>
+      <button onclick="document.getElementById('attestHistoryModal').style.display='none'"
+        style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
+    </div>
+    <div style="text-align:center;padding:2rem;color:var(--muted);">${lang==='tl'?'Naglo-load...':'Loading...'}</div>
+  `;
+
+  // Compute date range
+  let cutoffStr = null;
+  let rangeLabel;
+  if (_attestHistoryRange === '30') {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    cutoffStr = d.toISOString().slice(0,10);
+    rangeLabel = lang==='tl' ? 'ngayong buwan' : 'this month';
+  } else if (_attestHistoryRange === '90') {
+    const d = new Date(); d.setDate(d.getDate() - 90);
+    cutoffStr = d.toISOString().slice(0,10);
+    rangeLabel = lang==='tl' ? 'sa nakaraang 90 araw' : 'in the last 90 days';
+  } else {
+    rangeLabel = lang==='tl' ? 'sa kabuuan' : 'all-time';
+  }
+
+  // Fetch attendance rows
+  try {
+    let q = db.from('attendance')
+      .select('id,event_date,event_type,source,confirmed_by,disputed,pastor_resolved,pastor_decision')
+      .eq('member_id', MEMBER.memberId)
+      .eq('present', true)
+      .order('event_date', {ascending: false})
+      .limit(500);
+    if (cutoffStr) q = q.gte('event_date', cutoffStr);
+    const {data, error} = await q;
+    if (error) throw error;
+    _attestHistoryRows = data || [];
+  } catch(e) {
+    console.error('[attest-history] load failed:', e);
+    body.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h3 style="margin:0;font-size:16px;">📊 ${lang==='tl'?'Aking Attendance':'My Attendance'}</h3>
+        <button onclick="document.getElementById('attestHistoryModal').style.display='none'"
+          style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
+      </div>
+      <div style="text-align:center;padding:2rem;color:#9a2727;">Could not load: ${MultiplyShared.escapeHTML(e.message)}</div>
+    `;
+    return;
+  }
+
+  // Filter out disputed/rejected for display purposes (member shouldn't claim those visibly)
+  const validRows = _attestHistoryRows.filter(r => {
+    if (r.pastor_resolved && r.pastor_decision === 'rejected') return false;
+    if (r.disputed && !r.pastor_resolved) return false;  // hide while pending review
+    return true;
+  });
+
+  const totalCount = validRows.length;
+
+  // Per-service breakdown
+  const byType = {};
+  validRows.forEach(r => {
+    if (!byType[r.event_type]) byType[r.event_type] = [];
+    byType[r.event_type].push(r);
+  });
+
+  // Compute streak per service (consecutive weeks with at least 1 attendance)
+  const streaks = {};
+  Object.keys(byType).forEach(t => {
+    streaks[t] = _computeWeeklyStreak(byType[t].map(r => r.event_date));
+  });
+  // Best streak (for celebration)
+  let bestStreak = null;
+  Object.entries(streaks).forEach(([t, s]) => {
+    if (s >= 2 && (!bestStreak || s > bestStreak.weeks)) bestStreak = {event: t, weeks: s};
+  });
+
+  // ─── Render ───
+  const tabs = [
+    {key: '30', label: lang==='tl'?'Buwan':'Month'},
+    {key: '90', label: lang==='tl'?'90 araw':'90 Days'},
+    {key: 'all', label: lang==='tl'?'Lahat':'All-Time'},
+  ];
+  const tabsHtml = tabs.map(t => {
+    const active = _attestHistoryRange === t.key;
+    return `<button onclick="_setAttestHistoryRange('${t.key}')"
+      style="flex:1;padding:.55rem .5rem;background:${active?'var(--gold)':'transparent'};
+             color:${active?'#fff':'var(--text)'};
+             border:1px solid ${active?'var(--gold)':'var(--border)'};border-radius:999px;
+             font-weight:${active?'700':'500'};font-size:12px;cursor:pointer;">
+      ${t.label}
+    </button>`;
+  }).join('');
+
+  // Hero card
+  const heroTxt = totalCount === 0
+    ? (lang==='tl' ? `Wala pang attendance ${rangeLabel}.` : `No attendance ${rangeLabel} yet.`)
+    : (lang==='tl'
+        ? `Pumunta ka ng <strong>${totalCount}</strong> beses ${rangeLabel}.`
+        : `You showed up <strong>${totalCount}</strong> times ${rangeLabel}.`);
+
+  // Per-service rows
+  const eventTypes = Object.keys(byType).sort((a,b) => byType[b].length - byType[a].length);
+  const serviceRowsHtml = eventTypes.length === 0
+    ? ''
+    : eventTypes.map(t => {
+        const count = byType[t].length;
+        const dots = _renderDotBar(count);
+        return `<div style="display:flex;align-items:center;gap:.7rem;padding:.5rem .15rem;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:0;font-size:12.5px;color:var(--text);font-weight:600;">${MultiplyShared.escapeHTML(t)}</div>
+          <div style="font-family:monospace;letter-spacing:1px;font-size:14px;color:var(--gold);">${dots}</div>
+          <div style="min-width:24px;text-align:right;font-weight:700;font-size:13px;color:var(--text);">${count}</div>
+        </div>`;
+      }).join('');
+
+  // Streak callout
+  const streakHtml = bestStreak
+    ? `<div style="background:linear-gradient(135deg,#fff3d6,#ffe9b8);border:1px solid #f0c854;border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.6rem;">
+        <span style="font-size:22px;">🔥</span>
+        <div style="font-size:12.5px;color:#7a5800;line-height:1.4;">
+          ${lang==='tl'
+            ? `<strong>${bestStreak.weeks} linggong sunud-sunod</strong> ka sa <strong>${MultiplyShared.escapeHTML(bestStreak.event)}</strong>!`
+            : `<strong>${bestStreak.weeks} weeks straight</strong> at <strong>${MultiplyShared.escapeHTML(bestStreak.event)}</strong>!`}
+        </div>
+      </div>`
+    : '';
+
+  // Recent dates list (top 10)
+  const recentHtml = validRows.slice(0, 10).map(r => {
+    const lbl = _attestFmtShort(r.event_date);
+    let icon = '✓';
+    if (r.pastor_resolved && r.pastor_decision === 'confirmed') icon = '✓';
+    else if (r.source === 'self_attest' && !r.confirmed_by) icon = '🟡';
+    else if (r.source === 'self_attest' && r.confirmed_by) icon = '🟢';
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .15rem;font-size:12px;color:var(--text);border-bottom:1px solid var(--border);">
+      <span style="width:18px;text-align:center;">${icon}</span>
+      <span style="flex:1;min-width:0;">${MultiplyShared.escapeHTML(r.event_type)}</span>
+      <span style="color:var(--muted);font-size:11px;">${lbl}</span>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;font-size:16px;">📊 ${lang==='tl'?'Aking Attendance':'My Attendance'}</h3>
+      <button onclick="document.getElementById('attestHistoryModal').style.display='none'"
+        style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
+    </div>
+
+    <div style="display:flex;gap:.4rem;margin-bottom:1.1rem;">${tabsHtml}</div>
+
+    <div style="background:linear-gradient(135deg,#e7f5ec,#d4edd9);border:1px solid #b6dac3;border-radius:12px;padding:1rem 1.1rem;text-align:center;margin-bottom:1rem;">
+      <div style="font-size:32px;margin-bottom:.2rem;">🌟</div>
+      <div style="font-size:14px;color:#1f6b3a;line-height:1.5;">${heroTxt}</div>
+    </div>
+
+    ${streakHtml}
+
+    ${eventTypes.length > 0 ? `
+      <div style="margin-bottom:1.2rem;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:.4rem;">
+          ${lang==='tl'?'Per service':'Per service'}
+        </div>
+        <div>${serviceRowsHtml}</div>
+      </div>
+    ` : ''}
+
+    ${validRows.length > 0 ? `
+      <div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:.4rem;">
+          ${lang==='tl'?'Mga huling petsa':'Recent dates'}
+        </div>
+        <div>${recentHtml}</div>
+        ${validRows.length > 10 ? `<div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:.6rem;">${lang==='tl'?'Ipinapakita ang 10 lang sa':'Showing 10 of'} ${validRows.length}</div>` : ''}
+      </div>
+    ` : ''}
+  `;
+}
+
+// Build a 10-dot bar (filled vs hollow), capped at 10 with "+" overflow indicator
+function _renderDotBar(count){
+  const max = 10;
+  const filled = Math.min(count, max);
+  const empty = max - filled;
+  const overflow = count > max ? '+' : '';
+  return '●'.repeat(filled) + '○'.repeat(empty) + overflow;
+}
+
+// Compute longest current weekly streak (consecutive ISO weeks with ≥1 entry)
+// Walks backward from the most recent entry; stops when a week is missing.
+function _computeWeeklyStreak(dateStrs){
+  if (!dateStrs || !dateStrs.length) return 0;
+  const weeks = new Set();
+  dateStrs.forEach(ds => {
+    const d = new Date(ds + 'T00:00:00');
+    // Get ISO week number (year-week)
+    const onejan = new Date(d.getFullYear(), 0, 1);
+    const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+    weeks.add(`${d.getFullYear()}-${String(week).padStart(2,'0')}`);
+  });
+  // Walk back from current week
+  const today = new Date();
+  const onejan = new Date(today.getFullYear(), 0, 1);
+  let curWeek = Math.ceil((((today - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+  let curYear = today.getFullYear();
+  let streak = 0;
+  while (true) {
+    const key = `${curYear}-${String(curWeek).padStart(2,'0')}`;
+    if (weeks.has(key)) {
+      streak++;
+      curWeek--;
+      if (curWeek < 1) { curYear--; curWeek = 52; }
+    } else if (streak === 0 && key === `${today.getFullYear()}-${String(Math.ceil((((today - onejan) / 86400000) + onejan.getDay() + 1) / 7)).padStart(2,'0')}`) {
+      // Allow current week to be empty if today hasn't reached the typical service day yet
+      curWeek--;
+      if (curWeek < 1) { curYear--; curWeek = 52; }
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+// Re-render on language toggle (if modal open)
+const _origSetLang3 = setLang;
+setLang = function(lang){
+  _origSetLang3(lang);
+  try {
+    const m = document.getElementById('attestHistoryModal');
+    if (m && m.style.display !== 'none') _renderAttestHistory();
+  } catch(e) {}
+};
 
 // Hook into renderHome chain
 const _origRenderHome2 = renderHome;
