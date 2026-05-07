@@ -361,6 +361,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <button class="nb" onclick="showPanel('alerts',this)">Alerts</button>
     <button class="nb" onclick="showPanel('disputes',this);loadDisputeQueue()">⚠️ Disputes <span id="navDisputeBadge" style="display:none;background:#9a2727;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="showPanel('announcements',this);loadAnnouncementQueue()">📣 Announcements <span id="navAnnBadge" style="display:none;background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
+    <button class="nb" onclick="showPanel('aiInsights',this);loadAiInsights()">🤖 AI Insights</button>
     <button class="nb" onclick="openTransfers()">🔄 Transfers <span id="navTxBadge" style="display:none;background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="showPanel('reports',this)">Reports</button>
     <button class="nb" onclick="showPanel('settings',this)">Settings</button>
@@ -515,6 +516,19 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </div>
   <div style="display:flex;gap:.4rem;margin-bottom:1rem;" id="annTabsBar"></div>
   <div id="announcementQueue"></div>
+</div></div>
+
+<!-- AI INSIGHTS -->
+<div id="panel-aiInsights" class="panel"><div class="pw">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <h2 style="margin:0;">🤖 AI Insights</h2>
+    <button onclick="loadAiInsights()" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.45rem .8rem;font-weight:700;cursor:pointer;">↻ Refresh</button>
+  </div>
+  <div style="background:#fef9ed;border:1px solid #f0d680;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;font-size:13px;line-height:1.5;color:#7a5800;">
+    AI-assisted notes captured during pastoral debriefs. <strong>These are conversation starters, not verdicts</strong> — the Holy Spirit and the shepherd remain the primary judges. Use these to inform follow-up, not to label.
+  </div>
+  <div style="display:flex;gap:.4rem;margin-bottom:1rem;" id="aiInsightsTabsBar"></div>
+  <div id="aiInsightsContent"></div>
 </div></div>
 
 <!-- REPORTS -->
@@ -1529,6 +1543,7 @@ function rInterventions(){
       <div class="ic-actions">
         <button class="ic-btn ic-btn-open" onclick="openDebrief('${m.id}')">📋 Debrief Guide</button>
         <button class="ic-btn ic-btn-open" onclick="openTrack('${m.id}')">📖 Intervention Tracker</button>
+        <button class="ic-btn ic-btn-open" onclick="openAiInsightsForMember('${m.id}')">🤖 AI History</button>
         <button class="ic-btn ic-btn-done" onclick="markIntComplete('${m.id}')">✓ Mark Complete</button>
       </div>
     </div>`).join('');
@@ -1636,6 +1651,7 @@ function rAlerts(){
         ${a.zone>=2?`<div class="alert-actions">
           <button class="alert-link al-debrief" onclick="openDebrief('${a.id}')">📋 Open Debrief Guide</button>
           <button class="alert-link al-track" onclick="openTrack('${a.id}')">📖 Open Intervention Tracker</button>
+          <button class="alert-link al-debrief" onclick="openAiInsightsForMember('${a.id}')">🤖 AI History</button>
           <button class="alert-link al-assign" onclick="openEdit('${a.id}')">✎ Edit Member</button>
         </div>`:''}
       </div>
@@ -2588,6 +2604,7 @@ function rDiagTab(m){
     ${m&&m.diagnostic_zone>=2?`<div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="alert-link al-debrief" onclick="openDebrief('${m.id}')">📋 Open Debrief Guide</button>
       <button class="alert-link al-track" onclick="openTrack('${m.id}')">📖 Open Intervention Tracker</button>
+      <button class="alert-link al-debrief" onclick="openAiInsightsForMember('${m.id}')">🤖 AI History</button>
     </div>`:'<div style="color:var(--green);font-size:13px;font-weight:500">✅ No intervention needed — ready for BTLI 101.</div>'}
     ${m&&m.id?`<div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
       <button onclick="copyDiagLink('${m.id}')" style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 14px;background:var(--green-bg);color:var(--green);border:1.5px solid rgba(42,92,64,.2);border-radius:6px;cursor:pointer;">📤 Send New Diagnostic Link</button>
@@ -5936,6 +5953,305 @@ async function _pastorAnnPublish(){
 // Auto-load on dashboard boot for badge count
 setTimeout(() => { loadAnnouncementQueue(); }, 2000);
 setInterval(loadAnnouncementQueue, 300000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// AI INSIGHTS  (Pastor-side overview of AI-assisted debrief notes)
+// ─────────────────────────────────────────────────────────────────────
+// Three tabs:
+//   recent    — chronological feed of latest debriefs that had AI work
+//   byMember  — grouped by member, expandable, latest first
+//   byFlag    — grouped by flag type (CONCERN / NEEDS CLARIFICATION / CLEAR)
+// Soft framing throughout — these are conversation starters, not verdicts.
+// ═══════════════════════════════════════════════════════════════════════
+
+let _aiInsightsTab = 'recent';
+let _aiInsightsRows = [];   // raw debrief rows with ai_parsed_json populated
+
+async function loadAiInsights(){
+  const wrap = document.getElementById('aiInsightsContent');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Loading...</div>';
+  try {
+    const {data, error} = await db.from('debrief_records')
+      .select('id,member_id,facilitator_name,final_summary,ai_raw_response,ai_parsed_json,created_at,is_complete')
+      .not('ai_parsed_json', 'is', null)
+      .order('created_at', {ascending: false})
+      .limit(200);
+    if (error) throw error;
+    _aiInsightsRows = data || [];
+    // Hydrate member names from members table
+    const memIds = [...new Set(_aiInsightsRows.map(r => r.member_id).filter(Boolean))];
+    if (memIds.length) {
+      const {data: mems} = await db.from('members').select('id,name,lc_group,pipeline_level').in('id', memIds);
+      const memMap = {};
+      (mems || []).forEach(m => { memMap[m.id] = m; });
+      _aiInsightsRows.forEach(r => { r._member = memMap[r.member_id] || null; });
+    }
+    renderAiInsights();
+  } catch(e) {
+    console.error('[ai-insights] load failed:', e);
+    wrap.innerHTML = '<div style="padding:2rem;color:#9a2727;text-align:center;">Error: ' + MultiplyShared.escapeHTML(e.message) + '</div>';
+  }
+}
+
+function _setAiInsightsTab(t){ _aiInsightsTab = t; renderAiInsights(); }
+
+function renderAiInsights(){
+  const tabsBar = document.getElementById('aiInsightsTabsBar');
+  const wrap = document.getElementById('aiInsightsContent');
+  if (!tabsBar || !wrap) return;
+
+  const totalSessions = _aiInsightsRows.length;
+  const uniqueMembers = new Set(_aiInsightsRows.map(r => r.member_id)).size;
+  const totalAnalyses = _aiInsightsRows.reduce((sum, r) => {
+    const arr = r.ai_parsed_json?.analyses;
+    return sum + (Array.isArray(arr) ? arr.length : 0);
+  }, 0);
+
+  const tabs = [
+    {key:'recent',   label:'📅 Recent',     n: totalSessions},
+    {key:'byMember', label:'👤 By Member',  n: uniqueMembers},
+    {key:'byFlag',   label:'🏷️ By Flag',    n: totalAnalyses},
+  ];
+  tabsBar.innerHTML = tabs.map(t => {
+    const active = _aiInsightsTab === t.key;
+    return `<button onclick="_setAiInsightsTab('${t.key}')"
+      style="padding:.5rem .9rem;background:${active?'var(--gold)':'#fff'};
+             color:${active?'#fff':'var(--text)'};
+             border:1px solid ${active?'var(--gold)':'var(--border)'};border-radius:999px;
+             font-weight:${active?'700':'500'};font-size:12.5px;cursor:pointer;">
+      ${t.label} (${t.n})
+    </button>`;
+  }).join('');
+
+  if (!_aiInsightsRows.length) {
+    wrap.innerHTML = '<div style="padding:3rem 1rem;text-align:center;color:var(--muted);font-size:14px;">No AI-assisted debrief notes yet. They appear here after pastors run AI analysis during a debrief.</div>';
+    return;
+  }
+
+  if (_aiInsightsTab === 'recent')   wrap.innerHTML = _renderAiRecent();
+  else if (_aiInsightsTab === 'byMember') wrap.innerHTML = _renderAiByMember();
+  else if (_aiInsightsTab === 'byFlag')   wrap.innerHTML = _renderAiByFlag();
+}
+
+function _aiFmtDate(iso){
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('en-PH', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
+  } catch(e) { return iso; }
+}
+
+function _aiFlagBadge(flag){
+  const upper = (flag || '').toUpperCase();
+  if (upper === 'CONCERN')               return '<span style="background:#fde8e8;color:#9a2727;padding:2px 7px;border-radius:8px;font-size:10.5px;font-weight:700;">CONCERN</span>';
+  if (upper === 'NEEDS CLARIFICATION')   return '<span style="background:#fff3d6;color:#7a5800;padding:2px 7px;border-radius:8px;font-size:10.5px;font-weight:700;">NEEDS CLARIFICATION</span>';
+  if (upper === 'CLEAR')                 return '<span style="background:#e7f5ec;color:#1f6b3a;padding:2px 7px;border-radius:8px;font-size:10.5px;font-weight:700;">CLEAR</span>';
+  return '<span style="background:#eee;color:#666;padding:2px 7px;border-radius:8px;font-size:10.5px;">' + MultiplyShared.escapeHTML(flag || '?') + '</span>';
+}
+
+function _renderAiRecent(){
+  return _aiInsightsRows.slice(0, 30).map(r => {
+    const memName = r._member?.name || 'Unknown member';
+    const lcLine = r._member?.lc_group || (r._member?.pipeline_level != null ? 'L' + r._member.pipeline_level : '');
+    const flagCount = (r.ai_parsed_json?.analyses || []).length;
+    const flags = (r.ai_parsed_json?.analyses || []);
+    const flagPreview = flags.slice(0, 4).map(a => _aiFlagBadge(a.flag) + ' ' + MultiplyShared.escapeHTML(a.qid || '')).join(' · ');
+    const overall = r.ai_parsed_json?.overall_note || '';
+    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:.75rem;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:.5rem;flex-wrap:wrap;">
+        <div>
+          <strong style="font-size:14px;">${MultiplyShared.escapeHTML(memName)}</strong>
+          ${lcLine ? `<span style="font-size:11px;color:var(--muted);margin-left:.5rem;">${MultiplyShared.escapeHTML(lcLine)}</span>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--muted);">${MultiplyShared.escapeHTML(_aiFmtDate(r.created_at))} · ${MultiplyShared.escapeHTML(r.facilitator_name || '')}</div>
+      </div>
+      ${flagCount > 0 ? `<div style="margin-bottom:.5rem;font-size:11.5px;line-height:1.7;">${flagPreview}${flagCount > 4 ? ` <span style="color:var(--muted);">+ ${flagCount - 4} more</span>` : ''}</div>` : ''}
+      ${overall ? `<div style="font-size:12.5px;color:var(--text);line-height:1.5;background:#faf6ef;border-left:3px solid var(--gold);padding:.5rem .75rem;margin-top:.5rem;font-style:italic;">${MultiplyShared.escapeHTML(overall.slice(0, 280))}${overall.length > 280 ? '…' : ''}</div>` : ''}
+      <div style="margin-top:.6rem;text-align:right;">
+        <button onclick="openAiInsightsForMember('${r.member_id}')" style="background:transparent;color:#1f6b3a;border:1px solid #1f6b3a;border-radius:6px;padding:.35rem .8rem;font-size:11px;font-weight:600;cursor:pointer;">Full history →</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _renderAiByMember(){
+  // Group rows by member_id
+  const groups = {};
+  _aiInsightsRows.forEach(r => {
+    const k = r.member_id;
+    if (!groups[k]) groups[k] = {member: r._member, rows: []};
+    groups[k].rows.push(r);
+  });
+  const sorted = Object.values(groups).sort((a,b) => {
+    const aLast = a.rows[0]?.created_at || '';
+    const bLast = b.rows[0]?.created_at || '';
+    return bLast.localeCompare(aLast);
+  });
+  return sorted.map(g => {
+    const memName = g.member?.name || 'Unknown';
+    const sessionCount = g.rows.length;
+    const lcLine = g.member?.lc_group || '';
+    const lastDate = _aiFmtDate(g.rows[0]?.created_at);
+    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:.85rem 1.2rem;margin-bottom:.6rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:700;font-size:14px;color:var(--text);">${MultiplyShared.escapeHTML(memName)}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:.15rem;">
+          ${sessionCount} session${sessionCount === 1 ? '' : 's'}
+          ${lcLine ? ' · ' + MultiplyShared.escapeHTML(lcLine) : ''}
+           · last ${MultiplyShared.escapeHTML(lastDate)}
+        </div>
+      </div>
+      <button onclick="openAiInsightsForMember('${g.rows[0].member_id}')" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem .9rem;font-weight:700;font-size:12px;cursor:pointer;">View →</button>
+    </div>`;
+  }).join('');
+}
+
+function _renderAiByFlag(){
+  // Flatten all analyses with member context
+  const all = [];
+  _aiInsightsRows.forEach(r => {
+    (r.ai_parsed_json?.analyses || []).forEach(a => {
+      all.push({...a, _row: r});
+    });
+  });
+  // Group by flag type
+  const buckets = {CONCERN: [], 'NEEDS CLARIFICATION': [], CLEAR: [], OTHER: []};
+  all.forEach(a => {
+    const f = (a.flag || '').toUpperCase();
+    if (buckets[f]) buckets[f].push(a);
+    else buckets.OTHER.push(a);
+  });
+
+  let html = '';
+  ['CONCERN', 'NEEDS CLARIFICATION', 'CLEAR', 'OTHER'].forEach(b => {
+    if (!buckets[b].length) return;
+    html += `<div style="margin-bottom:1.2rem;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+        ${_aiFlagBadge(b)}
+        <span style="font-size:13px;color:var(--text);font-weight:600;">${buckets[b].length} entr${buckets[b].length === 1 ? 'y' : 'ies'}</span>
+      </div>
+      ${buckets[b].slice(0, 50).map(a => {
+        const memName = a._row._member?.name || 'Unknown';
+        return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;margin-bottom:.5rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:.7rem;margin-bottom:.4rem;">
+            <div>
+              <strong style="font-size:13px;">${MultiplyShared.escapeHTML(memName)}</strong>
+              <span style="font-size:11px;color:var(--muted);margin-left:.5rem;">${MultiplyShared.escapeHTML(a.qid || '')}</span>
+            </div>
+            <span style="font-size:10.5px;color:var(--muted);">${MultiplyShared.escapeHTML(_aiFmtDate(a._row.created_at))}</span>
+          </div>
+          ${a.flag_reason ? `<div style="font-size:12px;color:var(--text);line-height:1.5;font-style:italic;">${MultiplyShared.escapeHTML(a.flag_reason)}</div>` : ''}
+          <div style="margin-top:.4rem;text-align:right;">
+            <button onclick="openAiInsightsForMember('${a._row.member_id}')" style="background:transparent;color:#1f6b3a;border:none;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline;">Full context →</button>
+          </div>
+        </div>`;
+      }).join('')}
+      ${buckets[b].length > 50 ? `<div style="font-size:11px;color:var(--muted);text-align:center;">Showing first 50 of ${buckets[b].length}</div>` : ''}
+    </div>`;
+  });
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PER-MEMBER AI HISTORY MODAL  (opened from anywhere — AI Insights tabs,
+// member detail modal, etc.)
+// ═══════════════════════════════════════════════════════════════════════
+async function openAiInsightsForMember(memberId){
+  let modal = document.getElementById('aiMemberHistoryModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'aiMemberHistoryModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:10001;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = '<div id="aiMemberHistoryBody" style="background:#fff;max-width:640px;width:100%;border-radius:14px;padding:1.25rem;margin-top:2rem;margin-bottom:2rem;color:#1a1612;box-shadow:0 12px 40px rgba(0,0,0,.3);"></div>';
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  const body = document.getElementById('aiMemberHistoryBody');
+  body.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Loading...</div>';
+
+  try {
+    // Fetch all AI-bearing debriefs for this member, plus member info
+    const [debriefRes, memberRes] = await Promise.all([
+      db.from('debrief_records')
+        .select('id,facilitator_name,final_summary,ai_raw_response,ai_parsed_json,created_at,is_complete')
+        .eq('member_id', memberId)
+        .not('ai_parsed_json', 'is', null)
+        .order('created_at', {ascending: false})
+        .limit(50),
+      db.from('members').select('id,name,lc_group,pipeline_level').eq('id', memberId).single()
+    ]);
+    if (debriefRes.error) throw debriefRes.error;
+    const sessions = debriefRes.data || [];
+    const member = memberRes.data;
+    const memName = member?.name || 'Unknown';
+
+    if (!sessions.length) {
+      body.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <h3 style="margin:0;font-size:16px;">🤖 AI History — ${MultiplyShared.escapeHTML(memName)}</h3>
+          <button onclick="document.getElementById('aiMemberHistoryModal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
+        </div>
+        <div style="padding:2rem;text-align:center;color:var(--muted);">No AI-assisted notes for this member yet.</div>`;
+      return;
+    }
+
+    const sessionsHtml = sessions.map(s => {
+      const flags = s.ai_parsed_json?.analyses || [];
+      const overall = s.ai_parsed_json?.overall_note || '';
+      const flagsHtml = flags.map(a => `
+        <div style="padding:.6rem .85rem;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem;">
+            ${_aiFlagBadge(a.flag)}
+            <strong style="font-size:12.5px;">${MultiplyShared.escapeHTML(a.qid || '')}</strong>
+          </div>
+          ${a.flag_reason ? `<div style="font-size:12px;color:var(--text);line-height:1.5;margin-bottom:.4rem;">${MultiplyShared.escapeHTML(a.flag_reason)}</div>` : ''}
+          ${Array.isArray(a.followup_questions) && a.followup_questions.length ? `
+            <div style="font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:.4rem;margin-bottom:.2rem;">Follow-up questions:</div>
+            <ul style="margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--text);">
+              ${a.followup_questions.map(q => `<li>${MultiplyShared.escapeHTML(q)}</li>`).join('')}
+            </ul>
+          ` : ''}
+        </div>`).join('');
+
+      return `<div style="background:#faf6ef;border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-bottom:.8rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;">
+          <div style="font-weight:700;font-size:13px;">${MultiplyShared.escapeHTML(_aiFmtDate(s.created_at))}</div>
+          <div style="font-size:11px;color:var(--muted);">by ${MultiplyShared.escapeHTML(s.facilitator_name || '')} ${s.is_complete ? '✓' : '🔄 in progress'}</div>
+        </div>
+        ${overall ? `
+          <div style="background:#fff;border-left:3px solid var(--gold);padding:.55rem .8rem;margin-bottom:.6rem;font-size:12px;color:var(--text);line-height:1.5;font-style:italic;">
+            <strong style="font-style:normal;">Overall note:</strong> ${MultiplyShared.escapeHTML(overall)}
+          </div>
+        ` : ''}
+        ${flagsHtml ? `<div style="background:#fff;border:1px solid var(--border);border-radius:6px;">${flagsHtml}</div>` : ''}
+        ${s.final_summary ? `
+          <div style="margin-top:.6rem;padding:.5rem .75rem;background:#eef6f1;border-radius:6px;font-size:12px;color:var(--text);line-height:1.5;">
+            <strong>Pastor's summary:</strong> ${MultiplyShared.escapeHTML(s.final_summary)}
+          </div>
+        ` : ''}
+      </div>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+        <div>
+          <h3 style="margin:0;font-size:16px;">🤖 AI History — ${MultiplyShared.escapeHTML(memName)}</h3>
+          <div style="font-size:11px;color:var(--muted);margin-top:.2rem;">${sessions.length} session${sessions.length === 1 ? '' : 's'} · most recent first</div>
+        </div>
+        <button onclick="document.getElementById('aiMemberHistoryModal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
+      </div>
+      <div style="background:#fef9ed;border:1px solid #f0d680;border-radius:8px;padding:.6rem .85rem;margin-bottom:1rem;font-size:11.5px;color:#7a5800;line-height:1.5;">
+        ⚠️ AI flags are conversation starters, not verdicts. Always use pastoral judgment.
+      </div>
+      ${sessionsHtml}
+    `;
+  } catch(e) {
+    console.error('[ai-insights] member history failed:', e);
+    body.innerHTML = '<div style="padding:2rem;color:#9a2727;">Error: ' + MultiplyShared.escapeHTML(e.message) + '</div>';
+  }
+}
+
 </script>
 </body>
 </html>
