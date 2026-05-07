@@ -435,6 +435,70 @@ body.lang-tl .tl-text{display:inline;}
 .pill.todo{background:#fde2d3;color:#9a3412;}
 .pill.suggest{background:#f5e8c4;color:#7a5c0d;}
 
+/* ═══════════════ RESULT EXPANSION (within assess-card) ═══════════════
+   When a "Done" assessment is tapped, an inline panel reveals the
+   member's top result(s) + a short pastoral takeaway + action buttons.
+   Salvation Assurance is intentionally excluded — that one is a
+   conversation starter for pastoral care, not a self-readout.        */
+.assess-result{
+  background:linear-gradient(180deg,var(--cream),var(--paper));
+  border:1px solid var(--line);
+  border-radius:13px;
+  margin:-6px 0 12px;       /* slight overlap upward to feel "attached" */
+  padding:14px 16px 16px;
+  font-size:13px;
+  animation:resultIn .22s ease-out;
+}
+@keyframes resultIn{
+  from{opacity:0;transform:translateY(-4px);}
+  to{opacity:1;transform:translateY(0);}
+}
+.assess-result .ar-eyebrow{
+  font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  font-weight:700;color:var(--gold);margin-bottom:6px;
+}
+.assess-result .ar-top{
+  font-family:'Fraunces',serif;font-weight:600;
+  font-size:17px;color:var(--ink);line-height:1.25;margin-bottom:4px;
+}
+.assess-result .ar-secondary{
+  font-size:11.5px;color:var(--muted);margin-bottom:10px;
+}
+.assess-result .ar-takeaway{
+  font-family:'Fraunces',serif;font-style:italic;
+  font-size:13px;line-height:1.6;color:var(--ink-soft);
+  padding:10px 12px;background:rgba(184,136,42,.06);
+  border-left:3px solid var(--gold-bright);
+  border-radius:0 8px 8px 0;margin-bottom:12px;
+}
+.assess-result .ar-actions{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.assess-result .ar-btn{
+  flex:1;min-width:140px;
+  font-family:'DM Sans',sans-serif;font-size:11.5px;font-weight:600;
+  padding:9px 12px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--line);background:var(--paper);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all .15s;
+}
+.assess-result .ar-btn:active{transform:scale(.97);}
+.assess-result .ar-btn.primary{
+  background:var(--forest);color:#fef9ec;border-color:var(--forest);
+}
+.assess-result .ar-btn.primary:active{background:var(--forest-2);}
+/* Visual feedback when an action succeeds (e.g., notify discipler) */
+.assess-result .ar-btn.is-sent{
+  background:#d1f5e3;color:#0e3a2c;border-color:#9bdfba;pointer-events:none;
+}
+/* Score-bar mini visualization for assessments with multiple components */
+.assess-result .ar-bars{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+.assess-result .ar-bar-row{display:flex;align-items:center;gap:8px;font-size:11px;}
+.assess-result .ar-bar-label{flex:0 0 110px;color:var(--ink-soft);font-weight:500;}
+.assess-result .ar-bar-track{flex:1;height:7px;background:var(--cream-2);border-radius:99px;overflow:hidden;}
+.assess-result .ar-bar-fill{height:100%;border-radius:99px;background:var(--gold);transition:width .35s ease;}
+.assess-result .ar-bar-pct{flex:0 0 36px;text-align:right;color:var(--muted);font-size:10.5px;font-weight:600;}
+
 /* ═══════════════ PROFILE SCREEN ═══════════════ */
 
 .profile-hero{
@@ -1493,8 +1557,8 @@ body.lang-tl .tl-text{display:inline;}
     <div class="content">
 
       <p class="assess-intro">
-        <span class="en-text">Each one helps you understand a different facet of who you are. Take them at your pace — your discipler will see your results.</span>
-        <span class="tl-text">Bawat isa ay tutulong sa iyo na maunawaan ang sarili mo. Gawin sa sarili mong bilis — makikita ng iyong discipler ang resulta.</span>
+        <span class="en-text">Each one helps you understand a different facet of who you are. Take them at your pace — and tap any "Done" card to see your result.</span>
+        <span class="tl-text">Bawat isa ay tutulong sa iyo na maunawaan ang sarili mo. Gawin sa sarili mong bilis — at i-tap ang anumang "Tapos" card para makita ang resulta.</span>
       </p>
 
       <div id="assessContainer">
@@ -2320,6 +2384,53 @@ function renderPipeline(){
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ASSESSMENTS — RESULT TAKEAWAYS
+// ─────────────────────────────────────────────────────────────
+// Bilingual one-liners shown inline when a member taps a "Done" card.
+// Designed to be warm and short — depth lives in the full report and,
+// more importantly, in the discipler conversation. Salvation Assurance
+// is intentionally excluded from this map (per pastoral design rule:
+// "AI/diagnostic as conversation starter, not verdict").
+// ═══════════════════════════════════════════════════════════════
+const RESULT_TAKEAWAYS = {
+  spiritual_gifts: {
+    en: 'God has wired you with these gifts for a reason. Talk with your discipler about where these can serve the church most fruitfully.',
+    tl: 'May dahilan kung bakit pinagkalooban ka ng Diyos ng mga ito. Pag-usapan ninyo ng iyong discipler kung saan pinakamabunga ang paglilingkod mo.'
+  },
+  strengths: {
+    en: 'These talents shine when you can use them daily. Look for ministries and roles where these come naturally — that\'s where you\'ll thrive.',
+    tl: 'Nagniningning ang mga lakas mo kapag araw-araw mong nagagamit. Hanapin ang ministry at papel kung saan natural mo itong naipapakita.'
+  },
+  disc: {
+    en: 'This is your default working style — your "first move" under pressure. Knowing it helps you collaborate with people whose styles differ from yours.',
+    tl: 'Ito ang iyong default style — kung paano ka kumikilos sa pressure. Tutulong ito sa pakikipagtulungan sa mga ibang style.'
+  },
+  enneagram: {
+    en: 'Your type reveals what you most deeply want — and most deeply fear. Christ meets you exactly there. Bring this to your discipler for prayer.',
+    tl: 'Ipinapakita ng type mo ang pinakamalalim mong hinahangad — at kinatatakutan. Doon mismo ka sinasalubong ni Cristo. I-share ito sa discipler mo para sa panalangin.'
+  },
+  love_language: {
+    en: 'You give and receive love most fluently this way. Share this with the people closest to you — it changes how they can love you well.',
+    tl: 'Ito ang paraang pinakamadali mong nararamdaman ang pagmamahal. I-share ito sa mga malalapit sa iyo — magbabago kung paano ka nila mahihigit na mahalin.'
+  },
+  conflict: {
+    en: 'No style is always right or always wrong. The mature leader learns to ask: "What does this moment require?"',
+    tl: 'Walang estilong palaging tama o palaging mali. Natutuong magtanong ang matured na lider: "Anong kailangan ng sandaling ito?"'
+  }
+};
+
+// Public-facing viewer URL (same one the dashboard uses)
+const _VIEWER_BASE = 'https://gejable1.github.io/multiply/profile_results_viewer.html';
+const _VIEWER_TYPE = {
+  spiritual_gifts: 'gifts', strengths: 'strengths', disc: 'disc',
+  enneagram: 'enneagram', love_language: 'love_language', conflict: 'conflict_style'
+};
+
+// Track which result panels are currently expanded so re-renders preserve state
+const _expandedResults = new Set();
+
+
+// ═══════════════════════════════════════════════════════════════
 // ASSESSMENTS RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderAssessments(){
@@ -2335,6 +2446,9 @@ function renderAssessments(){
   ASSESSMENTS.forEach(a => {
     const done = isAssessmentDone(a);
     const isSuggested = !done && a.key === suggestedKey;
+    // Salvation Assurance is excluded from inline results display
+    // (pastoral design: not a self-graded verdict)
+    const showsResult = done && a.key !== 'salvation';
 
     let pillHtml;
     if(done){
@@ -2345,9 +2459,19 @@ function renderAssessments(){
       pillHtml = `<span class="pill todo"><span class="en-text">Not started</span><span class="tl-text">Hindi pa</span></span>`;
     }
 
+    // Add a "View Result" affordance to the meta line for completed (non-salvation) assessments
+    const viewHint = showsResult
+      ? ` <span style="color:var(--line-strong)">·</span> <span style="color:var(--gold);font-weight:600">${
+          'Tap to view result'
+        }</span>`
+      : '';
+
     const btn = document.createElement('button');
     btn.className = 'assess-card';
-    btn.onclick = () => openAssessment(a);
+    btn.onclick = () => {
+      if(showsResult) toggleResultPanel(a);
+      else openAssessment(a);
+    };
     btn.innerHTML = `
       <div class="ico ${a.icoClass}">${a.icon}</div>
       <div class="body">
@@ -2356,12 +2480,17 @@ function renderAssessments(){
           <span class="tl-text">${MultiplyShared.escapeHTML(a.name_tl)}</span>
         </div>
         <div class="a-meta">
-          ${pillHtml} <span style="color:var(--line-strong)">·</span> <span>${MultiplyShared.escapeHTML(a.mins)}</span>
+          ${pillHtml} <span style="color:var(--line-strong)">·</span> <span>${MultiplyShared.escapeHTML(a.mins)}</span>${viewHint}
         </div>
       </div>
-      <div style="color:var(--muted);font-size:18px">›</div>
+      <div style="color:var(--muted);font-size:18px">${showsResult ? (_expandedResults.has(a.key) ? '▾' : '▸') : '›'}</div>
     `;
     container.appendChild(btn);
+
+    // If this card was previously expanded, render its result panel
+    if(showsResult && _expandedResults.has(a.key)){
+      container.appendChild(buildResultPanel(a));
+    }
   });
 }
 
@@ -2376,6 +2505,190 @@ function isAssessmentDone(a){
 function openAssessment(a){
   // Open with member id query param so the assessment page knows whose data to load
   location.href = a.file + '?id=' + encodeURIComponent(MEMBER.memberId);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESULT PANEL — inline expansion
+// ═══════════════════════════════════════════════════════════════
+function toggleResultPanel(a){
+  if(_expandedResults.has(a.key)) _expandedResults.delete(a.key);
+  else _expandedResults.add(a.key);
+  renderAssessments();
+  // Scroll the just-opened card into view
+  if(_expandedResults.has(a.key)){
+    setTimeout(() => {
+      const cards = document.querySelectorAll('.assess-card');
+      const idx = ASSESSMENTS.findIndex(x => x.key === a.key);
+      if(cards[idx]) cards[idx].scrollIntoView({ behavior:'smooth', block:'center' });
+    }, 50);
+  }
+}
+
+function buildResultPanel(a){
+  const wrap = document.createElement('div');
+  wrap.className = 'assess-result';
+  wrap.dataset.key = a.key;
+
+  // Resolve the top result(s) from the denormalized columns
+  const summary = _summaryFor(a);
+  const takeaway = RESULT_TAKEAWAYS[a.key] || { en:'', tl:'' };
+
+  wrap.innerHTML = `
+    <div class="ar-eyebrow"><span class="en-text">Your Result</span><span class="tl-text">Iyong Resulta</span></div>
+    <div class="ar-top">${summary.topHtml}</div>
+    ${summary.subHtml ? `<div class="ar-secondary">${summary.subHtml}</div>` : ''}
+    ${summary.barsHtml || ''}
+    <div class="ar-takeaway">
+      <span class="en-text">${MultiplyShared.escapeHTML(takeaway.en)}</span>
+      <span class="tl-text">${MultiplyShared.escapeHTML(takeaway.tl)}</span>
+    </div>
+    <div class="ar-actions">
+      <button class="ar-btn primary" onclick="openFullReport('${a.key}'); event.stopPropagation();">
+        <span>📖</span>
+        <span><span class="en-text">Full Report</span><span class="tl-text">Buong Ulat</span></span>
+      </button>
+      <button class="ar-btn" id="discussBtn-${a.key}" onclick="notifyDiscipler('${a.key}', this); event.stopPropagation();">
+        <span>💬</span>
+        <span><span class="en-text">Discuss with Discipler</span><span class="tl-text">Pag-usapan sa Discipler</span></span>
+      </button>
+    </div>
+  `;
+  return wrap;
+}
+
+// Build the headline display for each assessment based on what's stored
+// on the members table denormalized columns.
+function _summaryFor(a){
+  const escape = (s) => MultiplyShared.escapeHTML(String(s||''));
+  const titleCase = (s) => String(s||'').replace(/[_-]/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
+  switch(a.key){
+    case 'spiritual_gifts': {
+      // members.spiritual_gifts is a text array (top 3) per schema patterns
+      const gifts = Array.isArray(memberRow.spiritual_gifts)
+        ? memberRow.spiritual_gifts
+        : (memberRow.spiritual_gifts ? String(memberRow.spiritual_gifts).split(/[,;]/).map(s=>s.trim()).filter(Boolean) : []);
+      const top1 = gifts[0] || '—';
+      const rest = gifts.slice(1, 3).join(' · ');
+      return {
+        topHtml: '🎁 ' + escape(titleCase(top1)),
+        subHtml: rest ? '<span class="en-text">Also strong: ' + escape(titleCase(rest)) + '</span><span class="tl-text">Malalakas din: ' + escape(titleCase(rest)) + '</span>' : ''
+      };
+    }
+    case 'strengths': {
+      const top5 = Array.isArray(memberRow.strengths_top5) ? memberRow.strengths_top5 : [];
+      const top1 = top5[0] || '—';
+      const rest = top5.slice(1,5).map(titleCase).join(' · ');
+      return {
+        topHtml: '⭐ ' + escape(titleCase(top1)),
+        subHtml: rest ? '<span class="en-text">Top 5: ' + escape(titleCase(top1)) + ' · ' + escape(rest) + '</span><span class="tl-text">Top 5: ' + escape(titleCase(top1)) + ' · ' + escape(rest) + '</span>' : ''
+      };
+    }
+    case 'disc': {
+      const primary = memberRow.disc_primary || '—';
+      const NAMES = { D:'Dominance', I:'Influence', S:'Steadiness', C:'Conscientiousness' };
+      const NAMES_TL = { D:'Dominance · Pamamayagpag', I:'Influence · Pag-impluwensiya', S:'Steadiness · Katatagan', C:'Conscientiousness · Pagiging Maingat' };
+      const fullEn = NAMES[primary] || primary;
+      const fullTl = NAMES_TL[primary] || primary;
+      return {
+        topHtml: '🧭 <span class="en-text">' + escape(fullEn) + ' (' + escape(primary) + ')</span><span class="tl-text">' + escape(fullTl) + '</span>',
+        subHtml: ''
+      };
+    }
+    case 'enneagram': {
+      const t = memberRow.enneagram_type || '—';
+      const TYPES = {
+        '1':{en:'The Reformer', tl:'Ang Reformer'},
+        '2':{en:'The Helper', tl:'Ang Tagatulong'},
+        '3':{en:'The Achiever', tl:'Ang Nakakamit'},
+        '4':{en:'The Individualist', tl:'Ang Indibidwalista'},
+        '5':{en:'The Investigator', tl:'Ang Mananaliksik'},
+        '6':{en:'The Loyalist', tl:'Ang Tapat'},
+        '7':{en:'The Enthusiast', tl:'Ang Masigasig'},
+        '8':{en:'The Challenger', tl:'Ang Tagahamon'},
+        '9':{en:'The Peacemaker', tl:'Ang Tagapamayapa'}
+      };
+      const info = TYPES[String(t)] || {en:'—', tl:'—'};
+      return {
+        topHtml: '🌀 <span class="en-text">Type ' + escape(t) + ' — ' + escape(info.en) + '</span><span class="tl-text">Type ' + escape(t) + ' — ' + escape(info.tl) + '</span>',
+        subHtml: ''
+      };
+    }
+    case 'love_language': {
+      const primary = memberRow.love_language_primary || '—';
+      const NAMES_EN = { words:'Words of Affirmation', service:'Acts of Service', acts:'Acts of Service', gifts:'Receiving Gifts', time:'Quality Time', touch:'Physical Touch' };
+      const NAMES_TL = { words:'Mga Salita ng Pagpapatibay', service:'Paglilingkod', acts:'Paglilingkod', gifts:'Pagtanggap ng Regalo', time:'Quality Time', touch:'Pisikal na Doon' };
+      const en = NAMES_EN[primary] || titleCase(primary);
+      const tl = NAMES_TL[primary] || titleCase(primary);
+      return {
+        topHtml: '💝 <span class="en-text">' + escape(en) + '</span><span class="tl-text">' + escape(tl) + '</span>',
+        subHtml: ''
+      };
+    }
+    case 'conflict': {
+      const p = memberRow.conflict_primary || '—';
+      const TL = { Competing:'Pakikipagtagisan', Collaborating:'Pagtutulungan', Compromising:'Pagsuko sa Gitna', Avoiding:'Pag-iwas', Accommodating:'Pagpapaubaya' };
+      return {
+        topHtml: '⚖️ <span class="en-text">' + escape(p) + '</span><span class="tl-text">' + escape(TL[p] || p) + '</span>',
+        subHtml: ''
+      };
+    }
+    default:
+      return { topHtml:'—', subHtml:'' };
+  }
+}
+
+function openFullReport(key){
+  const type = _VIEWER_TYPE[key];
+  if(!type) return;
+  const url = _VIEWER_BASE + '?id=' + encodeURIComponent(MEMBER.memberId) + '&type=' + encodeURIComponent(type);
+  window.open(url, '_blank');
+}
+
+// Send a lightweight notification to the member's discipler so the next
+// debrief can pick up this thread. Falls through gracefully if no
+// discipler is on file or the table doesn't exist.
+async function notifyDiscipler(key, btnEl){
+  const disciplerId = memberRow.discipler_id;
+  if(!disciplerId){
+    showToast('No discipler on file yet — talk with your LC leader directly.');
+    return;
+  }
+  const a = ASSESSMENTS.find(x => x.key === key);
+  const aName = a ? a.name_en : key;
+  const memberName = memberRow.name || 'A member';
+  try {
+    const { error } = await db.from('notifications').insert({
+      recipient_id: disciplerId,
+      kind: 'assessment_discussion_request',
+      title: memberName + ' wants to discuss their ' + aName + ' result',
+      body: memberName + ' has reviewed their ' + aName + ' assessment in MMT and asked to discuss it with you. Open MLT to start a debrief session.',
+      payload: { member_id: MEMBER.memberId, assessment_key: key, assessment_name: aName }
+    });
+    if(error) throw error;
+    if(btnEl){
+      btnEl.classList.add('is-sent');
+      btnEl.innerHTML = '<span>✓</span><span><span class="en-text">Notified</span><span class="tl-text">Naipaalam</span></span>';
+    }
+    showToast('Your discipler has been notified. 🙏');
+  } catch(e){
+    console.warn('notifyDiscipler failed:', e.message);
+    showToast('Could not send right now. Try again later.');
+  }
+}
+
+// Light toast helper if the page doesn't already have one
+function showToast(msg){
+  let t = document.getElementById('mmtToast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'mmtToast';
+    t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:99px;font-size:12.5px;font-weight:500;z-index:9999;box-shadow:0 6px 18px rgba(0,0,0,.18);opacity:0;transition:opacity .2s;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(window._mmtToastTimer);
+  window._mmtToastTimer = setTimeout(() => { t.style.opacity = '0'; }, 2400);
 }
 
 // ═══════════════════════════════════════════════════════════════
