@@ -3805,30 +3805,48 @@ function _renderAnnDraftForm(){
         <label for="annAllChk" style="font-size:12.5px;cursor:pointer;">📢 All members (broadcast)</label>
       </div>
       ${!d.audience.all ? `
-        <div style="background:#faf6ef;border:1px solid #e2d8cc;border-radius:8px;padding:.6rem .75rem;font-size:11.5px;line-height:1.6;">
-          <div style="margin-bottom:.4rem;">
-            <strong>LC Groups</strong> (comma-separated, exact names):<br>
-            <input type="text" value="${(d.audience.lc_groups||[]).join(', ')}"
-              oninput="_annDraft.audience.lc_groups = this.value.split(',').map(s=>s.trim()).filter(Boolean);"
-              placeholder="e.g. Kingsway, Hillside"
-              style="width:100%;padding:.4rem .55rem;border:1px solid #e2d8cc;border-radius:6px;font-size:12px;margin-top:.2rem;">
+        <div style="background:#faf6ef;border:1px solid #e2d8cc;border-radius:8px;padding:.6rem .75rem;font-size:11.5px;line-height:1.5;">
+
+          <div style="margin-bottom:.6rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">
+              <strong>👥 LC Groups</strong>
+              <button onclick="mltOpenAudPicker('lc_groups')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.3rem .65rem;font-size:11px;font-weight:700;cursor:pointer;">＋ Pick</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem;min-height:1.4rem;">
+              ${_mltRenderAudChips('lc_groups', d.audience.lc_groups||[])}
+            </div>
           </div>
-          <div style="margin-bottom:.4rem;">
-            <strong>Pipeline Levels</strong> (comma-separated 0-5):<br>
+
+          <div style="margin-bottom:.6rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">
+              <strong>🙋 Particular Members</strong>
+              <button onclick="mltOpenAudPicker('member_ids')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.3rem .65rem;font-size:11px;font-weight:700;cursor:pointer;">＋ Pick</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem;min-height:1.4rem;">
+              ${_mltRenderAudChips('member_ids', d.audience.member_ids||[])}
+            </div>
+          </div>
+
+          <div style="margin-bottom:.6rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">
+              <strong>⛪ Ministries</strong>
+              <button onclick="mltOpenAudPicker('ministries')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.3rem .65rem;font-size:11px;font-weight:700;cursor:pointer;">＋ Pick</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem;min-height:1.4rem;">
+              ${_mltRenderAudChips('ministries', d.audience.ministries||[])}
+            </div>
+          </div>
+
+          <div>
+            <strong>📊 Pipeline Levels</strong> (0-5, comma-separated):<br>
             <input type="text" value="${(d.audience.levels||[]).join(', ')}"
               oninput="_annDraft.audience.levels = this.value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));"
               placeholder="e.g. 3, 4, 5"
               style="width:100%;padding:.4rem .55rem;border:1px solid #e2d8cc;border-radius:6px;font-size:12px;margin-top:.2rem;">
           </div>
-          <div>
-            <strong>Ministries</strong> (comma-separated, exact names):<br>
-            <input type="text" value="${(d.audience.ministries||[]).join(', ')}"
-              oninput="_annDraft.audience.ministries = this.value.split(',').map(s=>s.trim()).filter(Boolean);"
-              placeholder="e.g. Music, Youth in Motion"
-              style="width:100%;padding:.4rem .55rem;border:1px solid #e2d8cc;border-radius:6px;font-size:12px;margin-top:.2rem;">
-          </div>
+
           <div style="font-size:10.5px;color:#6b5f4f;margin-top:.5rem;font-style:italic;">
-            Member matches if ANY filter matches. Leave a field blank to ignore it.
+            Member matches if ANY filter matches. Leave a section empty to ignore it.
           </div>
         </div>
       ` : ''}
@@ -3983,6 +4001,237 @@ async function _annComputeAudienceSize(filter){
   } catch(e) {
     return 0;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MLT AUDIENCE PICKER  (mirrors MD's picker; operates on _annDraft)
+// ─────────────────────────────────────────────────────────────────────
+// All names prefixed `mlt` / `_mlt` to avoid collisions with MD picker
+// in case both scripts ever co-exist (e.g. embedded modal preview).
+// ═══════════════════════════════════════════════════════════════════════
+
+let _mltAudKind = null;
+let _mltAudSearch = '';
+let _mltAudCache = { members: null, lcGroups: null, ministries: null };
+
+function _mltRenderAudChips(kind, ids){
+  if (!ids || !ids.length) {
+    return '<span style="font-size:11px;color:#6b5f4f;font-style:italic;">none selected</span>';
+  }
+  return ids.map(id => {
+    let label = id;
+    if (kind === 'member_ids') {
+      const m = (_mltAudCache.members || []).find(x => x.id === id);
+      if (m) label = m.name;
+      else label = String(id).slice(0, 8) + '…';
+    }
+    return `<span style="display:inline-flex;align-items:center;gap:.3rem;background:#fff;border:1px solid var(--gold);border-radius:999px;padding:.2rem .5rem .2rem .65rem;font-size:11px;color:#1a1612;">
+      ${MultiplyShared.escapeHTML(label)}
+      <button onclick="_mltRemoveAudChip('${kind}','${String(id).replace(/'/g,"\\'")}')" style="background:none;border:none;color:#9a2727;font-weight:700;cursor:pointer;padding:0 .1rem;font-size:13px;line-height:1;">×</button>
+    </span>`;
+  }).join('');
+}
+
+function _mltRemoveAudChip(kind, id){
+  if (!_annDraft) return;
+  const arr = _annDraft.audience[kind] || [];
+  _annDraft.audience[kind] = arr.filter(x => String(x) !== String(id));
+  _renderAnnModal();
+}
+
+async function mltOpenAudPicker(kind){
+  _mltAudKind = kind;
+  _mltAudSearch = '';
+  await _mltEnsureAudCache();
+  let modal = document.getElementById('mltAudPickerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'mltAudPickerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:10000;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = '<div id="mltAudPickerBody" style="background:#fff;max-width:500px;width:100%;border-radius:14px;padding:1.1rem;margin-top:2rem;margin-bottom:2rem;color:#1a1612;box-shadow:0 12px 40px rgba(0,0,0,.3);max-height:80vh;display:flex;flex-direction:column;"></div>';
+    modal.onclick = (e) => { if (e.target === modal) _mltCloseAudPicker(); };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  _mltRenderAudPicker();
+}
+
+function _mltCloseAudPicker(){
+  const m = document.getElementById('mltAudPickerModal');
+  if (m) m.style.display = 'none';
+  const body = document.getElementById('mltAudPickerBody');
+  if (body) body.removeAttribute('data-aud-kind');
+  _mltAudSearch = '';
+  _renderAnnModal();
+}
+
+async function _mltEnsureAudCache(){
+  if (_mltAudCache.members) return;
+  try {
+    const {data: members, error} = await db.from('members')
+      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3,is_facilitator,facilitator_role,discipler_id')
+      .or('is_test_member.is.null,is_test_member.eq.false')
+      .order('name');
+    if (error) throw error;
+    _mltAudCache.members = members || [];
+
+    const realGroups = new Set();
+    const virtualGroups = new Map();
+    _mltAudCache.members.forEach(m => {
+      if (m.lc_group && m.lc_group.trim()) {
+        realGroups.add(m.lc_group.trim());
+      } else if (m.discipler_id) {
+        const lcl = _mltAudCache.members.find(x => x.id === m.discipler_id);
+        if (lcl) {
+          const key = `lcl:${lcl.id}`;
+          if (!virtualGroups.has(key)) {
+            virtualGroups.set(key, `Unassigned (LCL: ${lcl.name})`);
+          }
+        }
+      }
+    });
+    _mltAudCache.lcGroups = [
+      ...Array.from(realGroups).sort().map(g => ({id: g, label: g, real: true})),
+      ...Array.from(virtualGroups.entries()).map(([id, label]) => ({id, label, real: false}))
+    ];
+
+    const minSet = new Set();
+    _mltAudCache.members.forEach(m => {
+      [m.ministry, m.ministry2, m.ministry3].forEach(x => {
+        if (x && x.trim()) minSet.add(x.trim());
+      });
+    });
+    _mltAudCache.ministries = Array.from(minSet).sort().map(x => ({id: x, label: x}));
+  } catch(e) {
+    console.error('[mlt-aud-picker] cache load failed:', e);
+    _mltAudCache.members = [];
+    _mltAudCache.lcGroups = [];
+    _mltAudCache.ministries = [];
+  }
+}
+
+function _mltRenderAudPicker(){
+  const body = document.getElementById('mltAudPickerBody');
+  if (!body) return;
+
+  const titles = {
+    lc_groups:  '👥 Pick LC Groups',
+    member_ids: '🙋 Pick Members',
+    ministries: '⛪ Pick Ministries'
+  };
+  const placeholders = {
+    lc_groups:  'Search LC group name…',
+    member_ids: 'Search by member name…',
+    ministries: 'Search ministry name…'
+  };
+
+  if (body.getAttribute('data-aud-kind') !== _mltAudKind) {
+    body.setAttribute('data-aud-kind', _mltAudKind);
+    body.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem;flex-shrink:0;">
+        <h3 style="margin:0;font-size:15px;color:#1a1612;">${titles[_mltAudKind]}</h3>
+        <button onclick="_mltCloseAudPicker()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
+      </div>
+      <input type="text" placeholder="${placeholders[_mltAudKind]}"
+        oninput="_mltAudSearch = this.value; _mltRenderAudPickerListOnly();"
+        id="mltAudPickerSearchInput"
+        style="width:100%;padding:.6rem .8rem;border:1px solid #e2d8cc;border-radius:8px;font-size:13px;margin-bottom:.6rem;flex-shrink:0;">
+      <div id="mltAudPickerListWrap" style="flex:1;overflow-y:auto;border:1px solid #e2d8cc;border-radius:8px;background:#fafafa;"></div>
+      <div id="mltAudPickerFooter" style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;flex-shrink:0;"></div>
+    `;
+    const inp = document.getElementById('mltAudPickerSearchInput');
+    if (inp) {
+      inp.value = _mltAudSearch || '';
+      setTimeout(() => inp.focus(), 50);
+    }
+  }
+  _mltRenderAudPickerListOnly();
+}
+
+function _mltRenderAudPickerListOnly(){
+  const listWrap = document.getElementById('mltAudPickerListWrap');
+  const footer = document.getElementById('mltAudPickerFooter');
+  if (!listWrap || !footer) return;
+
+  const selectedIds = new Set((_annDraft?.audience?.[_mltAudKind] || []).map(String));
+  const search = (_mltAudSearch || '').toLowerCase().trim();
+
+  let listHtml;
+  if (_mltAudKind === 'lc_groups') {
+    const items = (_mltAudCache.lcGroups || []).filter(g =>
+      !search || g.label.toLowerCase().includes(search)
+    );
+    listHtml = items.length === 0
+      ? '<div style="padding:1.5rem;text-align:center;color:#6b5f4f;font-size:12px;">No LC groups match.</div>'
+      : items.map(g => {
+          const checked = selectedIds.has(String(g.id));
+          return `<label style="display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-bottom:1px solid #e2d8cc;cursor:pointer;${checked?'background:#fef9ed;':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="_mltToggleAudItem('${String(g.id).replace(/'/g,"\\'")}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
+            <span style="flex:1;font-size:13px;color:#1a1612;font-weight:${g.real?'600':'500'};">${MultiplyShared.escapeHTML(g.label)}${!g.real?' <span style=\"font-size:10px;color:#6b5f4f;font-style:italic;\">(virtual)</span>':''}</span>
+          </label>`;
+        }).join('');
+  } else if (_mltAudKind === 'member_ids') {
+    const items = (_mltAudCache.members || []).filter(m =>
+      !search || m.name.toLowerCase().includes(search)
+    );
+    listHtml = items.length === 0
+      ? '<div style="padding:1.5rem;text-align:center;color:#6b5f4f;font-size:12px;">No members match.</div>'
+      : items.map(m => {
+          const checked = selectedIds.has(String(m.id));
+          const subLine = m.lc_group || (m.is_facilitator ? `LCL${m.facilitator_role?' · '+m.facilitator_role:''}` : '—');
+          return `<label style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border-bottom:1px solid #e2d8cc;cursor:pointer;${checked?'background:#fef9ed;':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="_mltToggleAudItem('${m.id}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;color:#1a1612;font-weight:600;">${MultiplyShared.escapeHTML(m.name)}</div>
+              <div style="font-size:10.5px;color:#6b5f4f;">${MultiplyShared.escapeHTML(subLine)}</div>
+            </div>
+          </label>`;
+        }).join('');
+  } else if (_mltAudKind === 'ministries') {
+    const items = (_mltAudCache.ministries || []).filter(g =>
+      !search || g.label.toLowerCase().includes(search)
+    );
+    listHtml = items.length === 0
+      ? '<div style="padding:1.5rem;text-align:center;color:#6b5f4f;font-size:12px;">No ministries match.</div>'
+      : items.map(g => {
+          const checked = selectedIds.has(String(g.id));
+          return `<label style="display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-bottom:1px solid #e2d8cc;cursor:pointer;${checked?'background:#fef9ed;':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="_mltToggleAudItem('${String(g.id).replace(/'/g,"\\'")}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
+            <span style="flex:1;font-size:13px;color:#1a1612;font-weight:600;">${MultiplyShared.escapeHTML(g.label)}</span>
+          </label>`;
+        }).join('');
+  }
+  listWrap.innerHTML = listHtml;
+
+  const selectedCount = selectedIds.size;
+  footer.innerHTML = `
+    <span style="font-size:12px;color:#6b5f4f;">${selectedCount} selected</span>
+    <div style="display:flex;gap:.4rem;">
+      ${selectedCount > 0 ? `<button onclick="_mltClearAudSelection()" style="background:transparent;border:1px solid #e2d8cc;color:#6b5f4f;border-radius:6px;padding:.45rem .8rem;font-size:11.5px;cursor:pointer;">Clear all</button>` : ''}
+      <button onclick="_mltCloseAudPicker()" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem 1.1rem;font-weight:700;font-size:12.5px;cursor:pointer;">✓ Done</button>
+    </div>
+  `;
+}
+
+function _mltToggleAudItem(id, checked){
+  if (!_annDraft) return;
+  const key = _mltAudKind;
+  const arr = _annDraft.audience[key] || [];
+  if (checked) {
+    if (!arr.map(String).includes(String(id))) arr.push(id);
+  } else {
+    _annDraft.audience[key] = arr.filter(x => String(x) !== String(id));
+    return _mltRenderAudPickerListOnly();
+  }
+  _annDraft.audience[key] = arr;
+  _mltRenderAudPickerListOnly();
+}
+
+function _mltClearAudSelection(){
+  if (!_annDraft) return;
+  if (!confirm('Clear all selected ' + _mltAudKind.replace('_',' ') + '?')) return;
+  _annDraft.audience[_mltAudKind] = [];
+  _mltRenderAudPickerListOnly();
 }
 
 async function _annSubmitDraft(){
