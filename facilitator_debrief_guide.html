@@ -775,6 +775,24 @@ body {
   </div>
 </div>
 
+<!-- START-MODE PICKER — shown before form interaction -->
+<div id="startModePicker" style="display:none;background:#fff8e5;border-bottom:2px solid #b8882a;padding:1rem 1.5rem;text-align:center;">
+  <div style="font-size:13px;font-weight:600;color:#5c4615;margin-bottom:.7rem;">How would you like to start?</div>
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+    <button onclick="startNewSession()" style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:10px 20px;background:#2a5c40;color:#fff;border:none;border-radius:6px;cursor:pointer;">➕ New Session</button>
+    <button onclick="openPastDebriefs()" id="pastDebriefsBtn" style="font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:10px 20px;background:#fff;color:#5c4615;border:1.5px solid #b8882a;border-radius:6px;cursor:pointer;">📁 Past Debriefs <span id="pastDebriefsCount"></span></button>
+  </div>
+</div>
+
+<!-- AI REFERENCE CARD (carries forward last AI insights when starting new session) -->
+<div id="aiCarryForwardCard" style="display:none;margin:14px 24px;background:#f5efe2;border:1px solid #d4c5a0;border-radius:8px;padding:12px 16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleAiCarryForward()">
+    <div style="font-size:12px;font-weight:600;color:#5c4615;">📖 Last AI Insights — <span id="aiCarryForwardDate"></span></div>
+    <span id="aiCarryForwardChevron" style="font-size:14px;color:#5c4615;">▼</span>
+  </div>
+  <div id="aiCarryForwardBody" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #d4c5a0;font-size:12px;line-height:1.6;color:#3a3028;"></div>
+</div>
+
 <!-- AI PASTORAL ASSIST PANEL -->
 <div id="aiPanel" class="ai-panel" style="display:none; margin: 20px 24px;">
   <div class="ai-panel-header">
@@ -1521,6 +1539,16 @@ body {
         </div>
       </div>
       <div id="saveStatus" style="display:none;margin-top:10px;padding:.6rem .85rem;border-radius:6px;font-size:12.5px;line-height:1.5"></div>
+
+      <div id="markCompleteRow" style="margin-top:14px;padding:10px 14px;background:#f5efe2;border:1px solid #d4c5a0;border-radius:6px;display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="markCompleteChk" style="width:18px;height:18px;cursor:pointer;">
+        <label for="markCompleteChk" style="font-size:12.5px;color:#5c4615;cursor:pointer;line-height:1.4;flex:1;">
+          <strong>Mark this session complete</strong> — finalized debriefs appear in <em>Past Debriefs</em> by default. Leave unchecked to save as in-progress draft.
+        </label>
+      </div>
+      <div id="resumeBadge" style="display:none;margin-top:10px;padding:8px 12px;background:#eef6f1;border:1px solid #2a5c40;border-radius:6px;font-size:12px;color:#1f4530;">
+        🔄 <strong>Resuming a previous session</strong> — Save will UPDATE that record (not create a new one).
+      </div>
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:1rem">
@@ -1611,6 +1639,18 @@ var db = supabase.createClient(SB_URL, SB_KEY, {
   auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
 });
 
+// ─────────────────────────────────────────────────────────────────
+// SESSION LIFECYCLE — start mode, past debriefs, resume
+// ─────────────────────────────────────────────────────────────────
+// _resumingDebriefId set to a uuid when "Continue" was tapped on a past
+// row → save flow UPDATES that row instead of inserting a new one.
+var _resumingDebriefId = null;
+// _carryForwardAi set when starting NEW session, populated from prior AI
+// insights so pastor can reference them. Read-only display, not saved
+// again — but available to copy/contemplate.
+var _carryForwardAi = null;
+var _pastDebriefsList = null;  // cached list
+
 document.addEventListener('DOMContentLoaded', function() {
   var id = new URLSearchParams(window.location.search).get('id');
   if (!id) return;
@@ -1661,8 +1701,244 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
 
+    // Show start-mode picker + count past debriefs
+    _initStartMode();
+
   } catch(e) { console.error(e); }
 });
+
+// Show the start-mode picker and load count of past debriefs (complete only by default)
+async function _initStartMode(){
+  var picker = document.getElementById('startModePicker');
+  if (picker) picker.style.display = 'block';
+  try {
+    var {count, error} = await db.from('debrief_records')
+      .select('*', {count:'exact', head:true})
+      .eq('member_id', _memberId)
+      .eq('is_complete', true);
+    if (!error && count != null && count > 0) {
+      var btn = document.getElementById('pastDebriefsCount');
+      if (btn) btn.textContent = '(' + count + ')';
+    }
+  } catch(e) { /* non-fatal */ }
+}
+
+// User clicked "➕ New Session" → hide picker, load AI carry-forward if any
+async function startNewSession(){
+  var picker = document.getElementById('startModePicker');
+  if (picker) picker.style.display = 'none';
+  _resumingDebriefId = null;
+  document.getElementById('resumeBadge').style.display = 'none';
+  document.getElementById('markCompleteChk').checked = false;
+  // Load AI carry-forward from most recent debrief (any status)
+  try {
+    var {data} = await db.from('debrief_records')
+      .select('id,created_at,ai_raw_response,ai_parsed_json,final_summary')
+      .eq('member_id', _memberId)
+      .order('created_at', {ascending: false})
+      .limit(1);
+    if (data && data.length && (data[0].ai_raw_response || data[0].ai_parsed_json)) {
+      _carryForwardAi = data[0];
+      _renderAiCarryForward();
+    }
+  } catch(e) { /* non-fatal */ }
+}
+
+// Render the carry-forward reference card
+function _renderAiCarryForward(){
+  var card = document.getElementById('aiCarryForwardCard');
+  if (!card || !_carryForwardAi) return;
+  var dateLabel = _fmtDateForDisplay(_carryForwardAi.created_at);
+  document.getElementById('aiCarryForwardDate').textContent = dateLabel;
+  var bodyHtml = '';
+  var p = _carryForwardAi.ai_parsed_json;
+  if (p && p.overall_note) {
+    bodyHtml += '<div style="margin-bottom:10px;"><strong>Overall note from last AI analysis:</strong><br>' +
+      escapeHtml(p.overall_note) + '</div>';
+  }
+  if (p && Array.isArray(p.analyses) && p.analyses.length) {
+    bodyHtml += '<div style="font-size:11.5px;color:#6b5f4f;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Flags from last session</div>';
+    bodyHtml += '<ul style="margin:0;padding-left:18px;">';
+    p.analyses.forEach(function(a){
+      var color = a.flag === 'CONCERN' ? '#9a2727' : (a.flag === 'NEEDS CLARIFICATION' ? '#7a5800' : '#1f6b3a');
+      bodyHtml += '<li style="margin-bottom:6px;"><strong style="color:' + color + ';">' +
+        escapeHtml(a.qid || '') + ' — ' + escapeHtml(a.flag || '') + '</strong>' +
+        (a.flag_reason ? ': ' + escapeHtml(a.flag_reason) : '') + '</li>';
+    });
+    bodyHtml += '</ul>';
+  } else if (_carryForwardAi.ai_raw_response) {
+    bodyHtml += '<div style="font-style:italic;color:#6b5f4f;">Last session had AI notes (not parsed to JSON). Load full debrief to view raw text.</div>';
+  }
+  if (_carryForwardAi.final_summary) {
+    bodyHtml += '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #d4c5a0;"><strong>Last summary:</strong><br>' +
+      escapeHtml(_carryForwardAi.final_summary) + '</div>';
+  }
+  document.getElementById('aiCarryForwardBody').innerHTML = bodyHtml;
+  card.style.display = 'block';
+}
+
+function toggleAiCarryForward(){
+  var body = document.getElementById('aiCarryForwardBody');
+  var chev = document.getElementById('aiCarryForwardChevron');
+  if (!body) return;
+  var visible = body.style.display !== 'none';
+  body.style.display = visible ? 'none' : 'block';
+  if (chev) chev.textContent = visible ? '▼' : '▲';
+}
+
+// User clicked "📁 Past Debriefs" → open list modal
+async function openPastDebriefs(){
+  // Build modal once
+  var modal = document.getElementById('pastDebriefsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pastDebriefsModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:1rem;overflow-y:auto;font-family:"IBM Plex Sans",sans-serif;';
+    modal.innerHTML = '<div id="pastDebriefsBody" style="background:#fff;max-width:560px;width:100%;border-radius:14px;padding:1.25rem;margin-top:2rem;margin-bottom:2rem;color:#1a1612;box-shadow:0 12px 40px rgba(0,0,0,.3);max-height:80vh;overflow-y:auto;"></div>';
+    modal.onclick = function(e){ if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  document.getElementById('pastDebriefsBody').innerHTML =
+    '<div style="text-align:center;padding:2rem;color:#6b5f4f;">Loading...</div>';
+
+  // Load all debriefs for this member
+  try {
+    var {data, error} = await db.from('debrief_records')
+      .select('id,created_at,facilitator_name,final_summary,is_complete,ai_parsed_json,next_meeting_date,assigned_discipler_name')
+      .eq('member_id', _memberId)
+      .order('created_at', {ascending: false})
+      .limit(50);
+    if (error) throw error;
+    _pastDebriefsList = data || [];
+    _renderPastDebriefsList('complete');
+  } catch(e) {
+    document.getElementById('pastDebriefsBody').innerHTML =
+      '<div style="color:#9a2727;padding:1rem;">Error loading: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+var _pastDebriefsTab = 'complete';
+function _renderPastDebriefsList(tab){
+  _pastDebriefsTab = tab || _pastDebriefsTab;
+  var body = document.getElementById('pastDebriefsBody');
+  if (!body) return;
+
+  var complete = (_pastDebriefsList || []).filter(function(d){ return d.is_complete; });
+  var inProgress = (_pastDebriefsList || []).filter(function(d){ return !d.is_complete; });
+  var rows = _pastDebriefsTab === 'complete' ? complete : inProgress;
+
+  var tabsHtml =
+    '<div style="display:flex;gap:6px;margin-bottom:14px;">' +
+    '<button onclick="_renderPastDebriefsList(\'complete\')" style="flex:1;padding:8px;background:' +
+      (_pastDebriefsTab === 'complete' ? '#2a5c40' : '#fff') + ';color:' +
+      (_pastDebriefsTab === 'complete' ? '#fff' : '#1a1612') +
+      ';border:1px solid #2a5c40;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">' +
+      '✓ Completed (' + complete.length + ')</button>' +
+    '<button onclick="_renderPastDebriefsList(\'inProgress\')" style="flex:1;padding:8px;background:' +
+      (_pastDebriefsTab === 'inProgress' ? '#b8882a' : '#fff') + ';color:' +
+      (_pastDebriefsTab === 'inProgress' ? '#fff' : '#1a1612') +
+      ';border:1px solid #b8882a;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;">' +
+      '🔄 In Progress (' + inProgress.length + ')</button>' +
+    '</div>';
+
+  var listHtml = '';
+  if (!rows.length) {
+    listHtml = '<div style="padding:2rem;text-align:center;color:#6b5f4f;font-size:13px;">' +
+      (_pastDebriefsTab === 'complete' ? 'No completed debriefs yet.' : 'No in-progress drafts.') +
+      '</div>';
+  } else {
+    listHtml = rows.map(function(d){
+      var dateLabel = _fmtDateForDisplay(d.created_at);
+      var summary = (d.final_summary || '').slice(0, 140) + ((d.final_summary || '').length > 140 ? '…' : '');
+      var flagCount = (d.ai_parsed_json && Array.isArray(d.ai_parsed_json.analyses)) ? d.ai_parsed_json.analyses.length : 0;
+      var btnRow = d.is_complete
+        ? '<button onclick="_loadPastDebrief(\'' + d.id + '\', \'view\')" style="background:#fff;border:1px solid #2a5c40;color:#2a5c40;padding:6px 12px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;">👁 View</button>' +
+          '<button onclick="_loadPastDebrief(\'' + d.id + '\', \'newWithCarry\')" style="background:#2a5c40;color:#fff;border:none;padding:6px 12px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;margin-left:6px;">➕ New (carry AI)</button>'
+        : '<button onclick="_loadPastDebrief(\'' + d.id + '\', \'continue\')" style="background:#b8882a;color:#fff;border:none;padding:6px 12px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;">✏ Continue</button>';
+      return '<div style="background:#faf6ef;border:1px solid #e2d8cc;border-radius:8px;padding:12px 14px;margin-bottom:8px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">' +
+          '<div style="font-size:12.5px;font-weight:700;color:#1a1612;">' + escapeHtml(dateLabel) + '</div>' +
+          '<div style="font-size:11px;color:#6b5f4f;">' + escapeHtml(d.facilitator_name || 'Unknown') + '</div>' +
+        '</div>' +
+        (summary ? '<div style="font-size:12px;color:#3a3028;line-height:1.5;margin-bottom:8px;">' + escapeHtml(summary) + '</div>' : '') +
+        (flagCount > 0 ? '<div style="font-size:10.5px;color:#7a5800;margin-bottom:8px;">🤖 ' + flagCount + ' AI flag' + (flagCount === 1 ? '' : 's') + '</div>' : '') +
+        '<div style="display:flex;justify-content:flex-end;">' + btnRow + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  body.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+      '<h3 style="margin:0;font-size:16px;">📁 Past Debriefs — ' + escapeHtml(_memberName) + '</h3>' +
+      '<button onclick="document.getElementById(\'pastDebriefsModal\').style.display=\'none\'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>' +
+    '</div>' + tabsHtml + listHtml;
+}
+
+// Load a specific past debrief by id; mode: 'view' | 'continue' | 'newWithCarry'
+async function _loadPastDebrief(debriefId, mode){
+  try {
+    var {data, error} = await db.from('debrief_records').select('*').eq('id', debriefId).single();
+    if (error) throw error;
+
+    document.getElementById('pastDebriefsModal').style.display = 'none';
+    document.getElementById('startModePicker').style.display = 'none';
+
+    if (mode === 'newWithCarry') {
+      // Fresh form, but show AI insights as carry-forward reference
+      _resumingDebriefId = null;
+      _carryForwardAi = data;
+      _renderAiCarryForward();
+      document.getElementById('markCompleteChk').checked = false;
+      document.getElementById('resumeBadge').style.display = 'none';
+      // Don't pre-fill summary/dates — those should be fresh for new session
+      return;
+    }
+
+    if (mode === 'continue') {
+      _resumingDebriefId = data.id;
+      document.getElementById('resumeBadge').style.display = 'block';
+    } else {
+      // 'view' — read-only-ish; we still let them edit if they want, but
+      // don't set _resumingDebriefId so save creates a new row.
+      _resumingDebriefId = null;
+      document.getElementById('resumeBadge').style.display = 'none';
+    }
+
+    // Pre-fill form fields from loaded record
+    if (document.getElementById('finalSummary')) document.getElementById('finalSummary').value = data.final_summary || '';
+    if (document.getElementById('nextMeetingDate')) document.getElementById('nextMeetingDate').value = data.next_meeting_date || '';
+    if (document.getElementById('assignedDiscipler')) document.getElementById('assignedDiscipler').value = data.assigned_discipler_name || '';
+    if (document.getElementById('markCompleteChk')) document.getElementById('markCompleteChk').checked = !!data.is_complete;
+
+    // Restore AI state so it shows in the AI panel
+    if (data.ai_raw_response) {
+      _aiRawResponse = data.ai_raw_response;
+      var inp = document.getElementById('aiResponseInput');
+      if (inp) inp.value = data.ai_raw_response;
+    }
+    if (data.ai_parsed_json) {
+      _aiParsedJson = data.ai_parsed_json;
+      var out = document.getElementById('aiParsedResults');
+      if (out && typeof renderAIResultsInto === 'function') {
+        renderAIResultsInto(data.ai_parsed_json, out);
+      }
+    }
+  } catch(e) {
+    alert('Could not load debrief: ' + e.message);
+  }
+}
+
+// Helper — format date string for display
+function _fmtDateForDisplay(iso){
+  if (!iso) return '—';
+  try {
+    var d = new Date(iso);
+    return d.toLocaleString('en-PH', {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+  } catch(e) { return iso; }
+}
+
+
 
 // ─────────────────────────────────────────────────────────────────
 // AI Pastoral Assist
@@ -2140,8 +2416,9 @@ window.saveDebrief = async function() {
       }
     }
 
-    // ── Insert the debrief record ──
-    var {data: debriefRow, error: debriefErr} = await db.from('debrief_records').insert({
+    // ── Determine save strategy: UPDATE if resuming, INSERT otherwise ──
+    var isComplete = !!(document.getElementById('markCompleteChk') && document.getElementById('markCompleteChk').checked);
+    var payload = {
       member_id:               _memberId,
       facilitator_id:          facilitatorId,
       facilitator_name:        facilitatorName,
@@ -2153,7 +2430,19 @@ window.saveDebrief = async function() {
       member_diag_score:       _memberDiagScore,
       ai_raw_response:         _aiRawResponse || null,
       ai_parsed_json:          _aiParsedJson  || null,
-    }).select('id').single();
+      is_complete:             isComplete,
+    };
+
+    var debriefRow, debriefErr;
+    if (_resumingDebriefId) {
+      // UPDATE existing in-progress row
+      var upd = await db.from('debrief_records').update(payload).eq('id', _resumingDebriefId).select('id').single();
+      debriefRow = upd.data; debriefErr = upd.error;
+    } else {
+      // INSERT new row
+      var ins = await db.from('debrief_records').insert(payload).select('id').single();
+      debriefRow = ins.data; debriefErr = ins.error;
+    }
     if (debriefErr) throw debriefErr;
     var debriefId = debriefRow?.id || null;
 
