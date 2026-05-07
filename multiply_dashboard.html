@@ -5348,7 +5348,15 @@ async function openAnnAckDetails(annId){
 function _annAudienceMatchesMemberMD(filter, member){
   if (!filter) return false;
   if (filter.all === true) return true;
-  if (filter.lc_groups?.includes(member.lc_group)) return true;
+  // Real LC group match
+  if (filter.lc_groups?.length) {
+    if (member.lc_group && filter.lc_groups.includes(member.lc_group)) return true;
+    // Virtual "Unassigned (LCL: ...)" — id format "lcl:<discipler_id>"
+    if (!member.lc_group && member.discipler_id) {
+      const virtKey = 'lcl:' + member.discipler_id;
+      if (filter.lc_groups.includes(virtKey)) return true;
+    }
+  }
   if (filter.levels?.includes(member.pipeline_level)) return true;
   if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
   if (filter.member_ids?.includes(member.id)) return true;
@@ -5362,14 +5370,11 @@ async function _annComputeAudienceSizeMD(filter){
         .or('is_test_member.is.null,is_test_member.eq.false');
       return count || 0;
     }
-    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3')
+    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id')
       .or('is_test_member.is.null,is_test_member.eq.false');
     let n = 0;
     (all||[]).forEach(m => {
-      if (filter.lc_groups?.includes(m.lc_group)) n++;
-      else if (filter.levels?.includes(m.pipeline_level)) n++;
-      else if (filter.ministries?.some(min => [m.ministry, m.ministry2, m.ministry3].includes(min))) n++;
-      else if (filter.member_ids?.includes(m.id)) n++;
+      if (_annAudienceMatchesMemberMD(filter, m)) n++;
     });
     return n;
   } catch(e) { return 0; }
@@ -5557,24 +5562,48 @@ function _renderPastorAnnComposer(){
         <label for="pAnnAllChk" style="font-size:13px;cursor:pointer;">📢 All members (broadcast)</label>
       </div>
       ${!d.audience.all ? `
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem;font-size:12px;line-height:1.6;">
-          <div style="margin-bottom:.5rem;">
-            <strong>LC Groups</strong> (comma-separated):<br>
-            <input type="text" value="${(d.audience.lc_groups||[]).join(', ')}"
-              oninput="_pastorAnnDraft.audience.lc_groups = this.value.split(',').map(s=>s.trim()).filter(Boolean);"
-              style="width:100%;padding:.4rem .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:.2rem;">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem;font-size:12px;line-height:1.5;">
+
+          <div style="margin-bottom:.7rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">
+              <strong>👥 LC Groups</strong>
+              <button onclick="openAudiencePicker('lc_groups')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.3rem .7rem;font-size:11px;font-weight:700;cursor:pointer;">＋ Pick</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem;min-height:1.4rem;">
+              ${_renderAudienceChips('lc_groups', d.audience.lc_groups||[])}
+            </div>
           </div>
-          <div style="margin-bottom:.5rem;">
-            <strong>Pipeline Levels</strong> (0-5):<br>
+
+          <div style="margin-bottom:.7rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">
+              <strong>🙋 Particular Members</strong>
+              <button onclick="openAudiencePicker('member_ids')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.3rem .7rem;font-size:11px;font-weight:700;cursor:pointer;">＋ Pick</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem;min-height:1.4rem;">
+              ${_renderAudienceChips('member_ids', d.audience.member_ids||[])}
+            </div>
+          </div>
+
+          <div style="margin-bottom:.7rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;">
+              <strong>⛪ Ministries</strong>
+              <button onclick="openAudiencePicker('ministries')" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.3rem .7rem;font-size:11px;font-weight:700;cursor:pointer;">＋ Pick</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem;min-height:1.4rem;">
+              ${_renderAudienceChips('ministries', d.audience.ministries||[])}
+            </div>
+          </div>
+
+          <div>
+            <strong>📊 Pipeline Levels</strong> (0-5, comma-separated):<br>
             <input type="text" value="${(d.audience.levels||[]).join(', ')}"
               oninput="_pastorAnnDraft.audience.levels = this.value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));"
+              placeholder="e.g. 1, 2, 4"
               style="width:100%;padding:.4rem .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:.2rem;">
           </div>
-          <div>
-            <strong>Ministries</strong>:<br>
-            <input type="text" value="${(d.audience.ministries||[]).join(', ')}"
-              oninput="_pastorAnnDraft.audience.ministries = this.value.split(',').map(s=>s.trim()).filter(Boolean);"
-              style="width:100%;padding:.4rem .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:.2rem;">
+
+          <div style="font-size:10.5px;color:var(--muted);margin-top:.6rem;font-style:italic;">
+            Member matches if ANY filter matches. Leave a section empty to ignore it.
           </div>
         </div>
       ` : ''}
@@ -5593,6 +5622,242 @@ function _renderPastorAnnComposer(){
       ✓ ${isEdit?'Save & Publish':'Publish Now'}
     </button>
   `;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUDIENCE PICKER  (LC Groups / Particular Members / Ministries)
+// ─────────────────────────────────────────────────────────────────────
+// Opened from the composer's ＋ Pick buttons. Three picker types share
+// one modal that adapts based on `_audPickerKind`:
+//   'lc_groups'  → real LC Groups + virtual "Unassigned (LCL: ...)" groups
+//   'member_ids' → flat alphabetical list of all members, search bar
+//   'ministries' → flat list of distinct ministries from members table
+// All pickers: search filter + multi-select chips. Done button closes.
+// ═══════════════════════════════════════════════════════════════════════
+
+let _audPickerKind = null;          // current picker type
+let _audPickerSearch = '';          // current search filter text
+let _audPickerCache = {              // cached lookup data (loaded once)
+  members: null,
+  lcGroups: null,
+  ministries: null,
+};
+
+// Build chip strip for the composer (renders selected items inline)
+function _renderAudienceChips(kind, ids){
+  if (!ids || !ids.length) {
+    return '<span style="font-size:11px;color:var(--muted);font-style:italic;">none selected</span>';
+  }
+  return ids.map(id => {
+    let label = id;
+    if (kind === 'member_ids') {
+      const m = (_audPickerCache.members || []).find(x => x.id === id);
+      if (m) label = m.name;
+      else label = id.slice(0, 8) + '…';
+    }
+    return `<span style="display:inline-flex;align-items:center;gap:.3rem;background:#fff;border:1px solid var(--gold);border-radius:999px;padding:.2rem .5rem .2rem .65rem;font-size:11px;color:var(--ink);">
+      ${MultiplyShared.escapeHTML(label)}
+      <button onclick="_removeAudChip('${kind}','${String(id).replace(/'/g,"\\'")}')" style="background:none;border:none;color:#9a2727;font-weight:700;cursor:pointer;padding:0 .1rem;font-size:13px;line-height:1;">×</button>
+    </span>`;
+  }).join('');
+}
+
+function _removeAudChip(kind, id){
+  if (!_pastorAnnDraft) return;
+  const arr = _pastorAnnDraft.audience[kind] || [];
+  _pastorAnnDraft.audience[kind] = arr.filter(x => String(x) !== String(id));
+  _renderPastorAnnComposer();
+}
+
+async function openAudiencePicker(kind){
+  _audPickerKind = kind;
+  _audPickerSearch = '';
+  await _ensureAudPickerCache();
+  let modal = document.getElementById('audPickerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'audPickerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:10000;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = '<div id="audPickerBody" style="background:#fff;max-width:500px;width:100%;border-radius:14px;padding:1.1rem;margin-top:2rem;margin-bottom:2rem;color:#1a1612;box-shadow:0 12px 40px rgba(0,0,0,.3);max-height:80vh;display:flex;flex-direction:column;"></div>';
+    modal.onclick = (e) => { if (e.target === modal) _closeAudPicker(); };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  _renderAudPicker();
+}
+
+function _closeAudPicker(){
+  const m = document.getElementById('audPickerModal');
+  if (m) m.style.display = 'none';
+  _renderPastorAnnComposer();  // re-render composer with updated chips
+}
+
+async function _ensureAudPickerCache(){
+  if (_audPickerCache.members) return;
+  try {
+    // Load members + LCL relations in one go
+    const {data: members, error} = await db.from('members')
+      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3,is_facilitator,facilitator_role,discipler_id')
+      .or('is_test_member.is.null,is_test_member.eq.false')
+      .order('name');
+    if (error) throw error;
+    _audPickerCache.members = members || [];
+
+    // Build LC Groups: real groups (from .lc_group) + virtual LCL-derived groups
+    const realGroups = new Set();
+    const virtualGroups = new Map();  // key = "lcl:<id>" → label
+    _audPickerCache.members.forEach(m => {
+      if (m.lc_group && m.lc_group.trim()) {
+        realGroups.add(m.lc_group.trim());
+      } else if (m.discipler_id) {
+        // Virtual group: members under this LCL
+        const lcl = _audPickerCache.members.find(x => x.id === m.discipler_id);
+        if (lcl) {
+          const key = `lcl:${lcl.id}`;
+          if (!virtualGroups.has(key)) {
+            virtualGroups.set(key, `Unassigned (LCL: ${lcl.name})`);
+          }
+        }
+      }
+    });
+    _audPickerCache.lcGroups = [
+      ...Array.from(realGroups).sort().map(g => ({id: g, label: g, real: true})),
+      ...Array.from(virtualGroups.entries()).map(([id, label]) => ({id, label, real: false}))
+    ];
+
+    // Build Ministries: distinct values from ministry / ministry2 / ministry3
+    const minSet = new Set();
+    _audPickerCache.members.forEach(m => {
+      [m.ministry, m.ministry2, m.ministry3].forEach(x => {
+        if (x && x.trim()) minSet.add(x.trim());
+      });
+    });
+    _audPickerCache.ministries = Array.from(minSet).sort().map(x => ({id: x, label: x}));
+  } catch(e) {
+    console.error('[aud-picker] cache load failed:', e);
+    _audPickerCache.members = [];
+    _audPickerCache.lcGroups = [];
+    _audPickerCache.ministries = [];
+  }
+}
+
+function _renderAudPicker(){
+  const body = document.getElementById('audPickerBody');
+  if (!body) return;
+
+  const titles = {
+    lc_groups:  '👥 Pick LC Groups',
+    member_ids: '🙋 Pick Members',
+    ministries: '⛪ Pick Ministries'
+  };
+  const placeholders = {
+    lc_groups:  'Search LC group name…',
+    member_ids: 'Search by member name…',
+    ministries: 'Search ministry name…'
+  };
+
+  const selectedIds = new Set((_pastorAnnDraft?.audience?.[_audPickerKind] || []).map(String));
+  const search = (_audPickerSearch || '').toLowerCase().trim();
+
+  let listHtml;
+  if (_audPickerKind === 'lc_groups') {
+    const items = (_audPickerCache.lcGroups || []).filter(g =>
+      !search || g.label.toLowerCase().includes(search)
+    );
+    listHtml = items.length === 0
+      ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;">No LC groups match.</div>'
+      : items.map(g => {
+          const checked = selectedIds.has(String(g.id));
+          return `<label style="display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-bottom:1px solid var(--border);cursor:pointer;${checked?'background:#fef9ed;':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="_toggleAudPickerItem('${String(g.id).replace(/'/g,"\\'")}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
+            <span style="flex:1;font-size:13px;color:var(--ink);font-weight:${g.real?'600':'500'};">${MultiplyShared.escapeHTML(g.label)}${!g.real?' <span style=\"font-size:10px;color:var(--muted);font-style:italic;\">(virtual)</span>':''}</span>
+          </label>`;
+        }).join('');
+
+  } else if (_audPickerKind === 'member_ids') {
+    const items = (_audPickerCache.members || []).filter(m =>
+      !search || m.name.toLowerCase().includes(search)
+    );
+    listHtml = items.length === 0
+      ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;">No members match.</div>'
+      : items.map(m => {
+          const checked = selectedIds.has(String(m.id));
+          const subLine = m.lc_group || (m.is_facilitator ? `LCL${m.facilitator_role?' · '+m.facilitator_role:''}` : '—');
+          return `<label style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border-bottom:1px solid var(--border);cursor:pointer;${checked?'background:#fef9ed;':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="_toggleAudPickerItem('${m.id}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;color:var(--ink);font-weight:600;">${MultiplyShared.escapeHTML(m.name)}</div>
+              <div style="font-size:10.5px;color:var(--muted);">${MultiplyShared.escapeHTML(subLine)}</div>
+            </div>
+          </label>`;
+        }).join('');
+
+  } else if (_audPickerKind === 'ministries') {
+    const items = (_audPickerCache.ministries || []).filter(g =>
+      !search || g.label.toLowerCase().includes(search)
+    );
+    listHtml = items.length === 0
+      ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;">No ministries match.</div>'
+      : items.map(g => {
+          const checked = selectedIds.has(String(g.id));
+          return `<label style="display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-bottom:1px solid var(--border);cursor:pointer;${checked?'background:#fef9ed;':''}">
+            <input type="checkbox" ${checked?'checked':''} onchange="_toggleAudPickerItem('${String(g.id).replace(/'/g,"\\'")}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
+            <span style="flex:1;font-size:13px;color:var(--ink);font-weight:600;">${MultiplyShared.escapeHTML(g.label)}</span>
+          </label>`;
+        }).join('');
+  }
+
+  const selectedCount = selectedIds.size;
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem;flex-shrink:0;">
+      <h3 style="margin:0;font-size:15px;color:var(--ink);">${titles[_audPickerKind]}</h3>
+      <button onclick="_closeAudPicker()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
+    </div>
+    <input type="text" placeholder="${placeholders[_audPickerKind]}" value="${MultiplyShared.escapeHTML(_audPickerSearch)}"
+      oninput="_audPickerSearch = this.value; _renderAudPicker(); document.getElementById('audPickerSearchInput')?.focus();"
+      id="audPickerSearchInput"
+      style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:.6rem;flex-shrink:0;">
+    <div style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fafafa;">
+      ${listHtml}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;flex-shrink:0;">
+      <span style="font-size:12px;color:var(--muted);">${selectedCount} selected</span>
+      <div style="display:flex;gap:.4rem;">
+        ${selectedCount > 0 ? `<button onclick="_clearAudPickerSelection()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.45rem .8rem;font-size:11.5px;cursor:pointer;">Clear all</button>` : ''}
+        <button onclick="_closeAudPicker()" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem 1.1rem;font-weight:700;font-size:12.5px;cursor:pointer;">✓ Done</button>
+      </div>
+    </div>
+  `;
+  // Restore focus to search box (oninput re-renders the body so we lose focus)
+  setTimeout(() => {
+    const inp = document.getElementById('audPickerSearchInput');
+    if (inp && document.activeElement !== inp && _audPickerSearch) {
+      inp.focus();
+      inp.setSelectionRange(_audPickerSearch.length, _audPickerSearch.length);
+    }
+  }, 0);
+}
+
+function _toggleAudPickerItem(id, checked){
+  if (!_pastorAnnDraft) return;
+  const key = _audPickerKind;
+  const arr = _pastorAnnDraft.audience[key] || [];
+  if (checked) {
+    if (!arr.map(String).includes(String(id))) arr.push(id);
+  } else {
+    _pastorAnnDraft.audience[key] = arr.filter(x => String(x) !== String(id));
+    return _renderAudPicker();
+  }
+  _pastorAnnDraft.audience[key] = arr;
+  _renderAudPicker();
+}
+
+function _clearAudPickerSelection(){
+  if (!_pastorAnnDraft) return;
+  if (!confirm('Clear all selected ' + _audPickerKind.replace('_',' ') + '?')) return;
+  _pastorAnnDraft.audience[_audPickerKind] = [];
+  _renderAudPicker();
 }
 
 async function _pastorAnnPublish(){
