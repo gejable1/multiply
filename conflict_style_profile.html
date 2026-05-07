@@ -1491,8 +1491,8 @@ h2.sec-title {
 // ═══════════════════════════════════════════════════════════════
 // SUPABASE CONFIG
 // ═══════════════════════════════════════════════════════════════
-const SB_URL = "https://hgjvhyqvugesqfvqxasn.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhnanZoeXF2dWdlc3FmdnF4YXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1MjkyMjIsImV4cCI6MjA3MjEwNTIyMn0.6S1AwjvKn0n-_IjFOvbOj11cGJExf1t4pTavJtFJUbI";
+const SB_URL = "https://tirzeikbflolaclgtket.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8";
 let _db = null;
 function getDB(){
   if(!_db){
@@ -1889,6 +1889,40 @@ function _showIdlePrompt(){
     // Set today's date if empty
     const dateEl = document.getElementById('pDate');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+
+    // ── Auto-link member from URL (?id=<uuid>) ──
+    // Dashboard's "Take" / "Send link" buttons open this page with ?id=<member-uuid>.
+    // Fetch the member's name and pre-fill the link state so the participant
+    // doesn't have to re-search and the save lands on the right member record.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlId = params.get('id');
+      if (urlId) {
+        // Fire async; UI is already rendered. Keep failures silent —
+        // member can still self-search if this errors out.
+        (async () => {
+          try {
+            const { data } = await getDB().from('members').select('id,name').eq('id', urlId).limit(1);
+            if (data && data.length) {
+              const m = data[0];
+              if (typeof selectMember === 'function') {
+                selectMember(m.id, m.name);
+              } else {
+                // Fallback if hoisting order ever changes
+                _memberId = m.id;
+                document.getElementById('selectedMemberId').value = m.id;
+                const ms = document.getElementById('memberSearch'); if (ms) ms.value = m.name;
+                const sel = document.getElementById('memberSelected');
+                if (sel) { sel.style.display = 'block'; sel.textContent = '✓ Linked: ' + m.name; }
+                const pn = document.getElementById('pName'); if (pn && !pn.value) pn.value = m.name;
+              }
+            } else {
+              console.warn('URL id provided but member not found:', urlId);
+            }
+          } catch(e){ console.warn('URL preload failed:', e.message); }
+        })();
+      }
+    } catch(e){ console.warn('URL preload skipped:', e.message); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
@@ -1939,7 +1973,15 @@ async function saveToDashboard(){
     alert('Please complete the assessment first.');
     return;
   }
-  const name = document.getElementById('pName').value.trim() || 'Unknown';
+  // Resolve name with progressive fallbacks (mirrors PDF logic)
+  const _resolveName = () => {
+    const a = document.getElementById('pName')?.value?.trim();          if (a) return a;
+    const b = document.getElementById('memberSearch')?.value?.trim();   if (b) return b;
+    const badge = document.getElementById('memberSelected')?.textContent || '';
+    const m = badge.match(/Linked:\s*(.+)$/);                            if (m && m[1]) return m[1].trim();
+    return 'Unknown';
+  };
+  const name = _resolveName();
   const memberId = _memberId || document.getElementById('selectedMemberId').value || null;
   const lcGroup = document.getElementById('pGroup').value.trim() || null;
   const dateTaken = document.getElementById('pDate').value || new Date().toISOString().split('T')[0];
@@ -2081,7 +2123,23 @@ async function downloadPDFReport(chainToSave){
   y = 110;
 
   // ── MEMBER INFO ──
-  const memberName = document.getElementById('pName')?.value || 'Unknown';
+  // Resolve member name with progressive fallbacks so the PDF filename and
+  // header never silently land on "Unknown" when other sources have the data:
+  //   1. The "Full Name" input (pName) — what the participant typed
+  //   2. The member-search field (memberSearch) — populated by URL preload or selectMember()
+  //   3. The "Linked: <name>" badge text — set by selectMember()
+  // If all three are empty, keep "Unknown" (rare: walk-in retreat use, no member link).
+  function resolveMemberName(){
+    const direct = document.getElementById('pName')?.value?.trim();
+    if (direct) return direct;
+    const fromSearch = document.getElementById('memberSearch')?.value?.trim();
+    if (fromSearch) return fromSearch;
+    const badge = document.getElementById('memberSelected')?.textContent || '';
+    const m = badge.match(/Linked:\s*(.+)$/);
+    if (m && m[1]) return m[1].trim();
+    return 'Unknown';
+  }
+  const memberName = resolveMemberName();
   const lcGroup    = document.getElementById('pGroup')?.value || '—';
   const dateTaken  = document.getElementById('pDate')?.value || new Date().toISOString().split('T')[0];
   const facilitator = document.getElementById('pAdmin')?.value || '—';
