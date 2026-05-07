@@ -5689,6 +5689,10 @@ async function openAudiencePicker(kind){
 function _closeAudPicker(){
   const m = document.getElementById('audPickerModal');
   if (m) m.style.display = 'none';
+  // Clear data attribute so next open rebuilds the shell fresh
+  const body = document.getElementById('audPickerBody');
+  if (body) body.removeAttribute('data-aud-kind');
+  _audPickerSearch = '';
   _renderPastorAnnComposer();  // re-render composer with updated chips
 }
 
@@ -5756,6 +5760,40 @@ function _renderAudPicker(){
     ministries: 'Search ministry name…'
   };
 
+  // Build full modal shell (only on first render or kind change)
+  // We use a data attribute to detect if shell already matches the current kind.
+  if (body.getAttribute('data-aud-kind') !== _audPickerKind) {
+    body.setAttribute('data-aud-kind', _audPickerKind);
+    body.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem;flex-shrink:0;">
+        <h3 style="margin:0;font-size:15px;color:var(--ink);">${titles[_audPickerKind]}</h3>
+        <button onclick="_closeAudPicker()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
+      </div>
+      <input type="text" placeholder="${placeholders[_audPickerKind]}"
+        oninput="_audPickerSearch = this.value; _renderAudPickerListOnly();"
+        id="audPickerSearchInput"
+        style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:.6rem;flex-shrink:0;">
+      <div id="audPickerListWrap" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fafafa;"></div>
+      <div id="audPickerFooter" style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;flex-shrink:0;"></div>
+    `;
+    // Set initial value of search box (preserves any existing _audPickerSearch)
+    const inp = document.getElementById('audPickerSearchInput');
+    if (inp) {
+      inp.value = _audPickerSearch || '';
+      setTimeout(() => inp.focus(), 50);
+    }
+  }
+
+  // Always re-render the list + footer (cheap, doesn't touch the input)
+  _renderAudPickerListOnly();
+}
+
+// Render only the list and footer — preserves the search input element/focus/cursor
+function _renderAudPickerListOnly(){
+  const listWrap = document.getElementById('audPickerListWrap');
+  const footer = document.getElementById('audPickerFooter');
+  if (!listWrap || !footer) return;
+
   const selectedIds = new Set((_pastorAnnDraft?.audience?.[_audPickerKind] || []).map(String));
   const search = (_audPickerSearch || '').toLowerCase().trim();
 
@@ -5773,7 +5811,6 @@ function _renderAudPicker(){
             <span style="flex:1;font-size:13px;color:var(--ink);font-weight:${g.real?'600':'500'};">${MultiplyShared.escapeHTML(g.label)}${!g.real?' <span style=\"font-size:10px;color:var(--muted);font-style:italic;\">(virtual)</span>':''}</span>
           </label>`;
         }).join('');
-
   } else if (_audPickerKind === 'member_ids') {
     const items = (_audPickerCache.members || []).filter(m =>
       !search || m.name.toLowerCase().includes(search)
@@ -5791,7 +5828,6 @@ function _renderAudPicker(){
             </div>
           </label>`;
         }).join('');
-
   } else if (_audPickerKind === 'ministries') {
     const items = (_audPickerCache.ministries || []).filter(g =>
       !search || g.label.toLowerCase().includes(search)
@@ -5806,37 +5842,16 @@ function _renderAudPicker(){
           </label>`;
         }).join('');
   }
+  listWrap.innerHTML = listHtml;
 
   const selectedCount = selectedIds.size;
-
-  body.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem;flex-shrink:0;">
-      <h3 style="margin:0;font-size:15px;color:var(--ink);">${titles[_audPickerKind]}</h3>
-      <button onclick="_closeAudPicker()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
-    </div>
-    <input type="text" placeholder="${placeholders[_audPickerKind]}" value="${MultiplyShared.escapeHTML(_audPickerSearch)}"
-      oninput="_audPickerSearch = this.value; _renderAudPicker(); document.getElementById('audPickerSearchInput')?.focus();"
-      id="audPickerSearchInput"
-      style="width:100%;padding:.6rem .8rem;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:.6rem;flex-shrink:0;">
-    <div style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fafafa;">
-      ${listHtml}
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;flex-shrink:0;">
-      <span style="font-size:12px;color:var(--muted);">${selectedCount} selected</span>
-      <div style="display:flex;gap:.4rem;">
-        ${selectedCount > 0 ? `<button onclick="_clearAudPickerSelection()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.45rem .8rem;font-size:11.5px;cursor:pointer;">Clear all</button>` : ''}
-        <button onclick="_closeAudPicker()" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem 1.1rem;font-weight:700;font-size:12.5px;cursor:pointer;">✓ Done</button>
-      </div>
+  footer.innerHTML = `
+    <span style="font-size:12px;color:var(--muted);">${selectedCount} selected</span>
+    <div style="display:flex;gap:.4rem;">
+      ${selectedCount > 0 ? `<button onclick="_clearAudPickerSelection()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.45rem .8rem;font-size:11.5px;cursor:pointer;">Clear all</button>` : ''}
+      <button onclick="_closeAudPicker()" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem 1.1rem;font-weight:700;font-size:12.5px;cursor:pointer;">✓ Done</button>
     </div>
   `;
-  // Restore focus to search box (oninput re-renders the body so we lose focus)
-  setTimeout(() => {
-    const inp = document.getElementById('audPickerSearchInput');
-    if (inp && document.activeElement !== inp && _audPickerSearch) {
-      inp.focus();
-      inp.setSelectionRange(_audPickerSearch.length, _audPickerSearch.length);
-    }
-  }, 0);
 }
 
 function _toggleAudPickerItem(id, checked){
