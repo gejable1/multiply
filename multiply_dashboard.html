@@ -360,6 +360,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <button class="nb" onclick="showPanel('eolo',this)">EOLO</button>
     <button class="nb" onclick="showPanel('alerts',this)">Alerts</button>
     <button class="nb" onclick="showPanel('disputes',this);loadDisputeQueue()">⚠️ Disputes <span id="navDisputeBadge" style="display:none;background:#9a2727;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
+    <button class="nb" onclick="showPanel('announcements',this);loadAnnouncementQueue()">📣 Announcements <span id="navAnnBadge" style="display:none;background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="openTransfers()">🔄 Transfers <span id="navTxBadge" style="display:none;background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:3px;font-weight:700"></span></button>
     <button class="nb" onclick="showPanel('reports',this)">Reports</button>
     <button class="nb" onclick="showPanel('settings',this)">Settings</button>
@@ -499,6 +500,21 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     Members marked themselves present and their LCL disputed the record. Resolve each by either <strong>confirming</strong> (counts as 1.0 in SVI) or <strong>rejecting</strong> (counts as 0.0). Available to leaders L3 and above.
   </div>
   <div id="disputeQueue"></div>
+</div></div>
+
+<div id="panel-announcements" class="panel"><div class="pw">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <h2 style="margin:0;">📣 Announcements</h2>
+    <div style="display:flex;gap:.5rem;">
+      <button onclick="openPastorAnnComposer()" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.45rem .85rem;font-weight:700;cursor:pointer;">+ Compose & Publish</button>
+      <button onclick="loadAnnouncementQueue()" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.45rem .8rem;font-weight:700;cursor:pointer;">↻ Refresh</button>
+    </div>
+  </div>
+  <div style="background:#fef9ed;border:1px solid #f0d680;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;font-size:13px;line-height:1.5;color:#7a5800;">
+    Drafts from L3+ leaders await your approval here. Approve, edit, or reject. Once published, an announcement is visible to its target audience until it expires.
+  </div>
+  <div style="display:flex;gap:.4rem;margin-bottom:1rem;" id="annTabsBar"></div>
+  <div id="announcementQueue"></div>
 </div></div>
 
 <!-- REPORTS -->
@@ -4986,6 +5002,441 @@ async function resolveDispute(attendanceId, decision){
 // Load badge count on dashboard boot, refresh every 5 min
 setTimeout(() => { loadDisputeQueue(); }, 1500);
 setInterval(loadDisputeQueue, 300000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANNOUNCEMENTS  (Pastor moderation queue + composer)
+// ─────────────────────────────────────────────────────────────────────
+// Tabs: Pending | Published | Rejected | Archived
+// Pastor can: approve, edit (then approve), reject (with note), archive
+// ═══════════════════════════════════════════════════════════════════════
+
+let _annPanelTab = 'pending';
+let _annAll = [];
+
+async function loadAnnouncementQueue(){
+  if (!LEADER || (LEADER.leaderLevel || 0) < 3) {
+    const wrap = document.getElementById('announcementQueue');
+    if (wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Restricted to leaders L3+.</div>';
+    return;
+  }
+  try {
+    const {data, error} = await db.from('announcements')
+      .select('*')
+      .order('created_at', {ascending: false})
+      .limit(200);
+    if (error) throw error;
+    _annAll = data || [];
+    renderAnnouncementQueue();
+    updateAnnBadge();
+  } catch(e) {
+    console.error('[announcements] load failed:', e);
+    const wrap = document.getElementById('announcementQueue');
+    if (wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:#9a2727;">Error: ' + e.message + '</div>';
+  }
+}
+
+function updateAnnBadge(){
+  const badge = document.getElementById('navAnnBadge');
+  if (!badge) return;
+  const pending = _annAll.filter(a => a.status === 'pending').length;
+  if (pending > 0) {
+    badge.textContent = String(pending);
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function _annPanelSetTab(t){
+  _annPanelTab = t;
+  renderAnnouncementQueue();
+}
+
+function _annFmtDate(s){
+  if (!s) return '';
+  return new Date(s).toLocaleString('en-PH', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+}
+
+function _annAudienceText(filter){
+  if (!filter || filter.all) return '📢 All members';
+  const parts = [];
+  if (filter.lc_groups?.length) parts.push(`LC: ${filter.lc_groups.join(', ')}`);
+  if (filter.levels?.length) parts.push(`Lvl: ${filter.levels.join(', ')}`);
+  if (filter.ministries?.length) parts.push(`Min: ${filter.ministries.join(', ')}`);
+  if (filter.member_ids?.length) parts.push(`${filter.member_ids.length} specific member(s)`);
+  return parts.join(' · ') || '(no filter)';
+}
+
+function _annPriorityBadgeMD(p){
+  if (p === 'urgent')      return '<span style="background:#fde8e8;color:#9a2727;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700;">🔥 URGENT</span>';
+  if (p === 'celebration') return '<span style="background:#fff3d6;color:#7a5800;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700;">🎉 CELEBRATE</span>';
+  return '<span style="background:#e8f0fe;color:#1a4d80;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700;">📢 NORMAL</span>';
+}
+
+function renderAnnouncementQueue(){
+  const tabsBar = document.getElementById('annTabsBar');
+  const wrap = document.getElementById('announcementQueue');
+  if (!tabsBar || !wrap) return;
+
+  const counts = {
+    pending: _annAll.filter(a => a.status === 'pending').length,
+    published: _annAll.filter(a => a.status === 'published').length,
+    rejected: _annAll.filter(a => a.status === 'rejected').length,
+    archived: _annAll.filter(a => a.status === 'archived').length,
+  };
+
+  const tabs = [
+    {key:'pending', label:'⏳ Pending', n: counts.pending},
+    {key:'published', label:'✓ Published', n: counts.published},
+    {key:'rejected', label:'✕ Rejected', n: counts.rejected},
+    {key:'archived', label:'📦 Archived', n: counts.archived},
+  ];
+  tabsBar.innerHTML = tabs.map(t => {
+    const active = _annPanelTab === t.key;
+    return `<button onclick="_annPanelSetTab('${t.key}')"
+      style="padding:.5rem .9rem;background:${active?'var(--gold)':'#fff'};
+             color:${active?'#fff':'var(--text)'};
+             border:1px solid ${active?'var(--gold)':'var(--border)'};border-radius:999px;
+             font-weight:${active?'700':'500'};font-size:12.5px;cursor:pointer;">
+      ${t.label} (${t.n})
+    </button>`;
+  }).join('');
+
+  const filtered = _annAll.filter(a => a.status === _annPanelTab);
+  if (!filtered.length) {
+    wrap.innerHTML = '<div style="padding:3rem 1rem;text-align:center;color:var(--muted);font-size:14px;">Nothing here.</div>';
+    return;
+  }
+
+  wrap.innerHTML = filtered.map(a => {
+    const isPending = a.status === 'pending';
+    const isPublished = a.status === 'published';
+    const actionsHtml = isPending
+      ? `<div style="display:flex;flex-direction:column;gap:.4rem;min-width:160px;">
+          <button onclick="approveAnnouncement('${a.id}')"
+            style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+            ✓ Approve & Publish
+          </button>
+          <button onclick="editAnnouncement('${a.id}')"
+            style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+            ✏️ Edit
+          </button>
+          <button onclick="rejectAnnouncement('${a.id}')"
+            style="background:#9a2727;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+            ✕ Reject
+          </button>
+        </div>`
+      : isPublished
+      ? `<div style="display:flex;flex-direction:column;gap:.4rem;min-width:160px;">
+          <button onclick="archiveAnnouncement('${a.id}')"
+            style="background:#666;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+            📦 Archive Now
+          </button>
+        </div>`
+      : '';
+
+    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem;display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:start;">
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;">
+          ${_annPriorityBadgeMD(a.priority)}
+          <strong style="font-size:14.5px;">${escapeHtml(a.title)}</strong>
+        </div>
+        <div style="font-size:12.5px;color:var(--text);margin-bottom:.5rem;line-height:1.55;white-space:pre-wrap;">${escapeHtml(a.body)}</div>
+        <div style="font-size:11px;color:var(--muted);display:flex;gap:.7rem;flex-wrap:wrap;">
+          <span><strong>${escapeHtml(a.author_name)}</strong> drafted ${_annFmtDate(a.created_at)}</span>
+          <span>· Audience: ${escapeHtml(_annAudienceText(a.audience_filter))}</span>
+          ${a.expires_at ? `<span>· Expires ${_annFmtDate(a.expires_at)}</span>` : ''}
+          ${a.published_at ? `<span>· Published ${_annFmtDate(a.published_at)}</span>` : ''}
+        </div>
+        ${a.status === 'rejected' && a.pastor_notes ? `
+          <div style="margin-top:.5rem;padding:.45rem .65rem;background:#fde8e8;border-left:3px solid #c14545;border-radius:4px;font-size:11.5px;color:#9a2727;">
+            <strong>Rejection note:</strong> ${escapeHtml(a.pastor_notes)}
+          </div>
+        ` : ''}
+        ${isPublished ? `
+          <div id="annAckMD-${a.id}" style="margin-top:.5rem;font-size:11.5px;color:#1f6b3a;font-weight:600;">
+            📊 Loading ack stats...
+          </div>
+        ` : ''}
+      </div>
+      ${actionsHtml}
+    </div>`;
+  }).join('');
+
+  // Lazy-load ack rates for published rows
+  if (_annPanelTab === 'published') _annLoadAckRatesMD();
+}
+
+async function _annLoadAckRatesMD(){
+  const published = _annAll.filter(a => a.status === 'published');
+  for (const a of published) {
+    try {
+      const {count: ackCount} = await db.from('announcement_acks').select('*', {count:'exact', head:true}).eq('announcement_id', a.id);
+      const audSize = await _annComputeAudienceSizeMD(a.audience_filter);
+      const el = document.getElementById('annAckMD-' + a.id);
+      if (el) {
+        const pct = audSize > 0 ? Math.round(((ackCount||0) / audSize) * 100) : 0;
+        el.innerHTML = `📊 <strong>${ackCount||0} of ${audSize}</strong> acknowledged (${pct}%)`;
+      }
+    } catch(e) {}
+  }
+}
+
+async function _annComputeAudienceSizeMD(filter){
+  try {
+    if (!filter || filter.all) {
+      const {count} = await db.from('members').select('*',{count:'exact',head:true})
+        .or('is_test_member.is.null,is_test_member.eq.false');
+      return count || 0;
+    }
+    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3')
+      .or('is_test_member.is.null,is_test_member.eq.false');
+    let n = 0;
+    (all||[]).forEach(m => {
+      if (filter.lc_groups?.includes(m.lc_group)) n++;
+      else if (filter.levels?.includes(m.pipeline_level)) n++;
+      else if (filter.ministries?.some(min => [m.ministry, m.ministry2, m.ministry3].includes(min))) n++;
+      else if (filter.member_ids?.includes(m.id)) n++;
+    });
+    return n;
+  } catch(e) { return 0; }
+}
+
+async function approveAnnouncement(id){
+  if (!confirm('Approve and publish this announcement now?')) return;
+  try {
+    const {error} = await db.from('announcements').update({
+      status: 'published',
+      pastor_decision_by: LEADER.leaderId,
+      pastor_decision_at: new Date().toISOString(),
+      published_at: new Date().toISOString()
+    }).eq('id', id);
+    if (error) throw error;
+    await loadAnnouncementQueue();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function rejectAnnouncement(id){
+  const note = prompt('Rejection reason (visible to author):');
+  if (!note || !note.trim()) return;
+  try {
+    const {error} = await db.from('announcements').update({
+      status: 'rejected',
+      pastor_decision_by: LEADER.leaderId,
+      pastor_decision_at: new Date().toISOString(),
+      pastor_notes: note.trim()
+    }).eq('id', id);
+    if (error) throw error;
+    await loadAnnouncementQueue();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function archiveAnnouncement(id){
+  if (!confirm('Archive this published announcement? It will no longer appear on member home screens.')) return;
+  try {
+    const {error} = await db.from('announcements').update({ status: 'archived' }).eq('id', id);
+    if (error) throw error;
+    await loadAnnouncementQueue();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function editAnnouncement(id){
+  const a = _annAll.find(x => x.id === id);
+  if (!a) return;
+  // Open composer pre-filled in edit mode
+  openPastorAnnComposer(a);
+}
+
+// ─── Pastor composer (also handles edit-existing) ───
+let _pastorAnnDraft = null;
+function openPastorAnnComposer(existing){
+  _pastorAnnDraft = existing
+    ? {
+        id: existing.id,
+        title: existing.title,
+        body: existing.body,
+        priority: existing.priority,
+        audience: existing.audience_filter || {all:true},
+        expiresAtDays: 7,
+        // Preserve original expires_at when editing
+        keepExpires: existing.expires_at
+      }
+    : {
+        id: null, title:'', body:'', priority:'normal',
+        audience:{all:true, lc_groups:[], levels:[], ministries:[], member_ids:[]},
+        expiresAtDays: 7
+      };
+
+  let modal = document.getElementById('pastorAnnModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pastorAnnModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = `<div id="pastorAnnBody" style="background:#fff;max-width:560px;width:100%;border-radius:14px;padding:1.25rem;margin-top:2rem;margin-bottom:2rem;color:#1a1612;"></div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  _renderPastorAnnComposer();
+}
+
+function _renderPastorAnnComposer(){
+  const body = document.getElementById('pastorAnnBody');
+  if (!body) return;
+  const d = _pastorAnnDraft;
+  const isEdit = !!d.id;
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+      <h3 style="margin:0;font-size:16px;">${isEdit?'✏️ Edit & Publish':'+ Compose & Publish'}</h3>
+      <button onclick="document.getElementById('pastorAnnModal').style.display='none'"
+        style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
+    </div>
+
+    <div style="margin-bottom:.7rem;">
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.25rem;">Title</label>
+      <input id="pAnnTitle" type="text" maxlength="120" value="${escapeHtml(d.title)}"
+        oninput="_pastorAnnDraft.title = this.value"
+        style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+    </div>
+
+    <div style="margin-bottom:.7rem;">
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.25rem;">Body</label>
+      <textarea maxlength="800" rows="5"
+        oninput="_pastorAnnDraft.body = this.value"
+        style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${escapeHtml(d.body)}</textarea>
+    </div>
+
+    <div style="margin-bottom:.7rem;">
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.3rem;">Priority</label>
+      <div style="display:flex;gap:.4rem;">
+        ${['normal','urgent','celebration'].map(p => {
+          const active = d.priority === p;
+          const lbl = p === 'urgent' ? '🔥 Urgent' : (p === 'celebration' ? '🎉 Celebrate' : '📢 Normal');
+          return `<button onclick="_pastorAnnDraft.priority='${p}'; _renderPastorAnnComposer();"
+            style="flex:1;padding:.45rem;background:${active?'var(--gold)':'#fff'};
+                   color:${active?'#fff':'var(--text)'};
+                   border:1px solid ${active?'var(--gold)':'var(--border)'};border-radius:8px;
+                   font-weight:${active?'700':'500'};font-size:12px;cursor:pointer;">
+            ${lbl}
+          </button>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div style="margin-bottom:.7rem;">
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.3rem;">Audience</label>
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem;">
+        <input type="checkbox" id="pAnnAllChk" ${d.audience.all ? 'checked' : ''}
+          onchange="_pastorAnnDraft.audience.all = this.checked; _renderPastorAnnComposer();">
+        <label for="pAnnAllChk" style="font-size:13px;cursor:pointer;">📢 All members (broadcast)</label>
+      </div>
+      ${!d.audience.all ? `
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem;font-size:12px;line-height:1.6;">
+          <div style="margin-bottom:.5rem;">
+            <strong>LC Groups</strong> (comma-separated):<br>
+            <input type="text" value="${(d.audience.lc_groups||[]).join(', ')}"
+              oninput="_pastorAnnDraft.audience.lc_groups = this.value.split(',').map(s=>s.trim()).filter(Boolean);"
+              style="width:100%;padding:.4rem .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:.2rem;">
+          </div>
+          <div style="margin-bottom:.5rem;">
+            <strong>Pipeline Levels</strong> (0-5):<br>
+            <input type="text" value="${(d.audience.levels||[]).join(', ')}"
+              oninput="_pastorAnnDraft.audience.levels = this.value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));"
+              style="width:100%;padding:.4rem .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:.2rem;">
+          </div>
+          <div>
+            <strong>Ministries</strong>:<br>
+            <input type="text" value="${(d.audience.ministries||[]).join(', ')}"
+              oninput="_pastorAnnDraft.audience.ministries = this.value.split(',').map(s=>s.trim()).filter(Boolean);"
+              style="width:100%;padding:.4rem .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:.2rem;">
+          </div>
+        </div>
+      ` : ''}
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.25rem;">Expires in</label>
+      <select onchange="_pastorAnnDraft.expiresAtDays = parseInt(this.value)"
+        style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">
+        ${[3,7,14,21,30].map(n => `<option value="${n}" ${d.expiresAtDays===n?'selected':''}>${n} days from now</option>`).join('')}
+      </select>
+    </div>
+
+    <button onclick="_pastorAnnPublish()"
+      style="width:100%;padding:.8rem;background:#1f6b3a;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">
+      ✓ ${isEdit?'Save & Publish':'Publish Now'}
+    </button>
+  `;
+}
+
+async function _pastorAnnPublish(){
+  const d = _pastorAnnDraft;
+  if (!d.title.trim() || !d.body.trim()) { alert('Title and body required'); return; }
+  const audience = d.audience.all
+    ? { all: true }
+    : {
+        all: false,
+        lc_groups: d.audience.lc_groups || [],
+        levels: d.audience.levels || [],
+        ministries: d.audience.ministries || [],
+        member_ids: d.audience.member_ids || []
+      };
+  if (!audience.all) {
+    const total = (audience.lc_groups.length || 0) + (audience.levels.length || 0)
+                + (audience.ministries.length || 0) + (audience.member_ids.length || 0);
+    if (total === 0) { alert('Pick at least one audience filter or check "All members"'); return; }
+  }
+  const expires = new Date(Date.now() + d.expiresAtDays * 86400000);
+
+  try {
+    if (d.id) {
+      // Edit existing — preserve original author, update content + republish
+      const {error} = await db.from('announcements').update({
+        title: d.title.trim(),
+        body: d.body.trim(),
+        priority: d.priority,
+        audience_filter: audience,
+        status: 'published',
+        pastor_decision_by: LEADER.leaderId,
+        pastor_decision_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        expires_at: expires.toISOString()
+      }).eq('id', d.id);
+      if (error) throw error;
+    } else {
+      // New from Pastor — author is Pastor, immediately published
+      const {error} = await db.from('announcements').insert({
+        author_id: LEADER.leaderId,
+        author_name: LEADER.leaderName || 'Pastor',
+        title: d.title.trim(),
+        body: d.body.trim(),
+        priority: d.priority,
+        audience_filter: audience,
+        status: 'published',
+        pastor_decision_by: LEADER.leaderId,
+        pastor_decision_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        expires_at: expires.toISOString()
+      });
+      if (error) throw error;
+    }
+    document.getElementById('pastorAnnModal').style.display = 'none';
+    await loadAnnouncementQueue();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+// Auto-load on dashboard boot for badge count
+setTimeout(() => { loadAnnouncementQueue(); }, 2000);
+setInterval(loadAnnouncementQueue, 300000);
 </script>
 </body>
 </html>

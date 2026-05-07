@@ -1358,6 +1358,12 @@ body.lang-tl .tl-text{display:inline;}
           <span class="tl-text">Talata ng linggo</span>
         </div>
       </div>
+
+      <!-- Pinned announcements (auto-hides if none) -->
+      <div id="annPinnedSection" style="display:none;margin-bottom:1rem;">
+        <!-- Cards injected by renderPinnedAnnouncements() -->
+      </div>
+
       <div class="verse-card" id="weeklyVerseCard">
         <div class="verse-text" id="weeklyVerseText">
           <span class="en-text">"For we are his workmanship, created in Christ Jesus for good works, which God prepared beforehand."</span>
@@ -4421,11 +4427,123 @@ setLang = function(lang){
   } catch(e) {}
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// PINNED ANNOUNCEMENTS  (Member-side; renders on Home above verse card)
+// ─────────────────────────────────────────────────────────────────────
+// Pulls published announcements where:
+//   - status='published' AND expires_at > now
+//   - audience matches this member (broadcast OR LC group OR level OR ministry OR member_id)
+//   - member has NOT yet acked
+// Displays card per announcement with priority-driven styling and a
+// required "✓ Got it" button that records ack and removes the card.
+// ═══════════════════════════════════════════════════════════════════════
+
+let _myAnnouncementsForHome = [];
+
+async function loadPinnedAnnouncements(){
+  if (!memberRow) return;
+  try {
+    // Step 1: live announcements
+    const nowIso = new Date().toISOString();
+    const {data: anns, error} = await db.from('announcements')
+      .select('id,title,body,priority,audience_filter,published_at,expires_at,author_name')
+      .eq('status', 'published')
+      .gt('expires_at', nowIso)
+      .order('published_at', {ascending: false})
+      .limit(50);
+    if (error) throw error;
+
+    // Step 2: my acks (so we can hide already-acked)
+    const {data: acks} = await db.from('announcement_acks')
+      .select('announcement_id')
+      .eq('member_id', MEMBER.memberId);
+    const ackedIds = new Set((acks || []).map(a => a.announcement_id));
+
+    // Step 3: filter by audience match + not-yet-acked
+    _myAnnouncementsForHome = (anns || []).filter(a => {
+      if (ackedIds.has(a.id)) return false;
+      return _annAudienceMatchesMember(a.audience_filter, memberRow);
+    });
+
+    renderPinnedAnnouncements();
+  } catch(e) {
+    console.error('[announcements] load failed:', e);
+    _myAnnouncementsForHome = [];
+    renderPinnedAnnouncements();
+  }
+}
+
+function _annAudienceMatchesMember(filter, member){
+  if (!filter) return false;
+  if (filter.all === true) return true;
+  if (filter.lc_groups?.includes(member.lc_group)) return true;
+  if (filter.levels?.includes(member.pipeline_level)) return true;
+  if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
+  if (filter.member_ids?.includes(member.id)) return true;
+  return false;
+}
+
+function renderPinnedAnnouncements(){
+  const wrap = document.getElementById('annPinnedSection');
+  if (!wrap) return;
+
+  if (!_myAnnouncementsForHome.length) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'block';
+
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  wrap.innerHTML = _myAnnouncementsForHome.map(a => {
+    let bg, border, badgeBg, badgeFg, badgeIcon, badgeLbl;
+    if (a.priority === 'urgent') {
+      bg = 'linear-gradient(135deg,#fde8e8,#fac8c8)'; border = '#c14545';
+      badgeBg = '#9a2727'; badgeFg = '#fff'; badgeIcon = '🔥'; badgeLbl = lang==='tl'?'MAHALAGA':'URGENT';
+    } else if (a.priority === 'celebration') {
+      bg = 'linear-gradient(135deg,#fff3d6,#ffe6b8)'; border = '#d4a437';
+      badgeBg = '#d4a437'; badgeFg = '#fff'; badgeIcon = '🎉'; badgeLbl = lang==='tl'?'PAGDIRIWANG':'CELEBRATION';
+    } else {
+      bg = 'linear-gradient(135deg,#e8f0fe,#d4e3fc)'; border = '#3a78d4';
+      badgeBg = '#1a4d80'; badgeFg = '#fff'; badgeIcon = '📢'; badgeLbl = lang==='tl'?'PAALALA':'ANNOUNCEMENT';
+    }
+    return `<div style="background:${bg};border:2px solid ${border};border-radius:12px;padding:1rem 1.1rem;margin-bottom:.6rem;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+        <span style="background:${badgeBg};color:${badgeFg};padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.5px;">${badgeIcon} ${badgeLbl}</span>
+        <span style="font-size:10.5px;color:#666;margin-left:auto;">${MultiplyShared.escapeHTML(a.author_name||'')}</span>
+      </div>
+      <div style="font-weight:700;font-size:14.5px;color:#1a1612;margin-bottom:.4rem;line-height:1.3;">${MultiplyShared.escapeHTML(a.title)}</div>
+      <div style="font-size:13px;color:#3a3028;line-height:1.55;margin-bottom:.8rem;white-space:pre-wrap;">${MultiplyShared.escapeHTML(a.body)}</div>
+      <button onclick="ackAnnouncement('${a.id}')"
+        style="width:100%;padding:.55rem;background:#fff;color:#1a1612;border:1.5px solid ${border};border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer;">
+        ✓ ${lang==='tl'?'Nakuha ko':'Got it'}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function ackAnnouncement(announcementId){
+  try {
+    const {error} = await db.from('announcement_acks').insert({
+      announcement_id: announcementId,
+      member_id: MEMBER.memberId
+    });
+    if (error && !String(error.message).includes('duplicate')) throw error;
+    // Remove from local list and re-render
+    _myAnnouncementsForHome = _myAnnouncementsForHome.filter(a => a.id !== announcementId);
+    renderPinnedAnnouncements();
+  } catch(e) {
+    console.error('[announcements] ack failed:', e);
+    showToast('Could not record. Please try again.', true);
+  }
+}
+
 // Hook into renderHome chain
 const _origRenderHome2 = renderHome;
 renderHome = function(){
   _origRenderHome2();
   try{ renderAttestCard(); }catch(e){ console.warn('[self-attest] renderAttestCard:', e); }
+  try{ loadPinnedAnnouncements(); }catch(e){ console.warn('[announcements]:', e); }
 };
 
 // Also re-render on language toggle
@@ -4433,7 +4551,11 @@ const _origSetLang2 = setLang;
 setLang = function(lang){
   _origSetLang2(lang);
   try{ if(memberRow) renderAttestCard(); }catch(e){}
+  try{ if(memberRow) renderPinnedAnnouncements(); }catch(e){}
 };
+
+// Poll for new announcements every 2 minutes (covers post-publish reach)
+setInterval(() => { if (memberRow) loadPinnedAnnouncements(); }, 120000);
 </script>
 </body>
 </html>
