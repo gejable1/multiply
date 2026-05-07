@@ -264,6 +264,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   cursor:pointer;border:none;font-family:'DM Sans',sans-serif;}
 .ar-send{background:rgba(96,165,250,.15);color:var(--blue);border:1px solid rgba(96,165,250,.3);}
 .ar-done{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.2);}
+/* View Results — gold pill, parallels MD's "View Results" affordance */
+.ar-view{background:rgba(218,165,32,.16);color:var(--gold);border:1px solid rgba(218,165,32,.32);}
+/* Group container so the two buttons (View + Retake) sit nicely on completed rows */
+.ar-actions{display:flex;gap:6px;flex-shrink:0;align-items:center;}
 
 /* Attendance history */
 .att-hist-row{display:flex;gap:4px;margin-bottom:8px;}
@@ -1206,7 +1210,8 @@ async function l5MarkSelfPresent(eventTypeKey, typicalDay){
   // Confirm
   if (!confirm(`Mark yourself present for ${eventTypeKey} on ${targetLbl}?`)) return;
 
-  // Duplicate check
+  // Pre-flight: skip if already marked present (UX polish only — the upsert
+  // below handles it correctly even without this check).
   try {
     const {data: existing} = await db.from('attendance')
       .select('id, present')
@@ -1214,26 +1219,17 @@ async function l5MarkSelfPresent(eventTypeKey, typicalDay){
       .eq('event_type', eventTypeKey)
       .eq('event_date', targetDate)
       .limit(1);
-    if (existing && existing.length) {
-      if (existing[0].present === true) {
-        toast(`Already marked present for ${targetLbl}`, 'info');
-        return;
-      }
-      // Update existing absent → present
-      const {error: uErr} = await db.from('attendance')
-        .update({present: true, logged_by: LEADER.leaderName || 'Self', logged_by_id: LEADER.leaderId})
-        .eq('id', existing[0].id);
-      if (uErr) throw uErr;
-      toast(`✓ Marked present for ${targetLbl}`, 'success');
-      _l5RefreshLastMarked();
+    if (existing && existing.length && existing[0].present === true) {
+      toast(`Already marked present for ${targetLbl}`, 'info');
       return;
     }
   } catch(e) {
-    console.warn('Dup-check failed; proceeding with insert:', e);
+    console.warn('Pre-flight check failed; proceeding with upsert:', e);
   }
 
-  // Insert new row
-  const {error} = await db.from('attendance').insert({
+  // Upsert against the unique constraint — atomically updates an existing
+  // absent row to present, or inserts a new one. No duplicate-key errors.
+  const {error} = await db.from('attendance').upsert({
     member_id:       LEADER.leaderId,
     member_name:     LEADER.leaderName || currentLeader?.name || 'Unknown',
     event_date:      targetDate,
@@ -1245,7 +1241,7 @@ async function l5MarkSelfPresent(eventTypeKey, typicalDay){
     event_lc_group:  '',
     logged_by:       LEADER.leaderName || currentLeader?.name || 'Self',
     logged_by_id:    LEADER.leaderId,
-  });
+  }, { onConflict: 'member_id,event_type,event_date' });
   if (error) {
     toast('Error: ' + error.message, 'error');
     return;
@@ -1492,15 +1488,23 @@ function buildDetailSections(mem){
         ${ASSESSMENTS.map(a=>{
           const done = !!mem[a.field];
           const val = done ? (Array.isArray(mem[a.field])?mem[a.field].slice(0,2).join(', '):String(mem[a.field]).split(',')[0].trim()) : null;
+          // Map MLT keys → profile_results_viewer.html ?type=... values.
+          // Salvation has no viewer entry by design (pastoral guardrail).
+          const VIEWER_TYPE = {gifts:'gifts', disc:'disc', strengths:'strengths', love:'love_language', enneagram:'enneagram', conflict:'conflict_style'};
+          const viewerType = VIEWER_TYPE[a.key];
+          const canView = done && !!viewerType;
           return `<div class="assess-row">
             <div class="ar-icon">${a.icon}</div>
             <div class="ar-info">
               <div class="ar-name">${a.name}</div>
               ${done?`<div class="ar-result">${val}</div>`:'<div class="ar-result" style="color:var(--red)">Not taken</div>'}
             </div>
-            <button class="ar-action ${done?'ar-done':'ar-send'}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
-              ${done?'Retake':'Send'}
-            </button>
+            <div class="ar-actions">
+              ${canView ? `<button class="ar-action ar-view" onclick="viewAssessmentResult('${a.key}')" title="View results">👁 View</button>` : ''}
+              <button class="ar-action ${done?'ar-done':'ar-send'}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
+                ${done?'Retake':'Send'}
+              </button>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -1658,6 +1662,23 @@ function sendAssessmentLink(file, name){
   sendLink_(currentMember.id, currentMember.name, file, name, currentMember.contact);
 }
 
+// View an assessment result for the currently-viewed member.
+// Opens the shared profile_results_viewer.html which knows how to render
+// each profile type (love_language, disc, enneagram, strengths, gifts,
+// conflict_style). Salvation Assurance is intentionally excluded — that
+// diagnostic is a conversation starter for pastoral care, not a self-readout.
+function viewAssessmentResult(key){
+  if(!currentMember) return;
+  const VIEWER_TYPE = {gifts:'gifts', disc:'disc', strengths:'strengths', love:'love_language', enneagram:'enneagram', conflict:'conflict_style'};
+  const type = VIEWER_TYPE[key];
+  if(!type){
+    toast('No results page for this assessment.', 'info');
+    return;
+  }
+  const url = BASE_URL + 'profile_results_viewer.html?id=' + encodeURIComponent(currentMember.id) + '&type=' + encodeURIComponent(type);
+  window.open(url, '_blank');
+}
+
 // ─────────────────────────────────────────────────────────────
 // Mark Present button — visual state helper
 // The button always logs against the MOST RECENT SUNDAY (today if Sunday,
@@ -1736,27 +1757,30 @@ async function logQuickAttendance(){
   const targetSunday = _getMostRecentSunday();
   const targetLbl    = _fmtShortSunday(targetSunday);
 
-  // Duplicate guard — check first so we don't insert a second row.
+  // Pre-flight: if there's already a `present:true` row, skip the round-trip.
+  // (Pure UX optimization — the upsert below handles this case correctly too.)
   try {
-    const { data: existing, error: chkErr } = await db.from('attendance')
-      .select('id')
+    const { data: existing } = await db.from('attendance')
+      .select('id, present')
       .eq('member_id', currentMember.id)
       .eq('event_date', targetSunday)
       .eq('event_type', 'Sunday Service')
-      .eq('present', true)
       .limit(1);
-    if(chkErr) throw chkErr;
-    if(existing && existing.length){
+    if(existing && existing.length && existing[0].present === true){
       toast('Already marked present for ' + targetLbl, 'success');
       _setMarkPresentBtn('marked');
       return;
     }
   } catch(e){
-    console.warn('Duplicate-check failed, proceeding with insert:', e);
-    // Fall through and try the insert anyway
+    // Non-fatal: fall through to the upsert.
+    console.warn('Pre-flight check failed, proceeding with upsert:', e);
   }
 
-  const { error } = await db.from('attendance').insert({
+  // Upsert against the (member_id, event_type, event_date) unique constraint.
+  // This atomically updates an existing absent→present row OR inserts a new
+  // one, eliminating the duplicate-key error that occurred when a prior
+  // `present:false` row existed (e.g. from a roll-call "mark all absent").
+  const { error } = await db.from('attendance').upsert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
     event_date:      targetSunday,                 // ← the Sunday, not today
@@ -1768,7 +1792,7 @@ async function logQuickAttendance(){
     event_lc_group:  currentLeader?.lc_group || '',
     logged_by:       currentLeader?.name || 'Unknown',
     logged_by_id:    currentLeader?.id || null,
-  });
+  }, { onConflict: 'member_id,event_type,event_date' });
   if(error){
     toast('Error: '+error.message,'error');
     _setMarkPresentBtn('idle');
