@@ -4446,12 +4446,11 @@ setLang = function(lang){
 // ═══════════════════════════════════════════════════════════════════════
 
 let _myAnnouncementsForHome = [];
-let _myRetractionNotices = [];
 
 async function loadPinnedAnnouncements(){
   if (!memberRow) return;
   try {
-    // Step 1: live announcements (status='published')
+    // Step 1: live announcements
     const nowIso = new Date().toISOString();
     const {data: anns, error} = await db.from('announcements')
       .select('id,title,body,priority,audience_filter,published_at,expires_at,author_name')
@@ -4473,64 +4472,11 @@ async function loadPinnedAnnouncements(){
       return _annAudienceMatchesMember(a.audience_filter, memberRow);
     });
 
-    // Step 4: load retraction notices for things I previously acked
-    await _loadRetractionNotices(ackedIds);
-
     renderPinnedAnnouncements();
   } catch(e) {
     console.error('[announcements] load failed:', e);
     _myAnnouncementsForHome = [];
-    _myRetractionNotices = [];
     renderPinnedAnnouncements();
-  }
-}
-
-// Find retracted announcements that I had previously acknowledged AND haven't dismissed yet
-async function _loadRetractionNotices(ackedIds){
-  try {
-    if (!ackedIds || ackedIds.size === 0) {
-      _myRetractionNotices = [];
-      return;
-    }
-    const ackedArr = Array.from(ackedIds);
-    // Fetch retracted announcements I acked
-    const {data: retracted, error: rErr} = await db.from('announcements')
-      .select('id,title,retracted_at,retraction_reason,author_name')
-      .eq('status', 'retracted')
-      .in('id', ackedArr)
-      .order('retracted_at', {ascending: false})
-      .limit(20);
-    if (rErr) throw rErr;
-    if (!retracted || !retracted.length) {
-      _myRetractionNotices = [];
-      return;
-    }
-    // Fetch my dismissals
-    const retractedIds = retracted.map(r => r.id);
-    const {data: dismissals} = await db.from('announcement_retraction_dismissals')
-      .select('announcement_id')
-      .eq('member_id', MEMBER.memberId)
-      .in('announcement_id', retractedIds);
-    const dismissedIds = new Set((dismissals || []).map(d => d.announcement_id));
-    _myRetractionNotices = retracted.filter(r => !dismissedIds.has(r.id));
-  } catch(e) {
-    console.warn('[announcements] retraction notice load failed:', e);
-    _myRetractionNotices = [];
-  }
-}
-
-async function dismissRetractionNotice(annId){
-  try {
-    const {error} = await db.from('announcement_retraction_dismissals').insert({
-      announcement_id: annId,
-      member_id: MEMBER.memberId
-    });
-    if (error && !String(error.message).includes('duplicate')) throw error;
-    _myRetractionNotices = _myRetractionNotices.filter(r => r.id !== annId);
-    renderPinnedAnnouncements();
-  } catch(e) {
-    console.error('[announcements] dismiss retraction failed:', e);
-    showToast('Could not dismiss. Try again.', true);
   }
 }
 
@@ -4548,9 +4494,7 @@ function renderPinnedAnnouncements(){
   const wrap = document.getElementById('annPinnedSection');
   if (!wrap) return;
 
-  const hasAnns = _myAnnouncementsForHome.length > 0;
-  const hasRetractions = (_myRetractionNotices || []).length > 0;
-  if (!hasAnns && !hasRetractions) {
+  if (!_myAnnouncementsForHome.length) {
     wrap.style.display = 'none';
     wrap.innerHTML = '';
     return;
@@ -4558,32 +4502,7 @@ function renderPinnedAnnouncements(){
   wrap.style.display = 'block';
 
   const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
-
-  // Build retraction notice cards (rendered first — older info to clear)
-  const retractionsHtml = (_myRetractionNotices || []).map(r => `
-    <div style="background:linear-gradient(135deg,#f5e8e8,#ecd6d6);border:2px solid #b04545;border-radius:12px;padding:1rem 1.1rem;margin-bottom:.6rem;">
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
-        <span style="background:#9a2727;color:#fff;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.5px;">🚫 ${lang==='tl'?'IBINAWI':'RETRACTED'}</span>
-        <span style="font-size:10.5px;color:#666;margin-left:auto;">${MultiplyShared.escapeHTML(r.author_name||'')}</span>
-      </div>
-      <div style="font-size:13px;color:#3a3028;line-height:1.55;margin-bottom:.4rem;">
-        ${lang==='tl'
-          ? `Ang abiso na <strong>"${MultiplyShared.escapeHTML(r.title)}"</strong> ay ibinawi.`
-          : `The announcement <strong>"${MultiplyShared.escapeHTML(r.title)}"</strong> was retracted.`}
-      </div>
-      ${r.retraction_reason ? `
-        <div style="font-size:12px;color:#7a3030;margin-bottom:.7rem;font-style:italic;">
-          ${lang==='tl'?'Dahilan':'Reason'}: ${MultiplyShared.escapeHTML(r.retraction_reason)}
-        </div>
-      ` : ''}
-      <button onclick="dismissRetractionNotice('${r.id}')"
-        style="width:100%;padding:.55rem;background:#fff;color:#1a1612;border:1.5px solid #b04545;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer;">
-        ✓ ${lang==='tl'?'Nakuha ko':'Got it'}
-      </button>
-    </div>
-  `).join('');
-
-  const annsHtml = _myAnnouncementsForHome.map(a => {
+  wrap.innerHTML = _myAnnouncementsForHome.map(a => {
     let bg, border, badgeBg, badgeFg, badgeIcon, badgeLbl;
     if (a.priority === 'urgent') {
       bg = 'linear-gradient(135deg,#fde8e8,#fac8c8)'; border = '#c14545';
@@ -4608,9 +4527,6 @@ function renderPinnedAnnouncements(){
       </button>
     </div>`;
   }).join('');
-
-  // Render: retraction notices first (high priority — clears outdated info), then live anns
-  wrap.innerHTML = retractionsHtml + annsHtml;
 }
 
 async function ackAnnouncement(announcementId){
@@ -4917,17 +4833,6 @@ async function _checkNewAlertsAndChime(){
       if (lastSeen !== newest.id) {
         if (lastSeen) playNotificationSound();
         localStorage.setItem('mmt_lastSeenAnnId', newest.id);
-      }
-    }
-  } catch(e) {}
-
-  try {
-    const newestRetraction = (_myRetractionNotices || [])[0];
-    if (newestRetraction) {
-      const lastSeen = localStorage.getItem('mmt_lastSeenRetractionId');
-      if (lastSeen !== newestRetraction.id) {
-        if (lastSeen) playNotificationSound();  // honors quiet-hours via the helper
-        localStorage.setItem('mmt_lastSeenRetractionId', newestRetraction.id);
       }
     }
   } catch(e) {}
