@@ -6,6 +6,9 @@
 <title>MULTIPLY — Member Tool</title>
 <link rel="manifest" href="manifest_member.json">
 <meta name="theme-color" content="#0e3a2c">
+<link rel="icon" type="image/png" sizes="192x192" href="icon_member_192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon_member_512.png">
+<link rel="shortcut icon" href="icon_member_192.png">
 <link rel="apple-touch-icon" href="icon_member_192.png">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -3707,7 +3710,7 @@ async function _loadRecentAttests(){
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
     const cutoffStr = cutoff.toISOString().slice(0,10);
     const {data, error} = await db.from('attendance')
-      .select('id,event_date,event_type,event_name,source,confirmed_by,confirmed_at,disputed,dispute_reason,nudge_count,last_nudged_at')
+      .select('id,event_date,event_type,event_name,source,confirmed_by,confirmed_at,disputed,dispute_reason,nudge_count,last_nudged_at,pastor_resolved,pastor_decision')
       .eq('member_id', MEMBER.memberId)
       .eq('source', 'self_attest')
       .gte('event_date', cutoffStr)
@@ -3744,11 +3747,20 @@ async function renderAttestCard(){
       const labelEsc = MultiplyShared.escapeHTML(et.label);
       if (existing) {
         // Already attested — show subtle status pill
+        // ORDER MATTERS: pastor_resolved is final, so check that first
+        const isResolved = !!existing.pastor_resolved;
         const isConfirmed = !!existing.confirmed_by;
         const isDisputed = !!existing.disputed;
         let bg = '#fff7e0', fg = '#8a6a00', icon = '🟡', txt = 'Pending confirmation';
-        if (isDisputed) { bg='#fde8e8'; fg='#9a2727'; icon='⚠️'; txt='Disputed — awaiting Pastor'; }
-        else if (isConfirmed) { bg='#e7f5ec'; fg='#1f6b3a'; icon='🟢'; txt='Confirmed'; }
+        if (isResolved && existing.pastor_decision === 'rejected') {
+          bg='#fde8e8'; fg='#9a2727'; icon='✕'; txt='Pastor rejected';
+        } else if (isResolved && existing.pastor_decision === 'confirmed') {
+          bg='#e7f5ec'; fg='#1f6b3a'; icon='✓'; txt='Pastor confirmed';
+        } else if (isDisputed) {
+          bg='#fde8e8'; fg='#9a2727'; icon='⚠️'; txt='Disputed — awaiting Pastor';
+        } else if (isConfirmed) {
+          bg='#e7f5ec'; fg='#1f6b3a'; icon='🟢'; txt='Confirmed';
+        }
         return `<button onclick="openAttestStatus('${existing.id}')"
                   style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.55rem .5rem;
                          background:${bg}; border:1px solid ${fg}33;
@@ -3899,11 +3911,31 @@ async function openAttestStatus(attendanceId){
   await _loadMyDiscipler();
   const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
 
+  const isResolved = !!row.pastor_resolved;
   const isConfirmed = !!row.confirmed_by;
   const isDisputed = !!row.disputed;
 
   let statusHtml, actionHtml;
-  if (isDisputed) {
+  if (isResolved && row.pastor_decision === 'rejected') {
+    statusHtml = `<div style="background:#fde8e8;border:1px solid #f5b5b5;border-radius:8px;padding:1rem;text-align:center;color:#9a2727;">
+      <div style="font-size:24px;margin-bottom:.4rem;">✕</div>
+      <div style="font-weight:700;margin-bottom:.3rem;">${lang==='tl'?'Pastor rejected':'Pastor rejected'}</div>
+      <div style="font-size:12px;line-height:1.5;">${lang==='tl'
+        ? `Pinag-aralan ni Pastor ang dispute at hindi ibinilang ang attendance na ito.`
+        : `Pastor reviewed the dispute and did not count this attendance.`}</div>
+      ${row.dispute_reason ? `<div style="margin-top:.6rem;font-size:11.5px;font-style:italic;">"${MultiplyShared.escapeHTML(row.dispute_reason)}"</div>` : ''}
+    </div>`;
+    actionHtml = '';
+  } else if (isResolved && row.pastor_decision === 'confirmed') {
+    statusHtml = `<div style="background:#e7f5ec;border:1px solid #b6dac3;border-radius:8px;padding:1rem;text-align:center;color:#1f6b3a;">
+      <div style="font-size:24px;margin-bottom:.4rem;">✓</div>
+      <div style="font-weight:700;margin-bottom:.3rem;">${lang==='tl'?'Pastor confirmed':'Pastor confirmed'}</div>
+      <div style="font-size:12px;line-height:1.5;">${lang==='tl'
+        ? `Pinag-aralan ni Pastor ang dispute at ibinilang ang attendance mo nang buo.`
+        : `Pastor reviewed the dispute and counted your attendance in full.`}</div>
+    </div>`;
+    actionHtml = '';
+  } else if (isDisputed) {
     statusHtml = `<div style="background:#fde8e8;border:1px solid #f5b5b5;border-radius:8px;padding:1rem;text-align:center;color:#9a2727;">
       <div style="font-size:24px;margin-bottom:.4rem;">⚠️</div>
       <div style="font-weight:700;margin-bottom:.3rem;">${lang==='tl'?'Disputed':'Disputed'}</div>
