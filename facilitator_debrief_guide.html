@@ -1923,6 +1923,9 @@ window.parseAIResponse = function() {
   try {
     parsed = JSON.parse(cleaned);
   } catch (e) {
+    // Stash even unparseable raw response — pastor may want to refer back
+    _aiRawResponse = raw;
+    _aiParsedJson = null;
     out.innerHTML = '<div style="color:#7a2020;font-size:12.5px;line-height:1.55;">' +
       '⚠ Could not parse as JSON. The AI may have responded with plain prose.<br><br>' +
       'You can either:<br>' +
@@ -1932,10 +1935,17 @@ window.parseAIResponse = function() {
       '</div>';
     return;
   }
+  // Stash for saveDebrief to persist alongside the typed summary
+  _aiRawResponse = raw;
+  _aiParsedJson = parsed;
   // Hand off to the existing renderer, but route output to aiParsedResults
   // (rather than aiBody, which now hosts the prompt-and-paste UI).
   renderAIResultsInto(parsed, out);
 };
+
+// Module-scope buffers so saveDebrief can persist AI work alongside the typed summary
+var _aiRawResponse = null;
+var _aiParsedJson = null;
 
 // Tiny inline toast — shown at the top of the AI panel for ~2.5s.
 function aiToast(msg, isErr) {
@@ -2141,6 +2151,8 @@ window.saveDebrief = async function() {
       assigned_discipler_id:   newDisciplerId,
       member_diag_zone:        _memberDiagZone,
       member_diag_score:       _memberDiagScore,
+      ai_raw_response:         _aiRawResponse || null,
+      ai_parsed_json:          _aiParsedJson  || null,
     }).select('id').single();
     if (debriefErr) throw debriefErr;
     var debriefId = debriefRow?.id || null;
