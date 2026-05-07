@@ -5004,11 +5004,50 @@ setTimeout(() => { loadDisputeQueue(); }, 1500);
 setInterval(loadDisputeQueue, 300000);
 
 // ═══════════════════════════════════════════════════════════════════════
-// ANNOUNCEMENTS  (Pastor moderation queue + composer)
+// EMOJI HINT — focuses target input + shows OS-specific shortcut tip
 // ─────────────────────────────────────────────────────────────────────
-// Tabs: Pending | Published | Rejected | Archived
-// Pastor can: approve, edit (then approve), reject (with note), archive
+// Browsers can't programmatically open the OS emoji picker, so the best
+// we can do is focus the field (so user can immediately type) AND show
+// the keyboard shortcut for their OS as a small toast.
 // ═══════════════════════════════════════════════════════════════════════
+function emojiHint(targetId){
+  const el = document.getElementById(targetId);
+  if (el) {
+    el.focus();
+    // Move cursor to end
+    if (typeof el.setSelectionRange === 'function') {
+      const len = (el.value || '').length;
+      el.setSelectionRange(len, len);
+    }
+  }
+  // Detect OS for accurate shortcut hint
+  const ua = navigator.userAgent || '';
+  const isMac = /Mac|iPhone|iPad|iPod/i.test(ua);
+  const isMobile = /Mobi|Android/i.test(ua);
+  let msg;
+  if (isMobile) {
+    msg = '😀 Tap the smiley on your keyboard to insert emoji';
+  } else if (isMac) {
+    msg = '😀 Press Ctrl + Cmd + Space to open the emoji picker';
+  } else {
+    msg = '😀 Press Win + . (period) to open the emoji picker';
+  }
+  // Show as toast — reuse existing toast/alert pattern
+  let tip = document.getElementById('emojiHintToast');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'emojiHintToast';
+    tip.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1612;color:#fff;padding:.7rem 1.1rem;border-radius:8px;font-size:13px;font-weight:500;z-index:10001;opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+    document.body.appendChild(tip);
+  }
+  tip.textContent = msg;
+  tip.style.opacity = '1';
+  clearTimeout(tip._timer);
+  tip._timer = setTimeout(() => { tip.style.opacity = '0'; }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANNOUNCEMENTS  (Pastor moderation queue + composer)
 
 let _annPanelTab = 'pending';
 let _annAll = [];
@@ -5176,10 +5215,128 @@ async function _annLoadAckRatesMD(){
       const el = document.getElementById('annAckMD-' + a.id);
       if (el) {
         const pct = audSize > 0 ? Math.round(((ackCount||0) / audSize) * 100) : 0;
-        el.innerHTML = `📊 <strong>${ackCount||0} of ${audSize}</strong> acknowledged (${pct}%)`;
+        el.innerHTML = `<button onclick="openAnnAckDetails('${a.id}')" style="background:transparent;border:none;color:#1f6b3a;font-weight:600;cursor:pointer;padding:0;font-size:11.5px;text-decoration:underline;">📊 <strong>${ackCount||0} of ${audSize}</strong> acknowledged (${pct}%)</button>`;
       }
     } catch(e) {}
   }
+}
+
+// Open a modal showing who acknowledged + who hasn't (in audience but no ack)
+async function openAnnAckDetails(annId){
+  const a = _annAll.find(x => x.id === annId);
+  if (!a) return;
+
+  let modal = document.getElementById('annAckDetailsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'annAckDetailsModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = `<div id="annAckDetailsBody" style="background:#fff;max-width:560px;width:100%;border-radius:14px;padding:1.25rem;margin-top:2rem;margin-bottom:2rem;color:#1a1612;box-shadow:0 12px 40px rgba(0,0,0,.3);"></div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+
+  const body = document.getElementById('annAckDetailsBody');
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">
+      <h3 style="margin:0;font-size:15px;">📊 Acknowledgments</h3>
+      <button onclick="document.getElementById('annAckDetailsModal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:1rem;line-height:1.5;">
+      "<strong>${MultiplyShared.escapeHTML(a.title)}</strong>" — published ${_annFmtDate(a.published_at)}
+    </div>
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);">Loading...</div>
+  `;
+
+  try {
+    // Step 1: who acknowledged
+    const {data: acks, error: aErr} = await db.from('announcement_acks')
+      .select('member_id, acked_at')
+      .eq('announcement_id', annId)
+      .order('acked_at', {ascending: false});
+    if (aErr) throw aErr;
+    const ackedIds = new Set((acks||[]).map(r => r.member_id));
+    const ackedAtMap = new Map((acks||[]).map(r => [r.member_id, r.acked_at]));
+
+    // Step 2: who's in audience
+    const {data: allMembers, error: mErr} = await db.from('members')
+      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3')
+      .or('is_test_member.is.null,is_test_member.eq.false')
+      .order('name');
+    if (mErr) throw mErr;
+
+    const audience = (allMembers||[]).filter(m => _annAudienceMatchesMemberMD(a.audience_filter, m));
+    const acked = audience.filter(m => ackedIds.has(m.id));
+    const pending = audience.filter(m => !ackedIds.has(m.id));
+
+    body.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">
+        <h3 style="margin:0;font-size:15px;">📊 Acknowledgments</h3>
+        <button onclick="document.getElementById('annAckDetailsModal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:1rem;line-height:1.5;">
+        "<strong>${MultiplyShared.escapeHTML(a.title)}</strong>" — published ${_annFmtDate(a.published_at)}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:1rem;">
+        <div style="background:#e7f5ec;border:1px solid #b6dac3;border-radius:8px;padding:.7rem .85rem;text-align:center;">
+          <div style="font-size:24px;font-weight:700;color:#1f6b3a;line-height:1;">${acked.length}</div>
+          <div style="font-size:11px;color:#1f6b3a;margin-top:.25rem;">✓ Acknowledged</div>
+        </div>
+        <div style="background:#fff7e0;border:1px solid #f0d680;border-radius:8px;padding:.7rem .85rem;text-align:center;">
+          <div style="font-size:24px;font-weight:700;color:#7a5800;line-height:1;">${pending.length}</div>
+          <div style="font-size:11px;color:#7a5800;margin-top:.25rem;">⏳ Pending</div>
+        </div>
+      </div>
+
+      ${acked.length > 0 ? `
+        <div style="margin-bottom:1rem;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:.4rem;">
+            ✓ Acknowledged (${acked.length})
+          </div>
+          <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">
+            ${acked.map(m => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .65rem;font-size:12px;border-bottom:1px solid var(--border);">
+                <span style="color:var(--text);">${MultiplyShared.escapeHTML(m.name)}</span>
+                <span style="color:var(--muted);font-size:10.5px;">${_annFmtDate(ackedAtMap.get(m.id))}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${pending.length > 0 ? `
+        <div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:.4rem;">
+            ⏳ Still pending (${pending.length})
+          </div>
+          <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">
+            ${pending.map(m => `
+              <div style="padding:.4rem .65rem;font-size:12px;color:var(--text);border-bottom:1px solid var(--border);">
+                ${MultiplyShared.escapeHTML(m.name)}
+                ${m.lc_group ? `<span style="color:var(--muted);font-size:10.5px;margin-left:.4rem;">${MultiplyShared.escapeHTML(m.lc_group)}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `;
+  } catch(e) {
+    console.error('[ann-acks] details load failed:', e);
+    body.innerHTML += '<div style="padding:1rem;color:#9a2727;text-align:center;">Error: ' + MultiplyShared.escapeHTML(e.message) + '</div>';
+  }
+}
+
+// Same audience-match logic as MMT — duplicated here for self-containment
+function _annAudienceMatchesMemberMD(filter, member){
+  if (!filter) return false;
+  if (filter.all === true) return true;
+  if (filter.lc_groups?.includes(member.lc_group)) return true;
+  if (filter.levels?.includes(member.pipeline_level)) return true;
+  if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
+  if (filter.member_ids?.includes(member.id)) return true;
+  return false;
 }
 
 async function _annComputeAudienceSizeMD(filter){
@@ -5300,15 +5457,23 @@ function _renderPastorAnnComposer(){
     </div>
 
     <div style="margin-bottom:.7rem;">
-      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.25rem;">Title</label>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;">
+        <label style="font-size:12px;font-weight:700;">Title</label>
+        <button type="button" onclick="emojiHint('pAnnTitle')" title="Open emoji picker"
+          style="background:#faf6ef;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;line-height:1;">😀</button>
+      </div>
       <input id="pAnnTitle" type="text" maxlength="120" value="${MultiplyShared.escapeHTML(d.title)}"
         oninput="_pastorAnnDraft.title = this.value"
         style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:8px;font-size:13px;">
     </div>
 
     <div style="margin-bottom:.7rem;">
-      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:.25rem;">Body</label>
-      <textarea maxlength="800" rows="5"
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;">
+        <label style="font-size:12px;font-weight:700;">Body</label>
+        <button type="button" onclick="emojiHint('pAnnBody')" title="Open emoji picker"
+          style="background:#faf6ef;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;line-height:1;">😀</button>
+      </div>
+      <textarea id="pAnnBody" maxlength="800" rows="5"
         oninput="_pastorAnnDraft.body = this.value"
         style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${MultiplyShared.escapeHTML(d.body)}</textarea>
     </div>
