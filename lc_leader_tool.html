@@ -3599,6 +3599,39 @@ setTimeout(loadPendingConfirmations, 1000);
 setInterval(loadPendingConfirmations, 90000);
 
 // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// EMOJI HINT — focuses target input + shows OS-specific shortcut tip
+// ═══════════════════════════════════════════════════════════════════════
+function emojiHint(targetId){
+  const el = document.getElementById(targetId);
+  if (el) {
+    el.focus();
+    if (typeof el.setSelectionRange === 'function') {
+      const len = (el.value || '').length;
+      el.setSelectionRange(len, len);
+    }
+  }
+  const ua = navigator.userAgent || '';
+  const isMac = /Mac|iPhone|iPad|iPod/i.test(ua);
+  const isMobile = /Mobi|Android/i.test(ua);
+  let msg;
+  if (isMobile)      msg = '😀 Tap the smiley on your keyboard to insert emoji';
+  else if (isMac)    msg = '😀 Press Ctrl + Cmd + Space to open the emoji picker';
+  else               msg = '😀 Press Win + . (period) to open the emoji picker';
+  let tip = document.getElementById('emojiHintToast');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'emojiHintToast';
+    tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a1612;color:#fff;padding:.7rem 1.1rem;border-radius:8px;font-size:13px;font-weight:500;z-index:10001;opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:90vw;text-align:center;';
+    document.body.appendChild(tip);
+  }
+  tip.textContent = msg;
+  tip.style.opacity = '1';
+  clearTimeout(tip._timer);
+  tip._timer = setTimeout(() => { tip.style.opacity = '0'; }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // ANNOUNCEMENTS  (L3+ author-side; modal opened from quick action)
 // ─────────────────────────────────────────────────────────────────────
 // Workflow:
@@ -3662,6 +3695,7 @@ function _annStatusBadge(s){
   if (s === 'pending')   return '<span style="background:#fff7e0;color:#8a6a00;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">⏳ Pending</span>';
   if (s === 'published') return '<span style="background:#e7f5ec;color:#1f6b3a;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">✓ Published</span>';
   if (s === 'rejected')  return '<span style="background:#fde8e8;color:#9a2727;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">✕ Rejected</span>';
+  if (s === 'retracted') return '<span style="background:#fde8e8;color:#9a2727;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">🚫 Retracted</span>';
   if (s === 'archived')  return '<span style="background:#eee;color:#666;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">📦 Archived</span>';
   return s;
 }
@@ -3715,7 +3749,11 @@ function _renderAnnDraftForm(){
     </div>
 
     <div style="margin-bottom:.7rem;">
-      <label style="display:block;font-size:11.5px;font-weight:700;color:#1a1612;margin-bottom:.25rem;">Title</label>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;">
+        <label style="font-size:11.5px;font-weight:700;color:#1a1612;">Title</label>
+        <button type="button" onclick="emojiHint('annTitle')" title="Emoji shortcut hint"
+          style="background:#fff;border:1px solid #e2d8cc;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;line-height:1;">😀</button>
+      </div>
       <input id="annTitle" type="text" maxlength="120" value="${MultiplyShared.escapeHTML(d.title)}"
         oninput="_annDraft.title = this.value"
         placeholder="Short, scannable headline"
@@ -3723,7 +3761,11 @@ function _renderAnnDraftForm(){
     </div>
 
     <div style="margin-bottom:.7rem;">
-      <label style="display:block;font-size:11.5px;font-weight:700;color:#1a1612;margin-bottom:.25rem;">Body</label>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;">
+        <label style="font-size:11.5px;font-weight:700;color:#1a1612;">Body</label>
+        <button type="button" onclick="emojiHint('annBody')" title="Emoji shortcut hint"
+          style="background:#fff;border:1px solid #e2d8cc;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;line-height:1;">😀</button>
+      </div>
       <textarea id="annBody" maxlength="800" rows="4"
         oninput="_annDraft.body = this.value"
         placeholder="Full message (max 800 chars)"
@@ -3803,7 +3845,9 @@ function _renderAnnMineList(){
   if (!_myAnnouncements.length) {
     return '<div style="text-align:center;padding:2rem;color:#6b5f4f;font-size:13px;">You haven\'t drafted any announcements yet.</div>';
   }
-  return _myAnnouncements.map(a => `
+  return _myAnnouncements.map(a => {
+    const canRetract = a.status === 'pending' || a.status === 'published';
+    return `
     <div style="background:#faf6ef;border:1px solid #e2d8cc;border-radius:10px;padding:.85rem 1rem;margin-bottom:.6rem;">
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;flex-wrap:wrap;">
         ${_annStatusBadge(a.status)}
@@ -3821,13 +3865,65 @@ function _renderAnnMineList(){
           <strong>Pastor's note:</strong> ${MultiplyShared.escapeHTML(a.pastor_notes)}
         </div>
       ` : ''}
+      ${a.status === 'retracted' ? `
+        <div style="margin-top:.5rem;padding:.5rem .65rem;background:#fde8e8;border-left:3px solid #c14545;border-radius:4px;font-size:11.5px;color:#9a2727;">
+          <strong>🚫 Retracted</strong> ${a.retracted_at ? `· ${_annFmt(a.retracted_at)}` : ''}
+          ${a.retraction_reason ? `<br><strong>Reason:</strong> ${MultiplyShared.escapeHTML(a.retraction_reason)}` : ''}
+        </div>
+      ` : ''}
       ${a.status === 'published' ? `
         <div id="annAckRate-${a.id}" style="margin-top:.5rem;font-size:11.5px;color:#1f6b3a;font-weight:600;">
           📊 Loading ack rate...
         </div>
       ` : ''}
+      ${canRetract ? `
+        <div style="margin-top:.6rem;text-align:right;">
+          <button onclick="_authorRetract('${a.id}')"
+            style="background:transparent;color:#9a2727;border:1px dashed #9a2727;border-radius:6px;padding:.35rem .8rem;font-weight:600;cursor:pointer;font-size:11px;">
+            🚫 Retract
+          </button>
+        </div>
+      ` : ''}
     </div>
-  `).join('');
+  `;}).join('');
+}
+
+// Author-side retraction (own announcements only)
+async function _authorRetract(annId){
+  const a = _myAnnouncements.find(x => x.id === annId);
+  if (!a) return;
+  const isPublished = a.status === 'published';
+  const warn = isPublished
+    ? 'Retract this published announcement?\n\nMembers who already acknowledged will see a one-time "Retracted" notice on their next visit.'
+    : 'Retract this draft? It will not go to Pastor for approval.';
+  if (!confirm(warn)) return;
+  const quickPicks = ['Typo / correction needed', 'Plans changed', 'Wrong audience', 'Sent by mistake'];
+  let reason = prompt(
+    'Reason (short — visible to members):\n\nQuick picks:\n' +
+      quickPicks.map((q,i) => `  ${i+1}. ${q}`).join('\n') +
+      '\n\nOr type your own:',
+    'Typo / correction needed'
+  );
+  if (reason === null) return;
+  reason = String(reason).trim();
+  const n = parseInt(reason, 10);
+  if (!isNaN(n) && n >= 1 && n <= quickPicks.length) reason = quickPicks[n-1];
+  if (!reason) reason = 'Retracted';
+
+  try {
+    const {error} = await db.from('announcements').update({
+      status: 'retracted',
+      retracted_by: LEADER.leaderId,
+      retracted_at: new Date().toISOString(),
+      retraction_reason: reason
+    }).eq('id', annId);
+    if (error) throw error;
+    toast('🚫 Retracted', 'success');
+    await _loadMyAnnouncements();
+    _renderAnnModal();
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
 }
 
 // After rendering, kick off ack-rate loads (avoids embedding </script> in a string)

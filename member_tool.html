@@ -1605,6 +1605,13 @@ body.lang-tl .tl-text{display:inline;}
           </span>
           <span class="value" id="fShareWithLc">…</span>
         </button>
+        <button class="field" onclick="openSoundSettings()">
+          <span class="label">
+            <span class="en-text">🔔 Notification sound</span>
+            <span class="tl-text">🔔 Tunog ng abiso</span>
+          </span>
+          <span class="value" id="fSoundStatus">…</span>
+        </button>
       </div>
 
       <button class="signout" onclick="signOut()">
@@ -4439,11 +4446,12 @@ setLang = function(lang){
 // ═══════════════════════════════════════════════════════════════════════
 
 let _myAnnouncementsForHome = [];
+let _myRetractionNotices = [];
 
 async function loadPinnedAnnouncements(){
   if (!memberRow) return;
   try {
-    // Step 1: live announcements
+    // Step 1: live announcements (status='published')
     const nowIso = new Date().toISOString();
     const {data: anns, error} = await db.from('announcements')
       .select('id,title,body,priority,audience_filter,published_at,expires_at,author_name')
@@ -4465,11 +4473,64 @@ async function loadPinnedAnnouncements(){
       return _annAudienceMatchesMember(a.audience_filter, memberRow);
     });
 
+    // Step 4: load retraction notices for things I previously acked
+    await _loadRetractionNotices(ackedIds);
+
     renderPinnedAnnouncements();
   } catch(e) {
     console.error('[announcements] load failed:', e);
     _myAnnouncementsForHome = [];
+    _myRetractionNotices = [];
     renderPinnedAnnouncements();
+  }
+}
+
+// Find retracted announcements that I had previously acknowledged AND haven't dismissed yet
+async function _loadRetractionNotices(ackedIds){
+  try {
+    if (!ackedIds || ackedIds.size === 0) {
+      _myRetractionNotices = [];
+      return;
+    }
+    const ackedArr = Array.from(ackedIds);
+    // Fetch retracted announcements I acked
+    const {data: retracted, error: rErr} = await db.from('announcements')
+      .select('id,title,retracted_at,retraction_reason,author_name')
+      .eq('status', 'retracted')
+      .in('id', ackedArr)
+      .order('retracted_at', {ascending: false})
+      .limit(20);
+    if (rErr) throw rErr;
+    if (!retracted || !retracted.length) {
+      _myRetractionNotices = [];
+      return;
+    }
+    // Fetch my dismissals
+    const retractedIds = retracted.map(r => r.id);
+    const {data: dismissals} = await db.from('announcement_retraction_dismissals')
+      .select('announcement_id')
+      .eq('member_id', MEMBER.memberId)
+      .in('announcement_id', retractedIds);
+    const dismissedIds = new Set((dismissals || []).map(d => d.announcement_id));
+    _myRetractionNotices = retracted.filter(r => !dismissedIds.has(r.id));
+  } catch(e) {
+    console.warn('[announcements] retraction notice load failed:', e);
+    _myRetractionNotices = [];
+  }
+}
+
+async function dismissRetractionNotice(annId){
+  try {
+    const {error} = await db.from('announcement_retraction_dismissals').insert({
+      announcement_id: annId,
+      member_id: MEMBER.memberId
+    });
+    if (error && !String(error.message).includes('duplicate')) throw error;
+    _myRetractionNotices = _myRetractionNotices.filter(r => r.id !== annId);
+    renderPinnedAnnouncements();
+  } catch(e) {
+    console.error('[announcements] dismiss retraction failed:', e);
+    showToast('Could not dismiss. Try again.', true);
   }
 }
 
@@ -4487,7 +4548,9 @@ function renderPinnedAnnouncements(){
   const wrap = document.getElementById('annPinnedSection');
   if (!wrap) return;
 
-  if (!_myAnnouncementsForHome.length) {
+  const hasAnns = _myAnnouncementsForHome.length > 0;
+  const hasRetractions = (_myRetractionNotices || []).length > 0;
+  if (!hasAnns && !hasRetractions) {
     wrap.style.display = 'none';
     wrap.innerHTML = '';
     return;
@@ -4495,7 +4558,32 @@ function renderPinnedAnnouncements(){
   wrap.style.display = 'block';
 
   const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
-  wrap.innerHTML = _myAnnouncementsForHome.map(a => {
+
+  // Build retraction notice cards (rendered first — older info to clear)
+  const retractionsHtml = (_myRetractionNotices || []).map(r => `
+    <div style="background:linear-gradient(135deg,#f5e8e8,#ecd6d6);border:2px solid #b04545;border-radius:12px;padding:1rem 1.1rem;margin-bottom:.6rem;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+        <span style="background:#9a2727;color:#fff;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700;letter-spacing:.5px;">🚫 ${lang==='tl'?'IBINAWI':'RETRACTED'}</span>
+        <span style="font-size:10.5px;color:#666;margin-left:auto;">${MultiplyShared.escapeHTML(r.author_name||'')}</span>
+      </div>
+      <div style="font-size:13px;color:#3a3028;line-height:1.55;margin-bottom:.4rem;">
+        ${lang==='tl'
+          ? `Ang abiso na <strong>"${MultiplyShared.escapeHTML(r.title)}"</strong> ay ibinawi.`
+          : `The announcement <strong>"${MultiplyShared.escapeHTML(r.title)}"</strong> was retracted.`}
+      </div>
+      ${r.retraction_reason ? `
+        <div style="font-size:12px;color:#7a3030;margin-bottom:.7rem;font-style:italic;">
+          ${lang==='tl'?'Dahilan':'Reason'}: ${MultiplyShared.escapeHTML(r.retraction_reason)}
+        </div>
+      ` : ''}
+      <button onclick="dismissRetractionNotice('${r.id}')"
+        style="width:100%;padding:.55rem;background:#fff;color:#1a1612;border:1.5px solid #b04545;border-radius:8px;font-weight:700;font-size:12.5px;cursor:pointer;">
+        ✓ ${lang==='tl'?'Nakuha ko':'Got it'}
+      </button>
+    </div>
+  `).join('');
+
+  const annsHtml = _myAnnouncementsForHome.map(a => {
     let bg, border, badgeBg, badgeFg, badgeIcon, badgeLbl;
     if (a.priority === 'urgent') {
       bg = 'linear-gradient(135deg,#fde8e8,#fac8c8)'; border = '#c14545';
@@ -4520,6 +4608,9 @@ function renderPinnedAnnouncements(){
       </button>
     </div>`;
   }).join('');
+
+  // Render: retraction notices first (high priority — clears outdated info), then live anns
+  wrap.innerHTML = retractionsHtml + annsHtml;
 }
 
 async function ackAnnouncement(announcementId){
@@ -4537,6 +4628,333 @@ async function ackAnnouncement(announcementId){
     showToast('Could not record. Please try again.', true);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// NOTIFICATION SOUND  (Web Audio chimes + quiet hours + alert detection)
+// ─────────────────────────────────────────────────────────────────────
+// All preferences stored in localStorage:
+//   mmt_sound_enabled      'true'|'false' (default 'true')
+//   mmt_sound_choice       'chime'|'two_tone'|'bell'|'urgent' (default 'chime')
+//   mmt_quiet_hours        'true'|'false' (default 'true')
+//   mmt_lastSeenAnnId      uuid of newest announcement we've seen
+//   mmt_lastSeenAttestRev  string fingerprint of self-attest states
+// Quiet-hours window: 15 min before → 90 min after each typical service.
+// Audio context lazy-init on first user gesture (browser requirement).
+// ═══════════════════════════════════════════════════════════════════════
+
+const SOUND_CHOICES = {
+  chime:    {label_en:'Soft chime', label_tl:'Malumanay na chime', icon:'🔔'},
+  two_tone: {label_en:'Two-tone',   label_tl:'Dalawang-tono',      icon:'🛎️'},
+  bell:     {label_en:'Bell',       label_tl:'Kampana',            icon:'🪘'},
+  urgent:   {label_en:'Urgent',     label_tl:'Mahalaga',            icon:'⚠️'},
+};
+const QUIET_PRE_MIN = 15;
+const QUIET_POST_MIN = 90;
+
+let _audioCtx = null;
+
+function _soundPref(){
+  return {
+    enabled: localStorage.getItem('mmt_sound_enabled') !== 'false',
+    choice:  localStorage.getItem('mmt_sound_choice') || 'chime',
+    quietHours: localStorage.getItem('mmt_quiet_hours') !== 'false',
+  };
+}
+
+function _setSoundPref(key, val){
+  localStorage.setItem(key, String(val));
+}
+
+function _ensureAudio(){
+  if (_audioCtx) return _audioCtx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    _audioCtx = new Ctx();
+    return _audioCtx;
+  } catch(e) {
+    console.warn('[sound] AudioContext init failed:', e);
+    return null;
+  }
+}
+
+function _playTone(freq, durationSec, volume){
+  const ctx = _ensureAudio();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + durationSec + 0.05);
+}
+
+function _playSequence(notes, volume){
+  const ctx = _ensureAudio();
+  if (!ctx) return;
+  let t = 0;
+  notes.forEach(n => {
+    setTimeout(() => _playTone(n.freq, n.dur, volume), t * 1000);
+    t += (n.gap != null ? n.gap : n.dur * 0.85);
+  });
+}
+
+function playNotificationSound(force){
+  const pref = _soundPref();
+  if (!pref.enabled && !force) return;
+  if (!force && pref.quietHours && _isInQuietHours()) {
+    console.log('[sound] suppressed (quiet hours)');
+    return;
+  }
+  const vol = 0.30;
+  const choice = pref.choice;
+  if (choice === 'chime') {
+    _playTone(880, 0.45, vol);
+  } else if (choice === 'two_tone') {
+    _playSequence([
+      {freq: 880, dur: 0.18},
+      {freq: 1175, dur: 0.30},
+    ], vol);
+  } else if (choice === 'bell') {
+    _playSequence([
+      {freq: 660, dur: 0.5},
+      {freq: 990, dur: 0.5, gap: 0.0},
+    ], vol * 0.8);
+  } else if (choice === 'urgent') {
+    _playSequence([
+      {freq: 1200, dur: 0.12},
+      {freq: 900,  dur: 0.12},
+      {freq: 1200, dur: 0.18},
+    ], vol);
+  }
+  if (navigator.vibrate) {
+    try { navigator.vibrate(choice === 'urgent' ? [80, 60, 80] : 50); } catch(e) {}
+  }
+}
+
+function _isInQuietHours(){
+  try {
+    const types = _attestEventTypes;
+    if (!types || !types.length) return false;
+    const now = new Date();
+    const todayIsoDay = now.getDay() === 0 ? 7 : now.getDay();
+    for (const et of types) {
+      if (Number(et.typical_day) !== todayIsoDay) continue;
+      const t = et.typical_time;
+      if (!t || !/^\d{1,2}:\d{2}$/.test(t)) continue;
+      const [hh, mm] = t.split(':').map(Number);
+      const start = new Date(now); start.setHours(hh, mm, 0, 0);
+      const preStart = new Date(start.getTime() - QUIET_PRE_MIN * 60000);
+      const postEnd  = new Date(start.getTime() + QUIET_POST_MIN * 60000);
+      if (now >= preStart && now <= postEnd) return true;
+    }
+    return false;
+  } catch(e) {
+    return false;
+  }
+}
+
+function _quietHoursStatus(){
+  if (_isInQuietHours()) return {active: true, label: 'Currently muted (service window)'};
+  try {
+    const types = _attestEventTypes;
+    if (!types || !types.length) return {active: false, label: 'No service times configured'};
+    const now = new Date();
+    let nearest = null;
+    for (const et of types) {
+      const t = et.typical_time;
+      if (!t || !/^\d{1,2}:\d{2}$/.test(t)) continue;
+      const [hh, mm] = t.split(':').map(Number);
+      const targetIsoDay = Number(et.typical_day);
+      for (let offset = 0; offset < 8; offset++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + offset);
+        const dIsoDay = d.getDay() === 0 ? 7 : d.getDay();
+        if (dIsoDay !== targetIsoDay) continue;
+        d.setHours(hh, mm, 0, 0);
+        const preStart = new Date(d.getTime() - QUIET_PRE_MIN * 60000);
+        if (preStart > now && (!nearest || preStart < nearest.when)) {
+          nearest = {when: preStart, label: et.label || et.key};
+        }
+        break;
+      }
+    }
+    if (!nearest) return {active: false, label: 'No upcoming service'};
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const d = nearest.when;
+    return {
+      active: false,
+      label: `Next mute: ${days[d.getDay()]} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
+    };
+  } catch(e) {
+    return {active: false, label: ''};
+  }
+}
+
+async function openSoundSettings(){
+  try { await _loadAttestEventTypes(); } catch(e) {}
+  let modal = document.getElementById('soundSettingsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'soundSettingsModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:1rem;overflow-y:auto;';
+    modal.innerHTML = `<div id="soundSettingsBody" style="background:var(--paper);max-width:440px;width:100%;border-radius:16px;padding:1.25rem;margin-top:2rem;margin-bottom:2rem;box-shadow:0 12px 40px rgba(0,0,0,.3);"></div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  _renderSoundSettings();
+}
+
+function _renderSoundSettings(){
+  const body = document.getElementById('soundSettingsBody');
+  if (!body) return;
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  const pref = _soundPref();
+  const qh = _quietHoursStatus();
+
+  const choicesHtml = Object.entries(SOUND_CHOICES).map(([key, info]) => {
+    const active = pref.choice === key;
+    const label = lang === 'tl' ? info.label_tl : info.label_en;
+    return `<button onclick="_selectSound('${key}')"
+      style="display:flex;align-items:center;gap:.6rem;width:100%;padding:.7rem .85rem;
+             background:${active ? 'var(--gold-soft)' : 'var(--cream)'};
+             border:1.5px solid ${active ? 'var(--gold)' : 'var(--line)'};
+             border-radius:10px;margin-bottom:.4rem;cursor:pointer;
+             font-size:13px;color:var(--ink);font-weight:${active?'700':'500'};">
+      <span style="font-size:18px;">${info.icon}</span>
+      <span style="flex:1;text-align:left;">${MultiplyShared.escapeHTML(label)}</span>
+      ${active ? '<span style="color:var(--gold);font-weight:700;">✓</span>' : ''}
+    </button>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;font-size:16px;color:var(--ink);">🔔 ${lang==='tl'?'Tunog ng Abiso':'Notification Sound'}</h3>
+      <button onclick="document.getElementById('soundSettingsModal').style.display='none'"
+        style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">×</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:.7rem;padding:.8rem 1rem;background:var(--cream);border-radius:10px;margin-bottom:1rem;">
+      <label style="flex:1;font-size:13px;color:var(--ink);font-weight:600;">
+        ${lang==='tl' ? 'I-on ang tunog' : 'Sound on'}
+      </label>
+      <input type="checkbox" id="soundEnabledChk" ${pref.enabled ? 'checked' : ''}
+        onchange="_setSoundPref('mmt_sound_enabled', this.checked); _renderSoundSettings();"
+        style="width:20px;height:20px;cursor:pointer;">
+    </div>
+
+    ${pref.enabled ? `
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:.5rem;">
+          ${lang==='tl' ? 'Pumili ng tunog' : 'Choose sound'}
+        </div>
+        ${choicesHtml}
+        <button onclick="playNotificationSound(true)"
+          style="width:100%;padding:.6rem;background:var(--forest);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;margin-top:.5rem;">
+          ▶ ${lang==='tl' ? 'I-test ang tunog' : 'Test sound'}
+        </button>
+      </div>
+    ` : ''}
+
+    <div style="border-top:1px solid var(--line);padding-top:1rem;">
+      <div style="display:flex;align-items:center;gap:.7rem;padding:.8rem 1rem;background:var(--cream);border-radius:10px;margin-bottom:.6rem;">
+        <label style="flex:1;font-size:13px;color:var(--ink);font-weight:600;">
+          🔇 ${lang==='tl' ? 'Tahimik tuwing service' : 'Quiet during services'}
+        </label>
+        <input type="checkbox" id="quietHoursChk" ${pref.quietHours ? 'checked' : ''}
+          onchange="_setSoundPref('mmt_quiet_hours', this.checked); _renderSoundSettings();"
+          style="width:20px;height:20px;cursor:pointer;">
+      </div>
+      ${pref.quietHours ? `
+        <div style="font-size:11.5px;color:var(--muted);padding:0 .5rem;line-height:1.5;">
+          ${lang==='tl'
+            ? `Auto-mute ${QUIET_PRE_MIN} min bago, hanggang ${QUIET_POST_MIN} min pagkatapos ng bawat service.`
+            : `Auto-mutes ${QUIET_PRE_MIN} min before to ${QUIET_POST_MIN} min after each service.`}
+          <br>
+          <strong style="color:${qh.active?'#9a2727':'var(--ink)'};">${qh.active?'🔇':'🔊'} ${MultiplyShared.escapeHTML(qh.label)}</strong>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function _selectSound(key){
+  _setSoundPref('mmt_sound_choice', key);
+  _renderSoundSettings();
+  setTimeout(() => playNotificationSound(true), 100);
+}
+
+function renderSoundFieldStatus(){
+  const el = document.getElementById('fSoundStatus');
+  if (!el) return;
+  const pref = _soundPref();
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  if (!pref.enabled) {
+    el.innerHTML = `<span style="color:var(--muted);">${lang==='tl'?'Naka-mute':'Muted'}</span>`;
+    return;
+  }
+  const choice = SOUND_CHOICES[pref.choice] || SOUND_CHOICES.chime;
+  const lbl = lang === 'tl' ? choice.label_tl : choice.label_en;
+  el.innerHTML = `<span>${choice.icon} ${MultiplyShared.escapeHTML(lbl)}</span>`;
+}
+
+async function _checkNewAlertsAndChime(){
+  if (!memberRow) return;
+  const pref = _soundPref();
+  if (!pref.enabled) return;
+
+  try {
+    const newest = (_myAnnouncementsForHome || [])[0];
+    if (newest) {
+      const lastSeen = localStorage.getItem('mmt_lastSeenAnnId');
+      if (lastSeen !== newest.id) {
+        if (lastSeen) playNotificationSound();
+        localStorage.setItem('mmt_lastSeenAnnId', newest.id);
+      }
+    }
+  } catch(e) {}
+
+  try {
+    const newestRetraction = (_myRetractionNotices || [])[0];
+    if (newestRetraction) {
+      const lastSeen = localStorage.getItem('mmt_lastSeenRetractionId');
+      if (lastSeen !== newestRetraction.id) {
+        if (lastSeen) playNotificationSound();  // honors quiet-hours via the helper
+        localStorage.setItem('mmt_lastSeenRetractionId', newestRetraction.id);
+      }
+    }
+  } catch(e) {}
+
+  try {
+    if (Array.isArray(_recentAttestRows) && _recentAttestRows.length) {
+      const fingerprint = _recentAttestRows.map(r =>
+        `${r.id}:${r.confirmed_by?'c':''}${r.disputed?'d':''}${r.pastor_resolved?'p':''}`
+      ).join('|');
+      const lastFp = localStorage.getItem('mmt_lastSeenAttestRev');
+      if (lastFp !== fingerprint) {
+        if (lastFp) playNotificationSound();
+        localStorage.setItem('mmt_lastSeenAttestRev', fingerprint);
+      }
+    }
+  } catch(e) {}
+}
+
+const _origRenderProfile2 = renderProfile;
+renderProfile = function(){
+  _origRenderProfile2();
+  try{ renderSoundFieldStatus(); }catch(e){}
+};
+
+setInterval(() => {
+  if (memberRow) _checkNewAlertsAndChime();
+}, 30000);
 
 // Hook into renderHome chain
 const _origRenderHome2 = renderHome;

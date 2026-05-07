@@ -5122,12 +5122,14 @@ function renderAnnouncementQueue(){
     published: _annAll.filter(a => a.status === 'published').length,
     rejected: _annAll.filter(a => a.status === 'rejected').length,
     archived: _annAll.filter(a => a.status === 'archived').length,
+    retracted: _annAll.filter(a => a.status === 'retracted').length,
   };
 
   const tabs = [
     {key:'pending', label:'⏳ Pending', n: counts.pending},
     {key:'published', label:'✓ Published', n: counts.published},
     {key:'rejected', label:'✕ Rejected', n: counts.rejected},
+    {key:'retracted', label:'🚫 Retracted', n: counts.retracted},
     {key:'archived', label:'📦 Archived', n: counts.archived},
   ];
   tabsBar.innerHTML = tabs.map(t => {
@@ -5164,9 +5166,17 @@ function renderAnnouncementQueue(){
             style="background:#9a2727;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
             ✕ Reject
           </button>
+          <button onclick="retractAnnouncement('${a.id}')"
+            style="background:transparent;color:#9a2727;border:1px dashed #9a2727;border-radius:6px;padding:.4rem .8rem;font-weight:600;cursor:pointer;font-size:11.5px;">
+            🚫 Retract
+          </button>
         </div>`
       : isPublished
       ? `<div style="display:flex;flex-direction:column;gap:.4rem;min-width:160px;">
+          <button onclick="retractAnnouncement('${a.id}')"
+            style="background:#9a2727;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
+            🚫 Retract
+          </button>
           <button onclick="archiveAnnouncement('${a.id}')"
             style="background:#666;color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;">
             📦 Archive Now
@@ -5190,6 +5200,12 @@ function renderAnnouncementQueue(){
         ${a.status === 'rejected' && a.pastor_notes ? `
           <div style="margin-top:.5rem;padding:.45rem .65rem;background:#fde8e8;border-left:3px solid #c14545;border-radius:4px;font-size:11.5px;color:#9a2727;">
             <strong>Rejection note:</strong> ${MultiplyShared.escapeHTML(a.pastor_notes)}
+          </div>
+        ` : ''}
+        ${a.status === 'retracted' ? `
+          <div style="margin-top:.5rem;padding:.45rem .65rem;background:#fde8e8;border-left:3px solid #c14545;border-radius:4px;font-size:11.5px;color:#9a2727;">
+            <strong>🚫 Retracted</strong> ${a.retracted_at ? `· ${_annFmtDate(a.retracted_at)}` : ''}
+            ${a.retraction_reason ? `<br><strong>Reason:</strong> ${MultiplyShared.escapeHTML(a.retraction_reason)}` : ''}
           </div>
         ` : ''}
         ${isPublished ? `
@@ -5396,6 +5412,44 @@ async function archiveAnnouncement(id){
   if (!confirm('Archive this published announcement? It will no longer appear on member home screens.')) return;
   try {
     const {error} = await db.from('announcements').update({ status: 'archived' }).eq('id', id);
+    if (error) throw error;
+    await loadAnnouncementQueue();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+// ─── Retract: pull back an announcement; acked members will see a notice ───
+async function retractAnnouncement(id){
+  const a = _annAll.find(x => x.id === id);
+  if (!a) return;
+  const isPublished = a.status === 'published';
+  const warn = isPublished
+    ? 'Retract this published announcement?\n\nMembers who already acknowledged will see a one-time "Retracted" notice on their next visit.'
+    : 'Retract this draft? It will not be published.';
+  if (!confirm(warn)) return;
+  // Quick-pick reason (matches common cases) or custom
+  const quickPicks = ['Typo / correction needed', 'Plans changed', 'Wrong audience', 'Sent by mistake'];
+  let reason = prompt(
+    'Reason (short — visible to members):\n\nQuick picks:\n' +
+      quickPicks.map((q,i) => `  ${i+1}. ${q}`).join('\n') +
+      '\n\nOr type your own:',
+    'Typo / correction needed'
+  );
+  if (reason === null) return;  // user cancelled
+  reason = String(reason).trim();
+  // Allow numeric quick-pick
+  const n = parseInt(reason, 10);
+  if (!isNaN(n) && n >= 1 && n <= quickPicks.length) reason = quickPicks[n-1];
+  if (!reason) reason = 'Retracted';
+
+  try {
+    const {error} = await db.from('announcements').update({
+      status: 'retracted',
+      retracted_by: LEADER.leaderId,
+      retracted_at: new Date().toISOString(),
+      retraction_reason: reason
+    }).eq('id', id);
     if (error) throw error;
     await loadAnnouncementQueue();
   } catch(e) {
