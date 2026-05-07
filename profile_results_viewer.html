@@ -384,6 +384,11 @@ function ib(cls, label, text) {
   return `<div class="ib ib-${cls}"><div class="ib-label">${label}</div>${text}</div>`;
 }
 
+function escapeHTML(s){
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function renderLL(d, member) {
   const scores = d.results || {};
   const sorted = LL_DATA.slice().sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
@@ -689,9 +694,21 @@ async function loadResults() {
     if(!db) { showError('Connection Failed', 'Could not initialize database connection.'); return; }
 
     setLoadingMsg('Loading profile results...');
-    const {data:rows, error} = await db.from('member_profiles')
-      .select('*').eq('member_id',memberId).eq('profile_type',type)
-      .order('date_taken',{ascending:false}).limit(1);
+
+    // Table routing: spiritual gifts saves to its own dedicated table,
+    // not the shared member_profiles table. All other types share member_profiles.
+    let rows, error;
+    if (type === 'gifts') {
+      const r = await db.from('gifts_diagnostic')
+        .select('*').eq('member_id', memberId)
+        .order('date_taken',{ascending:false}).limit(1);
+      rows = r.data; error = r.error;
+    } else {
+      const r = await db.from('member_profiles')
+        .select('*').eq('member_id',memberId).eq('profile_type',type)
+        .order('date_taken',{ascending:false}).limit(1);
+      rows = r.data; error = r.error;
+    }
 
     if(error) { showError('Database Error', error.message + ' (code: ' + (error.code||'?') + ')'); return; }
     if(!rows || rows.length===0) {
@@ -716,6 +733,8 @@ async function loadResults() {
       else if(type==='disc') renderDISC(d, member);
       else if(type==='enneagram') renderEnneagram(d, member);
       else if(type==='strengths') renderStrengths(d, member);
+      else if(type==='gifts') renderGifts(d, member);
+      else if(type==='conflict_style') renderConflict(d, member);
       else showError('Unknown Type', 'Type "'+type+'" not supported.');
     } catch(renderErr) {
       document.getElementById('loadingView').style.display = 'none';
@@ -727,6 +746,295 @@ async function loadResults() {
   } catch(e) {
     showError('Error', e.message);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SPIRITUAL GIFTS RENDERER
+// ─────────────────────────────────────────────────────────────────────
+// Reads from gifts_diagnostic table: primary_gift, secondary_gift,
+// supporting_gift (gift IDs), all_scores (object), ministry_match_*
+// ═══════════════════════════════════════════════════════════════════════
+
+const GIFTS_DATA = {
+  leadership:    {name:'Leadership',    nameTl:'Pamumuno',           emoji:'⚡', cluster:'word',
+    desc:'You motivate and guide others toward unified goals. People-oriented — you build team unity and push others toward completing God\'s work.',
+    descTl:'Napapakilos at ginagabayan mo ang iba tungo sa iisang layunin. Nakatuon sa tao — nagtatayo ng pagkakaisa.',
+    scripture:'Romans 12:8 · 1 Timothy 5:17', examples:'Moses, Joshua'},
+  administration:{name:'Administration', nameTl:'Pamamahala',         emoji:'📋', cluster:'word',
+    desc:'You organize people, resources, and systems to accomplish ministry goals. You keep teams on course and looking ahead.',
+    descTl:'Nag-aayos ka ng tao, resources, at sistema para makamit ang layunin ng ministry.',
+    scripture:'1 Corinthians 12:28', examples:'Joseph, Nehemiah'},
+  teaching:      {name:'Teaching',       nameTl:'Pagtuturo',          emoji:'📖', cluster:'word',
+    desc:'You communicate biblical truths in ways that strengthen and grow the church. You feel deep satisfaction when others grasp God\'s Word.',
+    descTl:'Inihahatid mo ang katotohanan ng Bibliya sa paraang nagpapatibay sa simbahan.',
+    scripture:'1 Corinthians 12:28 · Romans 12:7', examples:'Apollos, Paul'},
+  knowledge:     {name:'Knowledge',      nameTl:'Kaalaman',           emoji:'🔍', cluster:'know',
+    desc:'You discover, understand, and clearly explain great truths from Scripture. You inform and help the church understand God\'s Word.',
+    descTl:'Tumutuklas, umuunawa, at malinaw mong ipinapaliwanag ang mga katotohanan mula sa Kasulatan.',
+    scripture:'1 Corinthians 12:28 · Romans 15:14', examples:'Ezra, Paul'},
+  wisdom:        {name:'Wisdom',         nameTl:'Karunungan',         emoji:'💡', cluster:'know',
+    desc:'You apply truth to specific people and situations in ways that lead to holiness. You see where decisions are heading.',
+    descTl:'Inilalapat mo ang katotohanan sa partikular na tao at sitwasyon.',
+    scripture:'1 Corinthians 12:8 · James 3:13–18', examples:'Solomon, Daniel'},
+  prophecy:      {name:'Prophecy',       nameTl:'Pagpapahayag ng Salita', emoji:'📢', cluster:'word',
+    desc:'You proclaim God\'s truth boldly, applying it to specific situations and calling people to obedience.',
+    descTl:'Buong-tapang mong ipinahahayag ang katotohanan ng Diyos.',
+    scripture:'Romans 12:6 · 1 Corinthians 14:3', examples:'Isaiah, John the Baptist'},
+  evangelism:    {name:'Evangelism',     nameTl:'Pangangaral',        emoji:'🌱', cluster:'word',
+    desc:'You share the gospel naturally and effectively, leading non-believers to faith in Christ.',
+    descTl:'Natural mong ibinabahagi ang ebanghelyo, dinadala ang mga tao kay Cristo.',
+    scripture:'Ephesians 4:11 · 2 Timothy 4:5', examples:'Philip, Paul'},
+  shepherding:   {name:'Shepherding',    nameTl:'Pastoral na Pag-aalaga', emoji:'🐑', cluster:'word',
+    desc:'You guide, protect, and care for God\'s people over the long term — providing pastoral care, accountability, and discipleship.',
+    descTl:'Ginagabayan, ipinagtatanggol, at pinangangalagaan mo ang bayan ng Diyos.',
+    scripture:'Ephesians 4:11 · 1 Peter 5:2–4', examples:'David, Peter'},
+  exhortation:   {name:'Exhortation',    nameTl:'Pagpapatibay',       emoji:'💪', cluster:'word',
+    desc:'You encourage, comfort, and counsel others toward greater faith, hope, and Christlikeness.',
+    descTl:'Pinapatibay, inaaliw, at pinapayuhan mo ang iba tungo sa mas malalim na pananampalataya.',
+    scripture:'Romans 12:8 · Hebrews 10:25', examples:'Barnabas'},
+  faith:         {name:'Faith',          nameTl:'Pananampalataya',    emoji:'🙏', cluster:'know',
+    desc:'You have unusual confidence in God\'s power and promises, especially in big-vision moments. You inspire others to trust God for impossible things.',
+    descTl:'May di-pangkaraniwan kang tiwala sa kapangyarihan at pangako ng Diyos.',
+    scripture:'1 Corinthians 12:9 · Hebrews 11', examples:'Abraham, Stephen'},
+  giving:        {name:'Giving',         nameTl:'Pagbibigay',         emoji:'💝', cluster:'do',
+    desc:'You contribute material resources to God\'s work with cheerfulness, sacrifice, and discernment about needs.',
+    descTl:'Nagbibigay ka ng materyal na resources nang may kagalakan at sakripisyo.',
+    scripture:'Romans 12:8 · 2 Corinthians 9:7', examples:'Barnabas, Lydia'},
+  service:       {name:'Service',        nameTl:'Paglilingkod',       emoji:'🛠️', cluster:'do',
+    desc:'You identify unmet practical needs and joyfully meet them — often behind the scenes — to free others up for their ministry.',
+    descTl:'Tinutukoy at masaya mong tinutugunan ang mga praktikal na pangangailangan.',
+    scripture:'Romans 12:7 · 1 Peter 4:11', examples:'Martha, Phoebe'},
+  mercy:         {name:'Mercy',          nameTl:'Habag',              emoji:'❤️‍🩹', cluster:'do',
+    desc:'You feel deep empathy for the suffering and respond with compassionate, practical action that demonstrates Christ\'s love.',
+    descTl:'Malalim ang iyong empatiya sa naghihirap at tumutugon ka nang may habag.',
+    scripture:'Romans 12:8 · Matthew 25:35–36', examples:'Good Samaritan, Dorcas'},
+  hospitality:   {name:'Hospitality',    nameTl:'Pagtanggap',         emoji:'🏠', cluster:'do',
+    desc:'You welcome others into your space and life, creating warmth and belonging that draws people closer to Christ\'s family.',
+    descTl:'Tinatanggap mo ang iba sa iyong tahanan at buhay, lumilikha ng init at kapwa-loob.',
+    scripture:'1 Peter 4:9 · Romans 12:13', examples:'Lydia, Priscilla & Aquila'},
+  encouragement: {name:'Encouragement',  nameTl:'Pagbibigay-lakas',   emoji:'🌟', cluster:'word',
+    desc:'You see the potential in others and speak words that lift them up, helping them persevere and grow.',
+    descTl:'Nakikita mo ang potensyal sa iba at sinasabi mo ang mga salita na nagpapalakas sa kanila.',
+    scripture:'Acts 4:36 · 1 Thessalonians 5:11', examples:'Barnabas'},
+  intercession:  {name:'Intercession',   nameTl:'Panalangin para sa iba', emoji:'⛪', cluster:'know',
+    desc:'You pray with unusual depth, persistence, and effectiveness for the needs of others, often sensing what to pray for.',
+    descTl:'Nananalangin ka ng may di-pangkaraniwang lalim at pagpipinilit para sa pangangailangan ng iba.',
+    scripture:'James 5:16 · 1 Timothy 2:1', examples:'Anna, Epaphras'},
+  discernment:   {name:'Discernment',    nameTl:'Pang-unawa sa Espiritu', emoji:'👁️', cluster:'know',
+    desc:'You distinguish between truth and error, recognizing what is from God versus what merely appears to be.',
+    descTl:'Naiiba mo ang katotohanan sa kamalian, kinikilala kung ano ang mula sa Diyos.',
+    scripture:'1 Corinthians 12:10 · 1 John 4:1', examples:'Solomon'},
+};
+const GIFT_CLUSTER_COLORS = {
+  word: {bg:'#1a4a6b', light:'#e0eef7'},
+  know: {bg:'#7a4010', light:'#fcf0e0'},
+  do:   {bg:'#2a5c40', light:'#e7f5ec'}
+};
+
+function renderGifts(d, member) {
+  const allScores = d.all_scores || {};
+  // Sort gift IDs by score desc
+  const giftIds = Object.keys(GIFTS_DATA);
+  const sorted = giftIds.slice().sort((a,b) => (allScores[b]||0) - (allScores[a]||0));
+  const total = Object.values(allScores).reduce((a,b) => a+(b||0), 0) || 1;
+
+  const primaryId   = d.primary_gift   || sorted[0];
+  const secondaryId = d.secondary_gift || sorted[1];
+  const supportId   = d.supporting_gift || sorted[2];
+  const primary   = GIFTS_DATA[primaryId];
+  const secondary = GIFTS_DATA[secondaryId];
+
+  // Cover
+  document.getElementById('coverWrap').style.background = 'linear-gradient(135deg,#1a4a6b,#2a5c40,#7a4010)';
+  document.getElementById('coverName').textContent = (member?.name||d.member_name||'Member') + "'s Spiritual Gifts Profile";
+  document.getElementById('coverType').textContent = 'Spiritual Gifts Diagnostic';
+  document.getElementById('coverTags').innerHTML =
+    '<span class="ct">'+primary.emoji+' Primary: '+primary.name+'</span>' +
+    '<span class="ct">'+secondary.emoji+' Secondary: '+secondary.name+'</span>';
+  document.getElementById('progLabel').textContent = 'Spiritual Gifts Profile · Taken: '+(d.date_taken||'—');
+
+  // Hero
+  document.getElementById('heroWrap').innerHTML = `<div class="section"><div class="hero" style="background:linear-gradient(135deg,#1a4a6b,#2a5c40)">
+    <div class="hero-rank">Primary Spiritual Gift</div>
+    <div class="hero-primary">${primary.emoji} ${primary.name} <span style="font-size:.55em;font-weight:400;opacity:.85;">${primary.nameTl}</span></div>
+    <div class="hero-secondary">Secondary: ${secondary.emoji} ${secondary.name} · Supporting: ${GIFTS_DATA[supportId]?.emoji||''} ${GIFTS_DATA[supportId]?.name||'—'}</div>
+    <div class="hero-date">Taken: ${d.date_taken||'—'} · ${member?.name||d.member_name||''}</div>
+  </div></div>`;
+
+  // Top ministry matches
+  const ministries = [d.ministry_match_1, d.ministry_match_2, d.ministry_match_3].filter(Boolean);
+  if (ministries.length) {
+    document.getElementById('heroWrap').innerHTML += `<div class="section">
+      <div class="section-title">⛪ Recommended Ministries</div>
+      <div style="background:#e7f5ec;border:1px solid #2a5c40;border-radius:10px;padding:1rem 1.25rem;color:#1f4530;">
+        <div style="font-size:13px;line-height:1.7;">${ministries.map(m=>'<strong>'+escapeHTML(m)+'</strong>').join(' · ')}</div>
+      </div>
+    </div>`;
+  }
+
+  // Score bars (top 8)
+  const sw = document.getElementById('scoresWrap');
+  sw.innerHTML = '<div class="section-title">Top 8 Spiritual Gifts — Score Breakdown</div>';
+  sorted.slice(0, 8).forEach((id, i) => {
+    const g = GIFTS_DATA[id];
+    if (!g) return;
+    const s = allScores[id] || 0;
+    const pct = Math.round(s/total*100);
+    const color = GIFT_CLUSTER_COLORS[g.cluster]?.bg || '#7a4010';
+    sw.innerHTML += `<div class="bar-row">
+      <span class="br-icon">${g.emoji}</span>
+      <span class="br-name">${g.name}${i===0?' <span class="br-badge" style="background:#fdf0f4;color:#8a2040">Primary</span>':i===1?' <span class="br-badge" style="background:#fdf6e8;color:#b8882a">Secondary</span>':i===2?' <span class="br-badge" style="background:#e7f5ec;color:#2a5c40">Supporting</span>':''}</span>
+      <div class="br-track"><div class="br-fill" style="width:${Math.max(pct,3)}%;background:${color}"><span>${s}</span></div></div>
+      <span class="br-val">${s} pts</span>
+    </div>`;
+  });
+
+  // Profile cards (top 5)
+  const cw = document.getElementById('cardsWrap');
+  cw.innerHTML = '<div class="section-title">Your Top 5 Gifts — Full Detail</div>';
+  sorted.slice(0, 5).forEach((id, i) => {
+    const g = GIFTS_DATA[id];
+    if (!g) return;
+    const isOpen = i < 3;
+    const rankLabel = i===0?'Primary':i===1?'Secondary':i===2?'Supporting':'';
+    const rankStyle = i===0?'background:#fdf0f4;color:#8a2040':i===1?'background:#fdf6e8;color:#b8882a':i===2?'background:#e7f5ec;color:#2a5c40':'';
+    cw.innerHTML += `<div class="profile-card ${isOpen?'open':''}">
+      <div class="pc-head" onclick="this.closest('.profile-card').classList.toggle('open')">
+        <div class="pc-icon">${g.emoji}</div>
+        <div class="pc-info">
+          <div class="pc-name">${g.name}${rankLabel?` <span class="pc-rank" style="${rankStyle}">${rankLabel}</span>`:''}</div>
+          <div class="pc-tagline">${g.nameTl} · Cluster: ${g.cluster.toUpperCase()}</div>
+        </div>
+        <span class="pc-chev">▼</span>
+      </div>
+      <div class="pc-body">
+        <div class="desc-en">${escapeHTML(g.desc)}</div>
+        <div class="desc-tl">${escapeHTML(g.descTl)}</div>
+        ${ib('navy','📖 Scripture',g.scripture)}
+        ${ib('gold','✨ Biblical Examples',g.examples)}
+      </div>
+    </div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONFLICT STYLE RENDERER (TKI: 5 modes)
+// ─────────────────────────────────────────────────────────────────────
+// Reads from member_profiles where profile_type='conflict_style':
+// results = {Competing:n, Collaborating:n, Compromising:n, Avoiding:n, Accommodating:n}
+// top_result, second_result, third_result populated
+// ═══════════════════════════════════════════════════════════════════════
+
+const CONFLICT_DATA = {
+  'Competing':     {nameTl:'Pakikipagtagisan',  emoji:'⚔️', color:'#c44a3e',
+    descEn:'Direct, decisive, willing to take a stand. You bring courage and clarity to the moment.',
+    descTl:'Direkta, mapagdesisyon, handang manindigan. May tapang at linaw ka sa sandali.',
+    bestWhen:'Quick action needed; unpopular truths must be spoken; safety/values at stake.',
+    bestWhenTl:'Kailangan ng mabilis na aksyon; may mga di-popular na katotohanang dapat sabihin.',
+    blindspot:'May steamroll others. Wins arguments but loses relationships if overused.',
+    blindspotTl:'Maaaring may matatapakang iba. Nananalo sa pagtatalo ngunit nawawala ang relasyon.',
+    biblical:'Jesus cleansing the temple (John 2). Paul confronting Peter (Galatians 2).'},
+  'Collaborating': {nameTl:'Pakikipagtulungan', emoji:'🤝', color:'#2a7a4c',
+    descEn:'You seek win-win answers that honor everyone — willing to invest the time and dialogue it takes.',
+    descTl:'Naghahanap ka ng win-win na sagot na nagbibigay-halaga sa lahat — handang maglaan ng oras at usapan.',
+    bestWhen:'Stakes high and time available; relationships matter long-term; complex issues need full input.',
+    bestWhenTl:'Mataas ang stakes at may oras; mahalaga ang pangmatagalang relasyon.',
+    blindspot:'Slow. Can over-invest in trivial matters. Decision paralysis when consensus elusive.',
+    blindspotTl:'Mabagal. Maaaring sumobra sa pag-aaksaya ng oras sa maliliit na bagay.',
+    biblical:'Acts 15 — Jerusalem council resolving Jewish/Gentile tensions through dialogue.'},
+  'Compromising':  {nameTl:'Pagtatagpo sa Gitna', emoji:'⚖️', color:'#b8882a',
+    descEn:'You find practical middle ground where everyone gives and receives. Fair, expedient, peaceful.',
+    descTl:'Naghahanap ka ng praktikal na gitnang punto kung saan bawat isa ay nagbibigay at tumatanggap.',
+    bestWhen:'Equal-power parties; temporary settlement needed; collaborating failed.',
+    bestWhenTl:'Pantay-pantay ang kapangyarihan; kailangan ng pansamantalang kasunduan.',
+    blindspot:'Lukewarm outcomes. Nobody fully satisfied. Can erode trust over time.',
+    blindspotTl:'Walang lubos na nasisiyahan. Maaaring sumira sa tiwala sa kalaunan.',
+    biblical:'Solomon\'s wise judgment between two mothers (1 Kings 3:16–28).'},
+  'Avoiding':      {nameTl:'Pag-iwas',          emoji:'🚪', color:'#5b6573',
+    descEn:'You step back, postpone, or sidestep. You bring restraint and protect against premature conflict.',
+    descTl:'Umaatras ka, ipinagpapaliban, o iniiwasan. May pagpipigil ka.',
+    bestWhen:'Issue trivial; need cooling-off time; not your battle to fight; someone else better suited.',
+    bestWhenTl:'Maliit na bagay; kailangan ng oras para huminahon; hindi sa iyo ang laban.',
+    blindspot:'Issues fester. Resentment builds. Others may interpret silence as agreement.',
+    blindspotTl:'Lumalala ang isyu. Tumitindi ang sama ng loob. Maaaring akalain ng iba na sumasang-ayon ka.',
+    biblical:'Jesus often withdrew when confrontation wouldn\'t serve the moment (John 8:59, Mark 1:35).'},
+  'Accommodating': {nameTl:'Pagpaparaya',       emoji:'🕊️', color:'#7a4f9c',
+    descEn:'You yield gracefully, especially when the issue matters more to others. You prioritize peace and care.',
+    descTl:'Nagpaparaya ka nang maganda, lalo na kapag mas mahalaga sa iba ang isyu. Inuuna mo ang kapayapaan at pagmamalasakit.',
+    bestWhen:'You\'re wrong; relationship more important than position; building goodwill for future.',
+    bestWhenTl:'Mali ka; mas mahalaga ang relasyon kaysa sa posisyon.',
+    blindspot:'May breed resentment if chronic. Voice and gifts can be lost to constant deferring.',
+    blindspotTl:'Maaaring magbunga ng sama ng loob kung palagi. Mawawala ang iyong boses at kaloob.',
+    biblical:'Christ on the cross — yielding His rights for our sake (Philippians 2:5–8).'},
+};
+
+function renderConflict(d, member) {
+  const scores = d.results || {};
+  const modes = Object.keys(CONFLICT_DATA);
+  const sorted = modes.slice().sort((a,b) => (scores[b]||0) - (scores[a]||0));
+  const primary = sorted[0];
+  const secondary = sorted[1];
+  const total = Object.values(scores).reduce((a,b) => a+(b||0), 0) || 60;
+  const pdata = CONFLICT_DATA[primary];
+
+  // Cover
+  document.getElementById('coverWrap').style.background = `linear-gradient(135deg,${pdata.color},#1a1612 80%)`;
+  document.getElementById('coverName').textContent = (member?.name||d.member_name||'Member') + "'s Conflict Style Profile";
+  document.getElementById('coverType').textContent = 'Conflict Style Assessment (TKI)';
+  document.getElementById('coverTags').innerHTML =
+    '<span class="ct">'+pdata.emoji+' Primary: '+primary+'</span>' +
+    '<span class="ct">'+(CONFLICT_DATA[secondary]?.emoji||'')+' Secondary: '+secondary+'</span>';
+  document.getElementById('progLabel').textContent = 'Conflict Style Profile · Taken: '+(d.date_taken||'—');
+
+  // Hero
+  document.getElementById('heroWrap').innerHTML = `<div class="section"><div class="hero" style="background:linear-gradient(135deg,${pdata.color},#1a1612)">
+    <div class="hero-rank">Primary Conflict Style</div>
+    <div class="hero-primary">${pdata.emoji} ${primary} <span style="font-size:.55em;font-weight:400;opacity:.85;">${pdata.nameTl}</span></div>
+    <div class="hero-secondary">Secondary: ${CONFLICT_DATA[secondary]?.emoji||''} ${secondary}${d.summary ? ' · ' + escapeHTML(d.summary) : ''}</div>
+    <div class="hero-date">Taken: ${d.date_taken||'—'} · ${member?.name||d.member_name||''}</div>
+  </div></div>`;
+
+  // Score bars (all 5)
+  const sw = document.getElementById('scoresWrap');
+  sw.innerHTML = '<div class="section-title">All 5 Conflict-Handling Modes — Score Breakdown</div>';
+  sorted.forEach((mode, i) => {
+    const m = CONFLICT_DATA[mode];
+    const s = scores[mode] || 0;
+    const pct = Math.round(s/12*100);  // each mode is /12 max
+    sw.innerHTML += `<div class="bar-row">
+      <span class="br-icon">${m.emoji}</span>
+      <span class="br-name">${mode}${i===0?' <span class="br-badge" style="background:#fdf0f4;color:#8a2040">Primary</span>':i===1?' <span class="br-badge" style="background:#fdf6e8;color:#b8882a">Secondary</span>':''}</span>
+      <div class="br-track"><div class="br-fill" style="width:${Math.max(pct,3)}%;background:${m.color}"><span>${s}/12</span></div></div>
+      <span class="br-val">${s}/12</span>
+    </div>`;
+  });
+
+  // Profile cards (all 5)
+  const cw = document.getElementById('cardsWrap');
+  cw.innerHTML = '<div class="section-title">All 5 Conflict Modes — Full Detail</div>';
+  sorted.forEach((mode, i) => {
+    const m = CONFLICT_DATA[mode];
+    const isOpen = i < 2;
+    const rankLabel = i===0?'Primary':i===1?'Secondary':'';
+    const rankStyle = i===0?'background:#fdf0f4;color:#8a2040':i===1?'background:#fdf6e8;color:#b8882a':'';
+    cw.innerHTML += `<div class="profile-card ${isOpen?'open':''}">
+      <div class="pc-head" onclick="this.closest('.profile-card').classList.toggle('open')">
+        <div class="pc-icon">${m.emoji}</div>
+        <div class="pc-info">
+          <div class="pc-name">${mode}${rankLabel?` <span class="pc-rank" style="${rankStyle}">${rankLabel}</span>`:''}</div>
+          <div class="pc-tagline">${m.nameTl} · ${scores[mode]||0}/12</div>
+        </div>
+        <span class="pc-chev">▼</span>
+      </div>
+      <div class="pc-body">
+        <div class="desc-en">${escapeHTML(m.descEn)}</div>
+        <div class="desc-tl">${escapeHTML(m.descTl)}</div>
+        ${ib('green','✅ Best When',m.bestWhen+'<br><em style="opacity:.75">'+escapeHTML(m.bestWhenTl)+'</em>')}
+        ${ib('red','⚠ Blindspot',m.blindspot+'<br><em style="opacity:.75">'+escapeHTML(m.blindspotTl)+'</em>')}
+        ${ib('navy','📖 Biblical Picture',m.biblical)}
+      </div>
+    </div>`;
+  });
 }
 
 function showError(title, msg) {
