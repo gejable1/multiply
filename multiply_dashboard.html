@@ -76,7 +76,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-
 /* ── NAV: MORE BUTTON + DROPDOWN (desktop overflow) ─────────── */
 .nb-more-wrap{position:relative;display:inline-block;}
 .nb-more{border:1px solid var(--border);}
-.more-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:6px;z-index:300;}
+/* position:fixed escapes the .tnav `overflow-x:auto` clipping context.
+   Coordinates are recomputed each time the menu opens, anchored to the
+   More button's bounding rect — see toggleMoreMenu() in JS. */
+.more-menu{display:none;position:fixed;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:6px;z-index:400;}
 .more-menu.show{display:block;}
 .mm-item{display:flex;align-items:center;justify-content:space-between;width:100%;padding:8px 12px;background:transparent;border:none;border-radius:5px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--ink);text-align:left;transition:background .12s;}
 .mm-item:hover{background:var(--surface2);}
@@ -3013,15 +3016,27 @@ function _navTo(panelId, sideEffect, fromDrawer){
 }
 
 // ── More menu (desktop overflow) ──
+// Uses position:fixed because the parent .tnav has overflow-x:auto which
+// would otherwise clip the dropdown. We re-anchor to the button's
+// bounding rect each time the menu opens so window resizes don't matter
+// (it's hidden between opens, so only opening-state needs accuracy).
 function toggleMoreMenu(ev){
   if (ev) ev.stopPropagation();
   const m = document.getElementById('moreMenu');
-  if (!m) return;
+  const btn = document.getElementById('moreBtn');
+  if (!m || !btn) return;
   const wasOpen = m.classList.contains('show');
   hideMoreMenu();
   if (!wasOpen){
+    // Anchor: align dropdown's right edge with button's right edge,
+    // 6px below the button. Falls back gracefully if button is offscreen.
+    const r = btn.getBoundingClientRect();
+    m.style.top = (r.bottom + 6) + 'px';
+    // Right-aligned: position so dropdown extends leftward from button's right edge
+    m.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    m.style.left = 'auto';
     m.classList.add('show');
-    document.getElementById('moreBtn')?.setAttribute('aria-expanded', 'true');
+    btn.setAttribute('aria-expanded', 'true');
   }
 }
 function hideMoreMenu(){
