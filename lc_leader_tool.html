@@ -880,6 +880,49 @@ const NEXT_STEPS = {
 };
 
 // ═══════════════════════════════════════════════════════
+// ASSESSMENT COMPLETION CHECK
+// ─────────────────────────────────────────────────────────
+// Truthy-check (`!!mem[a.field]`) is too loose — it returns true for
+// empty arrays, whitespace-only strings, and placeholder values like
+// "-" or "pending". That caused false "Done" status in MLT, which in
+// turn surfaced View Results buttons that opened to "No Results Found"
+// because the actual gifts_diagnostic / member_profiles row was missing.
+// This helper enforces a stricter rule: an assessment is only "taken"
+// if its denormalized field on `members` holds real content.
+// ═══════════════════════════════════════════════════════
+function hasAssessment(mem, a){
+  if (!mem) return false;
+  const v = mem[a.field];
+  if (v == null) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'string'){
+    const trimmed = v.trim();
+    if (trimmed === '') return false;
+    // Filter out common placeholder values that indicate "not really taken"
+    if (['-','—','none','pending','n/a','na','null'].includes(trimmed.toLowerCase())) return false;
+    return true;
+  }
+  if (typeof v === 'number') return v > 0;
+  return true; // unknown types: defer to truthy
+}
+
+// Stricter version: returns true ONLY when a real backing diagnostic record
+// exists in the dedicated assessment table — not just an informal pastoral
+// note in the denormalized members column. Used to gate the "View Results"
+// button so it never opens to "No Results Found".
+//
+// Currently checks gifts (which has a dedicated gifts_diagnostic table).
+// For other assessments, falls back to hasAssessment since their results
+// live in the shared member_profiles table — and the dashboard already
+// merges those correctly. We could extend this with a similar Set for
+// member_profiles in the future if false-positives appear there too.
+function hasFormalAssessment(mem, a){
+  if (!hasAssessment(mem, a)) return false;
+  if (a.key === 'gifts') return _membersWithGiftsDiag.has(mem.id);
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════
 // Screen history stack for back-button handling
@@ -966,12 +1009,30 @@ history.replaceState({screen:'screenHome', t:Date.now()}, '', '');
 let allMembers = []; // full roster as returned by Supabase
 const LeaderScope = MultiplyShared.makeLeaderScope(() => allMembers);
 
+// Set of member_ids that have at least one row in gifts_diagnostic.
+// Lets the UI distinguish "informal note in members.spiritual_gifts"
+// from "actually completed the formal Spiritual Gifts assessment".
+let _membersWithGiftsDiag = new Set();
+
 async function loadMyMembers(){
   try {
     const {data, error} = await db.from('members')
       .select('*').order('name');
     if(error) throw error;
     allMembers = data || [];
+
+    // Parallel fetch: which members have a real gifts_diagnostic row?
+    // Failures here are non-fatal — the UI gracefully degrades to treating
+    // all members as "no formal diagnostic" (which means no View buttons,
+    // never a broken state).
+    try {
+      const { data: gd } = await db.from('gifts_diagnostic').select('member_id');
+      _membersWithGiftsDiag = new Set((gd || []).map(r => r.member_id).filter(Boolean));
+    } catch(e){
+      console.warn('gifts_diagnostic lookup failed; View buttons will be hidden:', e);
+      _membersWithGiftsDiag = new Set();
+    }
+
     refreshScopedMembers();
     updateScopeCountsMobile();
     renderHome();
@@ -1279,7 +1340,7 @@ function renderMemberList(){
   list.innerHTML = members.map(mem=>{
     const z = mem.diagnostic_zone||0;
     const zd = ZONE_DATA[z]||{color:'var(--muted)',bg:'var(--surface2)',label:'No Zone'};
-    const pendingAssess = ASSESSMENTS.filter(a=>!mem[a.field]).length;
+    const pendingAssess = ASSESSMENTS.filter(a=>!hasFormalAssessment(mem, a)).length;
     const hasPendingTransfer = mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group;
     const tags = [];
     if(mem.spiritual_gifts) tags.push({text:'🎁 '+mem.spiritual_gifts.split(',')[0].trim(),cls:'done'});
@@ -1476,7 +1537,10 @@ function buildDetailSections(mem){
       </div>
     </div>`;
   } else {
-    const pendingCount = ASSESSMENTS.filter(a=>!mem[a.field]).length;
+    // "Pending" means no FORMAL diagnostic — an informal pastoral note in
+    // members.spiritual_gifts is not enough; the member still needs to take
+    // the actual assessment. Drives the red badge in the section header.
+    const pendingCount = ASSESSMENTS.filter(a=>!hasFormalAssessment(mem, a)).length;
     html += `<div class="ds-card open">
       <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
         <div class="ds-icon">📋</div>
@@ -1486,23 +1550,43 @@ function buildDetailSections(mem){
       </div>
       <div class="ds-body">
         ${ASSESSMENTS.map(a=>{
-          const done = !!mem[a.field];
-          const val = done ? (Array.isArray(mem[a.field])?mem[a.field].slice(0,2).join(', '):String(mem[a.field]).split(',')[0].trim()) : null;
+          const noted    = hasAssessment(mem, a);          // any text content (incl. informal note for gifts)
+          const formal   = hasFormalAssessment(mem, a);    // backing diagnostic row exists
+          const val      = noted ? (Array.isArray(mem[a.field])?mem[a.field].slice(0,2).join(', '):String(mem[a.field]).split(',')[0].trim()) : null;
           // Map MLT keys → profile_results_viewer.html ?type=... values.
           // Salvation has no viewer entry by design (pastoral guardrail).
           const VIEWER_TYPE = {gifts:'gifts', disc:'disc', strengths:'strengths', love:'love_language', enneagram:'enneagram', conflict:'conflict_style'};
           const viewerType = VIEWER_TYPE[a.key];
-          const canView = done && !!viewerType;
+          const canView = formal && !!viewerType;
+
+          // Three-state status display:
+          //   formal === true  → green ✓ Done (real diagnostic row exists)
+          //   noted (gifts only) → gold "📝 Noted: <text>" (informal pastoral note)
+          //   neither           → red "Not taken"
+          let statusHtml;
+          if (formal) {
+            statusHtml = `<div class="ar-result">${val}</div>`;
+          } else if (noted && a.key === 'gifts') {
+            statusHtml = `<div class="ar-result" style="color:var(--gold)" title="Informal note from member onboarding — formal diagnostic not yet taken">📝 Noted: ${val}</div>`;
+          } else {
+            statusHtml = `<div class="ar-result" style="color:var(--red)">Not taken</div>`;
+          }
+
+          // Send/Retake button: only "Retake" when the formal diagnostic was done.
+          // An informal note still warrants "Send" (push them to take the formal one).
+          const actionLabel = formal ? 'Retake' : 'Send';
+          const actionClass = formal ? 'ar-done' : 'ar-send';
+
           return `<div class="assess-row">
             <div class="ar-icon">${a.icon}</div>
             <div class="ar-info">
               <div class="ar-name">${a.name}</div>
-              ${done?`<div class="ar-result">${val}</div>`:'<div class="ar-result" style="color:var(--red)">Not taken</div>'}
+              ${statusHtml}
             </div>
             <div class="ar-actions">
               ${canView ? `<button class="ar-action ar-view" onclick="viewAssessmentResult('${a.key}')" title="View results">👁 View</button>` : ''}
-              <button class="ar-action ${done?'ar-done':'ar-send'}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
-                ${done?'Retake':'Send'}
+              <button class="ar-action ${actionClass}" onclick="sendAssessmentLink('${a.file}','${a.name}')">
+                ${actionLabel}
               </button>
             </div>
           </div>`;
@@ -1650,7 +1734,7 @@ function openInterventionTracker(){
 
 function openAssessmentLink(){
   if(!currentMember) return;
-  const a = ASSESSMENTS.find(x=>!currentMember[x.field]);
+  const a = ASSESSMENTS.find(x=>!hasFormalAssessment(currentMember, x));
   if(a) sendAssessmentLink(a.file, a.name);
   else sendAssessmentLink('salvation_assurance_diagnostic.html','Salvation Assurance');
 }
@@ -2245,7 +2329,7 @@ async function renderReports(){
   const zones = {1:0,2:0,3:0,4:0,0:0};
   myMembers.forEach(m=>zones[m.diagnostic_zone||0]++);
   const pendingByAssess = {};
-  ASSESSMENTS.forEach(a=>{ pendingByAssess[a.name] = myMembers.filter(m=>!m[a.field]).length; });
+  ASSESSMENTS.forEach(a=>{ pendingByAssess[a.name] = myMembers.filter(m=>!hasFormalAssessment(m, a)).length; });
 
   // ── Attendance: pull all rows in the selected range ──
   const range = getReportRange();
@@ -2925,8 +3009,8 @@ function renderSendLinks(){
   if(!myMembers.length){ el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No members</div></div>'; return; }
 
   el.innerHTML = myMembers.map(mem=>{
-    const pending = ASSESSMENTS.filter(a=>!mem[a.field]);
-    const done    = ASSESSMENTS.filter(a=>!!mem[a.field]);
+    const pending = ASSESSMENTS.filter(a=>!hasFormalAssessment(mem, a));
+    const done    = ASSESSMENTS.filter(a=>hasFormalAssessment(mem, a));
     // Use encodeURIComponent on name for inline onclick safety
     const safeName = encodeURIComponent(mem.name);
     const hasPhone = !!normalizePHPhone(mem.contact);
