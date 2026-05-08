@@ -333,20 +333,20 @@ let mode = 'verify'; // 'verify' or 'setup'
 // ═══════════════════════════════════════════════════════════
 // LOAD MEMBERS LIST
 // ───────────────────────────────────────────────────────────
-// Allow pipeline_level >= 1 (Team Member and up).
-// Pre-Pipeline members (Level 0) are not yet onboarded.
-// Test members are excluded so they don't pollute the search list.
+// Every member of the church belongs in MMT — the whole point is
+// discipleship, regardless of pipeline level. The PIN setup flow
+// on first login (Step 2) is the real gate: a contact who shouldn't
+// have access simply won't have a PIN and won't get past it.
+// Test members ARE included in the login search — Pastor uses them
+// to verify MMT behavior end-to-end. They're visually marked with
+// a 🧪 badge so anyone browsing the list can identify them at a glance.
 // ═══════════════════════════════════════════════════════════
 async function loadMembers(){
   try{
     const {data, error} = await db.from('members')
       .select('id,name,pipeline_level,facilitator_role,lc_group,member_pin_hash,is_test_member,discipler_name')
-      .gte('pipeline_level', 1)
       .order('name');
     if(error) throw error;
-    // Test members ARE included in the login search — Pastor uses them to verify
-    // MMT behavior end-to-end. They're visually marked with a 🧪 badge so anyone
-    // browsing the search list can identify them at a glance.
     allMembers = data || [];
   }catch(e){
     showError('err1', 'Could not load member list. Check your connection. ('+e.message+')');
