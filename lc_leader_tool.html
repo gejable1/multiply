@@ -4930,18 +4930,34 @@ async function _annSubmitDraft(){
   const expires = new Date(Date.now() + d.expiresAtDays * 86400000);
 
   try {
-    const {error} = await db.from('announcements').insert({
+    // Auto-publish when the Pastor is the author. Pastor IS the approval
+    // authority — making them queue their own messages would be a self-loop.
+    // For all other leaders, status='pending' and the message lands in
+    // Pastor's MD approval queue (Announcements panel).
+    const isPastor = (LEADER.leaderLevel || 0) >= 5;
+    const nowIso = new Date().toISOString();
+
+    const row = {
       author_id: LEADER.leaderId,
       author_name: LEADER.leaderName || 'Unknown',
       title: d.title.trim(),
       body: d.body.trim(),
       priority: d.priority,
       audience_filter: audience,
-      status: 'pending',
+      status: isPastor ? 'published' : 'pending',
       expires_at: expires.toISOString()
-    });
+    };
+    // Match MD's approve flow: when auto-publishing, fill the same
+    // pastor_decision_* + published_at columns it would have set.
+    if (isPastor) {
+      row.pastor_decision_by = LEADER.leaderId;
+      row.pastor_decision_at = nowIso;
+      row.published_at = nowIso;
+    }
+
+    const {error} = await db.from('announcements').insert(row);
     if (error) throw error;
-    toast('✓ Submitted to Pastor for approval', 'success');
+    toast(isPastor ? '✓ Published to your audience' : '✓ Submitted to Pastor for approval', 'success');
     // Reset draft
     _annDraft = { title:'', body:'', priority:'normal',
       audience:{all:true, lc_groups:[], levels:[], ministries:[], member_ids:[]},
