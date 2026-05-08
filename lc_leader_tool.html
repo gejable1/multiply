@@ -537,6 +537,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-label">Attendance</div>
       <div class="qa-desc">Log today's meeting</div>
     </div>
+    <!-- Ministry Attendance — visible only to ministry heads (gated in JS) -->
+    <div class="qa-btn" id="qaMinistryAtt" onclick="showMinistryAttendance()" style="display:none">
+      <div class="qa-icon">🎵</div>
+      <div class="qa-label">Ministry Attendance</div>
+      <div class="qa-desc">For ministry heads</div>
+    </div>
     <div class="qa-btn" onclick="showScreen('screenReports')">
       <div class="qa-icon">📊</div>
       <div class="qa-label">Reports</div>
@@ -730,6 +736,70 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="att-count" id="attCount">0 present</div>
     <button class="select-all-btn" onclick="toggleSelectAll()">Select All</button>
     <button class="att-save-btn" onclick="saveAttendance()">💾 Save</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: MINISTRY ATTENDANCE ══════════════════
+     Separate flow from the main LC attendance screen. Ministry heads
+     pick a ministry → optional roster → date → mark present/absent.
+     Walk-ins (substitutes / guests) can be added inline.
+═══════════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screenMinistryAtt">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">🎵 Ministry Attendance</div>
+  </div>
+  <div class="att-meta">
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Ministry</div>
+      <select id="maMinistry" onchange="onMinistryAttContextChange()"
+        style="font-size:14px;padding:11px 14px;font-weight:600;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)"></select>
+    </div>
+    <div id="maRosterRow" style="margin-bottom:10px;display:none">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Roster <span style="color:var(--lighter);font-weight:500;font-size:9.5px">(optional)</span></div>
+      <select id="maRoster" onchange="onMinistryAttContextChange()"
+        style="font-size:14px;padding:11px 14px;font-weight:600;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)"></select>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">📅 Date</div>
+        <input type="date" id="maDate" onchange="onMinistryAttContextChange()" class="att-date-input"
+          style="font-size:14px;padding:11px 14px;font-weight:600;width:100%">
+      </div>
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Event Type</div>
+        <select id="maEventType" onchange="onMinistryAttContextChange()"
+          style="font-size:14px;padding:11px 14px;font-weight:600;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+          <option value="Ministry Practice">Ministry Practice</option>
+          <option value="Ministry Rehearsal">Ministry Rehearsal</option>
+          <option value="Ministry Meeting">Ministry Meeting</option>
+          <option value="Ministry Service">Ministry Service</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div id="maLoadedBanner" style="display:none;margin:0 14px 8px;padding:10px 12px;background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.35);border-radius:10px;font-size:12px;color:var(--text);line-height:1.45"></div>
+  <div class="att-list" id="maList"></div>
+  <div style="padding:0 14px 14px;display:flex;gap:8px;flex-wrap:wrap">
+    <button onclick="openMaWalkInPicker()" style="flex:1;min-width:160px;padding:9px 12px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:8px;color:var(--blue,#4a90e2);font-size:12.5px;font-weight:600;cursor:pointer">+ Add walk-in / substitute</button>
+    <button onclick="showMinistryReport()" style="flex:1;min-width:160px;padding:9px 12px;background:rgba(184,136,42,.14);border:1px solid rgba(184,136,42,.32);border-radius:8px;color:var(--gold);font-size:12.5px;font-weight:600;cursor:pointer">📊 View Report</button>
+  </div>
+  <div class="att-save-bar">
+    <div class="att-count" id="maCount">0 present</div>
+    <button class="select-all-btn" onclick="toggleMaSelectAll()">Select All</button>
+    <button class="att-save-btn" onclick="saveMinistryAttendance()">💾 Save</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: MINISTRY REPORT ══════════════════ -->
+<div class="screen" id="screenMinistryReport">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenMinistryAtt')">←</div>
+    <div class="tb-title">📊 Ministry Attendance Report</div>
+  </div>
+  <div id="mrContent" style="padding:0 0 80px">
+    <div class="loading"><div class="spinner"></div></div>
   </div>
 </div>
 
@@ -1128,6 +1198,9 @@ function renderHome(){
   document.getElementById('homeName').textContent = m.name;
   document.getElementById('homeRole').textContent = LEVEL_NAMES[m.pipeline_level]||'Leader';
   document.getElementById('homeLc').textContent = m.lc_group ? '🏠 '+m.lc_group : '';
+
+  // Show/hide ministry-attendance quick-button based on whether this leader heads any ministry
+  refreshMinistryAttButton();
 
   const z4 = myMembers.filter(x=>x.diagnostic_zone===4).length;
   const z1 = myMembers.filter(x=>x.diagnostic_zone===1).length;
@@ -2260,6 +2333,493 @@ async function saveAttendance(){
   setTimeout(()=>showScreen('screenHome'),1500);
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// MINISTRY ATTENDANCE — separate flow for ministry heads
+// ─────────────────────────────────────────────────────────────────
+// State: which ministry / roster / date / event type, and the present-set.
+// When a member is in the ministry (any of 3 slots) and a roster is selected
+// that they don't belong to, they're hidden. "Walk-ins" can be added inline
+// for substitutes or guests — they get attendance recorded but don't get
+// permanently added to the roster.
+// ═══════════════════════════════════════════════════════════════════
+
+let _maMinistries = [];       // ministries this leader heads (or all, for Pastor)
+let _maRosters   = [];        // rosters for the currently-selected ministry
+let _maRosterMembers = new Map(); // rosterId → Set<memberId>
+let _maMembers   = [];        // currently-displayed members (filtered by ministry/roster + walk-ins)
+let _maState     = {};        // memberId → bool (present)
+let _maWalkIns   = new Set(); // memberIds added inline for this session
+
+// Show the qa button on home if leader heads ≥1 ministry, OR is the pastor.
+// Lightweight check — fires async, updates button when result returns.
+async function refreshMinistryAttButton(){
+  const btn = document.getElementById('qaMinistryAtt');
+  if (!btn) return;
+  if (!currentLeader) { btn.style.display = 'none'; return; }
+  const isPastor = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+  if (isPastor){ btn.style.display = 'flex'; return; }
+  // Otherwise check if any active ministry has this leader as head.
+  try {
+    const { data, error } = await db.from('ministries')
+      .select('id').eq('active', true).eq('head_member_id', currentLeader.id).limit(1);
+    if (error) throw error;
+    btn.style.display = (data && data.length > 0) ? 'flex' : 'none';
+  } catch(e){
+    console.warn('refreshMinistryAttButton failed:', e);
+    btn.style.display = 'none';
+  }
+}
+
+async function showMinistryAttendance(){
+  // Fetch ministries this leader can take attendance for + all active rosters
+  try {
+    const isPastor = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+    const baseQ = db.from('ministries').select('id,name,head_member_id,active').eq('active', true).order('name');
+    const { data: mins, error: mErr } = await baseQ;
+    if (mErr) throw mErr;
+    _maMinistries = (mins || []).filter(m => isPastor || m.head_member_id === currentLeader.id);
+    if (_maMinistries.length === 0){
+      toast('You don\'t head any ministries yet. Ask the Pastor to assign you.', '⚠️');
+      return;
+    }
+  } catch(e){
+    toast('Could not load ministries: ' + e.message, '❌');
+    return;
+  }
+
+  // Populate ministry select
+  const sel = document.getElementById('maMinistry');
+  sel.innerHTML = _maMinistries.map(m => `<option value="${m.id}">${MultiplyShared.escapeHTML(m.name)}</option>`).join('');
+
+  // Default date = today
+  document.getElementById('maDate').value = new Date().toISOString().split('T')[0];
+
+  // Reset state
+  _maState = {};
+  _maWalkIns = new Set();
+
+  showScreen('screenMinistryAtt');
+  await onMinistryAttContextChange();
+}
+
+async function onMinistryAttContextChange(){
+  // Reset walk-ins when ministry changes (different roster of candidates)
+  // — but we keep state if ONLY date/event-type changed and the same
+  // ministry+roster is still selected.
+  const ministryId = document.getElementById('maMinistry').value;
+  if (!ministryId) return;
+
+  // Load rosters for this ministry (re-fetched each time to stay fresh
+  // if Pastor edited rosters in MD recently)
+  try {
+    const [rRes, rmRes] = await Promise.all([
+      db.from('ministry_rosters').select('*').eq('ministry_id', ministryId).eq('active', true).order('display_order').order('name'),
+      db.from('ministry_roster_members').select('roster_id, member_id')
+    ]);
+    if (rRes.error) throw rRes.error;
+    if (rmRes.error) throw rmRes.error;
+    _maRosters = rRes.data || [];
+    _maRosterMembers = new Map();
+    _maRosters.forEach(r => _maRosterMembers.set(r.id, new Set()));
+    (rmRes.data || []).forEach(rm => {
+      if (_maRosterMembers.has(rm.roster_id)) _maRosterMembers.get(rm.roster_id).add(rm.member_id);
+    });
+  } catch(e){
+    console.warn('Roster load failed:', e);
+    _maRosters = [];
+    _maRosterMembers = new Map();
+  }
+
+  // Roster select visibility + options
+  const rosterRow = document.getElementById('maRosterRow');
+  const rosterSel = document.getElementById('maRoster');
+  if (_maRosters.length === 0){
+    rosterRow.style.display = 'none';
+    rosterSel.innerHTML = '<option value="">All members</option>';
+  } else {
+    rosterRow.style.display = 'block';
+    rosterSel.innerHTML = '<option value="">All ministry members</option>'
+      + _maRosters.map(r => `<option value="${r.id}">${MultiplyShared.escapeHTML(r.name)}</option>`).join('');
+  }
+
+  _renderMaList();
+  await _maLoadExisting();
+}
+
+function _maMinistryName(){
+  const id = document.getElementById('maMinistry').value;
+  const m = _maMinistries.find(x => x.id === id);
+  return m ? m.name : '';
+}
+
+function _maRosterName(){
+  const id = document.getElementById('maRoster').value;
+  if (!id) return '';
+  const r = _maRosters.find(x => x.id === id);
+  return r ? r.name : '';
+}
+
+function _maComputeMembers(){
+  const ministryName = _maMinistryName();
+  if (!ministryName) return [];
+  const rosterId = document.getElementById('maRoster').value;
+  // Base candidates: anyone with this ministry in any of 3 slots
+  let candidates = (allMembers || []).filter(m =>
+    m.ministry === ministryName || m.ministry2 === ministryName || m.ministry3 === ministryName
+  );
+  // Roster filter: only those in the selected roster (if any)
+  if (rosterId){
+    const set = _maRosterMembers.get(rosterId) || new Set();
+    candidates = candidates.filter(m => set.has(m.id));
+  }
+  // Add walk-ins (always shown even if not in ministry/roster)
+  const walkInRows = (allMembers || []).filter(m => _maWalkIns.has(m.id))
+    .filter(m => !candidates.some(c => c.id === m.id)); // dedupe
+  candidates = [...candidates, ...walkInRows];
+  // Sort by name
+  candidates.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  return candidates;
+}
+
+function _renderMaList(){
+  _maMembers = _maComputeMembers();
+  const list = document.getElementById('maList');
+  if (!list) return;
+
+  if (_maMembers.length === 0){
+    list.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;color:var(--muted);font-size:13px;line-height:1.6">
+      No members in this ${document.getElementById('maRoster').value ? 'roster' : 'ministry'} yet.
+      <br><span style="font-size:11.5px;color:var(--lighter)">Use "+ Add walk-in / substitute" below to log someone who attended.</span>
+    </div>`;
+    document.getElementById('maCount').textContent = '0 present';
+    return;
+  }
+
+  list.innerHTML = _maMembers.map((mem, idx) => {
+    const present = !!_maState[mem.id];
+    const isWalkIn = _maWalkIns.has(mem.id);
+    return `<div class="att-member ${present?'present':''}" data-mid="${mem.id}">
+      <div class="att-check">${present?'✓':''}</div>
+      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
+      <div class="att-name">${MultiplyShared.escapeHTML(mem.name)}${isWalkIn ? ' <span style="font-size:9.5px;color:var(--blue,#4a90e2);font-weight:700;margin-left:5px">WALK-IN</span>' : ''}</div>
+      <div class="att-streak"></div>
+    </div>`;
+  }).join('');
+
+  // Wire taps
+  list.querySelectorAll('.att-member').forEach(row => {
+    row.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _maToggleAtt(row.dataset.mid);
+    });
+  });
+
+  const cnt = Object.values(_maState).filter(Boolean).length;
+  document.getElementById('maCount').textContent = cnt + ' present';
+}
+
+function _maToggleAtt(id){
+  _maState[id] = !_maState[id];
+  _renderMaList();
+}
+
+function toggleMaSelectAll(){
+  const allOn = _maMembers.every(m => _maState[m.id]);
+  _maMembers.forEach(m => { _maState[m.id] = !allOn; });
+  _renderMaList();
+}
+
+// ─── Walk-in picker ───────────────────────────────────────────────
+function openMaWalkInPicker(){
+  // Modal listing all members not currently in the displayed list
+  const ministryName = _maMinistryName();
+  const inList = new Set(_maMembers.map(m => m.id));
+  const others = (allMembers || []).filter(m => !inList.has(m.id));
+
+  let modal = document.getElementById('maWalkInModal');
+  if (!modal){
+    modal = document.createElement('div');
+    modal.id = 'maWalkInModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.7);z-index:9000;display:flex;align-items:flex-end;justify-content:center';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:var(--bg);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;border-radius:14px 14px 0 0;border-top:1px solid var(--border)">
+      <div style="padding:1rem 1.1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">Add walk-in / substitute</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Search and tap to add. They'll be marked present and recorded for this session only.</div>
+        </div>
+        <button onclick="_maCloseWalkIn()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 4px">×</button>
+      </div>
+      <div style="padding:.65rem 1.1rem">
+        <input id="maWalkInSearch" placeholder="Type a name…" oninput="_maRenderWalkInList()"
+          style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13.5px">
+      </div>
+      <div id="maWalkInList" style="flex:1;overflow-y:auto;padding:0 1.1rem 1rem"></div>
+    </div>
+  `;
+  modal._candidates = others;
+  modal.style.display = 'flex';
+  _maRenderWalkInList();
+}
+
+function _maRenderWalkInList(){
+  const modal = document.getElementById('maWalkInModal');
+  if (!modal) return;
+  const q = (document.getElementById('maWalkInSearch')?.value || '').trim().toLowerCase();
+  let rows = modal._candidates || [];
+  if (q) rows = rows.filter(m => (m.name||'').toLowerCase().includes(q));
+  rows = rows.slice(0, 50); // cap rendering
+  const list = document.getElementById('maWalkInList');
+  if (!list) return;
+  if (rows.length === 0){
+    list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12.5px">No matches.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(m => `
+    <div onclick="_maAddWalkIn('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;background:var(--surface2);margin-bottom:5px">
+      <div class="att-av" style="background:var(--surface3);color:var(--muted)">${initials(m.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${MultiplyShared.escapeHTML(m.name)}</div>
+        ${m.lc_group ? `<div style="font-size:10.5px;color:var(--muted)">${MultiplyShared.escapeHTML(m.lc_group)}</div>` : ''}
+      </div>
+      <div style="color:var(--blue,#4a90e2);font-size:18px;font-weight:700">+</div>
+    </div>
+  `).join('');
+}
+
+function _maAddWalkIn(memberId){
+  _maWalkIns.add(memberId);
+  _maState[memberId] = true; // walk-ins are added as "present" by default
+  _maCloseWalkIn();
+  _renderMaList();
+  toast('Added as walk-in', 'success');
+}
+
+function _maCloseWalkIn(){
+  const m = document.getElementById('maWalkInModal');
+  if (m) m.style.display = 'none';
+}
+
+// ─── Load existing attendance for the current context ─────────────
+async function _maLoadExisting(){
+  const ministryName = _maMinistryName();
+  const date = document.getElementById('maDate').value;
+  const eventType = document.getElementById('maEventType').value;
+  const rosterName = _maRosterName();
+  const banner = document.getElementById('maLoadedBanner');
+  if (!ministryName || !date) return;
+
+  // Encode roster into event_name so we can disambiguate same-day same-ministry
+  // events with different rosters (e.g. Music Team A practice + Team B practice).
+  // event_name format: "<ministryName> · <rosterName>" or just "<ministryName>"
+  const eventName = ministryName + (rosterName ? ' · ' + rosterName : '');
+
+  try {
+    const { data, error } = await db.from('attendance')
+      .select('member_id, present, logged_by')
+      .eq('event_date', date)
+      .eq('event_type', eventType)
+      .eq('event_name', eventName);
+    if (error) throw error;
+    const rows = data || [];
+    if (rows.length === 0){
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      // Reset state for fresh entry
+      _maState = {};
+      _renderMaList();
+      return;
+    }
+    // Hydrate state from existing rows + add walk-ins for any present members
+    // who aren't in the roster (so they show in the list)
+    _maState = {};
+    rows.forEach(r => { _maState[r.member_id] = !!r.present; });
+    // Add as walk-ins anyone present who isn't already in candidates
+    const ministryName_ = ministryName;
+    const rosterId = document.getElementById('maRoster').value;
+    rows.forEach(r => {
+      if (!r.present) return;
+      const m = (allMembers || []).find(x => x.id === r.member_id);
+      if (!m) return;
+      const inMin = m.ministry === ministryName_ || m.ministry2 === ministryName_ || m.ministry3 === ministryName_;
+      const inRoster = !rosterId || (_maRosterMembers.get(rosterId)?.has(r.member_id));
+      if (!inMin || !inRoster) _maWalkIns.add(r.member_id);
+    });
+    const presentCount = rows.filter(r => r.present).length;
+    const loggedBy = (rows[0] && rows[0].logged_by) || '—';
+    banner.style.display = 'block';
+    banner.innerHTML = `📋 Already logged for ${MultiplyShared.escapeHTML(eventName)} on ${date} · <strong>${presentCount} present</strong> · by ${MultiplyShared.escapeHTML(loggedBy)}. Edits will overwrite.`;
+    _renderMaList();
+  } catch(e){
+    console.warn('_maLoadExisting failed:', e);
+    banner.style.display = 'none';
+  }
+}
+
+// ─── Save ─────────────────────────────────────────────────────────
+async function saveMinistryAttendance(){
+  const ministryName = _maMinistryName();
+  const rosterName = _maRosterName();
+  const date = document.getElementById('maDate').value;
+  const eventType = document.getElementById('maEventType').value;
+  if (!ministryName){ toast('Pick a ministry first','⚠️'); return; }
+  if (!date){ toast('Pick a date','⚠️'); return; }
+  const eventName = ministryName + (rosterName ? ' · ' + rosterName : '');
+
+  const rows = _maMembers.map(m => ({
+    member_id:       m.id,
+    member_name:     m.name,
+    event_type:      eventType,
+    event_date:      date,
+    event_name:      eventName,
+    present:         !!_maState[m.id],
+    member_lc_group: m.lc_group || '',
+    member_zone:     m.diagnostic_zone ?? null,
+    member_level:    m.pipeline_level ?? null,
+    event_lc_group:  '',                       // not LC-scoped
+    logged_by:       currentLeader?.name || 'Unknown',
+    logged_by_id:    currentLeader?.id || null,
+  }));
+  if (rows.length === 0){ toast('No members to save','⚠️'); return; }
+
+  try {
+    // Upsert against the unique constraint (member_id, event_type, event_date)
+    // so re-saves overwrite. NOTE: this means two ministry events on the same
+    // day for the same person collapse into one row — by design, since one
+    // person can't be both present and absent on the same day for "Ministry
+    // Practice". If a future need arises to support multiple practices same
+    // day, we'll either differentiate event_type or relax the constraint.
+    const { error } = await db.from('attendance').upsert(rows, {
+      onConflict: 'member_id,event_type,event_date'
+    });
+    if (error) throw error;
+    const cnt = rows.filter(r => r.present).length;
+    toast(`✅ Saved! ${cnt}/${rows.length} present for ${eventName}`, 'success');
+    setTimeout(() => showScreen('screenHome'), 1500);
+  } catch(e){
+    console.error('saveMinistryAttendance failed:', e);
+    toast('Save failed: ' + e.message, '❌');
+  }
+}
+
+
+// ─── Ministry Attendance Report ───────────────────────────────────
+// Uses the current ministry+roster context from the attendance screen.
+// Pulls last 60 days of attendance for events whose event_name starts
+// with "<ministryName>" and shows per-member rates.
+async function showMinistryReport(){
+  const ministryName = _maMinistryName();
+  const rosterName = _maRosterName();
+  if (!ministryName){ toast('Pick a ministry first','⚠️'); return; }
+
+  const content = document.getElementById('mrContent');
+  content.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  showScreen('screenMinistryReport');
+
+  // Range: last 60 days
+  const today = new Date();
+  const fromDate = new Date(today.getTime() - 60*86400000);
+  const fromStr = fromDate.toISOString().split('T')[0];
+  const toStr = today.toISOString().split('T')[0];
+
+  // Pull all attendance rows whose event_name starts with the ministry name
+  // (covers both bare "Music" and "Music · Team A"). PostgREST `like` with
+  // wildcard handles this server-side.
+  let rows = [];
+  try {
+    let q = db.from('attendance')
+      .select('member_id, member_name, event_date, event_type, event_name, present')
+      .gte('event_date', fromStr)
+      .lte('event_date', toStr)
+      .like('event_name', ministryName + '%')
+      .order('event_date', {ascending: false});
+    // If a roster is selected, narrow to that roster's events
+    if (rosterName){
+      q = db.from('attendance')
+        .select('member_id, member_name, event_date, event_type, event_name, present')
+        .gte('event_date', fromStr)
+        .lte('event_date', toStr)
+        .eq('event_name', ministryName + ' · ' + rosterName)
+        .order('event_date', {ascending: false});
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    rows = data || [];
+  } catch(e){
+    content.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--red);font-size:13px">Could not load report: ${MultiplyShared.escapeHTML(e.message)}</div>`;
+    return;
+  }
+
+  // Aggregate per-member
+  const byMember = {};   // memberId → { name, present, total, last }
+  const eventDates = new Set();
+  rows.forEach(r => {
+    eventDates.add(r.event_date + '|' + r.event_name);
+    if (!byMember[r.member_id]){
+      byMember[r.member_id] = { name: r.member_name, present: 0, total: 0, last: null };
+    }
+    const M = byMember[r.member_id];
+    M.total++;
+    if (r.present) M.present++;
+    if (!M.last || r.event_date > M.last) M.last = r.event_date;
+  });
+
+  const memberRanked = Object.values(byMember).sort((a,b) => {
+    const rA = a.total ? a.present/a.total : -1;
+    const rB = b.total ? b.present/b.total : -1;
+    return rB - rA;
+  });
+
+  const totalEvents = eventDates.size;
+  const subtitle = ministryName + (rosterName ? ' · ' + rosterName : ' (all rosters)');
+
+  if (memberRanked.length === 0){
+    content.innerHTML = `
+      <div style="padding:1rem 16px">
+        <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:4px">${MultiplyShared.escapeHTML(subtitle)}</div>
+        <div style="font-size:11px;color:var(--muted)">${fromStr} → ${toStr} (last 60 days)</div>
+      </div>
+      <div style="padding:2.5rem 1.5rem;text-align:center;color:var(--muted);font-size:13px;line-height:1.6">
+        No attendance recorded yet for this ministry.<br>
+        <span style="font-size:11.5px;color:var(--lighter)">Once you log a session, this report will populate.</span>
+      </div>`;
+    return;
+  }
+
+  const rowsHtml = memberRanked.map(m => {
+    const rate = m.total ? Math.round(m.present/m.total*100) : 0;
+    const rateColor = rate >= 75 ? 'var(--green)' : rate >= 50 ? 'var(--gold)' : 'var(--red)';
+    const barColor  = rate >= 75 ? 'rgba(52,211,153,.85)' : rate >= 50 ? 'rgba(218,165,32,.85)' : 'rgba(239,107,107,.85)';
+    return `
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">${MultiplyShared.escapeHTML(m.name)}</div>
+          <div style="font-size:13px;font-weight:700;color:${rateColor}">${rate}% <span style="font-size:10.5px;color:var(--muted);font-weight:500">(${m.present}/${m.total})</span></div>
+        </div>
+        <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${rate}%;background:${barColor}"></div>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:4px">Last seen: ${m.last || '—'}</div>
+      </div>
+    `;
+  }).join('');
+
+  content.innerHTML = `
+    <div style="padding:1rem 16px;background:var(--surface);border-bottom:1px solid var(--border)">
+      <div style="font-size:14px;color:var(--text);font-weight:700">${MultiplyShared.escapeHTML(subtitle)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${fromStr} → ${toStr} (last 60 days · ${totalEvents} session${totalEvents===1?'':'s'} · ${memberRanked.length} member${memberRanked.length===1?'':'s'})</div>
+    </div>
+    <div style="padding:8px 16px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">
+      Ranked by attendance rate
+    </div>
+    ${rowsHtml}
+  `;
+}
+// Period state for attendance report
 // ═══════════════════════════════════════════════════════
 // REPORTS
 // ═══════════════════════════════════════════════════════

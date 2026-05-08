@@ -4094,6 +4094,7 @@ function buildSettingsMinistries(){
         <div style="display:flex;gap:3px;align-items:center">
           ${idx > 0 ? `<button onclick="reorderMinistry('${m.id}','up')" title="Move up" style="background:transparent;border:1px solid var(--border);border-radius:5px;width:26px;height:26px;cursor:pointer;color:var(--muted);font-size:12px">↑</button>` : '<div style="width:26px"></div>'}
           ${idx < mins.length-1 ? `<button onclick="reorderMinistry('${m.id}','down')" title="Move down" style="background:transparent;border:1px solid var(--border);border-radius:5px;width:26px;height:26px;cursor:pointer;color:var(--muted);font-size:12px">↓</button>` : '<div style="width:26px"></div>'}
+          <button onclick="openRosterManager('${m.id}')" title="Manage rosters / sub-teams" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:5px;padding:0 8px;height:26px;cursor:pointer;color:var(--blue,#4a90e2);font-size:11px;font-weight:600">🎵 Rosters</button>
           <button onclick="openEditMinistryModal('${m.id}')" title="Edit" style="background:var(--gold-bg);border:1px solid rgba(184,136,42,.3);border-radius:5px;padding:0 10px;height:26px;cursor:pointer;color:var(--gold);font-size:11px;font-weight:600">✏️ Edit</button>
           <button onclick="archiveMinistry('${m.id}')" title="Archive (soft-delete)" style="background:transparent;border:1px solid var(--border);border-radius:5px;padding:0 8px;height:26px;cursor:pointer;color:var(--muted);font-size:11px">📦</button>
         </div>
@@ -4302,6 +4303,304 @@ async function archiveMinistry(ministryId){
   } catch(e){
     console.error('Archive error:', e);
     toast('Could not archive: ' + e.message, '❌');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// MINISTRY ROSTERS — sub-team management
+// ─────────────────────────────────────────────────────────────────
+// A ministry can have N rosters (e.g. Music · Team A, Music · Team B).
+// Rosters are OPTIONAL — most ministries don't need them. When taking
+// attendance, the leader picks a roster (or "All members") to control
+// who's on the present/absent list. A member can be on multiple rosters.
+// ═══════════════════════════════════════════════════════════════════
+
+let _rosterManagerCtx = null; // { ministryId, ministryName, rosters:[], roster_members:Map<rosterId,Set<memberId>> }
+
+async function openRosterManager(ministryId){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage rosters','🔒'); return; }
+  const ministry = Object.values(MINISTRY_ROWS).find(r => r.id === ministryId);
+  if(!ministry){ toast('Ministry not found', '❌'); return; }
+
+  // Load rosters + their members in parallel
+  let rosters = [], rosterMembers = [];
+  try {
+    const [rRes, rmRes] = await Promise.all([
+      db.from('ministry_rosters').select('*').eq('ministry_id', ministryId).eq('active', true).order('display_order').order('name'),
+      db.from('ministry_roster_members').select('roster_id, member_id')
+    ]);
+    if (rRes.error) throw rRes.error;
+    if (rmRes.error) throw rmRes.error;
+    rosters = rRes.data || [];
+    rosterMembers = rmRes.data || [];
+  } catch(e){
+    toast('Could not load rosters: ' + e.message, '❌');
+    return;
+  }
+
+  // Index members by roster
+  const byRoster = new Map();
+  rosters.forEach(r => byRoster.set(r.id, new Set()));
+  rosterMembers.forEach(rm => {
+    if (byRoster.has(rm.roster_id)) byRoster.get(rm.roster_id).add(rm.member_id);
+  });
+
+  _rosterManagerCtx = { ministryId, ministryName: ministry.name, rosters, byRoster };
+  _renderRosterManager();
+}
+
+function _renderRosterManager(){
+  if (!_rosterManagerCtx) return;
+  const { ministryName, rosters, byRoster } = _rosterManagerCtx;
+
+  // Members assigned to this ministry (any of 3 slots) — these are the
+  // candidates for roster membership. We also include is_facilitator since
+  // ministry heads/leaders should be assignable.
+  const candidates = members.filter(m =>
+    m.ministry === ministryName || m.ministry2 === ministryName || m.ministry3 === ministryName
+  );
+
+  let modal = document.getElementById('rosterManagerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'rosterManagerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  const rosterListHtml = rosters.length === 0
+    ? `<div style="padding:1.25rem;text-align:center;color:var(--muted);font-size:12.5px;border:1px dashed var(--border);border-radius:8px">
+         No rosters yet. Most ministries don't need them — only create rosters when you have rotating sub-teams (e.g. Music Team A vs Team B).
+       </div>`
+    : rosters.map(r => {
+        const memCount = byRoster.get(r.id)?.size || 0;
+        return `
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--ink)">${escapeHTMLNotif(r.name)}</div>
+              <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${memCount} member${memCount===1?'':'s'}${r.description ? ' · ' + escapeHTMLNotif(r.description) : ''}</div>
+            </div>
+            <div style="display:flex;gap:3px">
+              <button onclick="_rmEditRosterMembers('${r.id}')" title="Manage members" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:5px;padding:0 10px;height:28px;cursor:pointer;color:var(--blue,#4a90e2);font-size:11px;font-weight:600">👥 Members</button>
+              <button onclick="_rmRenameRoster('${r.id}')" title="Rename" style="background:var(--gold-bg);border:1px solid rgba(184,136,42,.3);border-radius:5px;padding:0 10px;height:28px;cursor:pointer;color:var(--gold);font-size:11px;font-weight:600">✏️</button>
+              <button onclick="_rmDeleteRoster('${r.id}')" title="Delete roster" style="background:transparent;border:1px solid var(--border);border-radius:5px;padding:0 8px;height:28px;cursor:pointer;color:var(--muted);font-size:11px">🗑</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:1.25rem;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Rosters / Sub-teams</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-top:2px">${escapeHTMLNotif(ministryName)}</div>
+        </div>
+        <button onclick="_rmClose()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:1rem">
+        ${candidates.length} member${candidates.length===1?'':'s'} assigned to this ministry overall.
+        Rosters let you split them into rotating teams for attendance taking.
+      </div>
+      ${rosterListHtml}
+      <div style="display:flex;gap:8px;margin-top:1rem">
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_rmAddRoster()">➕ Add Roster</button>
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_rmClose()">Close</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+function _rmClose(){
+  const m = document.getElementById('rosterManagerModal');
+  if (m) m.style.display = 'none';
+  _rosterManagerCtx = null;
+}
+
+async function _rmAddRoster(){
+  if (!_rosterManagerCtx) return;
+  const name = prompt('Roster name (e.g. "Team A", "Sunday AM", "Acoustic Set"):');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  // Local dup check (case-sensitive — matches the unique index)
+  if (_rosterManagerCtx.rosters.some(r => r.name === trimmed)){
+    toast('A roster with that name already exists', '⚠️'); return;
+  }
+  try {
+    const { error } = await db.from('ministry_rosters').insert({
+      ministry_id: _rosterManagerCtx.ministryId,
+      name: trimmed,
+      display_order: _rosterManagerCtx.rosters.length
+    });
+    if (error) throw error;
+    toast('Roster added ✓');
+    await openRosterManager(_rosterManagerCtx.ministryId); // reload
+  } catch(e){
+    toast('Could not add: ' + e.message, '❌');
+  }
+}
+
+async function _rmRenameRoster(rosterId){
+  if (!_rosterManagerCtx) return;
+  const r = _rosterManagerCtx.rosters.find(x => x.id === rosterId);
+  if (!r) return;
+  const next = prompt('Rename roster:', r.name);
+  if (!next || next.trim() === r.name) return;
+  try {
+    const { error } = await db.from('ministry_rosters').update({ name: next.trim() }).eq('id', rosterId);
+    if (error) throw error;
+    toast('Renamed ✓');
+    await openRosterManager(_rosterManagerCtx.ministryId);
+  } catch(e){
+    toast('Could not rename: ' + e.message, '❌');
+  }
+}
+
+async function _rmDeleteRoster(rosterId){
+  if (!_rosterManagerCtx) return;
+  const r = _rosterManagerCtx.rosters.find(x => x.id === rosterId);
+  if (!r) return;
+  const memCount = _rosterManagerCtx.byRoster.get(rosterId)?.size || 0;
+  if (!confirm(`Delete roster "${r.name}"?\n\n${memCount} member assignment${memCount===1?'':'s'} will be removed. Past attendance records that referenced this roster will keep their event names but lose the roster link.`)) return;
+  try {
+    // ON DELETE CASCADE on ministry_roster_members handles assignment cleanup.
+    const { error } = await db.from('ministry_rosters').delete().eq('id', rosterId);
+    if (error) throw error;
+    toast('Roster deleted');
+    await openRosterManager(_rosterManagerCtx.ministryId);
+  } catch(e){
+    toast('Could not delete: ' + e.message, '❌');
+  }
+}
+
+// ─── Member assignment sub-modal ──────────────────────────────────
+async function _rmEditRosterMembers(rosterId){
+  if (!_rosterManagerCtx) return;
+  const r = _rosterManagerCtx.rosters.find(x => x.id === rosterId);
+  if (!r) return;
+
+  const candidates = members.filter(m =>
+    m.ministry === _rosterManagerCtx.ministryName ||
+    m.ministry2 === _rosterManagerCtx.ministryName ||
+    m.ministry3 === _rosterManagerCtx.ministryName
+  ).sort((a,b) => (a.name||'').localeCompare(b.name||''));
+
+  const currentSet = _rosterManagerCtx.byRoster.get(rosterId) || new Set();
+
+  // We use a "staged" set so the user can check/uncheck freely and only
+  // commit when they hit Save. Cancel = no DB writes.
+  const staged = new Set(currentSet);
+
+  let sub = document.getElementById('rosterMembersModal');
+  if (!sub) {
+    sub = document.createElement('div');
+    sub.id = 'rosterMembersModal';
+    sub.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.65);z-index:9100;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(sub);
+  }
+
+  const renderRows = () => candidates.map(m => {
+    const checked = staged.has(m.id);
+    return `
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:${checked?'var(--green-bg)':'transparent'};border:1px solid ${checked?'rgba(42,92,64,.3)':'transparent'}">
+        <input type="checkbox" ${checked?'checked':''} onchange="_rmToggleStaged('${m.id}',this.checked)" style="width:16px;height:16px;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis">${escapeHTMLNotif(m.name)}</div>
+          ${m.lc_group ? `<div style="font-size:10.5px;color:var(--muted)">${escapeHTMLNotif(m.lc_group)}</div>` : ''}
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  sub.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:480px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Roster members</div>
+            <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px">${escapeHTMLNotif(_rosterManagerCtx.ministryName)} · ${escapeHTMLNotif(r.name)}</div>
+            <div id="rmStagedCount" style="font-size:11.5px;color:var(--muted);margin-top:4px">${staged.size} selected</div>
+          </div>
+          <button onclick="_rmCloseMembersModal()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:.5rem 1.25rem">
+        ${candidates.length === 0
+          ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12.5px">No members are assigned to this ministry yet. Assign members first via their profile (any of the 3 ministry slots).</div>'
+          : `<div id="rmCandList">${renderRows()}</div>`}
+      </div>
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_rmCloseMembersModal()">Cancel</button>
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_rmSaveMembers('${rosterId}')">💾 Save Changes</button>
+      </div>
+    </div>
+  `;
+  sub.style.display = 'flex';
+
+  // Stash staged set on the modal so handlers can mutate it
+  sub._staged = staged;
+}
+
+function _rmToggleStaged(memberId, checked){
+  const sub = document.getElementById('rosterMembersModal');
+  if (!sub || !sub._staged) return;
+  if (checked) sub._staged.add(memberId);
+  else sub._staged.delete(memberId);
+  // Update count + visual on row
+  const countEl = document.getElementById('rmStagedCount');
+  if (countEl) countEl.textContent = `${sub._staged.size} selected`;
+  // Recolor the label (lazy: just re-find the input's parent)
+  const input = sub.querySelector(`input[onchange*="${memberId}"]`);
+  if (input){
+    const label = input.closest('label');
+    if (label){
+      label.style.background = checked ? 'var(--green-bg)' : 'transparent';
+      label.style.border = '1px solid ' + (checked ? 'rgba(42,92,64,.3)' : 'transparent');
+    }
+  }
+}
+
+function _rmCloseMembersModal(){
+  const sub = document.getElementById('rosterMembersModal');
+  if (sub) sub.style.display = 'none';
+}
+
+async function _rmSaveMembers(rosterId){
+  if (!_rosterManagerCtx) return;
+  const sub = document.getElementById('rosterMembersModal');
+  if (!sub || !sub._staged) return;
+  const staged = sub._staged;
+  const current = _rosterManagerCtx.byRoster.get(rosterId) || new Set();
+
+  const toAdd = [...staged].filter(id => !current.has(id));
+  const toRemove = [...current].filter(id => !staged.has(id));
+
+  if (toAdd.length === 0 && toRemove.length === 0){
+    _rmCloseMembersModal();
+    toast('No changes');
+    return;
+  }
+
+  try {
+    if (toAdd.length){
+      const rows = toAdd.map(memberId => ({ roster_id: rosterId, member_id: memberId }));
+      const { error } = await db.from('ministry_roster_members').insert(rows);
+      if (error) throw error;
+    }
+    if (toRemove.length){
+      const { error } = await db.from('ministry_roster_members')
+        .delete()
+        .eq('roster_id', rosterId)
+        .in('member_id', toRemove);
+      if (error) throw error;
+    }
+    toast(`Saved · +${toAdd.length} / −${toRemove.length}`);
+    _rmCloseMembersModal();
+    await openRosterManager(_rosterManagerCtx.ministryId); // refresh outer modal counts
+  } catch(e){
+    toast('Save failed: ' + e.message, '❌');
   }
 }
 
