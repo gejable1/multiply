@@ -4083,6 +4083,13 @@ async function renderAttestCard(){
   // Build picker buttons (one per event_type)
   const pickerRow = document.getElementById('attestPickerRow');
   if (pickerRow) {
+    // Member-scoped set of dismissed rejection rows. After the member taps a
+    // "Pastor rejected" pill to view the modal, we mark that attendance row
+    // as dismissed so the red pill doesn't keep shaming them on every render.
+    // Re-attestation for the same event/date later still appears normally
+    // because that creates a different attendance row id.
+    const dismissedRejections = _attestGetDismissedRejections();
+
     pickerRow.innerHTML = _attestEventTypes.map(et => {
       const targetDate = _attestLastTypicalDay(et.typical_day || 7);
       const targetLbl = _attestFmtShort(targetDate);
@@ -4091,7 +4098,15 @@ async function renderAttestCard(){
         r.event_type === et.key && r.event_date === targetDate
       );
       const labelEsc = MultiplyShared.escapeHTML(et.label);
-      if (existing) {
+      // If existing row is a rejection the member has already viewed, treat
+      // it as if it weren't there → show the "I'm here" button again so they
+      // can re-attest (or simply not see the red badge anymore).
+      const isResolvedRejection = existing
+        && existing.pastor_resolved
+        && existing.pastor_decision === 'rejected';
+      const showAsExisting = existing && !(isResolvedRejection && dismissedRejections.has(existing.id));
+
+      if (showAsExisting) {
         // Already attested — show subtle status pill
         // ORDER MATTERS: pastor_resolved is final, so check that first
         const isResolved = !!existing.pastor_resolved;
@@ -4119,7 +4134,7 @@ async function renderAttestCard(){
                   <span style="font-size:10px;opacity:.85;">${icon} ${txt} · ${targetLbl}</span>
                 </button>`;
       }
-      // Not yet attested — show "I'm here" button
+      // Not yet attested (or rejection already dismissed) — show "I'm here" button
       return `<button onclick="memberSelfAttest('${et.key}', ${et.typical_day || 7})"
                 style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
                        background:var(--cream); border:1px solid var(--line);
@@ -4131,6 +4146,36 @@ async function renderAttestCard(){
               </button>`;
     }).join('');
   }
+}
+
+// ── Dismissed-rejection helpers ────────────────────────────────
+// Persisted per-member in localStorage. Lightweight Set of attendance.id
+// values that the member has already tapped to view. Survives reloads,
+// not cross-device — but the badge only re-appears once on a new device,
+// then the same dismissal gesture mutes it.
+const _ATTEST_DISMISS_KEY = () => 'mmt_attest_rej_dismissed_' + (MEMBER && MEMBER.memberId ? MEMBER.memberId : 'unknown');
+
+function _attestGetDismissedRejections(){
+  try {
+    const raw = localStorage.getItem(_ATTEST_DISMISS_KEY());
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch(e){ return new Set(); }
+}
+
+function _attestMarkRejectionDismissed(attendanceId){
+  if (!attendanceId) return;
+  try {
+    const set = _attestGetDismissedRejections();
+    if (set.has(attendanceId)) return; // already marked
+    set.add(attendanceId);
+    // Cap at 50 entries to prevent unbounded growth on heavy users.
+    // Oldest entries drop off; very old rows wouldn't be in _recentAttestRows
+    // anyway so re-showing them isn't a real concern.
+    const arr = [...set].slice(-50);
+    localStorage.setItem(_ATTEST_DISMISS_KEY(), JSON.stringify(arr));
+  } catch(e){ /* localStorage full / disabled — non-fatal, badge just stays */ }
 }
 
 // ─── Member taps "I'm here" ───
@@ -4384,6 +4429,10 @@ async function openAttestStatus(attendanceId){
 
   let statusHtml, actionHtml;
   if (isResolved && row.pastor_decision === 'rejected') {
+    // Mark this rejection as "seen" so the red pill doesn't keep shaming
+    // the member on every home-screen render. They've now seen the reason;
+    // the pill goes away after this modal closes (on next attest-card render).
+    _attestMarkRejectionDismissed(row.id);
     statusHtml = `<div style="background:#fde8e8;border:1px solid #f5b5b5;border-radius:8px;padding:1rem;text-align:center;color:#9a2727;">
       <div style="font-size:24px;margin-bottom:.4rem;">✕</div>
       <div style="font-weight:700;margin-bottom:.3rem;">${lang==='tl'?'Pastor rejected':'Pastor rejected'}</div>
@@ -4467,12 +4516,21 @@ async function openAttestStatus(attendanceId){
   document.getElementById('attestStatusBody').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
       <h3 style="margin:0;font-size:15px;">${MultiplyShared.escapeHTML(row.event_type)} · ${_attestFmtShort(row.event_date)}</h3>
-      <button onclick="document.getElementById('attestStatusModal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">×</button>
+      <button onclick="closeAttestStatus()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">×</button>
     </div>
     ${statusHtml}
     ${actionHtml}
   `;
   document.getElementById('attestStatusModal').style.display = 'flex';
+}
+
+// Close the status modal AND immediately re-render the attest card so any
+// dismissals (e.g. a rejected pill that just got marked seen) take effect
+// without waiting for a page reload or another data fetch.
+function closeAttestStatus(){
+  const m = document.getElementById('attestStatusModal');
+  if (m) m.style.display = 'none';
+  if (typeof renderAttestCard === 'function') renderAttestCard();
 }
 
 async function manualRenudge(attendanceId, eventTypeKey, eventDate){
