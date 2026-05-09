@@ -450,6 +450,8 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         <button class="mm-item" data-nav="announcements" onclick="_navTo('announcements', loadAnnouncementQueue)">📣 Announcements <span id="navAnnBadgeMore" class="mm-badge mm-badge-gold" style="display:none"></span></button>
         <button class="mm-item" data-nav="aiInsights"    onclick="_navTo('aiInsights', loadAiInsights)">🤖 AI Insights</button>
         <button class="mm-item"                          onclick="hideMoreMenu(); openTransfers();">🔄 Transfers <span id="navTxBadgeMore" class="mm-badge mm-badge-gold" style="display:none"></span></button>
+        <!-- My Ministry: visibility toggled at runtime by _refreshMyMinistryNav() — only leaders who head ≥1 ministry see it -->
+        <button class="mm-item" id="navMyMinistryMore" data-nav="myMinistry" onclick="_navTo('myMinistry', renderMyMinistryPanel)" style="display:none">🎵 My Ministry</button>
         <button class="mm-item" data-nav="reports"       onclick="_navTo('reports')">📊 Reports</button>
         <button class="mm-item" data-nav="settings"      onclick="_navTo('settings')">⚙️ Settings</button>
       </div>
@@ -509,6 +511,8 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 
   <div class="nd-section">Insights &amp; admin</div>
   <button class="nd-item" data-nav="aiInsights"    onclick="_navTo('aiInsights', loadAiInsights, true)">🤖 AI Insights</button>
+  <!-- My Ministry: shown at runtime by _refreshMyMinistryNav() to leaders who head ≥1 ministry -->
+  <button class="nd-item" id="navMyMinistryDrawer" data-nav="myMinistry" onclick="_navTo('myMinistry', renderMyMinistryPanel, true)" style="display:none">🎵 My Ministry</button>
   <button class="nd-item" data-nav="reports"       onclick="_navTo('reports', null, true)">📊 Reports</button>
   <button class="nd-item" data-nav="settings"      onclick="_navTo('settings', null, true)">⚙️ Settings</button>
 </aside>
@@ -713,6 +717,20 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     </button>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" id="rg"></div>
+</div></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     MY MINISTRY — for ministry heads (visibility toggled at runtime)
+     ═══════════════════════════════════════════════════════════════════
+     Lets a ministry head manage rosters / sub-teams for ministries they
+     lead, without exposing the full Settings panel (which is Pastor-only
+     in spirit). When the leader heads multiple ministries, a chip switcher
+     at the top picks which one's rosters to manage.
+     ─────────────────────────────────────────────────────────────────── -->
+<div id="panel-myMinistry" class="panel"><div class="pw">
+  <div id="mmPanelContent">
+    <div style="padding:2rem 1rem;text-align:center;color:var(--muted);font-size:13px">Loading…</div>
+  </div>
 </div></div>
 
 <!-- SETTINGS -->
@@ -1184,6 +1202,10 @@ loadMinistries().then(() => {
   // After loading, re-render any UI that depends on ministries
   if(typeof buildMinistrySelect === 'function') buildMinistrySelect();
   if(typeof buildSettingsMinistries === 'function') buildSettingsMinistries();
+  // Show/hide the "My Ministry" nav buttons based on whether the current
+  // leader heads any ministry. Safe to call defensively — the function
+  // is a no-op if the buttons aren't in the DOM yet.
+  if(typeof _refreshMyMinistryNav === 'function') _refreshMyMinistryNav();
 });
 
 // ═══════════════════════════════════════
@@ -4102,6 +4124,10 @@ function buildSettingsMinistries(){
       catDiv.appendChild(row);
     });
   });
+  // Whenever the Settings ministries list re-renders (after add/edit/head-change/
+  // archive), re-evaluate My Ministry nav visibility — Pastor may have just
+  // assigned/removed a head.
+  if(typeof _refreshMyMinistryNav === 'function') _refreshMyMinistryNav();
 }
 // Initial paint (with hardcoded fallback if DB hasn't loaded yet — will
 // re-paint after loadMinistries() resolves)
@@ -4319,9 +4345,15 @@ async function archiveMinistry(ministryId){
 let _rosterManagerCtx = null; // { ministryId, ministryName, rosters:[], roster_members:Map<rosterId,Set<memberId>> }
 
 async function openRosterManager(ministryId){
-  if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage rosters','🔒'); return; }
+  // Access rule: Pastor can manage any ministry's rosters; a non-Pastor leader
+  // can only manage rosters for ministries they head (head_member_id = them).
+  // The currently-signed-in leader's id is in LEADER.leaderId (set by the
+  // gate at page load).
   const ministry = Object.values(MINISTRY_ROWS).find(r => r.id === ministryId);
   if(!ministry){ toast('Ministry not found', '❌'); return; }
+  const isPastor = LeaderScope.isPastor();
+  const isHead   = ministry.head_member_id && LEADER && ministry.head_member_id === LEADER.leaderId;
+  if(!isPastor && !isHead){ toast('Only the Pastor or this ministry\'s head can manage rosters', '🔒'); return; }
 
   // Load rosters + their members in parallel
   let rosters = [], rosterMembers = [];
@@ -4603,6 +4635,166 @@ async function _rmSaveMembers(rosterId){
     toast('Save failed: ' + e.message, '❌');
   }
 }
+
+
+// ═══════════════════════════════════════════════════════════════════
+// MY MINISTRY PANEL — for ministry heads
+// ─────────────────────────────────────────────────────────────────
+// Listed in the More menu and mobile drawer, but only visible to
+// leaders who currently head ≥1 active ministry. Pastor can also see
+// it for any ministry they happen to head, but their main entry is
+// still Settings → Ministries.
+//
+// Multi-ministry support: if the leader heads >1 ministry, a chip
+// switcher at the top selects which one's rosters are being managed.
+// ═══════════════════════════════════════════════════════════════════
+
+let _myMinistryActiveId = null; // currently-selected ministry id within the panel
+
+// List of ministries the current leader heads, computed fresh on each panel
+// open and on each nav-visibility check. Pastor sees this too if they head
+// any (e.g. running Music personally) — matches the head_member_id rule.
+function _getMinistriesLedByMe(){
+  if (!LEADER || !LEADER.leaderId) return [];
+  return Object.values(MINISTRY_ROWS || {})
+    .filter(m => m.active !== false && m.head_member_id === LEADER.leaderId)
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''));
+}
+
+// Show/hide the nav buttons in More menu + mobile drawer based on whether
+// the current leader heads any ministry. Called on initial load AND after
+// loadMinistries() resolves (since MINISTRY_ROWS hydrates async).
+function _refreshMyMinistryNav(){
+  const headed = _getMinistriesLedByMe();
+  const show = headed.length > 0;
+  const elMore   = document.getElementById('navMyMinistryMore');
+  const elDrawer = document.getElementById('navMyMinistryDrawer');
+  if (elMore)   elMore.style.display   = show ? '' : 'none';
+  if (elDrawer) elDrawer.style.display = show ? '' : 'none';
+}
+
+async function renderMyMinistryPanel(){
+  const wrap = document.getElementById('mmPanelContent');
+  if (!wrap) return;
+
+  const headed = _getMinistriesLedByMe();
+  if (headed.length === 0){
+    wrap.innerHTML = `
+      <div style="padding:2.5rem 1.25rem;text-align:center">
+        <div style="font-size:32px;margin-bottom:.5rem">🎵</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.4rem">No ministries assigned</div>
+        <div style="font-size:12.5px;color:var(--muted);max-width:380px;margin:0 auto;line-height:1.6">
+          You don't currently head any ministry. Once Pastor assigns you as a ministry head, this panel will let you manage rosters and sub-teams.
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Default to the first ministry, or remember the last-active selection
+  if (!_myMinistryActiveId || !headed.some(m => m.id === _myMinistryActiveId)){
+    _myMinistryActiveId = headed[0].id;
+  }
+  const active = headed.find(m => m.id === _myMinistryActiveId);
+
+  // Load active ministry's rosters
+  let rosters = [], rosterMemberRows = [];
+  try {
+    const [rRes, rmRes] = await Promise.all([
+      db.from('ministry_rosters').select('*').eq('ministry_id', active.id).eq('active', true).order('display_order').order('name'),
+      db.from('ministry_roster_members').select('roster_id, member_id')
+    ]);
+    if (rRes.error) throw rRes.error;
+    if (rmRes.error) throw rmRes.error;
+    rosters = rRes.data || [];
+    rosterMemberRows = rmRes.data || [];
+  } catch(e){
+    wrap.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--red);font-size:13px">Could not load: ${escapeHTMLNotif(e.message)}</div>`;
+    return;
+  }
+
+  // Index members per roster
+  const byRoster = new Map();
+  rosters.forEach(r => byRoster.set(r.id, new Set()));
+  rosterMemberRows.forEach(rm => {
+    if (byRoster.has(rm.roster_id)) byRoster.get(rm.roster_id).add(rm.member_id);
+  });
+
+  // Members assigned to this ministry overall (any of 3 ministry slots)
+  const assigned = members.filter(m =>
+    m.ministry === active.name || m.ministry2 === active.name || m.ministry3 === active.name
+  );
+
+  // ── HEADER (with chip switcher if >1) ──
+  const switcherHtml = headed.length > 1 ? `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem">
+      ${headed.map(m => {
+        const isActive = m.id === _myMinistryActiveId;
+        return `<button onclick="_mmSetActive('${m.id}')"
+          style="padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;cursor:pointer;
+                 background:${isActive ? 'var(--gold)' : 'var(--surface2)'};
+                 color:${isActive ? '#fff' : 'var(--muted)'};
+                 border:1px solid ${isActive ? 'var(--gold)' : 'var(--border)'}">
+          🎵 ${escapeHTMLNotif(m.name)}
+        </button>`;
+      }).join('')}
+    </div>` : '';
+
+  // ── ROSTER LIST ──
+  const rosterListHtml = rosters.length === 0
+    ? `<div style="padding:1.5rem 1.25rem;text-align:center;border:1px dashed var(--border);border-radius:10px;background:var(--surface)">
+         <div style="font-size:24px;margin-bottom:.5rem">📋</div>
+         <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:.4rem">No rosters yet</div>
+         <div style="font-size:11.5px;color:var(--muted);max-width:340px;margin:0 auto 1rem;line-height:1.55">
+           Most ministries don't need rosters — only create them when you have rotating sub-teams (e.g. Team A vs Team B alternating Sundays). All members will be shown by default when taking attendance.
+         </div>
+         <button class="sbtn" style="margin-top:0;background:var(--green);max-width:240px" onclick="openRosterManager('${active.id}')">➕ Add a Roster</button>
+       </div>`
+    : `<div style="display:flex;flex-direction:column;gap:6px">
+         ${rosters.map(r => {
+           const memCount = byRoster.get(r.id)?.size || 0;
+           return `
+             <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+               <div style="min-width:0">
+                 <div style="font-size:13px;font-weight:600;color:var(--ink)">${escapeHTMLNotif(r.name)}</div>
+                 <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${memCount} member${memCount===1?'':'s'}${r.description ? ' · ' + escapeHTMLNotif(r.description) : ''}</div>
+               </div>
+               <div style="display:flex;gap:3px">
+                 <button onclick="openRosterManager('${active.id}')" title="Manage all rosters for this ministry"
+                   style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:5px;padding:0 10px;height:28px;cursor:pointer;color:var(--blue,#4a90e2);font-size:11px;font-weight:600">
+                   ✏️ Manage
+                 </button>
+               </div>
+             </div>
+           `;
+         }).join('')}
+       </div>
+       <button class="sbtn" style="margin-top:1rem;background:var(--green);max-width:240px" onclick="openRosterManager('${active.id}')">➕ Add another Roster</button>`;
+
+  wrap.innerHTML = `
+    <div style="margin-bottom:.75rem">
+      <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">My ministry</div>
+      <div style="font-size:20px;font-weight:700;color:var(--ink);margin-top:2px">🎵 ${escapeHTMLNotif(active.name)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+        ${assigned.length} member${assigned.length===1?'':'s'} assigned to this ministry overall
+      </div>
+    </div>
+    ${switcherHtml}
+    <div class="ss" style="margin-top:.5rem">
+      <div class="st">Rosters / Sub-teams</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:1rem;line-height:1.55">
+        Rosters let you split ministry members into rotating teams (e.g. "Team A", "Sunday AM"). When a leader takes attendance for a roster, only those members appear on the list — not the whole ministry.
+      </div>
+      ${rosterListHtml}
+    </div>
+  `;
+}
+
+// Switcher chip click handler
+function _mmSetActive(ministryId){
+  _myMinistryActiveId = ministryId;
+  renderMyMinistryPanel();
+}
+
 
 async function openArchivedMinistries(){
   if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage archived ministries','🔒'); return; }
