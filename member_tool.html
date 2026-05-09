@@ -1476,6 +1476,9 @@ body.lang-tl .tl-text{display:inline;}
           </div>
         </div>
         <div id="attestPickerRow" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;"></div>
+        <!-- Status row: recent attestations with their resolution state.
+             Lives in its own row so it never covers the attest buttons above. -->
+        <div id="attestStatusRow" style="display:none;margin-bottom:.5rem;"></div>
         <button onclick="openAttestHistory()" 
           style="display:flex;align-items:center;gap:.4rem;margin:.3rem auto 0;padding:.4rem .8rem;background:transparent;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11.5px;cursor:pointer;">
           <span>📊</span>
@@ -4083,13 +4086,6 @@ async function renderAttestCard(){
   // Build picker buttons (one per event_type)
   const pickerRow = document.getElementById('attestPickerRow');
   if (pickerRow) {
-    // Member-scoped set of dismissed rejection rows. After the member taps a
-    // "Pastor rejected" pill to view the modal, we mark that attendance row
-    // as dismissed so the red pill doesn't keep shaming them on every render.
-    // Re-attestation for the same event/date later still appears normally
-    // because that creates a different attendance row id.
-    const dismissedRejections = _attestGetDismissedRejections();
-
     pickerRow.innerHTML = _attestEventTypes.map(et => {
       const targetDate = _attestLastTypicalDay(et.typical_day || 7);
       const targetLbl = _attestFmtShort(targetDate);
@@ -4098,43 +4094,36 @@ async function renderAttestCard(){
         r.event_type === et.key && r.event_date === targetDate
       );
       const labelEsc = MultiplyShared.escapeHTML(et.label);
-      // If existing row is a rejection the member has already viewed, treat
-      // it as if it weren't there → show the "I'm here" button again so they
-      // can re-attest (or simply not see the red badge anymore).
-      const isResolvedRejection = existing
-        && existing.pastor_resolved
-        && existing.pastor_decision === 'rejected';
-      const showAsExisting = existing && !(isResolvedRejection && dismissedRejections.has(existing.id));
 
-      if (showAsExisting) {
-        // Already attested — show subtle status pill
+      // ── Always show the attest button (never hidden by status pills) ──
+      // Status pills now live in their own row below — they don't cover this
+      // button. We do mark the button as "already attested" visually so the
+      // member can't accidentally double-attest. Tapping a disabled button
+      // takes them to the status modal instead of creating a new row.
+      if (existing) {
+        // Already attested for this slot — render as "completed" affordance
         // ORDER MATTERS: pastor_resolved is final, so check that first
         const isResolved = !!existing.pastor_resolved;
         const isConfirmed = !!existing.confirmed_by;
         const isDisputed = !!existing.disputed;
-        let bg = '#fff7e0', fg = '#8a6a00', icon = '🟡', txt = 'Pending confirmation';
-        if (isResolved && existing.pastor_decision === 'rejected') {
-          bg='#fde8e8'; fg='#9a2727'; icon='✕'; txt='Pastor rejected';
-        } else if (isResolved && existing.pastor_decision === 'confirmed') {
-          bg='#e7f5ec'; fg='#1f6b3a'; icon='✓'; txt='Pastor confirmed';
-        } else if (isDisputed) {
-          bg='#fde8e8'; fg='#9a2727'; icon='⚠️'; txt='Disputed — awaiting Pastor';
-        } else if (isConfirmed) {
-          bg='#e7f5ec'; fg='#1f6b3a'; icon='🟢'; txt='Confirmed';
-        }
+        let stateIcon = '🟡';
+        if (isResolved && existing.pastor_decision === 'rejected') stateIcon = '✕';
+        else if (isResolved && existing.pastor_decision === 'confirmed') stateIcon = '✓';
+        else if (isDisputed) stateIcon = '⚠️';
+        else if (isConfirmed) stateIcon = '🟢';
         return `<button onclick="openAttestStatus('${existing.id}')"
-                  style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.55rem .5rem;
-                         background:${bg}; border:1px solid ${fg}33;
-                         border-radius:12px; cursor:pointer; font-size:11.5px;
-                         display:flex; flex-direction:column; gap:.15rem; align-items:flex-start;
-                         line-height:1.3; color:${fg};">
-                  <span style="font-weight:700;display:flex;align-items:center;gap:.3rem;">
-                    <span>${et.icon || '✓'}</span>${labelEsc}
-                  </span>
-                  <span style="font-size:10px;opacity:.85;">${icon} ${txt} · ${targetLbl}</span>
+                  style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
+                         background:var(--cream); border:1px solid var(--line);
+                         border-radius:12px; cursor:pointer; font-size:12px;
+                         display:flex; align-items:center; gap:.4rem; justify-content:center;
+                         line-height:1.25; color:var(--ink); opacity:.55;"
+                  title="Already attested — tap to see status">
+                  <span style="font-size:15px;">${et.icon || '📍'}</span>
+                  <span style="font-weight:600;">${labelEsc}</span>
+                  <span style="font-size:11px;">${stateIcon}</span>
                 </button>`;
       }
-      // Not yet attested (or rejection already dismissed) — show "I'm here" button
+      // Not yet attested — show "I'm here" button
       return `<button onclick="memberSelfAttest('${et.key}', ${et.typical_day || 7})"
                 style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
                        background:var(--cream); border:1px solid var(--line);
@@ -4146,37 +4135,108 @@ async function renderAttestCard(){
               </button>`;
     }).join('');
   }
+
+  // Render the separate "recent activity" row underneath the buttons
+  _renderAttestStatusRow();
 }
 
-// ── Dismissed-rejection helpers ────────────────────────────────
-// Persisted per-member in localStorage. Lightweight Set of attendance.id
-// values that the member has already tapped to view. Survives reloads,
-// not cross-device — but the badge only re-appears once on a new device,
-// then the same dismissal gesture mutes it.
-const _ATTEST_DISMISS_KEY = () => 'mmt_attest_rej_dismissed_' + (MEMBER && MEMBER.memberId ? MEMBER.memberId : 'unknown');
+// ── Recent activity row ──────────────────────────────────────────
+// Renders a compact list of the member's recent attestations underneath
+// the attest buttons. Each row shows the event, date, and resolution
+// state (pending/confirmed/disputed/Pastor confirmed/Pastor rejected),
+// and is tappable to open the same status modal as before.
+//
+// This decouples STATUS DISPLAY from ATTEST ACTION — the buttons above
+// are always available for tapping, and these pills are pure information.
+// Rows naturally age out after 14 days because _recentAttestRows is
+// already filtered to that window in _loadRecentAttests().
+function _renderAttestStatusRow(){
+  const wrap = document.getElementById('attestStatusRow');
+  if (!wrap) return;
+  if (!_recentAttestRows.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
 
-function _attestGetDismissedRejections(){
-  try {
-    const raw = localStorage.getItem(_ATTEST_DISMISS_KEY());
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch(e){ return new Set(); }
+  // Sort newest-first (already done by query, but be defensive)
+  const rows = _recentAttestRows.slice().sort((a, b) =>
+    (b.event_date || '').localeCompare(a.event_date || '')
+  );
+
+  // Pretty event-type labels using the same _attestEventTypes lookup used above
+  const labelByKey = {};
+  _attestEventTypes.forEach(et => { labelByKey[et.key] = { label: et.label, icon: et.icon || '📍' }; });
+
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  const T = {
+    header: lang === 'tl' ? 'Mga kamakailang attestation' : 'Recent attestations',
+    pending: lang === 'tl' ? 'Naghihintay ng confirmation' : 'Pending confirmation',
+    leaderConfirmed: lang === 'tl' ? 'Kinumpirma ng leader' : 'Confirmed by leader',
+    pastorConfirmed: lang === 'tl' ? 'Kinumpirma ni Pastor' : 'Pastor confirmed',
+    pastorRejected: lang === 'tl' ? 'Hindi tinanggap ni Pastor' : 'Pastor rejected',
+    disputed: lang === 'tl' ? 'Naghihintay ng Pastor' : 'Awaiting Pastor'
+  };
+
+  const pillFor = (r) => {
+    const isResolved = !!r.pastor_resolved;
+    const isConfirmed = !!r.confirmed_by;
+    const isDisputed = !!r.disputed;
+    let bg = '#fff7e0', fg = '#8a6a00', icon = '🟡', txt = T.pending;
+    if (isResolved && r.pastor_decision === 'rejected') {
+      bg='#fde8e8'; fg='#9a2727'; icon='✕'; txt=T.pastorRejected;
+    } else if (isResolved && r.pastor_decision === 'confirmed') {
+      bg='#e7f5ec'; fg='#1f6b3a'; icon='✓'; txt=T.pastorConfirmed;
+    } else if (isDisputed) {
+      bg='#fde8e8'; fg='#9a2727'; icon='⚠️'; txt=T.disputed;
+    } else if (isConfirmed) {
+      bg='#e7f5ec'; fg='#1f6b3a'; icon='🟢'; txt=T.leaderConfirmed;
+    }
+    return { bg, fg, icon, txt };
+  };
+
+  // Cap the visible count to keep the home screen tight; older entries are
+  // still reachable via the "My attendance record" button below.
+  const VISIBLE = 6;
+  const visible = rows.slice(0, VISIBLE);
+  const overflow = Math.max(0, rows.length - VISIBLE);
+
+  wrap.innerHTML = `
+    <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:.4rem 0 .35rem;">${T.header}</div>
+    <div style="display:flex;flex-direction:column;gap:.3rem;">
+      ${visible.map(r => {
+        const meta = labelByKey[r.event_type] || { label: r.event_type, icon: '📍' };
+        const p = pillFor(r);
+        return `
+          <button onclick="openAttestStatus('${r.id}')"
+            style="display:flex;align-items:center;gap:.55rem;padding:.45rem .65rem;
+                   background:${p.bg}; border:1px solid ${p.fg}33;
+                   border-radius:10px; cursor:pointer; font-size:11.5px;
+                   color:${p.fg}; text-align:left; line-height:1.3;">
+            <span style="font-size:14px;">${meta.icon}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                ${MultiplyShared.escapeHTML(meta.label)}
+                <span style="font-weight:500;opacity:.75;">· ${_attestFmtShort(r.event_date)}</span>
+              </div>
+              <div style="font-size:10.5px;opacity:.85;margin-top:1px;">${p.icon} ${p.txt}</div>
+            </div>
+          </button>
+        `;
+      }).join('')}
+      ${overflow > 0 ? `
+        <button onclick="openAttestHistory()"
+          style="padding:.4rem;background:transparent;border:1px dashed var(--line);
+                 border-radius:8px;color:var(--muted);font-size:11px;cursor:pointer;">
+          + ${overflow} ${lang==='tl'?'pa, tingnan lahat':'more — see all'}
+        </button>` : ''}
+    </div>
+  `;
+  wrap.style.display = 'block';
 }
 
-function _attestMarkRejectionDismissed(attendanceId){
-  if (!attendanceId) return;
-  try {
-    const set = _attestGetDismissedRejections();
-    if (set.has(attendanceId)) return; // already marked
-    set.add(attendanceId);
-    // Cap at 50 entries to prevent unbounded growth on heavy users.
-    // Oldest entries drop off; very old rows wouldn't be in _recentAttestRows
-    // anyway so re-showing them isn't a real concern.
-    const arr = [...set].slice(-50);
-    localStorage.setItem(_ATTEST_DISMISS_KEY(), JSON.stringify(arr));
-  } catch(e){ /* localStorage full / disabled — non-fatal, badge just stays */ }
-}
+
+// Kept as no-ops so any cached pages still calling them don't blow up.
+// Replaced by the separate status row architecture which lets resolved
+// pills coexist with attest buttons instead of competing for slot space.
+function _attestGetDismissedRejections(){ return new Set(); }
+function _attestMarkRejectionDismissed(){ /* no-op */ }
 
 // ─── Member taps "I'm here" ───
 // ─── Member taps "I'm here" — entry point ───
@@ -4429,9 +4489,9 @@ async function openAttestStatus(attendanceId){
 
   let statusHtml, actionHtml;
   if (isResolved && row.pastor_decision === 'rejected') {
-    // Mark this rejection as "seen" so the red pill doesn't keep shaming
-    // the member on every home-screen render. They've now seen the reason;
-    // the pill goes away after this modal closes (on next attest-card render).
+    // Mark this resolved pill as "seen" so it doesn't keep covering the
+    // event/date slot on the home screen. Member can re-attest (or attest
+    // a different service) after dismissing.
     _attestMarkRejectionDismissed(row.id);
     statusHtml = `<div style="background:#fde8e8;border:1px solid #f5b5b5;border-radius:8px;padding:1rem;text-align:center;color:#9a2727;">
       <div style="font-size:24px;margin-bottom:.4rem;">✕</div>
@@ -4443,6 +4503,8 @@ async function openAttestStatus(attendanceId){
     </div>`;
     actionHtml = '';
   } else if (isResolved && row.pastor_decision === 'confirmed') {
+    // Same rationale as the rejected branch — once seen, free up the slot.
+    _attestMarkRejectionDismissed(row.id);
     statusHtml = `<div style="background:#e7f5ec;border:1px solid #b6dac3;border-radius:8px;padding:1rem;text-align:center;color:#1f6b3a;">
       <div style="font-size:24px;margin-bottom:.4rem;">✓</div>
       <div style="font-weight:700;margin-bottom:.3rem;">${lang==='tl'?'Pastor confirmed':'Pastor confirmed'}</div>
