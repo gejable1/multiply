@@ -1503,6 +1503,23 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
+      <!-- ⛪ Sunday Sermons — opens a screen with summaries Pastor publishes weekly.
+           Visible always; "no sermon yet" handled gracefully on the screen itself. -->
+      <button class="headsup-btn" onclick="openSermonsScreen()" style="margin-top:.5rem">
+        <div class="hu-icon">⛪</div>
+        <div class="hu-body">
+          <div class="hu-title">
+            <span class="en-text">Sunday sermons</span>
+            <span class="tl-text">Mga sermon tuwing Linggo</span>
+          </div>
+          <div class="hu-meta">
+            <span class="en-text">Read, review, share — pick any Sunday</span>
+            <span class="tl-text">Basahin, balikan, ibahagi</span>
+          </div>
+        </div>
+        <div style="color:var(--muted);font-size:18px">›</div>
+      </button>
+
       <!-- My recent heads-ups (only shown if any) -->
       <div id="myHeadsUpsSection" style="display:none">
         <div class="section-label">
@@ -1693,6 +1710,21 @@ body.lang-tl .tl-text{display:inline;}
         <span class="tl-text">Mag-sign out</span>
       </button>
 
+    </div>
+  </div>
+
+  <!-- ════════════════ SERMONS PAGE ════════════════
+       Not in the bottom tab bar — opened only via the Home-screen
+       "Sunday sermons" card. Has a back button to return to Home. -->
+  <div class="screen-page" id="page-sermons">
+    <div class="topbar" style="display:flex;align-items:center;gap:.6rem;padding:.6rem .75rem;background:var(--green-deep);color:#fff;position:sticky;top:0;z-index:10">
+      <button onclick="goTo('home')" style="background:transparent;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px 8px;line-height:1">←</button>
+      <div style="flex:1;font-size:15px;font-weight:600">⛪ <span class="en-text">Sunday Sermons</span><span class="tl-text">Mga Sermon ng Linggo</span></div>
+    </div>
+    <div class="content" id="sermonsContent" style="padding:1rem 0 calc(1rem + 60px)">
+      <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">
+        <span class="en-text">Loading sermons…</span><span class="tl-text">Naglo-load…</span>
+      </div>
     </div>
   </div>
 
@@ -2810,6 +2842,290 @@ function goTo(pageName){
   if(page){
     const content = page.querySelector('.content');
     if(content) content.scrollTop = 0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUNDAY SERMONS — read, review, share
+// ───────────────────────────────────────────────────────────────
+// Members hit this via the home "Sunday sermons" card. Three views:
+//   1. List of recent sermons (newest first, with date filter)
+//   2. Single sermon detail (title, scripture, body, share)
+//   3. "No sermons yet" empty state
+// Bilingual via the same .en-text/.tl-text mechanism the rest of MMT uses,
+// plus an in-content language toggle on the detail view (since the body
+// text is dynamic and not driven by the global toggle alone).
+// ═══════════════════════════════════════════════════════════════
+
+let _sermonsData = [];           // all loaded sermons (published only, newest first)
+let _sermonDateFilter = '';      // YYYY-MM-DD if user picked a date
+let _sermonView = 'list';        // 'list' | 'detail'
+let _sermonActiveId = null;
+let _sermonDetailLang = 'en';    // local language toggle on detail view
+
+async function openSermonsScreen(){
+  goTo('sermons');
+  _sermonView = 'list';
+  _sermonActiveId = null;
+  await _loadMmtSermons();
+  _renderSermonsScreen();
+}
+
+async function _loadMmtSermons(){
+  try {
+    const { data, error } = await db.from('sermons')
+      .select('id, sermon_date, speaker_name, scripture, title_en, title_tl, summary_en, summary_tl, audio_url, youtube_url')
+      .eq('published', true)
+      .order('sermon_date', { ascending: false })
+      .limit(100);
+    if(error) throw error;
+    _sermonsData = data || [];
+  } catch(e){
+    console.warn('[sermons] load failed:', e);
+    _sermonsData = [];
+  }
+}
+
+function _sermonFmtDate(dateStr){
+  if(!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return dateStr;
+  const lang = document.body.classList.contains('lang-tl') ? 'fil-PH' : 'en-US';
+  return d.toLocaleDateString(lang, { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+}
+
+function _renderSermonsScreen(){
+  const wrap = document.getElementById('sermonsContent');
+  if(!wrap) return;
+
+  if(_sermonView === 'detail' && _sermonActiveId){
+    _renderSermonDetail(wrap);
+    return;
+  }
+
+  // ── LIST VIEW ──
+  let filtered = _sermonsData;
+  if(_sermonDateFilter){
+    filtered = filtered.filter(s => s.sermon_date === _sermonDateFilter);
+  }
+
+  // Empty state
+  if(_sermonsData.length === 0){
+    wrap.innerHTML = `
+      <div style="padding:3rem 1.5rem;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.7">
+        <div style="font-size:42px;margin-bottom:.75rem">⛪</div>
+        <div style="font-weight:600;color:var(--ink);font-size:15px;margin-bottom:.4rem">
+          <span class="en-text">No sermons yet</span>
+          <span class="tl-text">Wala pang sermon</span>
+        </div>
+        <div>
+          <span class="en-text">Pastor will publish weekly summaries here. Check back after Sunday service.</span>
+          <span class="tl-text">Ipo-publish dito ni Pastor ang lingguhang buod. Bumalik pagkatapos ng Linggo.</span>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Date filter pill bar — show distinct dates
+  const allDates = [...new Set(_sermonsData.map(s => s.sermon_date))].sort().reverse();
+
+  wrap.innerHTML = `
+    <div style="padding:0 1rem 1rem">
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <input type="date" id="sermonDatePicker" value="${_sermonDateFilter || ''}"
+            list="sermonDateList"
+            onchange="_sermonSetDateFilter(this.value)"
+            style="flex:1;min-width:140px;padding:.5rem .65rem;border:1px solid var(--line);border-radius:8px;background:var(--cream);font-size:12.5px;font-family:'DM Sans',sans-serif">
+          <datalist id="sermonDateList">
+            ${allDates.map(d => `<option value="${d}">`).join('')}
+          </datalist>
+          ${_sermonDateFilter
+            ? `<button onclick="_sermonClearDateFilter()" style="padding:.5rem .85rem;background:var(--cream);border:1px solid var(--line);border-radius:8px;font-size:12px;color:var(--ink);cursor:pointer;font-weight:600">
+                <span class="en-text">Clear</span><span class="tl-text">Alisin</span>
+               </button>`
+            : ''}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">
+          ${filtered.length} ${filtered.length === 1 ? 'sermon' : 'sermons'}
+          ${_sermonDateFilter ? '<span class="en-text">on this date</span><span class="tl-text">sa petsang ito</span>' : '<span class="en-text">available</span><span class="tl-text">na pwedeng basahin</span>'}
+        </div>
+      </div>
+
+      ${filtered.length === 0
+        ? `<div style="padding:2rem 1rem;text-align:center;color:var(--muted);font-size:12.5px">
+             <span class="en-text">No sermon for that date.</span>
+             <span class="tl-text">Walang sermon sa petsang iyon.</span>
+           </div>`
+        : `<div style="display:flex;flex-direction:column;gap:.5rem">
+             ${filtered.map(s => {
+               const titleEn = MultiplyShared.escapeHTML(s.title_en || '');
+               const titleTl = MultiplyShared.escapeHTML(s.title_tl || s.title_en || '');
+               const scripture = MultiplyShared.escapeHTML(s.scripture || '');
+               const speaker = MultiplyShared.escapeHTML(s.speaker_name || '');
+               const dateLabel = _sermonFmtDate(s.sermon_date);
+               return `
+                 <button onclick="_sermonOpenDetail('${s.id}')"
+                   style="text-align:left;padding:.85rem 1rem;background:var(--surface);border:1px solid var(--line);border-radius:10px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;display:block">
+                   <div style="font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:.04em;margin-bottom:3px">
+                     ${MultiplyShared.escapeHTML(dateLabel)}${scripture ? ' · ' + scripture : ''}
+                   </div>
+                   <div style="font-size:14px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:3px">
+                     <span class="en-text">${titleEn}</span><span class="tl-text">${titleTl}</span>
+                   </div>
+                   <div style="font-size:10.5px;color:var(--muted)">
+                     ${speaker}
+                   </div>
+                 </button>
+               `;
+             }).join('')}
+           </div>`}
+    </div>
+  `;
+}
+
+function _sermonSetDateFilter(dateStr){
+  _sermonDateFilter = dateStr || '';
+  _renderSermonsScreen();
+}
+function _sermonClearDateFilter(){
+  _sermonDateFilter = '';
+  _renderSermonsScreen();
+}
+
+function _sermonOpenDetail(id){
+  _sermonView = 'detail';
+  _sermonActiveId = id;
+  // Default detail language to whatever the user has set globally
+  _sermonDetailLang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  _renderSermonsScreen();
+}
+
+function _sermonBackToList(){
+  _sermonView = 'list';
+  _sermonActiveId = null;
+  _renderSermonsScreen();
+}
+
+function _sermonToggleDetailLang(lang){
+  _sermonDetailLang = lang;
+  _renderSermonsScreen();
+}
+
+function _renderSermonDetail(wrap){
+  const s = _sermonsData.find(x => x.id === _sermonActiveId);
+  if(!s){ _sermonBackToList(); return; }
+
+  const lang = _sermonDetailLang;
+  const hasTl = !!(s.title_tl && s.summary_tl);
+  // If TL was requested but unavailable, fall back to EN gracefully
+  const showLang = (lang === 'tl' && hasTl) ? 'tl' : 'en';
+  const title = showLang === 'tl' ? s.title_tl : s.title_en;
+  const summary = showLang === 'tl' ? s.summary_tl : s.summary_en;
+  const dateLabel = _sermonFmtDate(s.sermon_date);
+
+  // Render summary as paragraphs by splitting on blank lines
+  const paragraphs = (summary || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+
+  wrap.innerHTML = `
+    <div style="padding:0 1rem 2rem">
+      <button onclick="_sermonBackToList()" style="background:transparent;border:none;color:var(--green-deep);font-size:13px;font-weight:600;cursor:pointer;padding:.5rem 0;display:flex;align-items:center;gap:.3rem">
+        ← <span class="en-text">All sermons</span><span class="tl-text">Lahat ng sermon</span>
+      </button>
+
+      ${hasTl ? `
+        <div style="display:flex;gap:.4rem;margin-bottom:1rem;background:var(--cream);padding:.3rem;border-radius:999px;border:1px solid var(--line);width:fit-content">
+          <button onclick="_sermonToggleDetailLang('en')"
+            style="padding:.4rem .9rem;border-radius:999px;border:none;background:${showLang==='en'?'var(--gold)':'transparent'};color:${showLang==='en'?'#fff':'var(--ink)'};font-weight:600;font-size:12px;cursor:pointer">
+            🇺🇸 EN
+          </button>
+          <button onclick="_sermonToggleDetailLang('tl')"
+            style="padding:.4rem .9rem;border-radius:999px;border:none;background:${showLang==='tl'?'var(--gold)':'transparent'};color:${showLang==='tl'?'#fff':'var(--ink)'};font-weight:600;font-size:12px;cursor:pointer">
+            🇵🇭 TL
+          </button>
+        </div>
+      ` : ''}
+
+      <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.05em;margin-bottom:.3rem">
+        ${MultiplyShared.escapeHTML(dateLabel)}
+      </div>
+      <h1 style="font-size:22px;font-weight:700;color:var(--ink);line-height:1.25;margin:0 0 .5rem">
+        ${MultiplyShared.escapeHTML(title || '')}
+      </h1>
+      ${s.scripture ? `
+        <div style="font-size:13px;color:var(--green-deep);font-weight:600;font-style:italic;margin-bottom:.5rem">
+          📖 ${MultiplyShared.escapeHTML(s.scripture)}
+        </div>` : ''}
+      ${s.speaker_name ? `
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:1.25rem">
+          ${MultiplyShared.escapeHTML(s.speaker_name)}
+        </div>` : ''}
+
+      <div style="font-size:14.5px;color:var(--ink);line-height:1.7;font-family:'Fraunces','Georgia',serif">
+        ${paragraphs.map(p => `<p style="margin:0 0 1rem">${MultiplyShared.escapeHTML(p)}</p>`).join('')}
+      </div>
+
+      <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--line);display:flex;gap:.5rem;flex-wrap:wrap">
+        <button onclick="_sermonShare()" style="flex:1;min-width:140px;padding:.7rem 1rem;background:var(--green-deep);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer">
+          📤 <span class="en-text">Share</span><span class="tl-text">Ibahagi</span>
+        </button>
+        <button onclick="_sermonCopyText()" style="flex:1;min-width:140px;padding:.7rem 1rem;background:var(--cream);color:var(--ink);border:1px solid var(--line);border-radius:10px;font-size:13px;font-weight:600;cursor:pointer">
+          📋 <span class="en-text">Copy</span><span class="tl-text">Kopyahin</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// Build the share text — title, scripture, first ~200 chars, link to MMT.
+function _sermonBuildShareText(){
+  const s = _sermonsData.find(x => x.id === _sermonActiveId);
+  if(!s) return '';
+  const lang = _sermonDetailLang === 'tl' && s.title_tl ? 'tl' : 'en';
+  const title = lang === 'tl' ? s.title_tl : s.title_en;
+  const summary = lang === 'tl' ? (s.summary_tl || s.summary_en) : s.summary_en;
+  const dateLabel = _sermonFmtDate(s.sermon_date);
+  const excerpt = (summary || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+  const truncated = (summary || '').length > 220 ? '…' : '';
+  const speaker = s.speaker_name || '';
+  const scripture = s.scripture ? `📖 ${s.scripture}\n` : '';
+  const lines = [
+    `⛪ ${title}`,
+    `${dateLabel}${speaker ? ' · ' + speaker : ''}`,
+    scripture,
+    `"${excerpt}${truncated}"`,
+    '',
+    `Read the full summary in MULTIPLY: https://gejable1.github.io/multiply/member_tool.html`
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+async function _sermonShare(){
+  const text = _sermonBuildShareText();
+  if(!text){ toast('Nothing to share', '⚠️'); return; }
+  // Prefer native share sheet (Android opens chooser → WhatsApp/Messenger/SMS/etc.)
+  if(navigator.share){
+    try {
+      await navigator.share({ text });
+      return;
+    } catch(e){
+      // User cancelled or share failed — fall through to copy fallback
+      if(e && e.name === 'AbortError') return;
+    }
+  }
+  // Fallback: copy to clipboard + toast
+  await _sermonCopyText();
+}
+
+async function _sermonCopyText(){
+  const text = _sermonBuildShareText();
+  if(!text){ toast('Nothing to copy', '⚠️'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+    toast(lang === 'tl' ? '✓ Nakopya' : '✓ Copied', 'success');
+  } catch(e){
+    toast('Copy failed: ' + e.message, '❌');
   }
 }
 
