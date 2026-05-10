@@ -1757,8 +1757,8 @@ body.lang-tl .tl-text{display:inline;}
 <!-- ═══════════════ FAB CONTROLS ═══════════════ -->
 <div class="fab-controls" id="fabControls" style="display:none">
   <div class="lang-pill">
-    <button id="langEn" class="active" onclick="setLang('en')">🇺🇸 EN</button>
-    <button id="langTl" onclick="setLang('tl')">🇵🇭 TL</button>
+    <button id="langEn" class="active" onclick="setLang('en')">🇺🇸 English</button>
+    <button id="langTl" onclick="setLang('tl')">🇵🇭 Tagalog</button>
   </div>
   <div class="font-pill">
     <button class="minus" onclick="adjustFont(-1)">A−</button>
@@ -3033,18 +3033,32 @@ function _renderSermonDetail(wrap){
         ← <span class="en-text">All sermons</span><span class="tl-text">Lahat ng sermon</span>
       </button>
 
-      ${hasTl ? `
-        <div style="display:flex;gap:.4rem;margin-bottom:1rem;background:var(--cream);padding:.3rem;border-radius:999px;border:1px solid var(--line);width:fit-content">
-          <button onclick="_sermonToggleDetailLang('en')"
-            style="padding:.4rem .9rem;border-radius:999px;border:none;background:${showLang==='en'?'var(--gold)':'transparent'};color:${showLang==='en'?'#fff':'var(--ink)'};font-weight:600;font-size:12px;cursor:pointer">
-            🇺🇸 EN
-          </button>
-          <button onclick="_sermonToggleDetailLang('tl')"
-            style="padding:.4rem .9rem;border-radius:999px;border:none;background:${showLang==='tl'?'var(--gold)':'transparent'};color:${showLang==='tl'?'#fff':'var(--ink)'};font-weight:600;font-size:12px;cursor:pointer">
-            🇵🇭 TL
-          </button>
+      <!-- Language toggle: always shown so the affordance is visible.
+           When this sermon has no Tagalog content, the TL button is dimmed
+           and shows a small hint instead of being hidden — so members know
+           the option exists for other sermons. -->
+      <div style="display:flex;gap:.4rem;margin-bottom:.4rem;background:var(--cream);padding:.3rem;border-radius:999px;border:1px solid var(--line);width:fit-content">
+        <button onclick="_sermonToggleDetailLang('en')"
+          style="padding:.4rem .9rem;border-radius:999px;border:none;background:${showLang==='en'?'var(--gold)':'transparent'};color:${showLang==='en'?'#fff':'var(--ink)'};font-weight:600;font-size:12px;cursor:pointer">
+          🇺🇸 English
+        </button>
+        <button onclick="_sermonToggleDetailLang('tl')" ${hasTl ? '' : 'disabled'}
+          style="padding:.4rem .9rem;border-radius:999px;border:none;
+                 background:${showLang==='tl'?'var(--gold)':'transparent'};
+                 color:${showLang==='tl'?'#fff':'var(--ink)'};
+                 font-weight:600;font-size:12px;
+                 cursor:${hasTl?'pointer':'not-allowed'};
+                 opacity:${hasTl?'1':'.45'}"
+          title="${hasTl ? '' : 'Tagalog version not available for this sermon'}">
+          🇵🇭 Tagalog
+        </button>
+      </div>
+      ${!hasTl ? `
+        <div style="font-size:10.5px;color:var(--muted);margin-bottom:1rem;font-style:italic">
+          <span class="en-text">Only the English version is available for this sermon.</span>
+          <span class="tl-text">Ang Ingles na bersyon lang ang available para sa sermon na ito.</span>
         </div>
-      ` : ''}
+      ` : '<div style="margin-bottom:1rem"></div>'}
 
       <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.05em;margin-bottom:.3rem">
         ${MultiplyShared.escapeHTML(dateLabel)}
@@ -3145,9 +3159,17 @@ function setLang(lang){
   document.getElementById('langEn').classList.toggle('active', lang === 'en');
   document.getElementById('langTl').classList.toggle('active', lang === 'tl');
   try{ localStorage.setItem('multiply_mmt_lang', lang); }catch(e){}
-  // Re-render pipeline (level name uses lang) and home (some labels use lang)
+  // Re-render any pages whose dynamic content depends on language
   if(memberRow){
     renderPipeline();
+  }
+  // If the sermons screen is currently showing, sync its detail view to the
+  // new global language (mirrors the behavior of pipeline above). The list
+  // view's static labels already update via the .en-text/.tl-text mechanism.
+  const sermonsActive = document.getElementById('page-sermons')?.classList.contains('active');
+  if (sermonsActive) {
+    _sermonDetailLang = lang;
+    _renderSermonsScreen();
   }
 }
 function applySavedLang(){
