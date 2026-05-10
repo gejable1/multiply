@@ -2336,7 +2336,10 @@ function computeNextSteps(){
 // Internal: mark today as read (silent — fired by reader-close, not a button anymore).
 // Idempotent: if already marked today, no-op. Updates streak in-place.
 async function markDevoReadSilent(){
-  const today = new Date().toISOString().slice(0,10);
+  // Use local-date (not UTC) — see comment on todayIso() above. Otherwise
+  // early-morning reads (before 8 AM Manila) get logged with yesterday's
+  // date and the streak tracker counts the wrong day.
+  const today = todayIso();
   try{
     const {data: existing} = await db.from('attendance')
       .select('id')
@@ -4254,7 +4257,18 @@ let currentReaderEntry = null; // row currently shown in reader (today or browse
 let currentReflection = '';    // textbox value while reader is open
 let currentReflectionRow = null; // existing reflection row (for update vs insert)
 
-function todayIso(){ return new Date().toISOString().slice(0,10); }
+// Returns today's date in the user's LOCAL timezone as 'YYYY-MM-DD'.
+// IMPORTANT: do NOT use toISOString() — that converts to UTC, which is
+// 8 hours behind Manila time. Between midnight and 8 AM PHT, UTC is still
+// the previous day, causing the home card to show yesterday's content.
+// This function pads year/month/day from the LOCAL Date to avoid that.
+function todayIso(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 function isSundayDate(iso){
   // iso = 'YYYY-MM-DD'. Treat as local-midnight date.
   return new Date(iso + 'T00:00:00').getDay() === 0;
@@ -4741,14 +4755,17 @@ function openHeadsUpModal(){
   const rsSel = document.getElementById('huReasonSel');
   rsSel.innerHTML = huReasons.map(r => `<option value="${MultiplyShared.escapeHTML(r)}">${MultiplyShared.escapeHTML(r)}</option>`).join('');
 
-  // Default date = next Sunday if event includes "Sunday", else today
+  // Default date = next Sunday if event includes "Sunday", else today.
+  // Uses todayIso() (local timezone) — toISOString() returns UTC, which
+  // is 8 hours behind Manila, so members up early would see yesterday's
+  // date as the default.
   const today = new Date();
-  const todayIso = today.toISOString().slice(0,10);
-  document.getElementById('huDate').value = todayIso;
-  document.getElementById('huDate').min = todayIso;
+  const todayLocalIso = todayIso();
+  document.getElementById('huDate').value = todayLocalIso;
+  document.getElementById('huDate').min = todayLocalIso;
   document.getElementById('huNote').value = '';
   document.getElementById('huReturn').value = '';
-  document.getElementById('huReturn').min = todayIso;
+  document.getElementById('huReturn').min = todayLocalIso;
 
   document.getElementById('huBackdrop').classList.add('show');
 }
@@ -5130,7 +5147,13 @@ function openAttestDatePicker(eventTypeKey, typicalDay, defaultDate, forced){
   for (let i = 0; i < 14; i++) {
     const d = new Date(); d.setHours(0,0,0,0);
     d.setDate(d.getDate() - i);
-    const iso = d.toISOString().slice(0,10);
+    // Local-date formatting (not toISOString which is UTC) — see
+    // todayIso() comment. Early-morning misalignment matters here because
+    // the picker is comparing against today's date for the default.
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    const iso = `${y}-${mo}-${da}`;
     days.push({
       iso,
       label: _attestFmtShort(iso),
