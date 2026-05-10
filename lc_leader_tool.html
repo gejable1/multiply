@@ -4656,12 +4656,14 @@ async function _annComputeAudienceSize(filter){
   // Simplified: count members matching the filter via Supabase
   try {
     let q = db.from('members').select('*', {count:'exact', head:true})
-      .or('is_test_member.is.null,is_test_member.eq.false');
+      .or('is_test_member.is.null,is_test_member.eq.false')
+      .or('is_external_user.is.null,is_external_user.eq.false');
     if (filter && !filter.all) {
       // Build OR clauses — Supabase REST doesn't easily compose this client-side,
       // so we do a coarse "fetch all and filter" for v1
       const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3')
-        .or('is_test_member.is.null,is_test_member.eq.false');
+        .or('is_test_member.is.null,is_test_member.eq.false')
+        .or('is_external_user.is.null,is_external_user.eq.false');
       let n = 0;
       (all||[]).forEach(m => {
         if (filter.lc_groups?.includes(m.lc_group)) n++;
@@ -4746,6 +4748,7 @@ async function _mltEnsureAudCache(){
     const {data: members, error} = await db.from('members')
       .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3,is_facilitator,facilitator_role,discipler_id')
       .or('is_test_member.is.null,is_test_member.eq.false')
+      .or('is_external_user.is.null,is_external_user.eq.false')
       .order('name');
     if (error) throw error;
     _mltAudCache.members = members || [];

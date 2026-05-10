@@ -27,7 +27,6 @@
   const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 
   const SESSION_KEY = 'multiply_leader_session';
-  const MEMBER_SESSION_KEY = 'multiply_member_session';
   const LEVEL_NAMES = ['Pre-Pipeline', 'Team Member', 'Leader', 'Coach', 'Director', 'Executive Leader'];
   const PASTOR_LEVEL = 5;
 
@@ -91,44 +90,6 @@
     try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
     global.location.replace(loginUrl || 'leader_login.html');
   }
-
-  // ───── Member-session gate (parallel to leader gate) ─────
-  // For MMT (Multiply Member Tool). Reads multiply_member_session.
-  // Members at pipeline_level >= 1 (Team Member and up) can log in.
-  // Pre-Pipeline (Level 0) members are not yet onboarded.
-  function getValidMemberSession() {
-    let sess = null;
-    try {
-      const raw = sessionStorage.getItem(MEMBER_SESSION_KEY);
-      if (raw) sess = JSON.parse(raw);
-    } catch (e) {
-      sess = null;
-    }
-    if (!sess || !sess.memberId || !sess.expiresAt) return null;
-    if (Date.parse(sess.expiresAt) <= Date.now()) return null;
-    if ((sess.memberLevel || 0) < 1) return null;
-    return sess;
-  }
-
-  // Hard gate for MMT. Redirects to member_login.html on failure.
-  // Returns true if session is valid, exposing window.MEMBER for the page.
-  function gateMemberOrRedirect(loginUrl) {
-    const sess = getValidMemberSession();
-    if (sess) {
-      global.MEMBER = sess;
-      return true;
-    }
-    try { sessionStorage.removeItem(MEMBER_SESSION_KEY); } catch (e) {}
-    global.location.replace(loginUrl || 'member_login.html');
-    return false;
-  }
-
-  // Logout for MMT.
-  function logoutMember(loginUrl) {
-    try { sessionStorage.removeItem(MEMBER_SESSION_KEY); } catch (e) {}
-    global.location.replace(loginUrl || 'member_login.html');
-  }
-
 
   // ───── LeaderScope ─────
   // Three views:
@@ -194,21 +155,32 @@
 
     function apply(memberList, opts) {
       const list = memberList || getMembers() || [];
-      // ─── TEST-MEMBER FILTER (Pastor's call, May 2026) ───
-      // By default, exclude members flagged is_test_member so they don't
-      // count in any statistical surface. Admin contexts (Pastor's full
-      // member list, edit modal lookup) pass {includeTest:true} to bypass.
-      const includeTest = !!(opts && opts.includeTest);
-      const filtered = includeTest ? list : list.filter(m => !m.is_test_member);
+      // ─── HIDDEN-MEMBER FILTERS (Pastor's call, May 2026) ───
+      // By default, exclude:
+      //   • is_test_member      — Pastor's QA accounts (May 2026)
+      //   • is_external_user    — real people trying the app but not yet
+      //                            church members (May 2026)
+      // …so neither shows up in pipeline counts, member lists shown to
+      // leaders, EOLO/celebration feeds, or anywhere statistics matter.
+      // Admin contexts (Pastor's full member list, edit-modal lookup,
+      // login search) pass {includeTest:true} (legacy name kept for
+      // compatibility) which now also re-includes external users, since
+      // both categories are "people Pastor manages but doesn't count".
+      const includeHidden = !!(opts && (opts.includeTest || opts.includeAll));
+      const filtered = includeHidden
+        ? list
+        : list.filter(m => !m.is_test_member && !m.is_external_user);
       // We need to filter the input to getDirect/getTree/getMinistry too,
       // since they read from getMembers() directly. Do that by temporarily
       // wrapping getMembers — but simpler: post-filter their results.
-      const stripTest = arr => includeTest ? arr : arr.filter(m => !m.is_test_member);
+      const stripHidden = arr => includeHidden
+        ? arr
+        : arr.filter(m => !m.is_test_member && !m.is_external_user);
       if (current === 'all' && isPastor()) return filtered;
-      if (current === 'disciples') return stripTest(getDirect());
-      if (current === 'tree') return stripTest(getTree());
-      if (current === 'ministry') return stripTest(getMinistry());
-      return stripTest(getDirect()); // safe fallback
+      if (current === 'disciples') return stripHidden(getDirect());
+      if (current === 'tree') return stripHidden(getTree());
+      if (current === 'ministry') return stripHidden(getMinistry());
+      return stripHidden(getDirect()); // safe fallback
     }
 
     function setView(v) {
@@ -285,14 +257,11 @@
 
   // ───── Public surface ─────
   global.MultiplyShared = {
-    SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
+    SB_URL, SB_KEY, SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
     getDB,
     getValidSession,
     gateOrRedirect,
     logoutLeader,
-    getValidMemberSession,
-    gateMemberOrRedirect,
-    logoutMember,
     makeLeaderScope,
     logView,
     tierLockCard,

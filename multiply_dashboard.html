@@ -1030,6 +1030,22 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
           When ON: this member is excluded from <strong>every</strong> count and report — attendance denominators, LCG flock sizes, dashboard cards, LCG Pulse, LC Attendance Report. Auto-assigned to your discipling so no LCL sees them.
         </div>
       </div>
+
+      <!-- EXTERNAL USER FLAG (Pastor-only; hidden for everyone else by JS).
+           Real humans who use MMT but aren't Rosehill members — friends, guest
+           seekers, pastors evaluating MULTIPLY. Excluded from stats just like
+           test members, but displayed differently in MMT (friendly "Guest of
+           Rosehill" note instead of a 🧪 badge). -->
+      <div class="fi full" id="externalUserRow" style="display:none;padding:.65rem;background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.3);border-radius:7px;margin-top:.5rem">
+        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#4a90e2;font-weight:600;margin-bottom:.35rem">👤 Guest / External User (Pastor only)</div>
+        <div class="fac-toggle">
+          <label class="toggle-sw"><input type="checkbox" id="fIsExternal" onchange="onToggleExternalUser()"><div class="toggle-track"></div></label>
+          <span style="font-size:13px;color:var(--ink)">Non-Rosehill MMT user</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:.4rem;line-height:1.5">
+          For real people who aren't Rosehill members — friends, guests, pastors evaluating MULTIPLY. Excluded from all church stats and reports, but they see a friendly <strong>"Guest of Rosehill"</strong> welcome in MMT instead of a test badge.
+        </div>
+      </div>
     </div></div>
     <!-- DIAGNOSTICS TAB -->
     <div id="mt-diag" style="display:none"><div id="diagTab"></div></div>
@@ -1293,9 +1309,11 @@ const LeaderScope = MultiplyShared.makeLeaderScope(() => members);
 // Update the count badges in the view-tabs UI.
 function updateScopeCounts(){
   const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
-  set('scopeCountDisciples', LeaderScope.getDirect().filter(m=>!m.is_test_member).length);
-  set('scopeCountTree',      LeaderScope.getTree().filter(m=>!m.is_test_member).length);
-  set('scopeCountMinistry',  LeaderScope.getMinistry().filter(m=>!m.is_test_member).length);
+  // Exclude both admin-flag types from scope counts (matches LeaderScope.apply default).
+  const isHidden = m => m.is_test_member || m.is_external_user;
+  set('scopeCountDisciples', LeaderScope.getDirect().filter(m=>!isHidden(m)).length);
+  set('scopeCountTree',      LeaderScope.getTree().filter(m=>!isHidden(m)).length);
+  set('scopeCountMinistry',  LeaderScope.getMinistry().filter(m=>!isHidden(m)).length);
   if(LeaderScope.isPastor()) set('scopeCountAll', liveMembers().length);
 }
 
@@ -1365,7 +1383,7 @@ let members=[],filt='all',eid=null;
 // the Pastor view to make the flag obvious.
 // ═══════════════════════════════════════
 function liveMembers(){
-  return members.filter(m => !m.is_test_member);
+  return members.filter(m => !m.is_test_member && !m.is_external_user);
 }
 
 function sync(s){
@@ -1382,8 +1400,14 @@ async function loadMembers(){
   sync('ok');
   document.getElementById('dbs').textContent='✅ Connected to Supabase';
   document.getElementById('dbc').textContent = (function(){
-    const live = liveMembers().length, total = members.length;
-    return live === total ? (total + ' members') : (live + ' live · ' + (total - live) + ' test');
+    const live = liveMembers().length;
+    const tests = members.filter(m => m.is_test_member).length;
+    const guests = members.filter(m => m.is_external_user).length;
+    if (tests === 0 && guests === 0) return live + ' members';
+    const parts = [live + ' live'];
+    if (tests) parts.push(tests + ' test');
+    if (guests) parts.push(guests + ' guest');
+    return parts.join(' · ');
   })();
   buildSettingsMinistries();
   renderAll();
@@ -1404,6 +1428,7 @@ function l2r(m){
     checks:m.checks||{},eolo:m.eolo||[],notes:m.notes||[],
     is_facilitator:m.is_facilitator||false,facilitator_role:m.facilitator_role||null,
     is_test_member:!!m.is_test_member,
+    is_external_user:!!m.is_external_user,
     diagnostic_score:m.diagnostic_score||null,diagnostic_zone:m.diagnostic_zone||null,
     diagnostic_date:m.diagnostic_date||null,intervention_track:m.intervention_track||null,
     intervention_status:m.intervention_status||null,facilitator_name:m.facilitator_name||null,
@@ -1428,6 +1453,7 @@ function r2l(r){
     eolo:r.eolo||[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}],
     notes:r.notes||[],is_facilitator:r.is_facilitator||false,
     is_test_member:!!r.is_test_member,
+    is_external_user:!!r.is_external_user,
     facilitator_role:r.facilitator_role||'',diagnostic_score:r.diagnostic_score||null,
     diagnostic_zone:r.diagnostic_zone||null,diagnostic_date:r.diagnostic_date||'',
     intervention_track:r.intervention_track||'',intervention_status:r.intervention_status||'',
@@ -1600,10 +1626,10 @@ function renderTable(){
     const upd=m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—';
     const dz=m.diagnostic_zone;
     const intFlag=dz>=2?`<span class="int-flag ${dz==4?'if-z4':dz==3?'if-z3':'if-z2'}">${dz==4?'🔴 Z4 Gospel':dz==3?'🟠 Z3 First Steps':'🟡 Z2 Assurance'}</span>`:'<span style="font-size:11px;color:var(--lighter)">—</span>';
-    return`<tr onclick="openEdit('${m.id}')" ${m.is_test_member?'style="opacity:.7"':''}>
+    return`<tr onclick="openEdit('${m.id}')" ${(m.is_test_member || m.is_external_user)?'style="opacity:.7"':''}>
       <td><div class="nc">
         <div class="av" style="background:${LC_COLORS[l]};color:${LC_TEXT[l]}">${ini}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
-        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${m.is_test_member?' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#7c3aed;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);">🧪 Test</span>':''}</div>
+        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${m.is_test_member?' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#7c3aed;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);">🧪 Test</span>':''}${m.is_external_user?' <span style="font-size:9px;background:rgba(74,144,226,.16);color:#3a7bd1;padding:1px 5px;border-radius:8px;border:1px solid rgba(74,144,226,.35);">👤 Guest</span>':''}</div>
         <div class="mi">${m.discipler_name||m.discipler||'No discipler'}</div></div>
       </div></td>
       <td><span class="lb lb${l}">${LN[l]}</span></td>
@@ -2633,6 +2659,9 @@ function clearF(){
   // by LeaderScope.apply(), so the leak corrupted dashboards church-wide.
   const fIsTest = document.getElementById('fIsTest');
   if(fIsTest) fIsTest.checked = false;
+  // Same risk applies to the External User checkbox — reset it too.
+  const fIsExt = document.getElementById('fIsExternal');
+  if(fIsExt) fIsExt.checked = false;
   buildFamilySlots([]);
 }
 
@@ -2686,6 +2715,13 @@ function fillF(m){
   if(testRow){
     testRow.style.display = isPastorView ? 'block' : 'none';
     document.getElementById('fIsTest').checked = !!m.is_test_member;
+  }
+  // External-user flag — same gate, separate row
+  const extRow = document.getElementById('externalUserRow');
+  if(extRow){
+    extRow.style.display = isPastorView ? 'block' : 'none';
+    const fIsExt = document.getElementById('fIsExternal');
+    if(fIsExt) fIsExt.checked = !!m.is_external_user;
   }
 }
 
@@ -2873,11 +2909,18 @@ async function saveMember(){
   const isTest = _isPastor
     ? !!document.getElementById('fIsTest').checked
     : _existingTest;
-  // ─── Enforce: test members are auto-assigned to Pastor's flock ───
-  // If toggled ON, override the discipler fields so no LCL ever sees them.
+  // ─── External user flag — same Pastor-only treatment ───
+  // Real human, not a Rosehill member. Excluded from stats just like
+  // test members. Preserved server-side when the row isn't visible.
+  const _existingExt = eid ? !!(members.find(x=>x.id===eid)?.is_external_user) : false;
+  const isExternal = _isPastor
+    ? !!(document.getElementById('fIsExternal')?.checked)
+    : _existingExt;
+  // ─── Enforce: test/external members are auto-assigned to Pastor's flock ───
+  // If either flag is ON, override the discipler fields so no LCL ever sees them.
   let effDiscId = discId || null;
   let effDiscName = discName || null;
-  if(isTest && _isPastor){
+  if((isTest || isExternal) && _isPastor){
     const me = (typeof LEADER !== 'undefined' && LEADER) ? LEADER : {};
     effDiscId   = me.leaderId || null;
     effDiscName = me.leaderName || discName || null;
@@ -2906,6 +2949,7 @@ async function saveMember(){
     is_facilitator:isFac,
     facilitator_role:isFac?document.getElementById('fFacRole').value:null,
     is_test_member:isTest,
+    is_external_user:isExternal,
   };
   // ─── DEFENSE IN DEPTH: Self-edit mode field protection ───
   // Even if the user disabled the locks via DevTools, force these
@@ -4243,6 +4287,32 @@ function onToggleTestMember() {
     );
     if(!ok){
       document.getElementById('fIsTest').checked = false;
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// EXTERNAL USER TOGGLE — Pastor only
+// When ON, the user is excluded from all reports/counts (just like test
+// members) but they see a friendly "Guest of Rosehill" note in MMT instead
+// of a 🧪 badge. Use case: friends, guests, evaluators using MMT without
+// being Rosehill members.
+// ═══════════════════════════════════════
+function onToggleExternalUser() {
+  const el = document.getElementById('fIsExternal');
+  if(!el || !el.checked) return;
+  // Same flock-routing concern as test members: warn if discipler will move.
+  const discInput = document.getElementById('fd');
+  const me = (typeof LEADER !== 'undefined' && LEADER) ? LEADER : {};
+  const myName = me.leaderName || '';
+  const currentDisc = (discInput?.value || '').trim();
+  if(currentDisc && myName && currentDisc !== myName){
+    const ok = confirm(
+      `Marking as Guest will move ${currentDisc ? '"' + currentDisc + '"' : 'the current discipler'} ` +
+      `→ you (${myName}) on save, so no LCL sees this record.\n\nProceed?`
+    );
+    if(!ok){
+      el.checked = false;
     }
   }
 }
@@ -6531,12 +6601,15 @@ function _annAudienceMatchesMemberMD(filter, member){
 async function _annComputeAudienceSizeMD(filter){
   try {
     if (!filter || filter.all) {
+      // Exclude both test members AND external users (guests) from "all members" count
       const {count} = await db.from('members').select('*',{count:'exact',head:true})
-        .or('is_test_member.is.null,is_test_member.eq.false');
+        .or('is_test_member.is.null,is_test_member.eq.false')
+        .or('is_external_user.is.null,is_external_user.eq.false');
       return count || 0;
     }
-    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id')
-      .or('is_test_member.is.null,is_test_member.eq.false');
+    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,is_external_user')
+      .or('is_test_member.is.null,is_test_member.eq.false')
+      .or('is_external_user.is.null,is_external_user.eq.false');
     let n = 0;
     (all||[]).forEach(m => {
       if (_annAudienceMatchesMemberMD(filter, m)) n++;

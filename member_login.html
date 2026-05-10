@@ -344,7 +344,7 @@ let mode = 'verify'; // 'verify' or 'setup'
 async function loadMembers(){
   try{
     const {data, error} = await db.from('members')
-      .select('id,name,pipeline_level,facilitator_role,lc_group,member_pin_hash,is_test_member,discipler_name')
+      .select('id,name,pipeline_level,facilitator_role,lc_group,member_pin_hash,is_test_member,is_external_user,discipler_name')
       .order('name');
     if(error) throw error;
     allMembers = data || [];
@@ -368,11 +368,17 @@ nameInput.addEventListener('input', ()=>{
   } else {
     dropdown.innerHTML = matches.map(m=>{
       const role = m.facilitator_role || LN[m.pipeline_level||0];
+      // Two distinct badges: 🧪 TEST (Pastor's QA accounts) vs 👤 GUEST
+      // (real people exploring the app but not formal church members).
+      // A row may have either, or neither, but typically not both.
       const testBadge = m.is_test_member
         ? ' <span style="background:#fde2d3;color:#9a3412;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px;letter-spacing:.04em;vertical-align:middle">🧪 TEST</span>'
         : '';
+      const guestBadge = m.is_external_user
+        ? ' <span style="background:rgba(74,144,226,.16);color:#2c5d96;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px;letter-spacing:.04em;vertical-align:middle;border:1px solid rgba(74,144,226,.35)">👤 GUEST</span>'
+        : '';
       return `<div class="search-item" onclick="pickMember('${m.id}')">
-        <div class="si-name">${escapeHTML(m.name)}${testBadge}</div>
+        <div class="si-name">${escapeHTML(m.name)}${testBadge}${guestBadge}</div>
         <div class="si-meta">${escapeHTML(role)}${m.lc_group?' · '+escapeHTML(m.lc_group):''}</div>
       </div>`;
     }).join('');
