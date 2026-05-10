@@ -464,11 +464,18 @@ html,body{
 const db = MultiplyShared.getDB();
 
 // ── Default to last Sunday for LC Meeting (most common case) ──
+// IMPORTANT: format as LOCAL date, not UTC. Manila is UTC+8; if we use
+// toISOString() between midnight and 8 AM PHT, the date string flips
+// to yesterday — so "last Sunday" becomes "the Sunday before last,"
+// and the date picker label shows the wrong weekday.
 function lastSunday(){
   const d = new Date();
   const day = d.getDay();           // 0 = Sunday
   d.setDate(d.getDate() - day);     // back to Sunday (today if today is Sunday)
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${da}`;
 }
 
 // ── Strip honorifics + take first given name ──

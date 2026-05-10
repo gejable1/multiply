@@ -1264,7 +1264,13 @@ function _l5LastTypicalDay(typicalDay){
   let offset = todayIso - typicalDay;
   if (offset < 0) offset += 7;
   d.setDate(d.getDate() - offset);
-  return d.toISOString().slice(0,10);
+  // Local-date formatting (NOT toISOString) — Manila is UTC+8, so between
+  // midnight and 8 AM PHT, toISOString() returns yesterday's UTC date.
+  // That made "last Sunday" sometimes return the Sunday before last.
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
 }
 
 function _l5FmtShort(dateStr){
