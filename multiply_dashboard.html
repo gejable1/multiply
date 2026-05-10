@@ -759,6 +759,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div class="sr"><span class="sl">View, fix, or delete wrongly logged attendance entries</span><button class="sbtn" style="margin-top:0;background:var(--red)" onclick="window.open('attendance_admin.html','_blank')">🗂️ Attendance Admin</button></div>
     <div class="sr"><span class="sl">Manage daily devotional guide entries (calendar + bulk paste)</span><button class="sbtn" style="margin-top:0;background:var(--green-deep)" onclick="window.open('devotional_admin.html','_blank')">📖 Devotional Admin</button></div>
     <div class="sr"><span class="sl">Publish weekly sermon summaries (members read in MMT)</span><button class="sbtn" style="margin-top:0;background:#5b6fbf" onclick="openSermonLibrary()">⛪ Sermon Library</button></div>
+    <div class="sr"><span class="sl">Manage level-gated reading materials (books, articles, study guides)</span><button class="sbtn" style="margin-top:0;background:#8a5b2e" onclick="openLibraryManager()">📚 Library Manager</button></div>
   </div>
   <!-- ─── DIAGNOSTIC SETTINGS (Pastor-configurable) ─── -->
   <div class="ss" id="diagSettingsSection"><div class="st">⚙️ Diagnostic Settings</div>
@@ -3690,6 +3691,423 @@ async function _sermonDelete(id){
     _sermonLibraryState.editing = null;
     await _loadSermons();
     _renderSermonLibrary();
+  } catch(e){
+    toast('Delete failed: ' + e.message, '❌');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// LIBRARY MANAGER — Pastor authors level-gated reading materials.
+// ─────────────────────────────────────────────────────────────────
+// Each resource has: level (0=all, 1-5 by pipeline), category, bilingual
+// title/summary/why-matters, and either an external URL or PDF URL.
+// Members see resources in their MMT Journey tab, layered by level.
+// Smart-paste applied to text fields (strips Word/Docs formatting).
+// ═══════════════════════════════════════════════════════════════════
+
+let _libraryState = { resources: [], editing: null };
+
+const LIBRARY_LEVELS = [
+  { value: 0, label: 'All Members (Level 0+)' },
+  { value: 1, label: 'Level 1 — Team Member' },
+  { value: 2, label: 'Level 2 — Leader' },
+  { value: 3, label: 'Level 3 — Coach' },
+  { value: 4, label: 'Level 4 — Director' },
+  { value: 5, label: 'Level 5 — Executive Leader' }
+];
+
+const LIBRARY_CATEGORIES = [
+  { value: 'foundational',     label: '📖 Foundational' },
+  { value: 'leadership',       label: '👑 Leadership' },
+  { value: 'ministry',         label: '⛪ Ministry-specific' },
+  { value: 'devotional',       label: '🙏 Devotional' },
+  { value: 'external_program', label: '🎓 External Program' }
+];
+
+async function openLibraryManager(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage the library', '🔒'); return; }
+  await _loadLibrary();
+  _renderLibraryManager();
+}
+
+async function _loadLibrary(){
+  try {
+    const { data, error } = await db.from('library_resources')
+      .select('*')
+      .order('level', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('title_en', { ascending: true });
+    if(error) throw error;
+    _libraryState.resources = data || [];
+  } catch(e){
+    toast('Could not load library: ' + e.message, '❌');
+    _libraryState.resources = [];
+  }
+}
+
+function _renderLibraryManager(){
+  let modal = document.getElementById('libraryManagerModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'libraryManagerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  const editing = _libraryState.editing;
+
+  if(editing){
+    _renderLibraryEditForm(modal, editing);
+    return;
+  }
+
+  // ── LIST VIEW grouped by level ──
+  const resources = _libraryState.resources;
+  const byLevel = {};
+  LIBRARY_LEVELS.forEach(l => byLevel[l.value] = []);
+  resources.forEach(r => {
+    if(byLevel[r.level] != null) byLevel[r.level].push(r);
+    else { byLevel[1] = byLevel[1] || []; byLevel[1].push(r); }
+  });
+
+  const levelSection = (lvl, label) => {
+    const items = byLevel[lvl] || [];
+    if(items.length === 0) return '';
+    return `
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:.4rem">${escapeHTMLNotif(label)} <span style="font-weight:500;color:var(--lighter)">· ${items.length}</span></div>
+        ${items.map(r => {
+          const catLabel = LIBRARY_CATEGORIES.find(c => c.value === r.category)?.label || '';
+          const hasTl = !!(r.title_tl || r.summary_tl);
+          const hasExt = !!(r.external_url || r.pdf_url);
+          const hasPodcast = !!(r.youtube_url_en || r.youtube_url_tl);
+          const hasTranscript = !!(r.transcript_en || r.transcript_tl);
+          return `
+            <div onclick="_libEdit('${r.id}')"
+              style="padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:center"
+              onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--ink);line-height:1.3">
+                  ${escapeHTMLNotif(r.title_en || '(untitled)')}
+                  ${!r.published ? '<span style="font-size:9.5px;background:var(--gold-bg);color:var(--gold);padding:1px 6px;border-radius:6px;margin-left:6px;font-weight:600">DRAFT</span>' : ''}
+                  ${r.is_required_for_next_level ? '<span style="font-size:9.5px;background:rgba(184,136,42,.18);color:var(--gold);padding:1px 6px;border-radius:6px;margin-left:6px;font-weight:600">🔑 REQUIRED</span>' : ''}
+                </div>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:3px">
+                  ${r.author ? escapeHTMLNotif(r.author) + ' · ' : ''}${escapeHTMLNotif(catLabel)}
+                  ${hasPodcast ? ' · 🎙 podcast' : ''}${hasTranscript ? ' · 📜 transcript' : ''}${hasTl ? ' · TL' : ''}${hasExt ? ' · 🔗 link' : (!hasPodcast ? ' · <span style="color:var(--red)">no content</span>' : '')}
+                </div>
+              </div>
+              <div style="font-size:18px;color:var(--muted)">›</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  };
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Pastor Tools</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-top:2px">📚 Library Manager</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">${resources.length} resource${resources.length===1?'':'s'} on file</div>
+        </div>
+        <button onclick="_libClose()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        ${resources.length === 0
+          ? `<div style="padding:2.5rem 1rem;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">
+              No resources yet.<br>
+              <span style="color:var(--lighter);font-size:11.5px">Click "+ New Resource" below to add the first book.</span>
+            </div>`
+          : LIBRARY_LEVELS.map(l => levelSection(l.value, l.label)).join('')}
+      </div>
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_libClose()">Close</button>
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_libNew()">+ New Resource</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+function _renderLibraryEditForm(modal, editing){
+  const isNew = !editing.id;
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:680px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">${isNew ? 'New resource' : 'Edit resource'}</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-top:2px">📚 Library Manager</div>
+        </div>
+        <button onclick="_libCancel()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Pipeline level</label>
+            <select id="libLevel" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+              ${LIBRARY_LEVELS.map(l => `<option value="${l.value}" ${editing.level === l.value ? 'selected' : ''}>${l.label}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Category</label>
+            <select id="libCategory" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+              <option value="">— pick one —</option>
+              ${LIBRARY_CATEGORIES.map(c => `<option value="${c.value}" ${editing.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:.75rem;margin-top:.75rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Author <span style="font-weight:400;color:var(--muted);font-size:10.5px">(language-neutral)</span></label>
+            <input type="text" id="libAuthor" value="${escapeHTMLNotif(editing.author || '')}" placeholder="e.g. Mac Lake"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Sort order <span style="font-weight:400;color:var(--muted);font-size:10.5px">(within level)</span></label>
+            <input type="number" id="libSortOrder" value="${editing.sort_order || 0}"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+        </div>
+
+        <div style="margin-top:1.25rem;padding:.85rem;background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.25);border-radius:8px;font-size:11.5px;color:var(--ink);line-height:1.55">
+          💡 <strong>Smart paste:</strong> Pasting from Word/Google Docs into title or summary fields auto-strips formatting and normalizes typography.
+        </div>
+
+        <!-- ENGLISH -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">English</div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Title (English) *</label>
+            <input type="text" id="libTitleEn" value="${escapeHTMLNotif(editing.title_en || '')}" placeholder="e.g. The Multiplication Effect"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Summary (English) * <span style="font-weight:400;color:var(--muted);font-size:10.5px">— ~200-300 words</span></label>
+            <textarea id="libSummaryEn" rows="6" placeholder="Pastor's summary of the book…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(editing.summary_en || '')}</textarea>
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Why this matters at this level <span style="font-weight:400;color:var(--muted);font-size:10.5px">(English)</span></label>
+            <textarea id="libWhyEn" rows="3" placeholder="A short pastoral note connecting this book to the member's level…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(editing.why_matters_en || '')}</textarea>
+          </div>
+        </div>
+
+        <!-- TAGALOG -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Tagalog <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(optional)</span></div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Pamagat (Tagalog)</label>
+            <input type="text" id="libTitleTl" value="${escapeHTMLNotif(editing.title_tl || '')}"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Buod (Tagalog)</label>
+            <textarea id="libSummaryTl" rows="6"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(editing.summary_tl || '')}</textarea>
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Bakit mahalaga sa antas na ito (Tagalog)</label>
+            <textarea id="libWhyTl" rows="3"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(editing.why_matters_tl || '')}</textarea>
+          </div>
+        </div>
+
+        <!-- 🎙 PODCAST (Phase 1: YouTube unlisted) -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🎙 Podcast Episode <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(YouTube unlisted)</span></div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.75rem">
+            Upload your 30-min summary to YouTube as <strong>Unlisted</strong>, then paste the share URL below. Members hear it embedded in MMT — they never leave the app. The static-image-as-video trick is the standard pattern.
+          </div>
+
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">YouTube URL — English</label>
+            <input type="url" id="libYoutubeEn" value="${escapeHTMLNotif(editing.youtube_url_en || '')}" placeholder="https://youtu.be/… or https://www.youtube.com/watch?v=…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">YouTube URL — Tagalog</label>
+            <input type="url" id="libYoutubeTl" value="${escapeHTMLNotif(editing.youtube_url_tl || '')}" placeholder="https://youtu.be/…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Audio duration <span style="font-weight:400;color:var(--muted);font-size:10.5px">(seconds — for "28 min" display)</span></label>
+            <input type="number" id="libAudioDuration" value="${editing.audio_duration_seconds || ''}" placeholder="e.g. 1800 for 30 minutes" min="0"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+        </div>
+
+        <!-- 📜 TRANSCRIPTS (optional, for read-along or read-instead) -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📜 Transcripts <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(optional)</span></div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.75rem">
+            Members can toggle "📜 Read transcript" on the resource card. Useful for those who prefer reading or have limited data. Paste from your script — formatting auto-strips.
+          </div>
+
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Transcript — English</label>
+            <textarea id="libTranscriptEn" rows="6" placeholder="The full transcript in English…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(editing.transcript_en || '')}</textarea>
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Transcript — Tagalog</label>
+            <textarea id="libTranscriptTl" rows="6" placeholder="Buong transcript sa Tagalog…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(editing.transcript_tl || '')}</textarea>
+          </div>
+        </div>
+
+        <!-- LINKS -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🔗 External References <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(optional)</span></div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.75rem">
+            For members who want to dig deeper into the source material. Podcast remains the primary delivery method.
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">External URL <span style="font-weight:400;color:var(--muted);font-size:10.5px">(Amazon, publisher, full book, etc.)</span></label>
+            <input type="url" id="libExternalUrl" value="${escapeHTMLNotif(editing.external_url || '')}" placeholder="https://…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">PDF URL <span style="font-weight:400;color:var(--muted);font-size:10.5px">(direct file link, optional)</span></label>
+            <input type="url" id="libPdfUrl" value="${escapeHTMLNotif(editing.pdf_url || '')}" placeholder="https://…/book.pdf"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+        </div>
+
+        <!-- REQUIRED FOR PROGRESSION (Phase 2 will use this flag) -->
+        <div style="margin-top:1rem;padding:.65rem .85rem;background:rgba(184,136,42,.08);border:1px solid rgba(184,136,42,.25);border-radius:8px;display:flex;align-items:center;gap:.6rem">
+          <input type="checkbox" id="libRequired" ${editing.is_required_for_next_level ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer">
+          <label for="libRequired" style="font-size:12.5px;color:var(--ink);cursor:pointer;flex:1">
+            <strong>🔑 Required for next-level eligibility</strong>
+            <span style="font-weight:400;color:var(--muted);display:block;margin-top:2px;font-size:11px">When Phase 2 quizzes ship, members must complete this resource (and pass its quiz) before they're eligible for level promotion. You'll still make the final pastoral call.</span>
+          </label>
+        </div>
+
+        <div style="margin-top:1rem;padding:.65rem .85rem;background:var(--surface2);border-radius:8px;display:flex;align-items:center;gap:.6rem">
+          <input type="checkbox" id="libPublished" ${editing.published === false ? '' : 'checked'} style="width:16px;height:16px;cursor:pointer">
+          <label for="libPublished" style="font-size:12.5px;color:var(--ink);cursor:pointer;flex:1">
+            <strong>Published</strong> <span style="font-weight:400;color:var(--muted)">— visible to members in MMT. Uncheck to keep as a draft.</span>
+          </label>
+        </div>
+      </div>
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_libCancel()">Cancel</button>
+        ${!isNew ? `<button class="sbtn" style="margin-top:0;background:var(--red)" onclick="_libDelete('${editing.id}')">🗑 Delete</button>` : ''}
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_libSave()">💾 Save</button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+
+  // Wire smart-paste on text fields (reuse the same helper that sermons use)
+  ['libTitleEn','libTitleTl','libAuthor','libSummaryEn','libSummaryTl','libWhyEn','libWhyTl','libTranscriptEn','libTranscriptTl'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el && typeof _sermonSmartPaste === 'function') el.addEventListener('paste', _sermonSmartPaste);
+  });
+}
+
+function _libClose(){
+  const m = document.getElementById('libraryManagerModal');
+  if(m) m.style.display = 'none';
+  _libraryState.editing = null;
+}
+
+function _libNew(){
+  _libraryState.editing = {
+    level: 1,
+    category: '',
+    sort_order: 0,
+    title_en: '', title_tl: '',
+    author: '',
+    summary_en: '', summary_tl: '',
+    why_matters_en: '', why_matters_tl: '',
+    external_url: '', pdf_url: '',
+    youtube_url_en: '', youtube_url_tl: '',
+    audio_duration_seconds: null,
+    transcript_en: '', transcript_tl: '',
+    is_required_for_next_level: false,
+    published: true
+  };
+  _renderLibraryManager();
+}
+
+function _libEdit(id){
+  const r = _libraryState.resources.find(x => x.id === id);
+  if(!r){ toast('Resource not found', '❌'); return; }
+  _libraryState.editing = {...r};
+  _renderLibraryManager();
+}
+
+function _libCancel(){
+  _libraryState.editing = null;
+  _renderLibraryManager();
+}
+
+async function _libSave(){
+  const titleEn = document.getElementById('libTitleEn').value.trim();
+  const summaryEn = document.getElementById('libSummaryEn').value.trim();
+  if(!titleEn){ toast('English title required', '⚠️'); return; }
+  if(!summaryEn){ toast('English summary required', '⚠️'); return; }
+
+  const editing = _libraryState.editing;
+  const durationRaw = document.getElementById('libAudioDuration').value.trim();
+  const payload = {
+    level:           parseInt(document.getElementById('libLevel').value, 10),
+    category:        document.getElementById('libCategory').value || null,
+    sort_order:      parseInt(document.getElementById('libSortOrder').value, 10) || 0,
+    title_en:        titleEn,
+    title_tl:        document.getElementById('libTitleTl').value.trim() || null,
+    author:          document.getElementById('libAuthor').value.trim() || null,
+    summary_en:      summaryEn,
+    summary_tl:      document.getElementById('libSummaryTl').value.trim() || null,
+    why_matters_en:  document.getElementById('libWhyEn').value.trim() || null,
+    why_matters_tl:  document.getElementById('libWhyTl').value.trim() || null,
+    external_url:    document.getElementById('libExternalUrl').value.trim() || null,
+    pdf_url:         document.getElementById('libPdfUrl').value.trim() || null,
+    youtube_url_en:  document.getElementById('libYoutubeEn').value.trim() || null,
+    youtube_url_tl:  document.getElementById('libYoutubeTl').value.trim() || null,
+    audio_duration_seconds: durationRaw === '' ? null : (parseInt(durationRaw, 10) || null),
+    transcript_en:   document.getElementById('libTranscriptEn').value.trim() || null,
+    transcript_tl:   document.getElementById('libTranscriptTl').value.trim() || null,
+    is_required_for_next_level: document.getElementById('libRequired').checked,
+    published:       document.getElementById('libPublished').checked
+  };
+
+  try {
+    if(editing.id){
+      const { error } = await db.from('library_resources').update(payload).eq('id', editing.id);
+      if(error) throw error;
+      toast('✓ Resource updated', 'success');
+    } else {
+      const { error } = await db.from('library_resources').insert(payload);
+      if(error) throw error;
+      toast('✓ Resource added', 'success');
+    }
+    _libraryState.editing = null;
+    await _loadLibrary();
+    _renderLibraryManager();
+  } catch(e){
+    toast('Save failed: ' + e.message, '❌');
+  }
+}
+
+async function _libDelete(id){
+  const r = _libraryState.resources.find(x => x.id === id);
+  if(!r) return;
+  if(!confirm(`Delete "${r.title_en}"?\n\nThis is permanent. Members' reading progress for this resource will also be deleted.`)) return;
+  try {
+    const { error } = await db.from('library_resources').delete().eq('id', id);
+    if(error) throw error;
+    toast('Resource deleted', 'success');
+    _libraryState.editing = null;
+    await _loadLibrary();
+    _renderLibraryManager();
   } catch(e){
     toast('Delete failed: ' + e.message, '❌');
   }

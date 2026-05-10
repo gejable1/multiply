@@ -1392,6 +1392,26 @@ body.lang-tl .tl-text{display:inline;}
   <div class="screen-page active" id="page-home">
     <div class="content">
 
+      <!-- ⛪ Guest of Rosehill banner — shown ONLY to external users.
+           Friendly welcome for non-Rosehill people who use MMT (friends,
+           seekers, evaluators). Hidden by default; renderGuestBanner()
+           toggles its display once memberRow loads. -->
+      <div id="guestBanner" style="display:none;margin:.5rem 1rem 0;padding:.85rem 1rem;background:linear-gradient(135deg,rgba(74,144,226,.12),rgba(184,136,42,.10));border:1px solid rgba(74,144,226,.32);border-radius:12px">
+        <div style="display:flex;align-items:flex-start;gap:.6rem">
+          <div style="font-size:22px;line-height:1">⛪</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px">
+              <span class="en-text">Guest of Rosehill</span>
+              <span class="tl-text">Bisita ng Rosehill</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);line-height:1.5">
+              <span class="en-text">Welcome, kapatid. We're glad you're exploring with us. Feel free to use the devotional, take an assessment, or message Pastor anytime.</span>
+              <span class="tl-text">Kumusta, kapatid. Salamat sa iyong pagdalaw. Maaari mong gamitin ang devotional, sagutan ang assessment, o magmensahe kay Pastor anumang oras.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Today's Anchor -->
       <div class="anchor-card" id="anchorCard">
         <div class="streak" id="streakBadge" style="display:none">🔥 <span id="streakDays">0</span><span class="en-text">-day streak</span><span class="tl-text">-araw streak</span></div>
@@ -1568,6 +1588,13 @@ body.lang-tl .tl-text{display:inline;}
       <div class="next-milestone" id="nextMilestoneBox">
         <!-- Populated dynamically -->
       </div>
+
+      <!-- ═══════ LIBRARY / READING LIST ═══════
+           Level-gated reading materials. Current level shown prominently;
+           future levels appear as locked previews so members can see
+           what's ahead. Past levels are collapsed (expandable) for revisits.
+           Populated by renderLibrary() on page-pipeline activation. -->
+      <div id="librarySection" style="margin-top:1.5rem"></div>
 
     </div>
   </div>
@@ -2076,6 +2103,7 @@ async function initMMT(){
     try{ await loadCelebrationFeed(); }catch(e){ console.warn('feed failed:', e); }
     try{ await loadHeadsUpConfig(); }catch(e){ console.warn('headsup config failed:', e); }
     try{ await loadMyRecentNotices(); }catch(e){ console.warn('my notices failed:', e); }
+    try{ await loadLibraryAndProgress(); }catch(e){ console.warn('library failed:', e); }
     renderHome();
     renderPipeline();
     renderAssessments();
@@ -2116,6 +2144,15 @@ async function loadMember(){
   // Avatar initials
   const initials = (memberRow.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   document.getElementById('avatarBtn').textContent = initials;
+
+  // ── Guest of Rosehill banner — only shown to external (non-member) users ──
+  // The is_external_user flag is set by Pastor in MD's Add Member form.
+  // Test members (is_test_member) are NOT given a special banner — they don't
+  // need a friendly welcome since the account isn't a real human.
+  const guestBanner = document.getElementById('guestBanner');
+  if (guestBanner) {
+    guestBanner.style.display = memberRow.is_external_user ? 'block' : 'none';
+  }
 }
 
 // ───── Devotional streak ─────
@@ -2415,6 +2452,462 @@ function renderPipeline(){
         <span class="tl-text">Ngayon: dumami ka, kapatid.</span>
       </div>
     `;
+  }
+  // Reading list refreshes alongside the pipeline view (so language and
+  // progress changes flow through together)
+  if (typeof renderLibrary === 'function') renderLibrary();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LIBRARY / READING LIST — level-gated reading materials
+// ─────────────────────────────────────────────────────────────
+// Pastor publishes resources in MD's Library Manager. Each is tagged
+// to a pipeline level (0=all, 1-5=by level). This member's view is
+// "layered":
+//   • Current level (memberRow.pipeline_level): full cards, prominent
+//   • Future levels: visible but locked (preview, no link buttons)
+//   • Past levels: collapsed, expandable for revisits
+//
+// Progress is per-member in library_progress table. Three states:
+// not_started, in_progress, completed. Tapping the action button
+// transitions: nothing → started → completed → (optional) back to
+// not_started by long-press (deferred to v2).
+// ═══════════════════════════════════════════════════════════════
+
+let _libResources = [];   // all published, sorted by level + sort_order
+let _libProgress  = {};   // { resource_id: row } for the current member
+
+async function loadLibraryAndProgress(){
+  if (!memberRow || !MEMBER || !MEMBER.memberId){ _libResources = []; _libProgress = {}; return; }
+  // Both queries in parallel — failure of progress shouldn't block the catalog
+  try {
+    const [resRes, progRes] = await Promise.all([
+      db.from('library_resources')
+        .select('id, level, category, sort_order, title_en, title_tl, author, summary_en, summary_tl, why_matters_en, why_matters_tl, external_url, pdf_url, youtube_url_en, youtube_url_tl, audio_duration_seconds, transcript_en, transcript_tl, is_required_for_next_level')
+        .eq('published', true)
+        .order('level', {ascending: true})
+        .order('sort_order', {ascending: true})
+        .order('title_en', {ascending: true}),
+      db.from('library_progress')
+        .select('id, resource_id, status, started_at, completed_at, notes')
+        .eq('member_id', MEMBER.memberId)
+    ]);
+    if (resRes.error) throw resRes.error;
+    _libResources = resRes.data || [];
+    if (!progRes.error) {
+      _libProgress = {};
+      (progRes.data || []).forEach(p => { _libProgress[p.resource_id] = p; });
+    }
+  } catch(e){
+    console.warn('[library] load failed:', e);
+    _libResources = []; _libProgress = {};
+  }
+}
+
+const _LIB_CAT_LABELS = {
+  foundational:     {en:'Foundational',     tl:'Pundasyon'},
+  leadership:       {en:'Leadership',        tl:'Pamumuno'},
+  ministry:         {en:'Ministry',          tl:'Ministeryo'},
+  devotional:       {en:'Devotional',        tl:'Debosyonal'},
+  external_program: {en:'External Program',  tl:'Panlabas na Programa'}
+};
+
+const _LIB_LEVEL_LABELS_EN = {
+  0: 'For All Members',
+  1: 'Level 1 — Team Member',
+  2: 'Level 2 — Leader',
+  3: 'Level 3 — Coach',
+  4: 'Level 4 — Director',
+  5: 'Level 5 — Executive Leader'
+};
+const _LIB_LEVEL_LABELS_TL = {
+  0: 'Para sa Lahat',
+  1: 'Antas 1 — Kasapi ng Team',
+  2: 'Antas 2 — Lider',
+  3: 'Antas 3 — Coach',
+  4: 'Antas 4 — Direktor',
+  5: 'Antas 5 — Executive Leader'
+};
+
+function _libGetLang(){ return document.body.classList.contains('lang-tl') ? 'tl' : 'en'; }
+
+// Extract a YouTube video ID from common URL forms:
+//   https://youtu.be/VIDEO_ID
+//   https://www.youtube.com/watch?v=VIDEO_ID
+//   https://www.youtube.com/embed/VIDEO_ID
+//   https://m.youtube.com/watch?v=VIDEO_ID
+// Returns null if not a recognizable YouTube URL.
+function _libExtractYoutubeId(url){
+  if(!url || typeof url !== 'string') return null;
+  // youtu.be/<id>
+  let m = url.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/);
+  if(m) return m[1];
+  // youtube.com/watch?v=<id>
+  m = url.match(/[?&]v=([A-Za-z0-9_-]{6,})/);
+  if(m) return m[1];
+  // youtube.com/embed/<id>
+  m = url.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
+  if(m) return m[1];
+  return null;
+}
+
+// Format seconds as "28 min" or "1 hr 5 min" — short and friendly.
+function _libFormatDuration(seconds){
+  if(!seconds || seconds < 60) return '';
+  const mins = Math.round(seconds / 60);
+  if(mins < 60) return mins + ' min';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+
+// Toggle the transcript panel visibility for a given resource.
+function _libToggleTranscript(resourceId){
+  const el = document.getElementById('libTranscript_' + resourceId);
+  const btn = document.getElementById('libTranscriptBtn_' + resourceId);
+  if(!el) return;
+  const lang = _libGetLang();
+  if(el.style.display === 'none' || el.style.display === ''){
+    el.style.display = 'block';
+    if(btn){
+      btn.innerHTML = lang === 'tl' ? '📜 Itago ang transcript' : '📜 Hide transcript';
+    }
+  } else {
+    el.style.display = 'none';
+    if(btn){
+      btn.innerHTML = lang === 'tl' ? '📜 Basahin ang transcript' : '📜 Read transcript';
+    }
+  }
+}
+
+function renderLibrary(){
+  const wrap = document.getElementById('librarySection');
+  if (!wrap) return;
+  if (!memberRow){ wrap.innerHTML = ''; return; }
+
+  if (_libResources.length === 0){
+    wrap.innerHTML = `
+      <div style="padding:1.5rem 1.25rem;background:var(--surface);border:1px solid var(--line);border-radius:12px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6">
+        <div style="font-size:30px;margin-bottom:.4rem">📚</div>
+        <div style="font-weight:600;color:var(--ink);font-size:14px;margin-bottom:.3rem">
+          <span class="en-text">Reading list coming soon</span>
+          <span class="tl-text">Paparating na ang reading list</span>
+        </div>
+        <div style="font-size:11.5px">
+          <span class="en-text">Pastor will publish recommended books for your level here.</span>
+          <span class="tl-text">Maglalagay si Pastor ng mga inirerekomendang libro para sa iyong antas.</span>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const myLevel = memberRow.pipeline_level || 0;
+  const lang = _libGetLang();
+
+  // Group resources by level (level 0 always merges into "current" tier
+  // since it's "for everyone")
+  const byLevel = {};
+  _libResources.forEach(r => {
+    const k = r.level == null ? 1 : r.level;
+    (byLevel[k] = byLevel[k] || []).push(r);
+  });
+  const levelKeys = Object.keys(byLevel).map(n => parseInt(n,10)).sort((a,b)=>a-b);
+
+  // Build the section. The "current tier" includes:
+  //   - resources at the member's level
+  //   - resources at level 0 (for-all)
+  // Past levels are collapsed; future levels are visible but locked.
+  const currentTierResources = [];
+  const pastTierByLevel = [];
+  const futureTierByLevel = [];
+
+  levelKeys.forEach(k => {
+    if (k === 0 || k === myLevel) {
+      currentTierResources.push(...(byLevel[k] || []));
+    } else if (k < myLevel) {
+      pastTierByLevel.push({ level: k, items: byLevel[k] });
+    } else {
+      futureTierByLevel.push({ level: k, items: byLevel[k] });
+    }
+  });
+
+  const html = [];
+
+  // Header
+  html.push(`
+    <div style="margin-bottom:.6rem">
+      <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">
+        <span class="en-text">📚 Your Reading List</span>
+        <span class="tl-text">📚 Ang Iyong Reading List</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:3px">
+        <span class="en-text">Books and resources Pastor recommends for your journey.</span>
+        <span class="tl-text">Mga libro at resource na inirerekomenda ni Pastor para sa iyong paglalakbay.</span>
+      </div>
+    </div>
+  `);
+
+  // ─── CURRENT TIER ───
+  if (currentTierResources.length > 0){
+    html.push(`<div style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--forest);font-weight:700;margin:1rem 0 .5rem">
+      <span class="en-text">Recommended for you now</span>
+      <span class="tl-text">Inirerekomenda para sa iyo ngayon</span>
+    </div>`);
+    currentTierResources.forEach(r => html.push(_libRenderCard(r, 'current', lang)));
+  }
+
+  // ─── FUTURE TIERS (preview, locked) ───
+  if (futureTierByLevel.length > 0){
+    html.push(`<div style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:1.5rem 0 .5rem">
+      <span class="en-text">🔒 Coming up on your journey</span>
+      <span class="tl-text">🔒 Paparating sa iyong paglalakbay</span>
+    </div>`);
+    futureTierByLevel.forEach(group => {
+      const lvlLabel = (lang === 'tl' ? _LIB_LEVEL_LABELS_TL : _LIB_LEVEL_LABELS_EN)[group.level] || `Level ${group.level}`;
+      html.push(`<div style="font-size:11.5px;font-weight:600;color:var(--muted);margin:.85rem 0 .35rem">${MultiplyShared.escapeHTML(lvlLabel)}</div>`);
+      group.items.forEach(r => html.push(_libRenderCard(r, 'future', lang)));
+    });
+  }
+
+  // ─── PAST TIERS (collapsed) ───
+  if (pastTierByLevel.length > 0){
+    const totalPast = pastTierByLevel.reduce((acc,g) => acc + g.items.length, 0);
+    html.push(`
+      <details style="margin-top:1.5rem;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden">
+        <summary style="padding:.7rem 1rem;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between">
+          <span>
+            <span class="en-text">✓ Books from earlier levels (${totalPast})</span>
+            <span class="tl-text">✓ Mga libro mula sa naunang antas (${totalPast})</span>
+          </span>
+          <span style="color:var(--muted);font-size:11px">▾</span>
+        </summary>
+        <div style="padding:.5rem 1rem 1rem">
+          ${pastTierByLevel.map(group => {
+            const lvlLabel = (lang === 'tl' ? _LIB_LEVEL_LABELS_TL : _LIB_LEVEL_LABELS_EN)[group.level] || `Level ${group.level}`;
+            return `<div style="font-size:11px;font-weight:600;color:var(--muted);margin:.7rem 0 .3rem;text-transform:uppercase;letter-spacing:.04em">${MultiplyShared.escapeHTML(lvlLabel)}</div>`
+              + group.items.map(r => _libRenderCard(r, 'past', lang)).join('');
+          }).join('')}
+        </div>
+      </details>
+    `);
+  }
+
+  wrap.innerHTML = html.join('');
+}
+
+function _libRenderCard(r, tier, lang){
+  // tier: 'current' (full features), 'future' (locked preview), 'past' (compact)
+  const title    = (lang === 'tl' && r.title_tl)   ? r.title_tl   : r.title_en;
+  const summary  = (lang === 'tl' && r.summary_tl) ? r.summary_tl : r.summary_en;
+  const why      = (lang === 'tl' && r.why_matters_tl) ? r.why_matters_tl : r.why_matters_en;
+  const cat      = r.category && _LIB_CAT_LABELS[r.category] ? _LIB_CAT_LABELS[r.category][lang] : '';
+  const author   = r.author || '';
+  const link     = r.external_url || r.pdf_url || '';
+  const prog     = _libProgress[r.id];
+  const status   = prog?.status || 'not_started';
+
+  const escape = MultiplyShared.escapeHTML;
+
+  // Base card chrome — different per tier
+  if (tier === 'past'){
+    // Compact row — title + status check + tap to expand only
+    const statusIcon = status === 'completed' ? '✓' : (status === 'in_progress' ? '◐' : '○');
+    return `
+      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:.6rem;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--line)">
+        <div style="font-size:14px;color:${status==='completed'?'var(--forest)':'var(--muted)'};width:18px;text-align:center">${statusIcon}</div>
+        <div style="min-width:0">
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.3">${escape(title)}</div>
+          ${author ? `<div style="font-size:10.5px;color:var(--muted);margin-top:1px">${escape(author)}</div>` : ''}
+        </div>
+        ${link ? `<a href="${escape(link)}" target="_blank" rel="noopener" style="color:var(--gold);font-size:11px;font-weight:600;text-decoration:none">↗</a>` : ''}
+      </div>
+    `;
+  }
+
+  if (tier === 'future'){
+    // Locked preview — visible but with lock badge, no progress controls, link disabled
+    const futurePodcastHint = (r.youtube_url_en || r.youtube_url_tl) ? '🎙' : '';
+    const futureTranscriptHint = (r.transcript_en || r.transcript_tl) ? '📜' : '';
+    const hints = [futurePodcastHint, futureTranscriptHint].filter(Boolean).join(' ');
+    return `
+      <div style="background:var(--cream);border:1px dashed var(--line-strong);border-radius:10px;padding:.85rem 1rem;margin-bottom:.5rem;opacity:.85">
+        <div style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.3rem">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.3">${escape(title)}</div>
+            <div style="font-size:10.5px;color:var(--muted);margin-top:2px">
+              ${author ? escape(author) + (cat ? ' · ' : '') : ''}${cat ? escape(cat) : ''}${hints ? ' · ' + hints : ''}
+            </div>
+          </div>
+          <div style="font-size:9.5px;background:var(--gold-soft);color:var(--gold);padding:2px 7px;border-radius:99px;font-weight:700;letter-spacing:.04em;white-space:nowrap">
+            🔒 <span class="en-text">LOCKED</span><span class="tl-text">SARADO</span>
+          </div>
+        </div>
+        ${summary ? `<div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-top:.4rem">${escape(summary.slice(0, 180))}${summary.length > 180 ? '…' : ''}</div>` : ''}
+        <div style="font-size:10.5px;color:var(--muted);margin-top:.5rem;font-style:italic">
+          <span class="en-text">Reach this level on your journey to unlock.</span>
+          <span class="tl-text">Maabot ang antas na ito upang mabuksan.</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // tier === 'current' — full card with progress controls
+  const statusBadge = (() => {
+    if (status === 'completed') {
+      return `<span style="background:rgba(52,211,153,.18);color:var(--forest);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.04em">
+        ✓ <span class="en-text">COMPLETED</span><span class="tl-text">TAPOS</span>
+      </span>`;
+    }
+    if (status === 'in_progress') {
+      return `<span style="background:rgba(184,136,42,.16);color:var(--gold);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.04em">
+        ◐ <span class="en-text">READING</span><span class="tl-text">BINABASA</span>
+      </span>`;
+    }
+    return '';
+  })();
+
+  // Action button cycles status: not_started → in_progress → completed
+  const actionBtn = (() => {
+    if (status === 'completed'){
+      return `<button onclick="_libSetStatus('${r.id}','in_progress')"
+        style="padding:.55rem .9rem;background:var(--cream);color:var(--muted);border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+        <span class="en-text">↺ Mark as reading</span>
+        <span class="tl-text">↺ Markahan na binabasa</span>
+      </button>`;
+    }
+    if (status === 'in_progress'){
+      return `<button onclick="_libSetStatus('${r.id}','completed')"
+        style="padding:.55rem .9rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+        <span class="en-text">✓ Mark as completed</span>
+        <span class="tl-text">✓ Markahan na tapos</span>
+      </button>`;
+    }
+    return `<button onclick="_libSetStatus('${r.id}','in_progress')"
+      style="padding:.55rem .9rem;background:var(--gold);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+      <span class="en-text">📖 I've started reading</span>
+      <span class="tl-text">📖 Sinimulan ko nang basahin</span>
+    </button>`;
+  })();
+
+  const linkBtn = link
+    ? `<a href="${escape(link)}" target="_blank" rel="noopener"
+        style="padding:.55rem .9rem;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">
+        🔗 <span class="en-text">More info</span><span class="tl-text">Karagdagang impormasyon</span>
+      </a>`
+    : '';
+
+  // ── PODCAST PLAYER (YouTube unlisted, embedded) ──
+  // Pick the right URL for the current language; fall back to whichever
+  // is available if only one was uploaded.
+  const ytEn = r.youtube_url_en || '';
+  const ytTl = r.youtube_url_tl || '';
+  const preferredYt = (lang === 'tl' && ytTl) ? ytTl
+                    : (lang === 'en' && ytEn) ? ytEn
+                    : (ytEn || ytTl);
+  const ytId = _libExtractYoutubeId(preferredYt);
+  const durationLabel = _libFormatDuration(r.audio_duration_seconds);
+  const hasBilingualPodcast = !!(ytEn && ytTl);
+  // Note which language the player is currently showing — for the small
+  // pill below if both are available.
+  const activePodcastLang = (lang === 'tl' && ytTl) ? 'tl'
+                          : (lang === 'en' && ytEn) ? 'en'
+                          : (ytEn ? 'en' : (ytTl ? 'tl' : null));
+
+  const podcastBlock = ytId ? `
+    <div style="margin:.7rem 0;border-radius:10px;overflow:hidden;background:#000;position:relative;padding-bottom:56.25%;height:0">
+      <iframe
+        src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1"
+        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"
+        allowfullscreen
+        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+        referrerpolicy="strict-origin-when-cross-origin"
+        loading="lazy"></iframe>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:-.2rem;margin-bottom:.6rem">
+      <div>
+        🎙 <span class="en-text">Podcast</span><span class="tl-text">Podcast</span>${durationLabel ? ' · ' + durationLabel : ''}
+        ${hasBilingualPodcast
+          ? ` · <span style="font-style:italic">${activePodcastLang === 'tl' ? (lang==='tl'?'Tagalog na bersyon':'Tagalog version') : (lang==='tl'?'Ingles na bersyon':'English version')}</span>`
+          : (activePodcastLang === 'tl' && lang === 'en' ? ' · <span style="font-style:italic">Tagalog only</span>' :
+             activePodcastLang === 'en' && lang === 'tl' ? ' · <span style="font-style:italic">English lang ang available</span>' : '')}
+      </div>
+    </div>
+  ` : '';
+
+  // ── TRANSCRIPT (collapsible) ──
+  const tEn = r.transcript_en || '';
+  const tTl = r.transcript_tl || '';
+  const transcript = (lang === 'tl' && tTl) ? tTl : (tEn || tTl);
+  const transcriptBlock = transcript ? `
+    <button id="libTranscriptBtn_${r.id}" onclick="_libToggleTranscript('${r.id}')"
+      style="padding:.5rem .8rem;background:transparent;color:var(--gold);border:1px solid var(--gold);border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;margin:0 0 .5rem">
+      📜 <span class="en-text">Read transcript</span><span class="tl-text">Basahin ang transcript</span>
+    </button>
+    <div id="libTranscript_${r.id}" style="display:none;background:var(--cream);border-left:3px solid var(--gold);padding:.85rem 1rem;border-radius:6px;font-size:12.5px;color:var(--ink-soft);line-height:1.7;font-family:'Fraunces','Georgia',serif;max-height:380px;overflow-y:auto;margin-bottom:.7rem;white-space:pre-wrap">${escape(transcript)}</div>
+  ` : '';
+
+  return `
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin-bottom:.7rem;box-shadow:var(--shadow)">
+      <div style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.5rem">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700;color:var(--ink);line-height:1.3">${escape(title)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">
+            ${author ? escape(author) + (cat ? ' · ' : '') : ''}${cat ? escape(cat) : ''}
+          </div>
+        </div>
+        ${statusBadge}
+      </div>
+      ${why ? `
+        <div style="background:var(--gold-soft);border-left:3px solid var(--gold);padding:.55rem .75rem;border-radius:6px;font-size:11.5px;color:var(--ink);line-height:1.55;margin-bottom:.6rem;font-style:italic">
+          <strong>
+            <span class="en-text">Why this matters: </span>
+            <span class="tl-text">Bakit mahalaga: </span>
+          </strong>${escape(why)}
+        </div>
+      ` : ''}
+      ${podcastBlock}
+      ${summary ? `
+        <div style="font-size:12.5px;color:var(--ink-soft);line-height:1.65;margin-bottom:.7rem;font-family:'Fraunces','Georgia',serif">
+          ${escape(summary)}
+        </div>
+      ` : ''}
+      ${transcriptBlock}
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        ${actionBtn}
+        ${linkBtn}
+      </div>
+    </div>
+  `;
+}
+
+async function _libSetStatus(resourceId, newStatus){
+  if (!MEMBER || !MEMBER.memberId){ toast('Sign in required', '⚠️'); return; }
+  const existing = _libProgress[resourceId];
+  const now = new Date().toISOString();
+  const payload = {
+    member_id:    MEMBER.memberId,
+    resource_id:  resourceId,
+    status:       newStatus,
+    started_at:   (newStatus === 'in_progress' && !existing?.started_at) ? now
+                  : (existing?.started_at || (newStatus === 'completed' ? now : null)),
+    completed_at: newStatus === 'completed' ? now : null
+  };
+  try {
+    const { data, error } = await db.from('library_progress')
+      .upsert(payload, { onConflict: 'member_id,resource_id' })
+      .select()
+      .single();
+    if (error) throw error;
+    _libProgress[resourceId] = data;
+    renderLibrary();
+    const lang = _libGetLang();
+    if (newStatus === 'completed'){
+      toast(lang === 'tl' ? '🎉 Tapos na!' : '🎉 Marked completed', 'success');
+    } else if (newStatus === 'in_progress'){
+      toast(lang === 'tl' ? '📖 Salamat sa pagsisimula!' : '📖 Happy reading!', 'success');
+    }
+  } catch(e){
+    toast('Save failed: ' + e.message, '❌');
   }
 }
 
