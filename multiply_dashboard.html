@@ -4343,7 +4343,13 @@ function _renderQuizBuilder(){
 
         <!-- ADD QUESTION BUTTONS -->
         <div style="margin-top:1rem;padding:.85rem 1rem;background:var(--surface2);border-radius:8px">
-          <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:.5rem">Add a question:</div>
+          <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:.5rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem">
+            <span>Add a question:</span>
+            <button onclick="_quizOpenBulkImport()"
+              style="padding:.45rem .8rem;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer">
+              📋 Bulk Import
+            </button>
+          </div>
           <div style="display:flex;gap:.4rem;flex-wrap:wrap">
             <button onclick="_quizAddQuestion('multiple_choice')"
               style="padding:.55rem .9rem;background:rgba(74,144,226,.18);color:var(--blue,#4a90e2);border:1px solid rgba(74,144,226,.4);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">
@@ -4598,6 +4604,589 @@ async function _quizDeleteAll(){
   } catch (e) {
     toast('Delete failed: ' + e.message, '❌');
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// BULK QUIZ IMPORT — plain-text parser + modal
+// ─────────────────────────────────────────────────────────────────
+// Lets Pastor paste a preformatted text block to create many questions
+// at once. Format documented inline in the modal's help section.
+//
+// Design choices:
+//   • Preview is mandatory — Import button only enables after a successful
+//     preview pass. Prevents accidental disasters.
+//   • Append by default; Replace requires a second confirm.
+//   • Settings (SCORE/INTRO/OUTRO_*) are optional — present overrides, absent keeps.
+//   • Partial parse OK — errors per-question, not whole-file rejection.
+// ═══════════════════════════════════════════════════════════════════
+
+// Parser: returns { ok, settings, questions, errors, warnings }
+function _quizParseBulkText(text){
+  const result = {
+    ok: false,
+    settings: {},   // { passing_score, intro_text_en, intro_text_tl, outro_text_pass_en, outro_text_pass_tl, outro_text_fail_en, outro_text_fail_tl }
+    questions: [],
+    errors: [],     // [{ line, message }]
+    warnings: []    // [{ line, message }]
+  };
+
+  if (!text || !text.trim()){
+    result.errors.push({ line: 0, message: 'Empty input' });
+    return result;
+  }
+
+  const lines = text.split(/\r?\n/);
+
+  // First pass: pull out settings (lines like SCORE: 70, INTRO_EN: ...)
+  // Settings can be multi-line via continuation (line starts with whitespace).
+  // We process line-by-line; settings encountered later override earlier ones.
+  let i = 0;
+
+  // Helper: peek next non-blank non-comment line index
+  function skipBlankAndComments(idx){
+    while (idx < lines.length){
+      const t = lines[idx].trim();
+      if (t === '' || t.startsWith('#')) idx++;
+      else break;
+    }
+    return idx;
+  }
+
+  while (i < lines.length){
+    const raw = lines[i];
+    const line = raw.trim();
+    // Skip blank lines and comments
+    if (line === '' || line.startsWith('#')){ i++; continue; }
+
+    // Settings line? — SCORE / INTRO_EN / INTRO_TL / OUTRO_PASS_EN / OUTRO_PASS_TL / OUTRO_FAIL_EN / OUTRO_FAIL_TL
+    const settingMatch = line.match(/^(SCORE|INTRO_EN|INTRO_TL|OUTRO_PASS_EN|OUTRO_PASS_TL|OUTRO_FAIL_EN|OUTRO_FAIL_TL)\s*:\s*(.*)$/i);
+    if (settingMatch){
+      const key = settingMatch[1].toUpperCase();
+      let value = settingMatch[2];
+      if (key === 'SCORE'){
+        const n = parseInt(value, 10);
+        if (isNaN(n) || n < 0 || n > 100){
+          result.errors.push({ line: i+1, message: `SCORE must be a number 0-100 (got "${value}")` });
+        } else {
+          result.settings.passing_score = n;
+        }
+      } else {
+        // Text settings: key maps to settings field
+        const fieldMap = {
+          INTRO_EN: 'intro_text_en',
+          INTRO_TL: 'intro_text_tl',
+          OUTRO_PASS_EN: 'outro_text_pass_en',
+          OUTRO_PASS_TL: 'outro_text_pass_tl',
+          OUTRO_FAIL_EN: 'outro_text_fail_en',
+          OUTRO_FAIL_TL: 'outro_text_fail_tl'
+        };
+        result.settings[fieldMap[key]] = value.trim();
+      }
+      i++;
+      continue;
+    }
+
+    // Question? MC / TF / R prefix (with optional EN: / TL:)
+    //   MC EN: question text...
+    //   MC TL: tagalog version...
+    //   - EN: option1
+    //     TL: option1 tagalog
+    //   * EN: correct option
+    //     TL: correct tagalog
+    //
+    //   TF EN: statement
+    //   TF TL: tagalog
+    //   A: True / False
+    //
+    //   R EN: prompt
+    //   R TL: prompt tagalog
+    //   MIN: 40
+
+    const mcMatch = line.match(/^MC\s+(?:(EN|TL)\s*:\s*)?(.*)$/i);
+    const tfMatch = line.match(/^TF\s+(?:(EN|TL)\s*:\s*)?(.*)$/i);
+    const rMatch  = line.match(/^R\s+(?:(EN|TL)\s*:\s*)?(.*)$/i);
+
+    if (mcMatch){
+      const q = _quizParseMC(lines, i, result);
+      if (q){
+        result.questions.push(q.question);
+        i = q.nextLine;
+      } else {
+        i++; // skip to next line; error already pushed
+      }
+      continue;
+    }
+    if (tfMatch){
+      const q = _quizParseTF(lines, i, result);
+      if (q){
+        result.questions.push(q.question);
+        i = q.nextLine;
+      } else {
+        i++;
+      }
+      continue;
+    }
+    if (rMatch){
+      const q = _quizParseReflection(lines, i, result);
+      if (q){
+        result.questions.push(q.question);
+        i = q.nextLine;
+      } else {
+        i++;
+      }
+      continue;
+    }
+
+    // Unrecognized line — warn, don't fail
+    result.warnings.push({ line: i+1, message: `Unrecognized: "${line.substring(0, 60)}${line.length>60?'…':''}"` });
+    i++;
+  }
+
+  result.ok = result.questions.length > 0 || Object.keys(result.settings).length > 0;
+  return result;
+}
+
+// Parse a Multiple Choice question. lines[startIdx] is the "MC EN: ..." line.
+// Returns { question, nextLine } or null on error.
+function _quizParseMC(lines, startIdx, result){
+  const newId = 'q_' + Math.random().toString(36).slice(2, 9);
+  const q = {
+    id: newId,
+    type: 'multiple_choice',
+    question_en: '',
+    question_tl: '',
+    options_en: [],
+    options_tl: [],
+    correct_index: -1
+  };
+
+  // First line: MC [EN|TL]: text
+  let i = startIdx;
+  const first = lines[i].trim();
+  const m = first.match(/^MC\s+(?:(EN|TL)\s*:\s*)?(.*)$/i);
+  const firstLang = m[1] ? m[1].toUpperCase() : 'EN';
+  const firstText = m[2].trim();
+  if (firstLang === 'EN') q.question_en = firstText;
+  else q.question_tl = firstText;
+  i++;
+
+  // Read subsequent MC lines: continuation language (rare) or options
+  while (i < lines.length){
+    const raw = lines[i];
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')){ i++; continue; }
+
+    // Another MC EN/TL line for this same question (Tagalog stem after English)?
+    const mcCont = line.match(/^MC\s+(EN|TL)\s*:\s*(.*)$/i);
+    if (mcCont && q.options_en.length === 0){
+      const lang = mcCont[1].toUpperCase();
+      const txt = mcCont[2].trim();
+      if (lang === 'EN' && !q.question_en) q.question_en = txt;
+      else if (lang === 'TL') q.question_tl = txt;
+      else {
+        // Already have both stems — this MC starts a new question, back off
+        break;
+      }
+      i++;
+      continue;
+    }
+
+    // Option line? starts with - or *
+    const optMatch = line.match(/^([-*])\s*(?:(EN|TL)\s*:\s*)?(.*)$/);
+    if (optMatch){
+      const isCorrect = optMatch[1] === '*';
+      const optLang = optMatch[2] ? optMatch[2].toUpperCase() : 'EN';
+      const optText = optMatch[3].trim();
+      if (optLang === 'EN'){
+        q.options_en.push(optText);
+        if (isCorrect){
+          if (q.correct_index !== -1){
+            result.warnings.push({ line: i+1, message: `Multiple correct options for MC at line ${startIdx+1}; using the last starred (*)` });
+          }
+          q.correct_index = q.options_en.length - 1;
+        }
+        // Look ahead: is the very next line an indented TL option?
+        if (i + 1 < lines.length){
+          const next = lines[i+1];
+          const nextTrim = next.trim();
+          const nextTL = nextTrim.match(/^TL\s*:\s*(.*)$/i);
+          if (nextTL && (next.startsWith(' ') || next.startsWith('\t'))){
+            q.options_tl.push(nextTL[1].trim());
+            i++; // consume that TL line
+          } else {
+            q.options_tl.push(''); // keep parallel
+          }
+        } else {
+          q.options_tl.push('');
+        }
+      } else {
+        // Standalone TL option (rare — usually paired)
+        q.options_tl.push(optText);
+        if (isCorrect && q.correct_index === -1){
+          q.correct_index = q.options_tl.length - 1;
+          // Mirror to options_en if missing
+          while (q.options_en.length < q.options_tl.length) q.options_en.push('');
+        }
+      }
+      i++;
+      continue;
+    }
+
+    // Anything else — end of this question
+    break;
+  }
+
+  // Validation
+  if (!q.question_en){
+    result.errors.push({ line: startIdx+1, message: `MC at line ${startIdx+1}: missing English question text` });
+    return null;
+  }
+  if (q.options_en.filter(Boolean).length < 2){
+    result.errors.push({ line: startIdx+1, message: `MC at line ${startIdx+1}: need at least 2 answer choices` });
+    return null;
+  }
+  if (q.correct_index === -1){
+    result.errors.push({ line: startIdx+1, message: `MC at line ${startIdx+1}: no correct answer marked (use * instead of -)` });
+    return null;
+  }
+
+  // Trim options_tl to parallel length
+  while (q.options_tl.length < q.options_en.length) q.options_tl.push('');
+  while (q.options_tl.length > q.options_en.length) q.options_tl.pop();
+
+  return { question: q, nextLine: i };
+}
+
+function _quizParseTF(lines, startIdx, result){
+  const newId = 'q_' + Math.random().toString(36).slice(2, 9);
+  const q = {
+    id: newId,
+    type: 'true_false',
+    statement_en: '',
+    statement_tl: '',
+    correct: null
+  };
+
+  let i = startIdx;
+  const first = lines[i].trim();
+  const m = first.match(/^TF\s+(?:(EN|TL)\s*:\s*)?(.*)$/i);
+  const firstLang = m[1] ? m[1].toUpperCase() : 'EN';
+  if (firstLang === 'EN') q.statement_en = m[2].trim();
+  else q.statement_tl = m[2].trim();
+  i++;
+
+  while (i < lines.length){
+    const raw = lines[i];
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')){ i++; continue; }
+
+    const tfCont = line.match(/^TF\s+(EN|TL)\s*:\s*(.*)$/i);
+    if (tfCont){
+      const lang = tfCont[1].toUpperCase();
+      if (lang === 'EN' && !q.statement_en) q.statement_en = tfCont[2].trim();
+      else if (lang === 'TL') q.statement_tl = tfCont[2].trim();
+      else break;
+      i++;
+      continue;
+    }
+
+    const ansMatch = line.match(/^A\s*:\s*(true|false|t|f)\s*$/i);
+    if (ansMatch){
+      const v = ansMatch[1].toLowerCase();
+      q.correct = (v === 'true' || v === 't');
+      i++;
+      break; // A: is the final piece of a TF question
+    }
+
+    break;
+  }
+
+  if (!q.statement_en){
+    result.errors.push({ line: startIdx+1, message: `TF at line ${startIdx+1}: missing English statement` });
+    return null;
+  }
+  if (q.correct === null){
+    result.errors.push({ line: startIdx+1, message: `TF at line ${startIdx+1}: missing answer line (use "A: True" or "A: False")` });
+    return null;
+  }
+
+  return { question: q, nextLine: i };
+}
+
+function _quizParseReflection(lines, startIdx, result){
+  const newId = 'q_' + Math.random().toString(36).slice(2, 9);
+  const q = {
+    id: newId,
+    type: 'reflection',
+    prompt_en: '',
+    prompt_tl: '',
+    min_chars: 40
+  };
+
+  let i = startIdx;
+  const first = lines[i].trim();
+  const m = first.match(/^R\s+(?:(EN|TL)\s*:\s*)?(.*)$/i);
+  const firstLang = m[1] ? m[1].toUpperCase() : 'EN';
+  if (firstLang === 'EN') q.prompt_en = m[2].trim();
+  else q.prompt_tl = m[2].trim();
+  i++;
+
+  while (i < lines.length){
+    const raw = lines[i];
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')){ i++; continue; }
+
+    const rCont = line.match(/^R\s+(EN|TL)\s*:\s*(.*)$/i);
+    if (rCont){
+      const lang = rCont[1].toUpperCase();
+      if (lang === 'EN' && !q.prompt_en) q.prompt_en = rCont[2].trim();
+      else if (lang === 'TL') q.prompt_tl = rCont[2].trim();
+      else break;
+      i++;
+      continue;
+    }
+
+    const minMatch = line.match(/^MIN\s*:\s*(\d+)\s*$/i);
+    if (minMatch){
+      q.min_chars = Math.max(10, Math.min(500, parseInt(minMatch[1], 10) || 40));
+      i++;
+      continue;
+    }
+
+    break;
+  }
+
+  if (!q.prompt_en){
+    result.errors.push({ line: startIdx+1, message: `R at line ${startIdx+1}: missing English prompt` });
+    return null;
+  }
+
+  return { question: q, nextLine: i };
+}
+
+
+// ─── BULK IMPORT MODAL ──────────────────────────────────────────────
+let _bulkImportPreview = null;   // last successful parse result
+
+function _quizOpenBulkImport(){
+  let modal = document.getElementById('quizBulkImportModal');
+  if (!modal){
+    modal = document.createElement('div');
+    modal.id = 'quizBulkImportModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.65);z-index:9300;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  const sampleText = `# Sample format — delete or replace this
+
+SCORE: 70
+INTRO_EN: This isn't an exam — see what stuck.
+INTRO_TL: Hindi ito eksamen — tingnan kung ano ang naintindihan.
+OUTRO_PASS_EN: Now: how will you live this?
+OUTRO_PASS_TL: Ngayon: paano mo ito isasabuhay?
+OUTRO_FAIL_EN: It's okay — relisten and try again.
+OUTRO_FAIL_TL: Okay lang — pakinggan muli at subukan ulit.
+
+# Question 1 — Multiple Choice (* marks correct answer)
+MC EN: What does FATS stand for?
+MC TL: Ano ang ibig sabihin ng FATS?
+* EN: Faithful, Available, Teachable, Selfless
+  TL: Tapat, Available, Naituturo, Hindi makasarili
+- EN: Fast, Active, Trained, Strong
+  TL: Mabilis, Aktibo, Sinanay, Malakas
+- EN: Faithful, Articulate, Trained, Steady
+  TL: Tapat, Mahusay, Sinanay, Matatag
+
+# Question 2 — True / False
+TF EN: A leader must be perfect before discipling others.
+TF TL: Dapat perpekto ang leader bago siya makapag-disciple.
+A: False
+
+# Question 3 — Reflection (member writes a response)
+R EN: What is one specific way you'll apply this in your LC this week?
+R TL: Ano ang isang tiyak na paraan na iaaply mo ito sa LC ninyo ngayong linggo?
+MIN: 40
+`;
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:780px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">📋 Bulk Import</div>
+          <div style="font-size:15px;font-weight:700;color:var(--ink);margin-top:2px">Paste preformatted quiz text</div>
+        </div>
+        <button onclick="_quizCloseBulkImport()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        <details style="margin-bottom:.85rem">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--blue,#4a90e2);padding:.5rem .75rem;background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.2);border-radius:6px">📖 Format reference — tap to expand</summary>
+          <div style="padding:.85rem 1rem;background:var(--surface2);border-radius:6px;margin-top:.4rem;font-size:11.5px;color:var(--ink-soft);line-height:1.7">
+            <strong>Settings</strong> (all optional, each on its own line):
+            <pre style="background:var(--surface);padding:.6rem .75rem;border-radius:5px;font-size:11px;margin:.4rem 0;white-space:pre-wrap;font-family:monospace;color:var(--ink)">SCORE: 70
+INTRO_EN: text shown before quiz starts
+INTRO_TL: tagalog version
+OUTRO_PASS_EN: after passing
+OUTRO_PASS_TL: ...
+OUTRO_FAIL_EN: after failing
+OUTRO_FAIL_TL: ...</pre>
+
+            <strong>Multiple Choice:</strong>
+            <pre style="background:var(--surface);padding:.6rem .75rem;border-radius:5px;font-size:11px;margin:.4rem 0;white-space:pre-wrap;font-family:monospace;color:var(--ink)">MC EN: question text
+MC TL: tagalog (optional)
+* EN: correct option        ← asterisk marks correct
+  TL: tagalog option
+- EN: wrong option           ← dash for wrong options
+  TL: tagalog
+- EN: another wrong
+  TL: tagalog</pre>
+
+            <strong>True / False:</strong>
+            <pre style="background:var(--surface);padding:.6rem .75rem;border-radius:5px;font-size:11px;margin:.4rem 0;white-space:pre-wrap;font-family:monospace;color:var(--ink)">TF EN: statement
+TF TL: tagalog (optional)
+A: True       ← or False</pre>
+
+            <strong>Reflection (free-text response):</strong>
+            <pre style="background:var(--surface);padding:.6rem .75rem;border-radius:5px;font-size:11px;margin:.4rem 0;white-space:pre-wrap;font-family:monospace;color:var(--ink)">R EN: prompt for the member
+R TL: tagalog (optional)
+MIN: 40       ← min characters (default 40)</pre>
+
+            <strong>Other:</strong> Lines starting with <code style="background:var(--surface);padding:0 4px;border-radius:3px">#</code> are comments and ignored. Blank lines between questions are encouraged for readability.
+          </div>
+        </details>
+
+        <textarea id="quizBulkText" rows="18" placeholder="Paste your preformatted quiz here…"
+          style="width:100%;padding:.7rem .85rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-family:monospace;font-size:12.5px;line-height:1.55;resize:vertical">${escapeHTMLNotif(sampleText)}</textarea>
+
+        <div id="quizBulkPreview" style="margin-top:.85rem"></div>
+      </div>
+
+      <div style="padding:.9rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button onclick="_quizCloseBulkImport()" style="padding:.55rem 1rem;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer">Cancel</button>
+        <button onclick="_quizPreviewBulkImport()" style="padding:.55rem 1.1rem;background:rgba(74,144,226,.2);color:var(--blue,#4a90e2);border:1px solid rgba(74,144,226,.4);border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer">👁 Preview</button>
+        <button onclick="_quizConfirmBulkImport(false)" id="quizBulkImportBtn" disabled
+          style="padding:.55rem 1.1rem;background:var(--green);color:#fff;border:none;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;opacity:.4">
+          ✓ Append to quiz
+        </button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  _bulkImportPreview = null;
+}
+
+function _quizCloseBulkImport(){
+  const m = document.getElementById('quizBulkImportModal');
+  if (m) m.style.display = 'none';
+  _bulkImportPreview = null;
+}
+
+function _quizPreviewBulkImport(){
+  const text = document.getElementById('quizBulkText').value;
+  const parsed = _quizParseBulkText(text);
+  _bulkImportPreview = parsed;
+
+  const preview = document.getElementById('quizBulkPreview');
+  const importBtn = document.getElementById('quizBulkImportBtn');
+
+  if (parsed.questions.length === 0 && Object.keys(parsed.settings).length === 0){
+    preview.innerHTML = `
+      <div style="padding:.7rem .85rem;background:rgba(232,93,93,.12);border:1px solid rgba(232,93,93,.3);border-radius:7px;color:var(--red);font-size:12px;line-height:1.55">
+        <strong>Nothing to import.</strong> ${parsed.errors.length > 0 ? `${parsed.errors.length} error${parsed.errors.length===1?'':'s'} found below.` : 'Check the format reference above.'}
+      </div>
+      ${parsed.errors.length > 0 ? _quizRenderErrorList(parsed.errors, 'red') : ''}
+    `;
+    importBtn.disabled = true;
+    importBtn.style.opacity = '.4';
+    return;
+  }
+
+  const settingsRows = Object.keys(parsed.settings).map(k => {
+    const v = parsed.settings[k];
+    const display = typeof v === 'string' && v.length > 60 ? v.substring(0,60) + '…' : v;
+    return `<div style="font-size:11px;color:var(--muted);padding:2px 0"><strong style="color:var(--ink)">${k}:</strong> ${escapeHTMLNotif(display)}</div>`;
+  }).join('');
+
+  const counts = parsed.questions.reduce((acc, q) => {
+    acc[q.type] = (acc[q.type] || 0) + 1;
+    return acc;
+  }, {});
+  const countLabel = [
+    counts.multiple_choice ? `${counts.multiple_choice} MC` : null,
+    counts.true_false      ? `${counts.true_false} T/F`     : null,
+    counts.reflection      ? `${counts.reflection} reflection` : null
+  ].filter(Boolean).join(', ');
+
+  preview.innerHTML = `
+    <div style="padding:.85rem 1rem;background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.3);border-radius:8px">
+      <div style="font-size:13px;font-weight:700;color:var(--forest);margin-bottom:.4rem">
+        ✓ ${parsed.questions.length} question${parsed.questions.length===1?'':'s'} ready to import (${countLabel})
+      </div>
+      ${settingsRows ? `<div style="margin-top:.6rem;padding-top:.5rem;border-top:1px solid rgba(52,211,153,.2)"><div style="font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px">Settings to apply</div>${settingsRows}</div>` : ''}
+    </div>
+    ${parsed.errors.length > 0 ? `<div style="margin-top:.6rem;font-size:12px;font-weight:700;color:var(--red);margin-bottom:.3rem">⚠ ${parsed.errors.length} question${parsed.errors.length===1?'':'s'} skipped:</div>${_quizRenderErrorList(parsed.errors, 'red')}` : ''}
+    ${parsed.warnings.length > 0 ? `<div style="margin-top:.6rem;font-size:12px;font-weight:600;color:var(--gold);margin-bottom:.3rem">ℹ ${parsed.warnings.length} warning${parsed.warnings.length===1?'':'s'}:</div>${_quizRenderErrorList(parsed.warnings, 'gold')}` : ''}
+    <div style="margin-top:.7rem;padding:.6rem .85rem;background:var(--surface2);border-radius:6px;font-size:11.5px;color:var(--muted);line-height:1.55">
+      💡 <strong>Append</strong> adds these questions to your existing quiz. <strong>Replace all</strong> deletes existing questions first — only use if you're rebuilding from scratch.
+    </div>
+  `;
+  importBtn.disabled = false;
+  importBtn.style.opacity = '1';
+
+  // Expose the Replace option once preview is valid
+  const cancelBtn = importBtn.previousElementSibling;
+  if (cancelBtn && !document.getElementById('quizBulkReplaceBtn')){
+    const replaceBtn = document.createElement('button');
+    replaceBtn.id = 'quizBulkReplaceBtn';
+    replaceBtn.onclick = () => _quizConfirmBulkImport(true);
+    replaceBtn.style.cssText = 'padding:.55rem 1.1rem;background:var(--red);color:#fff;border:none;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer';
+    replaceBtn.textContent = '🗑 Replace all';
+    importBtn.parentNode.insertBefore(replaceBtn, importBtn);
+  }
+}
+
+function _quizRenderErrorList(items, color){
+  const colorVar = color === 'red' ? 'var(--red)' : 'var(--gold)';
+  const bg = color === 'red' ? 'rgba(232,93,93,.08)' : 'rgba(184,136,42,.08)';
+  const rows = items.map(e => `
+    <div style="padding:.35rem .55rem;font-size:11.5px;color:var(--ink-soft);line-height:1.5">
+      <span style="color:${colorVar};font-weight:700">Line ${e.line}:</span> ${escapeHTMLNotif(e.message)}
+    </div>
+  `).join('');
+  return `<div style="background:${bg};border-radius:6px;padding:.3rem .25rem;margin-top:.3rem">${rows}</div>`;
+}
+
+function _quizConfirmBulkImport(replaceAll){
+  if (!_bulkImportPreview || _bulkImportPreview.questions.length === 0){
+    toast('Run Preview first', '⚠️');
+    return;
+  }
+
+  if (replaceAll){
+    const current = (_quizBuilderState.quiz.questions || []).length;
+    if (current > 0){
+      const msg = `Delete the ${current} existing question${current===1?'':'s'} and replace with ${_bulkImportPreview.questions.length} from the import?\n\nThis cannot be undone.`;
+      if (!confirm(msg)) return;
+    }
+    _quizBuilderState.quiz.questions = _bulkImportPreview.questions.slice();
+  } else {
+    // Append
+    if (!Array.isArray(_quizBuilderState.quiz.questions)) _quizBuilderState.quiz.questions = [];
+    _quizBuilderState.quiz.questions.push(..._bulkImportPreview.questions);
+  }
+
+  // Apply settings (only overwrite fields that were present in the import)
+  Object.keys(_bulkImportPreview.settings).forEach(k => {
+    _quizBuilderState.quiz[k] = _bulkImportPreview.settings[k];
+  });
+
+  _quizBuilderState.dirty = true;
+  _quizCloseBulkImport();
+  _renderQuizBuilder();
+
+  const n = _bulkImportPreview.questions.length;
+  toast(`✓ Imported ${n} question${n===1?'':'s'}${replaceAll?' (replaced existing)':' (appended)'}`, 'success');
 }
 
 
