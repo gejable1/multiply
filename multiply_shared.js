@@ -1,22 +1,29 @@
 // ═══════════════════════════════════════════════════════════════
 // MULTIPLY · Shared Module
 // ─────────────────────────────────────────────────────────────────
-// Loaded by both multiply_dashboard.html (desktop) and
-// lc_leader_tool.html (mobile). Provides the single source of truth
-// for: Supabase client, leader-session gating, scoping rules,
-// sensitivity tiers, and audit logging.
+// Loaded by:
+//   • multiply_dashboard.html (Pastor desktop)
+//   • lc_leader_tool.html     (LC leader mobile)
+//   • lc_attendance_report.html
+//   • member_tool.html        (MMT — member mobile)
 //
-// Pages should:
-//   1. Load this script BEFORE any of their own logic runs.
-//   2. Call MultiplyShared.gateOrRedirect(LOGIN_URL) at the very top
-//      of <body> to guarantee an authenticated leader session before
-//      anything renders.
-//   3. Read the active leader from window.LEADER, scope arrays via
-//      LeaderScope.apply(members), and gate sensitive UI via
-//      LeaderScope.canSee(tier, member).
+// Provides single source of truth for:
+//   • Supabase client (singleton)
+//   • Leader-session gating (gateOrRedirect, logoutLeader)
+//   • Member-session gating (gateMemberOrRedirect, logoutMember)
+//   • LeaderScope factory (scoping + tiers for leader-side tools)
+//   • Audit logging
 //
-// This module is intentionally framework-free and dependency-light —
-// it expects only the Supabase JS SDK to already be loaded.
+// Two distinct session keys live in sessionStorage:
+//   multiply_leader_session — used by MD/MLT/reports
+//   multiply_member_session — used by MMT
+// They are independent. Same device can have either, both, or neither.
+//
+// IMPORTANT: All four entry pages call their respective gate function
+// at the top of <body>. If a gate function is MISSING from this module,
+// the calling page throws TypeError synchronously and the loading spinner
+// hangs forever. Do not remove member or leader gate functions without
+// updating every consumer.
 // ═══════════════════════════════════════════════════════════════
 
 (function (global) {
@@ -27,6 +34,7 @@
   const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 
   const SESSION_KEY = 'multiply_leader_session';
+  const MEMBER_SESSION_KEY = 'multiply_member_session';   // for MMT (member tool)
   const LEVEL_NAMES = ['Pre-Pipeline', 'Team Member', 'Leader', 'Coach', 'Director', 'Executive Leader'];
   const PASTOR_LEVEL = 5;
 
@@ -89,6 +97,55 @@
     } catch (e) { /* non-fatal */ }
     try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
     global.location.replace(loginUrl || 'leader_login.html');
+  }
+
+
+  // ═════════════════════════════════════════════════════════════
+  // MEMBER-SESSION FUNCTIONS (for MMT — member_tool.html)
+  // ───────────────────────────────────────────────────────────
+  // The member tool uses a SEPARATE session (multiply_member_session)
+  // from the leader tools, because a single device may be used by
+  // both a leader and an ordinary member at different times. These
+  // mirror the leader functions above but read/write the member key.
+  //
+  // The session shape is set by member_login.html's loginSuccess():
+  //   { memberId, memberName, memberLevel, memberRole, memberLcGroup,
+  //     memberDisciplerName, expiresAt, sessionStart }
+  // ═════════════════════════════════════════════════════════════
+
+  function getValidMemberSession() {
+    let sess = null;
+    try {
+      const raw = sessionStorage.getItem(MEMBER_SESSION_KEY);
+      if (raw) sess = JSON.parse(raw);
+    } catch (e) {
+      sess = null;
+    }
+    if (!sess || !sess.memberId || !sess.expiresAt) return null;
+    if (Date.parse(sess.expiresAt) <= Date.now()) return null;
+    return sess;
+  }
+
+  // Hard gate for MMT. If member session is invalid, clear storage and
+  // redirect to login. Returns true if session was valid (caller may
+  // proceed); on success, sets window.MEMBER for the page to read.
+  function gateMemberOrRedirect(loginUrl) {
+    const sess = getValidMemberSession();
+    if (sess) {
+      global.MEMBER = sess;
+      return true;
+    }
+    try { sessionStorage.removeItem(MEMBER_SESSION_KEY); } catch (e) {}
+    global.location.replace(loginUrl || 'member_login.html');
+    return false;
+  }
+
+  // Logout for members — clear storage and redirect to login.
+  // No DB session table for members in Phase 1 (could be added later
+  // if we want last-login auditing parallel to leader_sessions).
+  function logoutMember(loginUrl) {
+    try { sessionStorage.removeItem(MEMBER_SESSION_KEY); } catch (e) {}
+    global.location.replace(loginUrl || 'member_login.html');
   }
 
   // ───── LeaderScope ─────
@@ -257,11 +314,17 @@
 
   // ───── Public surface ─────
   global.MultiplyShared = {
-    SB_URL, SB_KEY, SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
+    SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
     getDB,
+    // Leader-session API (for MD, MLT, lc_attendance_report, etc.)
     getValidSession,
     gateOrRedirect,
     logoutLeader,
+    // Member-session API (for MMT — member_tool.html)
+    getValidMemberSession,
+    gateMemberOrRedirect,
+    logoutMember,
+    // Scoping + audit
     makeLeaderScope,
     logView,
     tierLockCard,
