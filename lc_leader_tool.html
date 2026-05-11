@@ -13,7 +13,14 @@
 <link rel="apple-touch-icon" href="icon_192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon_192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icon_512.png">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Non-blocking font load — protects against slow PH networks and
+     Vivo/Xiaomi data-saver throttling that hangs Google Fonts. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap"></noscript>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
@@ -28,7 +35,18 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html{overscroll-behavior-y:contain;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
-     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior-y:contain;}
+     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior-y:contain;
+     /* MLT was designed for ~380px phone screens. On tablets / larger phones
+        (Fhel's device, etc.), it previously stretched edge-to-edge — making
+        cards look strangely shrunken because the eye expects them to scale
+        with the viewport. Capping the content at 520px and centering it
+        keeps the mobile design intact on every device. */
+     max-width:520px;
+     margin:0 auto;
+     /* On wide screens, the surrounding "page" area gets a slightly darker
+        backdrop so the centered column reads as deliberate, not broken. */
+     box-shadow:0 0 0 100vmax #07070a;
+     clip-path:inset(0 -100vmax);}
 
 /* ── SCREENS ── */
 .screen{display:none;}
@@ -212,7 +230,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
 .att-name{font-size:14px;font-weight:600;flex:1;}
 .att-streak{font-size:11px;color:var(--muted);}
-.att-save-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);
+.att-save-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:520px;background:var(--surface);
   border-top:1px solid var(--border);padding:12px 16px calc(12px + env(safe-area-inset-bottom));
   display:flex;align-items:center;gap:10px;z-index:40;}
 .att-count{font-size:13px;font-weight:700;color:var(--gold);flex:1;}
@@ -296,7 +315,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   font-size:12px;font-weight:700;color:var(--text);cursor:pointer;}
 
 /* Detail action buttons */
-.detail-actions{position:fixed;bottom:0;left:0;right:0;
+.detail-actions{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:520px;
   padding:12px 16px calc(12px + env(safe-area-inset-bottom));
   background:var(--surface);border-top:1px solid var(--border);
   display:flex;gap:8px;z-index:40;}
