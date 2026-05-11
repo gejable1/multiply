@@ -1979,6 +1979,56 @@ body.lang-tl .tl-text{display:inline;}
 // BOOT — gate the page on a valid member session, then load data.
 // ═══════════════════════════════════════════════════════════════
 
+// ─── Visible boot-phase indicator ───
+// Members reporting "infinite spinner" can't tell us what phase failed.
+// This appends phase markers under the spinner text so we (and they) can
+// see exactly how far the boot got. Also serves as a passive diagnostic
+// for the platform — any "stuck" report can describe which phase showed.
+(function bootPhaseTracker(){
+  const phases = [];
+  window.__mmtPhase = function(label){
+    phases.push(label);
+    try {
+      let el = document.getElementById('bootPhases');
+      if (!el) {
+        const wrap = document.querySelector('#loadingScreen');
+        if (wrap) {
+          el = document.createElement('div');
+          el.id = 'bootPhases';
+          el.style.cssText = 'margin-top:1rem;font-size:10.5px;color:#6b5f4f;text-align:left;max-width:280px;font-family:monospace;line-height:1.7';
+          wrap.appendChild(el);
+        }
+      }
+      if (el) el.innerHTML = phases.map(p => '✓ ' + p).join('<br>');
+    } catch(e) {}
+  };
+})();
+window.__mmtPhase('Script parsed');
+
+// ─── Master safety net ───
+// No matter what happens below, if the spinner is still on screen after
+// 25 seconds, force-show a retry UI. This is the floor — even if my
+// other timeouts and guards fail, this WILL fire.
+const __masterTimeout = setTimeout(function(){
+  const ls = document.getElementById('loadingScreen');
+  if (!ls || ls.style.display === 'none') return;
+  const phases = (document.getElementById('bootPhases') || {innerHTML: '(no phases recorded)'}).innerHTML;
+  ls.innerHTML = `
+    <div style="text-align:center;padding:2rem 1.5rem;max-width:380px">
+      <div style="font-size:48px;margin-bottom:.75rem">⏱</div>
+      <div style="font-size:16px;font-weight:700;color:#1c1810;margin-bottom:.5rem">Still loading after 25 seconds</div>
+      <div style="font-size:13px;color:#6b5f4f;line-height:1.6;margin-bottom:1rem">
+        This usually means a flaky connection or a stuck app cache.
+      </div>
+      <div style="font-size:10.5px;color:#6b5f4f;background:#f5f0e6;padding:.6rem .75rem;border-radius:6px;text-align:left;font-family:monospace;margin-bottom:1rem">Boot reached:<br>${phases}</div>
+      <button onclick="location.reload(true)" style="padding:.7rem 1.5rem;background:#0e3a2c;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:.5rem">↻ Retry</button>
+      <div style="margin-top:.5rem">
+        <button onclick="if(window.MultiplyShared&&MultiplyShared.logoutMember){MultiplyShared.logoutMember();}localStorage.clear();location.href='member_login.html';" style="padding:.5rem 1rem;background:transparent;color:#6b5f4f;border:none;font-size:11.5px;cursor:pointer;text-decoration:underline">Sign out &amp; clear cache</button>
+      </div>
+    </div>
+  `;
+}, 25000);
+
 // ─── Dependency guard ───
 // If multiply_shared.js or the Supabase CDN failed to load, the script
 // will throw "MultiplyShared is not defined" or "supabase is not defined"
@@ -1988,10 +2038,14 @@ body.lang-tl .tl-text{display:inline;}
   const missing = [];
   if (window.__mmtDepError === 'supabase' || typeof supabase === 'undefined') missing.push('Supabase');
   if (window.__mmtDepError === 'shared'   || typeof MultiplyShared === 'undefined') missing.push('MultiplyShared');
-  if (missing.length === 0) return;
+  if (missing.length === 0) {
+    window.__mmtPhase('Dependencies OK');
+    return;
+  }
 
   // Replace the spinner with an actionable error UI
   function showDepError(){
+    clearTimeout(__masterTimeout);
     const ls = document.getElementById('loadingScreen');
     if (!ls) return;
     ls.innerHTML = `
@@ -2023,7 +2077,11 @@ if(!MultiplyShared.gateMemberOrRedirect('member_login.html')){
   // gateMemberOrRedirect already replaced location; nothing else to do.
 } else {
   // Has a valid session. window.MEMBER is set.
-  document.addEventListener('DOMContentLoaded', initMMT);
+  window.__mmtPhase('Session OK');
+  document.addEventListener('DOMContentLoaded', function(){
+    window.__mmtPhase('DOM ready');
+    initMMT();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2158,6 +2216,7 @@ let currentEditField = null;
 // INIT
 // ═══════════════════════════════════════════════════════════════
 async function initMMT(){
+  window.__mmtPhase('initMMT start');
   // Apply saved language + font scale early to avoid flash
   applySavedLang();
   applySavedFontScale();
@@ -2176,7 +2235,9 @@ async function initMMT(){
   }, 8000);
 
   try{
+    window.__mmtPhase('Calling Supabase');
     await loadMember();
+    window.__mmtPhase('Member loaded');
     clearTimeout(slowHintTimer);
     // Each subsequent loader is wrapped — a single failure shouldn't kill init
     try{ await loadDevoStreak(); }catch(e){ console.warn('streak failed:', e); }
@@ -2187,14 +2248,18 @@ async function initMMT(){
     try{ await loadHeadsUpConfig(); }catch(e){ console.warn('headsup config failed:', e); }
     try{ await loadMyRecentNotices(); }catch(e){ console.warn('my notices failed:', e); }
     try{ await loadLibraryAndProgress(); }catch(e){ console.warn('library failed:', e); }
+    window.__mmtPhase('Data loaded');
     renderHome();
     renderPipeline();
     renderAssessments();
     renderEolo();
     renderProfile();
+    if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
+    window.__mmtPhase('Rendered');
     showApp();
   }catch(e){
     clearTimeout(slowHintTimer);
+    if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
     console.error('initMMT failed:', e);
     // Replace the spinner with a clear retry UI so the user is never stuck
     // staring at a hung spinner. Most common cause: flaky mobile data.
