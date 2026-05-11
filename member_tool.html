@@ -1984,6 +1984,11 @@ body.lang-tl .tl-text{display:inline;}
 // This appends phase markers under the spinner text so we (and they) can
 // see exactly how far the boot got. Also serves as a passive diagnostic
 // for the platform — any "stuck" report can describe which phase showed.
+//
+// Hidden from members by default (display:none). Two ways to reveal:
+//   1. Tap the loading screen 5 times in quick succession → unhides
+//   2. Automatic on error/timeout screens (their innerHTML pulls phases
+//      regardless of visibility — those screens replace the whole spinner)
 (function bootPhaseTracker(){
   const phases = [];
   window.__mmtPhase = function(label){
@@ -1995,13 +2000,35 @@ body.lang-tl .tl-text{display:inline;}
         if (wrap) {
           el = document.createElement('div');
           el.id = 'bootPhases';
-          el.style.cssText = 'margin-top:1rem;font-size:10.5px;color:#6b5f4f;text-align:left;max-width:280px;font-family:monospace;line-height:1.7';
+          // Hidden by default — Pastor / debugger reveals via 5-tap
+          el.style.cssText = 'display:none;margin-top:1rem;font-size:10.5px;color:#6b5f4f;text-align:left;max-width:280px;font-family:monospace;line-height:1.7';
           wrap.appendChild(el);
         }
       }
       if (el) el.innerHTML = phases.map(p => '✓ ' + p).join('<br>');
     } catch(e) {}
   };
+
+  // 5-tap reveal — diagnostic gesture. Pastor (or any sufficiently
+  // curious user) taps the loading screen 5 times within 2 seconds
+  // and the phase list appears. Useful when a phone is stuck and we
+  // want to see how far it got without uninstalling.
+  let tapCount = 0;
+  let tapResetTimer = null;
+  document.addEventListener('DOMContentLoaded', function(){
+    const ls = document.getElementById('loadingScreen');
+    if (!ls) return;
+    ls.addEventListener('click', function(){
+      tapCount++;
+      clearTimeout(tapResetTimer);
+      tapResetTimer = setTimeout(() => { tapCount = 0; }, 2000);
+      if (tapCount >= 5){
+        const el = document.getElementById('bootPhases');
+        if (el) el.style.display = 'block';
+        tapCount = 0;
+      }
+    });
+  });
 })();
 window.__mmtPhase('Script parsed');
 
