@@ -767,6 +767,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div class="sr"><span class="sl">Manage daily devotional guide entries (calendar + bulk paste)</span><button class="sbtn" style="margin-top:0;background:var(--green-deep)" onclick="window.open('devotional_admin.html','_blank')">📖 Devotional Admin</button></div>
     <div class="sr"><span class="sl">Publish weekly sermon summaries (members read in MMT)</span><button class="sbtn" style="margin-top:0;background:#5b6fbf" onclick="openSermonLibrary()">⛪ Sermon Library</button></div>
     <div class="sr"><span class="sl">Manage level-gated reading materials (books, articles, study guides)</span><button class="sbtn" style="margin-top:0;background:#8a5b2e" onclick="openLibraryManager()">📚 Library Manager</button></div>
+    <div class="sr"><span class="sl">Review members' comprehension check attempts &amp; reflection answers</span><button class="sbtn" style="margin-top:0;background:#5e7d52" onclick="openQuizReview()">📝 Quiz Review</button></div>
   </div>
   <!-- ─── DIAGNOSTIC SETTINGS (Pastor-configurable) ─── -->
   <div class="ss" id="diagSettingsSection"><div class="st">⚙️ Diagnostic Settings</div>
@@ -4180,6 +4181,551 @@ async function _libDelete(id){
   } catch(e){
     toast('Delete failed: ' + e.message, '❌');
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// QUIZ REVIEW — Pastor's view of members' comprehension check attempts
+// ─────────────────────────────────────────────────────────────────
+// Pastoral framing (defend in future feature requests):
+//   • This is a window into HEARTS, not a performance dashboard.
+//   • Reflection answers are required-not-scored — read them as prayer
+//     context, not as right/wrong. The system does not auto-flag.
+//   • Pass once, pass forever — `quiz_passed_at` never cleared.
+//
+// Architecture:
+//   • Single-shot load: attempts + quizzes + resources + members (4 queries)
+//   • Joined client-side (small data volume, simpler than nested selects)
+//   • Grouped by member (collapsible), each attempt tappable → full detail
+//   • Filters: member, resource, date range, pass/fail status
+//   • CSV export for records
+// ═══════════════════════════════════════════════════════════════════
+
+let _quizReviewState = {
+  attempts: [],     // raw attempts joined with quiz + resource + member
+  quizzes: {},      // id → quiz
+  resources: {},    // id → resource
+  members: {},      // id → member
+  expanded: {},     // memberId → bool (accordion state)
+  filters: {
+    memberId: '',
+    resourceId: '',
+    fromDate: '',
+    toDate: '',
+    status: ''      // '', 'passed', 'failed'
+  },
+  detailAttempt: null  // attempt id currently shown in detail modal
+};
+
+async function openQuizReview(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can review quiz attempts','🔒'); return; }
+  // Render modal immediately with loading state
+  _qrRenderShell('loading');
+  try {
+    await _qrLoadData();
+    _qrRender();
+  } catch(e){
+    toast('Could not load quiz attempts: ' + (e.message || e), '❌');
+    _qrClose();
+  }
+}
+
+async function _qrLoadData(){
+  // Four parallel queries
+  const [attRes, qzRes, resRes, memRes] = await Promise.all([
+    db.from('library_quiz_attempts')
+      .select('id, member_id, quiz_id, started_at, completed_at, score, passed, answers, created_at')
+      .order('completed_at', { ascending: false, nullsFirst: false }),
+    db.from('library_quizzes')
+      .select('id, resource_id, passing_score, questions, intro_text_en, intro_text_tl, outro_text_pass_en, outro_text_pass_tl, outro_text_fail_en, outro_text_fail_tl, active'),
+    db.from('library_resources')
+      .select('id, title_en, title_tl, level, author'),
+    db.from('members')
+      .select('id, name, lc_group, pipeline_level')
+  ]);
+
+  if(attRes.error) throw attRes.error;
+  if(qzRes.error) throw qzRes.error;
+  if(resRes.error) throw resRes.error;
+  if(memRes.error) throw memRes.error;
+
+  _quizReviewState.attempts = attRes.data || [];
+
+  _quizReviewState.quizzes = {};
+  (qzRes.data || []).forEach(q => { _quizReviewState.quizzes[q.id] = q; });
+
+  _quizReviewState.resources = {};
+  (resRes.data || []).forEach(r => { _quizReviewState.resources[r.id] = r; });
+
+  _quizReviewState.members = {};
+  (memRes.data || []).forEach(m => { _quizReviewState.members[m.id] = m; });
+}
+
+function _qrFilteredAttempts(){
+  const f = _quizReviewState.filters;
+  return _quizReviewState.attempts.filter(a => {
+    if(!a.completed_at) return false;  // ignore in-progress
+    if(f.memberId && a.member_id !== f.memberId) return false;
+    const qz = _quizReviewState.quizzes[a.quiz_id];
+    if(f.resourceId){
+      if(!qz || qz.resource_id !== f.resourceId) return false;
+    }
+    if(f.status === 'passed' && !a.passed) return false;
+    if(f.status === 'failed' && a.passed) return false;
+    if(f.fromDate){
+      const d = (a.completed_at || '').slice(0,10);
+      if(d < f.fromDate) return false;
+    }
+    if(f.toDate){
+      const d = (a.completed_at || '').slice(0,10);
+      if(d > f.toDate) return false;
+    }
+    return true;
+  });
+}
+
+function _qrRenderShell(state){
+  let modal = document.getElementById('quizReviewModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'quizReviewModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+  if(state === 'loading'){
+    modal.innerHTML = `
+      <div style="background:var(--surface);border-radius:12px;padding:2.5rem 2rem;text-align:center;color:var(--muted);font-size:13px">
+        <div style="font-size:22px;margin-bottom:.5rem">📝</div>
+        Loading attempts…
+      </div>`;
+  }
+}
+
+function _qrRender(){
+  let modal = document.getElementById('quizReviewModal');
+  if(!modal){ _qrRenderShell('loading'); modal = document.getElementById('quizReviewModal'); }
+
+  const filtered = _qrFilteredAttempts();
+  const allAttempts = _quizReviewState.attempts.filter(a => a.completed_at);
+
+  // Church-wide stats (filter-independent for context)
+  const totalAttempts = allAttempts.length;
+  const uniqueMembers = new Set(allAttempts.map(a => a.member_id)).size;
+  const passCount = allAttempts.filter(a => a.passed).length;
+  const passRate = totalAttempts > 0 ? Math.round((passCount / totalAttempts) * 100) : 0;
+
+  // Group filtered attempts by member
+  const byMember = {};
+  filtered.forEach(a => {
+    if(!byMember[a.member_id]) byMember[a.member_id] = [];
+    byMember[a.member_id].push(a);
+  });
+  // Sort members by most recent activity
+  const memberIds = Object.keys(byMember).sort((a,b) => {
+    const aLatest = byMember[a][0]?.completed_at || '';
+    const bLatest = byMember[b][0]?.completed_at || '';
+    return bLatest.localeCompare(aLatest);
+  });
+
+  // Member dropdown options (everyone who ever attempted)
+  const everAttempted = new Set(allAttempts.map(a => a.member_id));
+  const memberOptions = Array.from(everAttempted)
+    .map(id => _quizReviewState.members[id])
+    .filter(m => m)
+    .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+
+  // Resource dropdown options (every resource with a quiz that has attempts)
+  const everQuizzed = new Set(allAttempts.map(a => _quizReviewState.quizzes[a.quiz_id]?.resource_id).filter(Boolean));
+  const resourceOptions = Array.from(everQuizzed)
+    .map(id => _quizReviewState.resources[id])
+    .filter(r => r)
+    .sort((a,b) => (a.title_en || '').localeCompare(b.title_en || ''));
+
+  const f = _quizReviewState.filters;
+  const hasFilters = f.memberId || f.resourceId || f.fromDate || f.toDate || f.status;
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:720px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Pastor Tools</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-top:2px">📝 Quiz Review</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+            ${totalAttempts} attempt${totalAttempts===1?'':'s'} · ${uniqueMembers} member${uniqueMembers===1?'':'s'} · ${passRate}% pass rate
+          </div>
+        </div>
+        <button onclick="_qrClose()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <!-- Pastoral framing banner -->
+      <div style="margin:1rem 1.25rem 0;padding:.75rem .9rem;background:var(--gold-bg);border:1px solid rgba(184,136,42,.25);border-radius:8px;font-size:11.5px;line-height:1.55;color:var(--ink)">
+        <span style="font-weight:600;color:var(--gold)">A window into hearts.</span>
+        Reflection answers are required-not-scored — read them as prayer context.
+        Wrong answers shown here are for your discernment, not auto-flags.
+      </div>
+
+      <!-- Filter bar -->
+      <div style="padding:.85rem 1.25rem .35rem;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <select onchange="_qrSetFilter('memberId', this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-family:inherit;font-size:12px;color:var(--ink)">
+          <option value="">All members</option>
+          ${memberOptions.map(m => `<option value="${m.id}" ${f.memberId===m.id?'selected':''}>${escapeHTMLNotif(m.name || '—')}</option>`).join('')}
+        </select>
+        <select onchange="_qrSetFilter('resourceId', this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-family:inherit;font-size:12px;color:var(--ink)">
+          <option value="">All resources</option>
+          ${resourceOptions.map(r => `<option value="${r.id}" ${f.resourceId===r.id?'selected':''}>${escapeHTMLNotif(r.title_en || '(untitled)')}</option>`).join('')}
+        </select>
+        <select onchange="_qrSetFilter('status', this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-family:inherit;font-size:12px;color:var(--ink)">
+          <option value="">All outcomes</option>
+          <option value="passed" ${f.status==='passed'?'selected':''}>Passed only</option>
+          <option value="failed" ${f.status==='failed'?'selected':''}>Did not pass</option>
+        </select>
+        <div style="display:flex;gap:.35rem;align-items:center">
+          <input type="date" value="${f.fromDate}" onchange="_qrSetFilter('fromDate', this.value)" title="From"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
+          <span style="font-size:11px;color:var(--muted)">→</span>
+          <input type="date" value="${f.toDate}" onchange="_qrSetFilter('toDate', this.value)" title="To"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
+        </div>
+      </div>
+      ${hasFilters ? `
+        <div style="padding:.4rem 1.25rem .65rem;font-size:11px;color:var(--muted)">
+          Showing ${filtered.length} of ${totalAttempts}
+          <button onclick="_qrClearFilters()" style="margin-left:.5rem;background:transparent;border:none;color:var(--gold);font-family:inherit;font-size:11px;cursor:pointer;text-decoration:underline">clear filters</button>
+        </div>
+      ` : ''}
+
+      <!-- Member-grouped list -->
+      <div style="flex:1;overflow-y:auto;padding:.5rem 1.25rem 1rem">
+        ${memberIds.length === 0 ? `
+          <div style="padding:2.5rem 1rem;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">
+            ${totalAttempts === 0 ? 'No quiz attempts yet.<br><span style="color:var(--lighter);font-size:11.5px">When members take comprehension checks, you\'ll see their attempts here.</span>' : 'No attempts match these filters.'}
+          </div>
+        ` : memberIds.map(memId => _qrRenderMemberCard(memId, byMember[memId])).join('')}
+      </div>
+
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_qrClose()">Close</button>
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_qrExportCSV()" ${filtered.length === 0 ? 'disabled' : ''}>📥 Export CSV</button>
+      </div>
+    </div>
+  `;
+}
+
+function _qrRenderMemberCard(memId, attempts){
+  const m = _quizReviewState.members[memId];
+  const name = m?.name || '(member not found)';
+  const lc = m?.lc_group || '';
+  const expanded = !!_quizReviewState.expanded[memId];
+
+  // Stats for this member's filtered attempts
+  const total = attempts.length;
+  const passed = attempts.filter(a => a.passed).length;
+  const rate = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const uniqueResources = new Set(attempts.map(a => _quizReviewState.quizzes[a.quiz_id]?.resource_id).filter(Boolean)).size;
+  const lastAt = attempts[0]?.completed_at;
+  const lastLabel = lastAt ? new Date(lastAt).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '—';
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:.55rem;overflow:hidden">
+      <div onclick="_qrToggleMember('${memId}')"
+        style="padding:.85rem 1rem;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:center"
+        onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
+        <div style="min-width:0">
+          <div style="font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.3">
+            ${escapeHTMLNotif(name)}
+            ${lc ? `<span style="font-size:10.5px;color:var(--muted);font-weight:500;margin-left:6px">· ${escapeHTMLNotif(lc)}</span>` : ''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">
+            ${total} attempt${total===1?'':'s'} across ${uniqueResources} resource${uniqueResources===1?'':'s'} · ${rate}% pass · last ${lastLabel}
+          </div>
+        </div>
+        <div style="font-size:18px;color:var(--muted);transition:transform .15s;transform:rotate(${expanded?90:0}deg)">›</div>
+      </div>
+      ${expanded ? `
+        <div style="border-top:1px solid var(--border);background:var(--surface)">
+          ${attempts.map(a => _qrRenderAttemptRow(a)).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function _qrRenderAttemptRow(a){
+  const qz = _quizReviewState.quizzes[a.quiz_id];
+  const res = qz ? _quizReviewState.resources[qz.resource_id] : null;
+  const title = res?.title_en || '(resource not found)';
+  const when = a.completed_at ? new Date(a.completed_at).toLocaleString('en-PH', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : '—';
+  const score = (a.score != null) ? `${a.score}%` : '—';
+  const passBadge = a.passed
+    ? `<span style="font-size:9.5px;background:var(--green-bg);color:var(--green);padding:2px 7px;border-radius:6px;font-weight:700;letter-spacing:.05em">PASSED</span>`
+    : `<span style="font-size:9.5px;background:rgba(180,80,80,.15);color:#b25050;padding:2px 7px;border-radius:6px;font-weight:700;letter-spacing:.05em">NOT YET</span>`;
+
+  // Detect if there are reflection answers
+  let hasReflection = false;
+  if(a.answers && qz && Array.isArray(qz.questions)){
+    hasReflection = qz.questions.some(q => q.type === 'reflection' && a.answers[q.id]?.value);
+  }
+
+  return `
+    <div onclick="_qrOpenAttempt('${a.id}')"
+      style="padding:.65rem 1rem;border-bottom:1px solid var(--border);cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:center"
+      onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
+      <div style="min-width:0">
+        <div style="font-size:12.5px;color:var(--ink);font-weight:500;line-height:1.3">
+          ${escapeHTMLNotif(title)}
+          ${hasReflection ? '<span style="font-size:9.5px;color:var(--gold);margin-left:5px">✦ reflection</span>' : ''}
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${when} · ${score}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.5rem">${passBadge}<span style="color:var(--muted);font-size:14px">›</span></div>
+    </div>
+  `;
+}
+
+function _qrToggleMember(memId){
+  _quizReviewState.expanded[memId] = !_quizReviewState.expanded[memId];
+  _qrRender();
+}
+
+function _qrSetFilter(key, val){
+  _quizReviewState.filters[key] = val;
+  _qrRender();
+}
+
+function _qrClearFilters(){
+  _quizReviewState.filters = { memberId:'', resourceId:'', fromDate:'', toDate:'', status:'' };
+  _qrRender();
+}
+
+function _qrOpenAttempt(attemptId){
+  _quizReviewState.detailAttempt = attemptId;
+  _qrRenderDetail();
+}
+
+function _qrRenderDetail(){
+  const a = _quizReviewState.attempts.find(x => x.id === _quizReviewState.detailAttempt);
+  if(!a){ _qrCloseDetail(); return; }
+
+  const qz = _quizReviewState.quizzes[a.quiz_id];
+  const res = qz ? _quizReviewState.resources[qz.resource_id] : null;
+  const m  = _quizReviewState.members[a.member_id];
+
+  const title = res?.title_en || '(resource not found)';
+  const memName = m?.name || '(member not found)';
+  const when = a.completed_at ? new Date(a.completed_at).toLocaleString('en-PH', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : '—';
+  const score = (a.score != null) ? `${a.score}%` : '—';
+  const passingScore = qz?.passing_score ?? 70;
+
+  let modal = document.getElementById('quizReviewDetailModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'quizReviewDetailModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  const questions = (qz && Array.isArray(qz.questions)) ? qz.questions : [];
+  const answers = a.answers || {};
+
+  const questionsHTML = questions.map((q, idx) => _qrRenderQuestionBlock(q, idx, answers[q.id])).join('');
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:640px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Attempt detail</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.3">${escapeHTMLNotif(memName)}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4">
+            ${escapeHTMLNotif(title)}<br>${when}
+          </div>
+        </div>
+        <button onclick="_qrCloseDetail()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px;line-height:1">×</button>
+      </div>
+
+      <!-- Score summary -->
+      <div style="padding:.85rem 1.25rem;background:${a.passed ? 'var(--green-bg)' : 'rgba(180,80,80,.08)'};border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:var(--ink)">
+          <span style="font-weight:700">${score}</span>
+          <span style="color:var(--muted)"> · ${passingScore}% to pass</span>
+        </div>
+        <span style="font-size:10.5px;background:${a.passed ? 'var(--green)' : '#b25050'};color:#fff;padding:3px 10px;border-radius:6px;font-weight:700;letter-spacing:.06em">
+          ${a.passed ? 'PASSED' : 'NOT YET'}
+        </span>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        ${questions.length === 0 ? `
+          <div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px">No question detail available.</div>
+        ` : questionsHTML}
+      </div>
+
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_qrCloseDetail()">Back</button>
+      </div>
+    </div>
+  `;
+}
+
+function _qrRenderQuestionBlock(q, idx, answer){
+  const qNum = idx + 1;
+  const stem = escapeHTMLNotif(q.stem_en || q.stem || '(no question text)');
+  const ans = answer || {};
+
+  if(q.type === 'multiple_choice'){
+    const opts = Array.isArray(q.options) ? q.options : [];
+    const chosen = ans.value;  // index of chosen option
+    const isCorrect = ans.correct === true;
+    return `
+      <div style="margin-bottom:1rem;padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
+        <div style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:5px">Q${qNum} · MULTIPLE CHOICE ${isCorrect ? '· <span style="color:var(--green)">✓</span>' : '· <span style="color:#b25050">✗</span>'}</div>
+        <div style="font-size:13px;color:var(--ink);line-height:1.4;margin-bottom:.55rem;font-weight:500">${stem}</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${opts.map((o, oi) => {
+            const text = escapeHTMLNotif(o.text_en || o.text || '');
+            const isAns = o.correct === true;
+            const isPicked = chosen === oi;
+            let bg = 'transparent', col = 'var(--muted)', marker = '○';
+            if(isAns && isPicked){ bg = 'var(--green-bg)'; col = 'var(--green)'; marker = '✓'; }
+            else if(isAns){ bg = 'var(--green-bg)'; col = 'var(--green)'; marker = '★'; }
+            else if(isPicked){ bg = 'rgba(180,80,80,.1)'; col = '#b25050'; marker = '✗'; }
+            return `
+              <div style="font-size:12px;padding:5px 9px;background:${bg};border-radius:6px;color:${col};display:flex;gap:7px">
+                <span style="font-weight:700;min-width:14px">${marker}</span>
+                <span style="color:var(--ink);flex:1;line-height:1.4">${text}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  if(q.type === 'true_false'){
+    const correct = q.correct_answer;  // true or false
+    const chosen = ans.value;
+    const isCorrect = ans.correct === true;
+    const cell = (val, label) => {
+      const isAns = correct === val;
+      const isPicked = chosen === val;
+      let bg = 'transparent', col = 'var(--muted)', marker = '○';
+      if(isAns && isPicked){ bg = 'var(--green-bg)'; col = 'var(--green)'; marker = '✓'; }
+      else if(isAns){ bg = 'var(--green-bg)'; col = 'var(--green)'; marker = '★'; }
+      else if(isPicked){ bg = 'rgba(180,80,80,.1)'; col = '#b25050'; marker = '✗'; }
+      return `
+        <div style="font-size:12px;padding:5px 9px;background:${bg};border-radius:6px;color:${col};display:flex;gap:7px">
+          <span style="font-weight:700;min-width:14px">${marker}</span>
+          <span style="color:var(--ink)">${label}</span>
+        </div>`;
+    };
+    return `
+      <div style="margin-bottom:1rem;padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
+        <div style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:5px">Q${qNum} · TRUE / FALSE ${isCorrect ? '· <span style="color:var(--green)">✓</span>' : '· <span style="color:#b25050">✗</span>'}</div>
+        <div style="font-size:13px;color:var(--ink);line-height:1.4;margin-bottom:.55rem;font-weight:500">${stem}</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${cell(true, 'True')}
+          ${cell(false, 'False')}
+        </div>
+      </div>
+    `;
+  }
+
+  if(q.type === 'reflection'){
+    const text = (ans.value || '').toString();
+    const minChars = q.min_chars || 0;
+    return `
+      <div style="margin-bottom:1rem;padding:.95rem 1.1rem;background:var(--gold-bg);border:1px solid rgba(184,136,42,.3);border-radius:10px">
+        <div style="font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.08em;margin-bottom:5px">Q${qNum} · REFLECTION ✦</div>
+        <div style="font-size:13px;color:var(--ink);line-height:1.4;margin-bottom:.65rem;font-weight:500">${stem}</div>
+        ${text ? `
+          <div style="font-family:'Fraunces',Georgia,serif;font-size:14px;line-height:1.65;color:var(--ink);background:var(--surface);padding:.85rem 1rem;border-left:3px solid var(--gold);border-radius:0 7px 7px 0;white-space:pre-wrap">${escapeHTMLNotif(text)}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:5px;text-align:right">${text.length} character${text.length===1?'':'s'}${minChars?` · min ${minChars}`:''}</div>
+        ` : `
+          <div style="font-size:12px;color:var(--muted);font-style:italic;padding:.5rem">No reflection provided.</div>
+        `}
+      </div>
+    `;
+  }
+
+  return `
+    <div style="margin-bottom:1rem;padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
+      <div style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.08em;margin-bottom:5px">Q${qNum} · ${escapeHTMLNotif(q.type || 'unknown')}</div>
+      <div style="font-size:12.5px;color:var(--ink)">${stem}</div>
+    </div>
+  `;
+}
+
+function _qrCloseDetail(){
+  const m = document.getElementById('quizReviewDetailModal');
+  if(m){ m.remove(); }
+  _quizReviewState.detailAttempt = null;
+}
+
+function _qrClose(){
+  _qrCloseDetail();
+  const m = document.getElementById('quizReviewModal');
+  if(m){ m.remove(); }
+  // Reset filters/expansion on close (fresh view next open)
+  _quizReviewState.expanded = {};
+  _quizReviewState.filters = { memberId:'', resourceId:'', fromDate:'', toDate:'', status:'' };
+}
+
+function _qrExportCSV(){
+  const filtered = _qrFilteredAttempts();
+  if(filtered.length === 0){ toast('Nothing to export', '⚠️'); return; }
+
+  const esc = (s) => {
+    if(s == null) return '';
+    const str = String(s).replace(/"/g, '""');
+    return /[",\n\r]/.test(str) ? `"${str}"` : str;
+  };
+
+  const rows = [
+    ['Member', 'LC Group', 'Resource', 'Level', 'Score (%)', 'Passing (%)', 'Passed', 'Completed At', 'Reflection']
+  ];
+
+  filtered.forEach(a => {
+    const qz = _quizReviewState.quizzes[a.quiz_id];
+    const res = qz ? _quizReviewState.resources[qz.resource_id] : null;
+    const m  = _quizReviewState.members[a.member_id];
+
+    // Concatenate all reflection answers for this attempt
+    let reflection = '';
+    if(qz && Array.isArray(qz.questions) && a.answers){
+      const parts = [];
+      qz.questions.forEach((q, idx) => {
+        if(q.type === 'reflection'){
+          const v = a.answers[q.id]?.value;
+          if(v) parts.push(`Q${idx+1}: ${v}`);
+        }
+      });
+      reflection = parts.join(' || ');
+    }
+
+    rows.push([
+      m?.name || '',
+      m?.lc_group || '',
+      res?.title_en || '',
+      res?.level != null ? `L${res.level}` : '',
+      a.score != null ? a.score : '',
+      qz?.passing_score != null ? qz.passing_score : '',
+      a.passed ? 'YES' : 'NO',
+      a.completed_at ? new Date(a.completed_at).toLocaleString('en-PH') : '',
+      reflection
+    ]);
+  });
+
+  const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });  // BOM for Excel
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `quiz_attempts_${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(`Exported ${filtered.length} attempt${filtered.length===1?'':'s'}`, '📥');
 }
 
 
