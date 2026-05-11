@@ -35,18 +35,7 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html{overscroll-behavior-y:contain;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
-     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior-y:contain;
-     /* MLT was designed for ~380px phone screens. On tablets / larger phones
-        (Fhel's device, etc.), it previously stretched edge-to-edge — making
-        cards look strangely shrunken because the eye expects them to scale
-        with the viewport. Capping the content at 520px and centering it
-        keeps the mobile design intact on every device. */
-     max-width:520px;
-     margin:0 auto;
-     /* On wide screens, the surrounding "page" area gets a slightly darker
-        backdrop so the centered column reads as deliberate, not broken. */
-     box-shadow:0 0 0 100vmax #07070a;
-     clip-path:inset(0 -100vmax);}
+     min-height:100vh;font-size:14px;line-height:1.5;overscroll-behavior-y:contain;}
 
 /* ── SCREENS ── */
 .screen{display:none;}
@@ -230,8 +219,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
 .att-name{font-size:14px;font-weight:600;flex:1;}
 .att-streak{font-size:11px;color:var(--muted);}
-.att-save-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:100%;max-width:520px;background:var(--surface);
+.att-save-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);
   border-top:1px solid var(--border);padding:12px 16px calc(12px + env(safe-area-inset-bottom));
   display:flex;align-items:center;gap:10px;z-index:40;}
 .att-count{font-size:13px;font-weight:700;color:var(--gold);flex:1;}
@@ -315,8 +303,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   font-size:12px;font-weight:700;color:var(--text);cursor:pointer;}
 
 /* Detail action buttons */
-.detail-actions{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:100%;max-width:520px;
+.detail-actions{position:fixed;bottom:0;left:0;right:0;
   padding:12px 16px calc(12px + env(safe-area-inset-bottom));
   background:var(--surface);border-top:1px solid var(--border);
   display:flex;gap:8px;z-index:40;}
@@ -1277,16 +1264,19 @@ async function _loadL5EventTypes(){
 
 // Compute the most recent occurrence of a typical_day (1=Mon..7=Sun)
 // relative to today. If today IS that day, returns today.
+// Returns today's date as YYYY-MM-DD in the user's local timezone.
+//
+// Previously this returned "the most recent occurrence of typicalDay" (e.g.,
+// last Wednesday if the LC meets Wednesdays). Pastor changed the rule
+// May 2026: LC leaders tap "I'm here" while AT the event, not retrospectively.
+// Backdating is still available via the date-picker escape hatch.
+//
+// The typicalDay parameter is kept in the signature for backward compatibility
+// with existing call sites but is now ignored. Could be removed in a future cleanup.
 function _l5LastTypicalDay(typicalDay){
   const d = new Date();
-  // JS getDay: 0=Sun..6=Sat → convert to ISO 1=Mon..7=Sun
-  const todayIso = d.getDay() === 0 ? 7 : d.getDay();
-  let offset = todayIso - typicalDay;
-  if (offset < 0) offset += 7;
-  d.setDate(d.getDate() - offset);
   // Local-date formatting (NOT toISOString) — Manila is UTC+8, so between
   // midnight and 8 AM PHT, toISOString() returns yesterday's UTC date.
-  // That made "last Sunday" sometimes return the Sunday before last.
   const y = d.getFullYear();
   const mo = String(d.getMonth() + 1).padStart(2, '0');
   const da = String(d.getDate()).padStart(2, '0');

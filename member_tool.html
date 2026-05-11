@@ -6277,14 +6277,26 @@ async function _loadMyDiscipler(){
 }
 
 // ─── Date helpers ───
+// Returns today's date as YYYY-MM-DD in the user's local timezone.
+//
+// Previously this function returned "the most recent occurrence of typicalDay"
+// (e.g., last Wednesday if the LC meets Wednesdays). Pastor changed the rule
+// May 2026: members tap "I'm here" while AT the event, not retrospectively —
+// so the date should be RIGHT NOW. Backdating is still available via the
+// date-picker escape hatch in _confirmAndSaveAttest.
+//
+// The typicalDay parameter is now ignored but kept in the signature so all
+// existing call sites continue to compile. Could be removed in a future cleanup.
+//
+// IMPORTANT: uses local-date construction (NOT toISOString) — Manila is UTC+8,
+// so toISOString() returns yesterday's date before 8 AM PHT and would cause
+// members opening MMT early-morning to log attendance with yesterday's date.
 function _attestLastTypicalDay(typicalDay){
-  // typical_day: 1=Mon..7=Sun. Returns YYYY-MM-DD of most recent occurrence.
   const d = new Date();
-  const todayIso = d.getDay() === 0 ? 7 : d.getDay();
-  let offset = todayIso - typicalDay;
-  if (offset < 0) offset += 7;
-  d.setDate(d.getDate() - offset);
-  return d.toISOString().slice(0,10);
+  const y  = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
 }
 
 function _attestFmtShort(dateStr){
