@@ -2700,14 +2700,16 @@ function renderPipeline(){
 // not_started by long-press (deferred to v2).
 // ═══════════════════════════════════════════════════════════════
 
-let _libResources = [];   // all published, sorted by level + sort_order
-let _libProgress  = {};   // { resource_id: row } for the current member
+let _libResources    = [];   // all published, sorted by level + sort_order
+let _libProgress     = {};   // { resource_id: row } for the current member
+let _libQuizzes      = {};   // { resource_id: quiz_row } — quizzes loaded once at boot
+let _libQuizAttempts = {};   // { quiz_id: [attempts] } — for retake/cooldown checks
 
 async function loadLibraryAndProgress(){
   if (!memberRow || !MEMBER || !MEMBER.memberId){ _libResources = []; _libProgress = {}; return; }
   // Both queries in parallel — failure of progress shouldn't block the catalog
   try {
-    const [resRes, progRes] = await Promise.all([
+    const [resRes, progRes, quizRes, attemptsRes] = await Promise.all([
       db.from('library_resources')
         .select('id, level, category, sort_order, title_en, title_tl, author, summary_en, summary_tl, why_matters_en, why_matters_tl, external_url, pdf_url, youtube_url_en, youtube_url_tl, audio_duration_seconds, transcript_en, transcript_tl, is_required_for_next_level')
         .eq('published', true)
@@ -2715,8 +2717,18 @@ async function loadLibraryAndProgress(){
         .order('sort_order', {ascending: true})
         .order('title_en', {ascending: true}),
       db.from('library_progress')
-        .select('id, resource_id, status, started_at, completed_at, notes, play_started_count, last_played_at, completion_percent')
+        .select('id, resource_id, status, started_at, completed_at, notes, play_started_count, last_played_at, completion_percent, quiz_passed_at')
+        .eq('member_id', MEMBER.memberId),
+      // Quiz metadata for ALL active quizzes — we filter to per-resource later
+      db.from('library_quizzes')
+        .select('id, resource_id, passing_score, questions, intro_text_en, intro_text_tl, outro_text_pass_en, outro_text_pass_tl, outro_text_fail_en, outro_text_fail_tl')
+        .eq('active', true),
+      // This member's recent quiz attempts (last 30 days is enough for cooldown logic)
+      db.from('library_quiz_attempts')
+        .select('id, quiz_id, completed_at, score, passed')
         .eq('member_id', MEMBER.memberId)
+        .not('completed_at', 'is', null)
+        .order('completed_at', {ascending: false})
     ]);
     if (resRes.error) throw resRes.error;
     _libResources = resRes.data || [];
@@ -2724,9 +2736,22 @@ async function loadLibraryAndProgress(){
       _libProgress = {};
       (progRes.data || []).forEach(p => { _libProgress[p.resource_id] = p; });
     }
+    // Index quizzes by resource_id for O(1) lookup during card render
+    _libQuizzes = {};
+    if (quizRes && !quizRes.error) {
+      (quizRes.data || []).forEach(q => { _libQuizzes[q.resource_id] = q; });
+    }
+    // Index attempts by quiz_id for retake / cooldown checks
+    _libQuizAttempts = {};
+    if (attemptsRes && !attemptsRes.error) {
+      (attemptsRes.data || []).forEach(a => {
+        if (!_libQuizAttempts[a.quiz_id]) _libQuizAttempts[a.quiz_id] = [];
+        _libQuizAttempts[a.quiz_id].push(a);
+      });
+    }
   } catch(e){
     console.warn('[library] load failed:', e);
-    _libResources = []; _libProgress = {};
+    _libResources = []; _libProgress = {}; _libQuizzes = {}; _libQuizAttempts = {};
   }
 }
 
@@ -2756,6 +2781,69 @@ const _LIB_LEVEL_LABELS_TL = {
 };
 
 function _libGetLang(){ return document.body.classList.contains('lang-tl') ? 'tl' : 'en'; }
+
+// Build the small eligibility card shown on the Journey tab.
+// Counts: completed-with-quiz-passed / total-required-at-current-level.
+// Returns HTML string or empty string if not relevant to show.
+function _libBuildEligibilityCard(requiredResources, lang){
+  if (!requiredResources || requiredResources.length === 0) return '';
+
+  let completedCount = 0;
+  requiredResources.forEach(r => {
+    const prog = _libProgress[r.id];
+    if (!prog) return;
+    // For required resources, "complete" means both completed status AND
+    // quiz passed (if the resource has a quiz). Quiz-less required resources
+    // count just by completion status.
+    const hasQuiz = !!(_libQuizzes[r.id] && Array.isArray(_libQuizzes[r.id].questions) && _libQuizzes[r.id].questions.length > 0);
+    const completionOK = prog.status === 'completed';
+    const quizOK = hasQuiz ? !!prog.quiz_passed_at : true;
+    if (completionOK && quizOK) completedCount++;
+  });
+
+  const total = requiredResources.length;
+  const allDone = completedCount === total;
+  const pct = Math.round((completedCount / total) * 100);
+
+  // Style based on progress
+  let icon = '📚';
+  let bg = 'rgba(184,136,42,.08)';
+  let border = 'rgba(184,136,42,.25)';
+  let titleColor = 'var(--gold)';
+  if (allDone){
+    icon = '🌱';
+    bg = 'rgba(52,211,153,.10)';
+    border = 'rgba(52,211,153,.30)';
+    titleColor = 'var(--forest)';
+  }
+
+  return `
+    <div style="margin:.85rem 0 .5rem;padding:.85rem 1rem;background:${bg};border:1px solid ${border};border-radius:10px">
+      <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:.5rem">
+        <div style="font-size:22px">${icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:${titleColor}">
+            ${allDone
+              ? `<span class="en-text">You've finished all required resources for this level</span>
+                 <span class="tl-text">Natapos mo na ang lahat ng kailangan sa antas na ito</span>`
+              : `<span class="en-text">${completedCount} of ${total} required completed for next level</span>
+                 <span class="tl-text">${completedCount} sa ${total} ng kailangan ay tapos na para sa susunod na antas</span>`}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic;line-height:1.45">
+            ${allDone
+              ? `<span class="en-text">Pastor will make the final pastoral call on advancement.</span>
+                 <span class="tl-text">Si Pastor ang gagawa ng pinal na pagpapasiya sa pag-usad.</span>`
+              : `<span class="en-text">A signal for your growth, not a finish line. The harder question: are you living what you're learning?</span>
+                 <span class="tl-text">Tanda ng iyong pag-unlad, hindi finish line. Ang mas mahirap na tanong: isinasabuhay mo ba ang iyong natutuhan?</span>`}
+          </div>
+        </div>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,.4);border-radius:3px;overflow:hidden">
+        <div style="height:100%;background:${allDone ? 'var(--forest)' : 'var(--gold)'};width:${pct}%;transition:width .3s"></div>
+      </div>
+    </div>
+  `;
+}
 
 // Extract a YouTube video ID from common URL forms:
 //   https://youtu.be/VIDEO_ID
@@ -2872,6 +2960,16 @@ function renderLibrary(){
       </div>
     </div>
   `);
+
+  // ─── ELIGIBILITY INDICATOR ───
+  // For each REQUIRED resource at the member's current level, check if they
+  // have completed it AND passed its quiz (if it has one).
+  // This is a SIGNAL to the member, not a gate — Pastor still has the final call.
+  const requiredAtCurrent = currentTierResources.filter(r => r.is_required_for_next_level);
+  if (requiredAtCurrent.length > 0){
+    const eligibilityCard = _libBuildEligibilityCard(requiredAtCurrent, lang);
+    if (eligibilityCard) html.push(eligibilityCard);
+  }
 
   // ─── CURRENT TIER ───
   if (currentTierResources.length > 0){
@@ -3179,6 +3277,611 @@ async function _libSaveReflectionAndComplete(resourceId){
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// QUIZ PLAYER — comprehension check for library resources
+// ─────────────────────────────────────────────────────────────────
+// Three states a member can be in for any given quiz:
+//   1. Never attempted          — show intro screen + Start button
+//   2. Cooling down              — 3 failed attempts in last 24h, show wait msg
+//   3. Active (eligible to try) — show questions one at a time
+// After completion: outro screen with pass/fail + stats + retake/close.
+//
+// Pastoral framings woven in:
+//   • Intro: "Not an exam — a chance to see what stuck."
+//   • Fail: warm, no shaming, soft suggestion to relisten.
+//   • Pass: not just congrats — also "now how will you live this?"
+//   • Reflection answers are required-but-not-scored; Pastor reviews qualitatively.
+// ═══════════════════════════════════════════════════════════════════
+
+const QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN = 3;
+const QUIZ_COOLDOWN_HOURS = 24;
+
+let _quizPlayerState = {
+  resourceId: null,
+  resource: null,
+  quiz: null,
+  attemptId: null,
+  questionOrder: [],   // shuffled question indices
+  currentIdx: 0,       // index into questionOrder
+  answers: {},         // { questionId: { value, correct } }
+  startedAt: null
+};
+
+function _libOpenQuizPlayer(resourceId){
+  if (!MEMBER || !MEMBER.memberId){ toast('Sign in required', '⚠️'); return; }
+  const resource = _libResources.find(x => x.id === resourceId);
+  const quiz = _libQuizzes[resourceId];
+  if (!resource || !quiz){ toast('Quiz not found', '❌'); return; }
+  if (!Array.isArray(quiz.questions) || quiz.questions.length === 0){
+    toast('This quiz has no questions yet', 'ℹ️'); return;
+  }
+
+  _quizPlayerState = {
+    resourceId, resource, quiz,
+    attemptId: null,
+    questionOrder: [],
+    currentIdx: 0,
+    answers: {},
+    startedAt: null
+  };
+
+  _renderQuizIntro();
+}
+
+function _quizGetModal(){
+  let modal = document.getElementById('quizPlayerModal');
+  if (!modal){
+    modal = document.createElement('div');
+    modal.id = 'quizPlayerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.7);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0';
+    document.body.appendChild(modal);
+  }
+  return modal;
+}
+
+function _libCloseQuizPlayer(){
+  const m = document.getElementById('quizPlayerModal');
+  if (m) m.style.display = 'none';
+  _quizPlayerState = { resourceId: null, resource: null, quiz: null, attemptId: null, questionOrder: [], currentIdx: 0, answers: {}, startedAt: null };
+}
+
+// Check if member is cooling down — returns null if eligible, or {until, attemptsRemaining} if cooling
+function _quizCheckCooldown(quizId){
+  const attempts = _libQuizAttempts[quizId] || [];
+  if (attempts.length === 0) return null;
+  // Has any attempt passed? → no cooldown ever
+  if (attempts.some(a => a.passed)) return null;
+  // Get last 3 attempts (already sorted desc by completed_at)
+  const recent = attempts.slice(0, QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN);
+  if (recent.length < QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN) return null;
+  // All 3 failed within cooldown window?
+  const allFailed = recent.every(a => !a.passed);
+  if (!allFailed) return null;
+  const lastFailedAt = new Date(recent[0].completed_at).getTime();
+  const cooldownEndsAt = lastFailedAt + (QUIZ_COOLDOWN_HOURS * 60 * 60 * 1000);
+  const now = Date.now();
+  if (now >= cooldownEndsAt) return null;
+  return { until: cooldownEndsAt };
+}
+
+function _renderQuizIntro(){
+  const modal = _quizGetModal();
+  const { resource: r, quiz } = _quizPlayerState;
+  const lang = _libGetLang();
+  const title = (lang === 'tl' && r.title_tl) ? r.title_tl : r.title_en;
+  const intro = (lang === 'tl' && quiz.intro_text_tl) ? quiz.intro_text_tl : (quiz.intro_text_en || '');
+
+  const cooldown = _quizCheckCooldown(quiz.id);
+  const attempts = _libQuizAttempts[quiz.id] || [];
+  const passed = attempts.some(a => a.passed);
+  const bestScore = attempts.reduce((m, a) => Math.max(m, a.score || 0), 0);
+  const gradedCount = quiz.questions.filter(q => q.type === 'multiple_choice' || q.type === 'true_false').length;
+  const reflectionCount = quiz.questions.filter(q => q.type === 'reflection').length;
+
+  // ── Cooldown screen ──
+  if (cooldown){
+    const hoursLeft = Math.ceil((cooldown.until - Date.now()) / (60*60*1000));
+    modal.innerHTML = `
+      <div style="background:var(--surface);width:100%;max-width:480px;max-height:90vh;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;margin:1rem">
+        <div style="padding:1.25rem;border-bottom:1px solid var(--line);text-align:center">
+          <div style="font-size:42px;margin-bottom:.4rem">⏱</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink)">
+            <span class="en-text">Take a breath, kapatid</span>
+            <span class="tl-text">Magpahinga muna, kapatid</span>
+          </div>
+        </div>
+        <div style="padding:1rem 1.25rem;color:var(--ink-soft);font-size:13.5px;line-height:1.6">
+          <p style="margin:0 0 .85rem">
+            <span class="en-text">You've used your 3 attempts on this quiz. Come back in about <strong>${hoursLeft} hour${hoursLeft===1?'':'s'}</strong> — relisten to the podcast or reread the resource first.</span>
+            <span class="tl-text">Naubos mo na ang 3 attempts sa pagsusuring ito. Bumalik sa loob ng <strong>${hoursLeft} oras</strong> — pakinggan muli ang podcast o basahin ulit ang resource.</span>
+          </p>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);font-style:italic">
+            <span class="en-text">This isn't punishment — it's the rhythm of learning. The content needs time to settle before the next attempt.</span>
+            <span class="tl-text">Hindi ito parusa — ganito talaga ang ritmo ng pagkatuto. Kailangan ng panahon para magsanib ang aral bago ang susunod na pagsubok.</span>
+          </p>
+        </div>
+        <div style="padding:1rem 1.25rem;border-top:1px solid var(--line);display:flex;justify-content:flex-end">
+          <button onclick="_libCloseQuizPlayer()" style="padding:.6rem 1.25rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+            <span class="en-text">Okay</span><span class="tl-text">Sige</span>
+          </button>
+        </div>
+      </div>
+    `;
+    modal.style.display = 'flex';
+    return;
+  }
+
+  // ── Standard intro screen ──
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:560px;max-height:90vh;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;margin:1rem">
+      <div style="padding:1.15rem 1.25rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">📝 Comprehension Check</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.3">${MultiplyShared.escapeHTML(title)}</div>
+        </div>
+        <button onclick="_libCloseQuizPlayer()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1.25rem">
+        ${intro ? `<div style="background:var(--cream);border-left:3px solid var(--gold);padding:.85rem 1rem;border-radius:6px;font-size:13px;color:var(--ink);line-height:1.65;margin-bottom:1rem;font-family:'Fraunces','Georgia',serif">${MultiplyShared.escapeHTML(intro)}</div>` : ''}
+
+        <div style="background:var(--surface2);border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem">
+          <div style="font-size:12.5px;color:var(--ink);line-height:1.7;font-style:italic">
+            <span class="en-text">This isn't an exam — it's a chance to see what stuck. Take your time. Honest answers matter more than perfect ones.</span>
+            <span class="tl-text">Hindi ito eksamen — pagkakataon ito para makita kung ano ang naintindihan mo. Walang madaliin. Mas mahalaga ang tapat na sagot kaysa sa perpektong sagot.</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;font-size:11.5px">
+          <div style="background:var(--surface2);padding:.6rem .8rem;border-radius:6px">
+            <div style="color:var(--muted);font-size:10px;letter-spacing:.05em;text-transform:uppercase;font-weight:700">
+              <span class="en-text">Questions</span><span class="tl-text">Mga Tanong</span>
+            </div>
+            <div style="color:var(--ink);font-weight:700;margin-top:2px">${quiz.questions.length}${reflectionCount > 0 ? ` <span style="font-weight:400;color:var(--muted);font-size:10.5px">· ${reflectionCount} reflection</span>` : ''}</div>
+          </div>
+          <div style="background:var(--surface2);padding:.6rem .8rem;border-radius:6px">
+            <div style="color:var(--muted);font-size:10px;letter-spacing:.05em;text-transform:uppercase;font-weight:700">
+              <span class="en-text">To Pass</span><span class="tl-text">Para Maipasa</span>
+            </div>
+            <div style="color:var(--ink);font-weight:700;margin-top:2px">${quiz.passing_score}% <span style="font-weight:400;color:var(--muted);font-size:10.5px">${lang==='tl'?'(MC/TF lang)':'(MC/TF only)'}</span></div>
+          </div>
+        </div>
+
+        ${passed ? `
+          <div style="margin-top:1rem;padding:.7rem .9rem;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);border-radius:8px;font-size:12.5px;color:var(--forest)">
+            ✓ <strong>
+              <span class="en-text">Passed previously</span><span class="tl-text">Naipasa na noon</span>
+            </strong>
+            <span class="en-text"> · best score ${bestScore}%. Reviewing again is welcome.</span>
+            <span class="tl-text"> · pinakamataas na iskor ${bestScore}%. Maganda ang muling pagbalik-aral.</span>
+          </div>
+        ` : attempts.length > 0 ? `
+          <div style="margin-top:1rem;padding:.7rem .9rem;background:rgba(74,144,226,.12);border:1px solid rgba(74,144,226,.3);border-radius:8px;font-size:12.5px;color:var(--blue,#4a90e2)">
+            <strong>${attempts.length}</strong>
+            <span class="en-text"> previous attempt${attempts.length===1?'':'s'} · best score ${bestScore}%. ${QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN - (attempts.filter(a => Date.now() - new Date(a.completed_at).getTime() < QUIZ_COOLDOWN_HOURS*60*60*1000).length)} attempt${(QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN - attempts.filter(a => Date.now() - new Date(a.completed_at).getTime() < QUIZ_COOLDOWN_HOURS*60*60*1000).length)===1?'':'s'} remaining today.</span>
+            <span class="tl-text"> nakaraang attempt · pinakamataas na iskor ${bestScore}%.</span>
+          </div>
+        ` : ''}
+      </div>
+
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="_libCloseQuizPlayer()" style="padding:.6rem 1rem;background:var(--cream);color:var(--muted);border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer">
+          <span class="en-text">Not now</span><span class="tl-text">Mamaya na</span>
+        </button>
+        <button onclick="_quizStart()" style="padding:.6rem 1.25rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+          ${passed
+            ? '<span class="en-text">Start review</span><span class="tl-text">Simulan ang pagbabalik-aral</span>'
+            : '<span class="en-text">Start →</span><span class="tl-text">Simulan →</span>'}
+        </button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+// Fisher-Yates shuffle for randomizing question order
+function _quizShuffle(arr){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+async function _quizStart(){
+  const { quiz } = _quizPlayerState;
+  _quizPlayerState.questionOrder = _quizShuffle(quiz.questions.map((_, i) => i));
+  _quizPlayerState.currentIdx = 0;
+  _quizPlayerState.answers = {};
+  _quizPlayerState.startedAt = new Date().toISOString();
+
+  // Create the attempt row up front — we'll update score+completed_at on submission
+  try {
+    const { data, error } = await db.from('library_quiz_attempts').insert({
+      member_id: MEMBER.memberId,
+      quiz_id: quiz.id,
+      started_at: _quizPlayerState.startedAt
+    }).select().single();
+    if (error) throw error;
+    _quizPlayerState.attemptId = data.id;
+  } catch (e) {
+    console.warn('[quiz] could not create attempt row:', e);
+    // Continue anyway — we'll try to insert on submit instead
+  }
+
+  _renderQuizQuestion();
+}
+
+function _renderQuizQuestion(){
+  const modal = _quizGetModal();
+  const { quiz, questionOrder, currentIdx, answers } = _quizPlayerState;
+  const lang = _libGetLang();
+  const qIdx = questionOrder[currentIdx];
+  const q = quiz.questions[qIdx];
+  const total = questionOrder.length;
+  const progress = Math.round(((currentIdx) / total) * 100);
+  const isLast = currentIdx === total - 1;
+
+  // Current answer if revisiting (forward/back nav allowed)
+  const currentAnswer = answers[q.id];
+
+  let questionBody = '';
+  let isAnswered = false;
+
+  if (q.type === 'multiple_choice'){
+    const stem = (lang === 'tl' && q.question_tl) ? q.question_tl : q.question_en;
+    const options = (lang === 'tl' && Array.isArray(q.options_tl) && q.options_tl.some(Boolean))
+      ? q.options_tl
+      : q.options_en;
+    isAnswered = currentAnswer && typeof currentAnswer.value === 'number';
+    questionBody = `
+      <div style="font-size:16px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:1.15rem;font-family:'Fraunces','Georgia',serif">${MultiplyShared.escapeHTML(stem)}</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        ${options.map((opt, i) => {
+          if (!opt) return '';
+          const checked = currentAnswer?.value === i;
+          return `
+            <label style="display:flex;align-items:flex-start;gap:.65rem;padding:.85rem 1rem;background:${checked ? 'rgba(184,136,42,.14)' : 'var(--surface2)'};border:2px solid ${checked ? 'var(--gold)' : 'transparent'};border-radius:10px;cursor:pointer;transition:all .15s;font-size:13.5px;line-height:1.5;color:var(--ink)">
+              <input type="radio" name="qpOpt" value="${i}" ${checked ? 'checked' : ''} onchange="_quizPickMC(${i})" style="margin-top:3px;cursor:pointer">
+              <div style="flex:1">${MultiplyShared.escapeHTML(opt)}</div>
+            </label>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } else if (q.type === 'true_false'){
+    const stem = (lang === 'tl' && q.statement_tl) ? q.statement_tl : q.statement_en;
+    isAnswered = currentAnswer && typeof currentAnswer.value === 'boolean';
+    questionBody = `
+      <div style="font-size:16px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:1.15rem;font-family:'Fraunces','Georgia',serif">${MultiplyShared.escapeHTML(stem)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <button onclick="_quizPickTF(true)"
+          style="padding:1rem;background:${currentAnswer?.value === true ? 'rgba(52,211,153,.18)' : 'var(--surface2)'};border:2px solid ${currentAnswer?.value === true ? 'var(--forest)' : 'transparent'};border-radius:10px;font-size:14.5px;font-weight:700;color:var(--ink);cursor:pointer;transition:all .15s">
+          ✓ <span class="en-text">True</span><span class="tl-text">Totoo</span>
+        </button>
+        <button onclick="_quizPickTF(false)"
+          style="padding:1rem;background:${currentAnswer?.value === false ? 'rgba(232,93,93,.18)' : 'var(--surface2)'};border:2px solid ${currentAnswer?.value === false ? 'var(--red)' : 'transparent'};border-radius:10px;font-size:14.5px;font-weight:700;color:var(--ink);cursor:pointer;transition:all .15s">
+          ✗ <span class="en-text">False</span><span class="tl-text">Mali</span>
+        </button>
+      </div>
+    `;
+  } else if (q.type === 'reflection'){
+    const stem = (lang === 'tl' && q.prompt_tl) ? q.prompt_tl : q.prompt_en;
+    const minChars = q.min_chars || 40;
+    const existing = currentAnswer?.value || '';
+    isAnswered = typeof currentAnswer?.value === 'string' && currentAnswer.value.trim().length >= minChars;
+    questionBody = `
+      <div style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:.5rem">
+        ✎ <span class="en-text">Reflection — your words matter here</span><span class="tl-text">Pagninilay — mahalaga ang iyong sagot</span>
+      </div>
+      <div style="font-size:16px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:1rem;font-family:'Fraunces','Georgia',serif">${MultiplyShared.escapeHTML(stem)}</div>
+      <textarea id="qpReflectionInput" rows="5" placeholder="${lang==='tl' ? 'Magsulat dito…' : 'Write here…'}"
+        oninput="_quizUpdateReflection()"
+        style="width:100%;padding:.8rem .9rem;border:1px solid var(--line);border-radius:8px;background:var(--cream);color:var(--ink);font-size:13.5px;font-family:'Fraunces','Georgia',serif;line-height:1.6;resize:vertical">${MultiplyShared.escapeHTML(existing)}</textarea>
+      <div id="qpReflectionMeta" style="font-size:10.5px;color:var(--muted);margin-top:.4rem;font-style:italic">
+        <span class="en-text">Minimum ${minChars} characters · Pastor may read this for pastoral care.</span>
+        <span class="tl-text">Hindi bababa sa ${minChars} karakter · Maaaring basahin ito ni Pastor.</span>
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:560px;max-height:95vh;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;margin:1rem">
+      <div style="padding:.85rem 1.25rem;border-bottom:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.05em">
+            <span class="en-text">Question ${currentIdx+1} of ${total}</span><span class="tl-text">Tanong ${currentIdx+1} sa ${total}</span>
+          </div>
+          <button onclick="_quizConfirmExit()" style="background:transparent;border:none;font-size:18px;cursor:pointer;color:var(--muted)">×</button>
+        </div>
+        <div style="height:4px;background:var(--cream);border-radius:2px;overflow:hidden">
+          <div style="height:100%;background:var(--gold);width:${progress}%;transition:width .3s"></div>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1.25rem">${questionBody}</div>
+
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <button onclick="_quizPrev()" ${currentIdx === 0 ? 'disabled' : ''}
+          style="padding:.55rem 1rem;background:transparent;color:${currentIdx === 0 ? 'var(--muted)' : 'var(--ink)'};border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-weight:600;cursor:${currentIdx === 0 ? 'not-allowed' : 'pointer'};opacity:${currentIdx === 0 ? '.4' : '1'}">
+          ← <span class="en-text">Back</span><span class="tl-text">Bumalik</span>
+        </button>
+        ${isLast
+          ? `<button onclick="_quizSubmit()" ${isAnswered ? '' : 'disabled'}
+              style="padding:.55rem 1.25rem;background:${isAnswered ? 'var(--forest)' : 'var(--cream)'};color:${isAnswered ? '#fff' : 'var(--muted)'};border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:${isAnswered ? 'pointer' : 'not-allowed'}">
+              <span class="en-text">Submit ✓</span><span class="tl-text">Ipasa ✓</span>
+            </button>`
+          : `<button onclick="_quizNext()" ${isAnswered ? '' : 'disabled'}
+              style="padding:.55rem 1rem;background:${isAnswered ? 'var(--forest)' : 'var(--cream)'};color:${isAnswered ? '#fff' : 'var(--muted)'};border:none;border-radius:7px;font-size:12.5px;font-weight:700;cursor:${isAnswered ? 'pointer' : 'not-allowed'}">
+              <span class="en-text">Next →</span><span class="tl-text">Susunod →</span>
+            </button>`}
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+function _quizPickMC(value){
+  const { quiz, questionOrder, currentIdx } = _quizPlayerState;
+  const q = quiz.questions[questionOrder[currentIdx]];
+  const correct = (value === q.correct_index);
+  _quizPlayerState.answers[q.id] = { value, correct, type: q.type };
+  _renderQuizQuestion();
+}
+
+function _quizPickTF(value){
+  const { quiz, questionOrder, currentIdx } = _quizPlayerState;
+  const q = quiz.questions[questionOrder[currentIdx]];
+  const correct = (value === q.correct);
+  _quizPlayerState.answers[q.id] = { value, correct, type: q.type };
+  _renderQuizQuestion();
+}
+
+function _quizUpdateReflection(){
+  const { quiz, questionOrder, currentIdx } = _quizPlayerState;
+  const q = quiz.questions[questionOrder[currentIdx]];
+  const ta = document.getElementById('qpReflectionInput');
+  if (!ta) return;
+  const value = ta.value;
+  _quizPlayerState.answers[q.id] = { value, type: q.type };
+
+  // Lightweight inline update: enable Next/Submit button when min chars reached
+  const minChars = q.min_chars || 40;
+  const meta = document.getElementById('qpReflectionMeta');
+  const remaining = Math.max(0, minChars - value.trim().length);
+  if (meta){
+    const lang = _libGetLang();
+    if (remaining > 0){
+      meta.innerHTML = `<span style="color:var(--gold);font-weight:600">${remaining} more characters needed</span> <span class="en-text">· Pastor may read this for pastoral care.</span><span class="tl-text">· Maaaring basahin ito ni Pastor.</span>`;
+    } else {
+      meta.innerHTML = `<span style="color:var(--forest);font-weight:600">✓ <span class="en-text">Long enough</span><span class="tl-text">Sapat na ang haba</span></span> <span class="en-text">· Pastor may read this.</span><span class="tl-text">· Maaaring basahin ito ni Pastor.</span>`;
+    }
+  }
+  // Re-enable submit/next button without a full re-render (which would lose focus)
+  const total = _quizPlayerState.questionOrder.length;
+  const isLast = currentIdx === total - 1;
+  const btn = document.querySelector('#quizPlayerModal button[onclick="' + (isLast ? '_quizSubmit()' : '_quizNext()') + '"]');
+  if (btn){
+    const ok = value.trim().length >= minChars;
+    btn.disabled = !ok;
+    btn.style.background = ok ? 'var(--forest)' : 'var(--cream)';
+    btn.style.color = ok ? '#fff' : 'var(--muted)';
+    btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+  }
+}
+
+function _quizPrev(){
+  if (_quizPlayerState.currentIdx > 0){
+    _quizPlayerState.currentIdx--;
+    _renderQuizQuestion();
+  }
+}
+
+function _quizNext(){
+  if (_quizPlayerState.currentIdx < _quizPlayerState.questionOrder.length - 1){
+    _quizPlayerState.currentIdx++;
+    _renderQuizQuestion();
+  }
+}
+
+function _quizConfirmExit(){
+  if (confirm("Exit the quiz? Your progress on this attempt won't be saved.")){
+    _libCloseQuizPlayer();
+  }
+}
+
+async function _quizSubmit(){
+  const { quiz, questionOrder, answers, attemptId } = _quizPlayerState;
+  const total = questionOrder.length;
+
+  // Verify every question is answered (defensive — the button gating should handle this)
+  for (const qIdx of questionOrder){
+    const q = quiz.questions[qIdx];
+    const a = answers[q.id];
+    if (!a){ toast('Please answer all questions before submitting', '⚠️'); return; }
+    if (q.type === 'reflection'){
+      const minChars = q.min_chars || 40;
+      if (!a.value || a.value.trim().length < minChars){
+        toast('Reflection answers need at least the minimum characters', '⚠️');
+        // Jump to that question
+        _quizPlayerState.currentIdx = questionOrder.indexOf(qIdx);
+        _renderQuizQuestion();
+        return;
+      }
+    }
+  }
+
+  // Score only MC + TF (reflection is required-but-not-scored)
+  const gradedAnswers = quiz.questions
+    .filter(q => q.type === 'multiple_choice' || q.type === 'true_false')
+    .map(q => answers[q.id]);
+  const correctCount = gradedAnswers.filter(a => a.correct).length;
+  const gradedTotal = gradedAnswers.length;
+  const score = gradedTotal > 0 ? Math.round((correctCount / gradedTotal) * 100) : 0;
+  const passed = score >= (quiz.passing_score || 70);
+
+  // Save attempt
+  try {
+    const completedAt = new Date().toISOString();
+    if (attemptId){
+      await db.from('library_quiz_attempts').update({
+        completed_at: completedAt,
+        score, passed,
+        answers
+      }).eq('id', attemptId);
+    } else {
+      // Fallback if intro create failed
+      const ins = await db.from('library_quiz_attempts').insert({
+        member_id: MEMBER.memberId,
+        quiz_id: quiz.id,
+        started_at: _quizPlayerState.startedAt,
+        completed_at: completedAt,
+        score, passed,
+        answers
+      }).select().single();
+      if (!ins.error) _quizPlayerState.attemptId = ins.data.id;
+    }
+
+    // If passed, stamp quiz_passed_at on library_progress (once — never cleared)
+    if (passed){
+      const prog = _libProgress[_quizPlayerState.resourceId];
+      if (!prog || !prog.quiz_passed_at){
+        const upsertPayload = {
+          member_id: MEMBER.memberId,
+          resource_id: _quizPlayerState.resourceId,
+          status: prog?.status || 'in_progress',
+          started_at: prog?.started_at || completedAt,
+          completed_at: prog?.completed_at,
+          quiz_passed_at: completedAt
+        };
+        const { data, error } = await db.from('library_progress')
+          .upsert(upsertPayload, { onConflict: 'member_id,resource_id' })
+          .select().single();
+        if (!error) _libProgress[_quizPlayerState.resourceId] = data;
+      }
+    }
+
+    // Refresh local attempt cache for accurate cooldown display next time
+    if (!_libQuizAttempts[quiz.id]) _libQuizAttempts[quiz.id] = [];
+    _libQuizAttempts[quiz.id].unshift({
+      id: _quizPlayerState.attemptId,
+      quiz_id: quiz.id,
+      completed_at: completedAt,
+      score, passed
+    });
+
+  } catch (e) {
+    toast('Could not save attempt: ' + e.message, '❌');
+    return;
+  }
+
+  _renderQuizOutro(score, passed, correctCount, gradedTotal);
+}
+
+function _renderQuizOutro(score, passed, correctCount, gradedTotal){
+  const modal = _quizGetModal();
+  const { resource: r, quiz, answers, questionOrder } = _quizPlayerState;
+  const lang = _libGetLang();
+  const outroPass = (lang === 'tl' && quiz.outro_text_pass_tl) ? quiz.outro_text_pass_tl : quiz.outro_text_pass_en;
+  const outroFail = (lang === 'tl' && quiz.outro_text_fail_tl) ? quiz.outro_text_fail_tl : quiz.outro_text_fail_en;
+  const outro = passed ? outroPass : outroFail;
+
+  // Find which questions were answered wrong (graded only)
+  const wrongQuestions = [];
+  questionOrder.forEach(qIdx => {
+    const q = quiz.questions[qIdx];
+    if (q.type === 'reflection') return;
+    const a = answers[q.id];
+    if (!a || !a.correct){
+      wrongQuestions.push({ q, a });
+    }
+  });
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:560px;max-height:95vh;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;margin:1rem">
+      <div style="padding:1.5rem 1.25rem 1.25rem;border-bottom:1px solid var(--line);text-align:center;background:${passed ? 'linear-gradient(135deg,rgba(52,211,153,.12),rgba(52,211,153,.02))' : 'linear-gradient(135deg,rgba(184,136,42,.12),rgba(184,136,42,.02))'}">
+        <div style="font-size:48px;margin-bottom:.4rem">${passed ? '🎉' : '🌱'}</div>
+        <div style="font-size:18px;font-weight:700;color:var(--ink);margin-bottom:.3rem">
+          ${passed
+            ? `<span class="en-text">You passed, kapatid</span><span class="tl-text">Naipasa mo, kapatid</span>`
+            : `<span class="en-text">Not yet — and that's okay</span><span class="tl-text">Hindi pa — at okay lang yan</span>`}
+        </div>
+        <div style="font-size:13px;color:var(--muted);font-weight:600">
+          ${correctCount}/${gradedTotal}
+          <span class="en-text"> correct · ${score}%${passed ? '' : ` · need ${quiz.passing_score}% to pass`}</span>
+          <span class="tl-text"> tama · ${score}%${passed ? '' : ` · kailangan ng ${quiz.passing_score}%`}</span>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1.25rem">
+        ${outro ? `<div style="background:var(--cream);border-left:3px solid var(--gold);padding:.85rem 1rem;border-radius:6px;font-size:13.5px;color:var(--ink);line-height:1.7;margin-bottom:1.15rem;font-family:'Fraunces','Georgia',serif">${MultiplyShared.escapeHTML(outro)}</div>` : ''}
+
+        ${passed ? `
+          <div style="background:var(--surface2);padding:.95rem 1rem;border-radius:8px;font-size:13px;line-height:1.7;color:var(--ink-soft);font-style:italic;font-family:'Fraunces','Georgia',serif">
+            <span class="en-text">Now the harder question: <strong style="color:var(--ink)">how will you live this?</strong></span>
+            <span class="tl-text">Ngayon, ang mas mahirap na tanong: <strong style="color:var(--ink)">paano mo ito isasabuhay?</strong></span>
+          </div>
+        ` : `
+          <div style="background:var(--surface2);padding:.95rem 1rem;border-radius:8px;font-size:13px;line-height:1.7;color:var(--ink-soft);font-style:italic;font-family:'Fraunces','Georgia',serif">
+            <span class="en-text">Take time. Relisten to the podcast or reread the resource. Then come back — we're not in a race.</span>
+            <span class="tl-text">Magbigay ng panahon. Pakinggan muli ang podcast o basahin ulit. Pagkatapos, bumalik — hindi tayo nagkakarera.</span>
+          </div>
+        `}
+
+        ${wrongQuestions.length > 0 ? `
+          <details style="margin-top:1.15rem">
+            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;padding:.5rem 0">
+              <span class="en-text">${wrongQuestions.length} question${wrongQuestions.length===1?'':'s'} to review</span>
+              <span class="tl-text">${wrongQuestions.length} tanong para balik-aralan</span>
+            </summary>
+            <div style="display:flex;flex-direction:column;gap:.6rem;padding:.5rem 0">
+              ${wrongQuestions.map(({q, a}) => {
+                const stem = q.type === 'multiple_choice'
+                  ? ((lang === 'tl' && q.question_tl) ? q.question_tl : q.question_en)
+                  : ((lang === 'tl' && q.statement_tl) ? q.statement_tl : q.statement_en);
+                let correctText = '';
+                if (q.type === 'multiple_choice'){
+                  const opts = (lang === 'tl' && Array.isArray(q.options_tl) && q.options_tl.some(Boolean)) ? q.options_tl : q.options_en;
+                  correctText = opts[q.correct_index] || '';
+                } else {
+                  correctText = q.correct
+                    ? (lang==='tl' ? 'Totoo' : 'True')
+                    : (lang==='tl' ? 'Mali' : 'False');
+                }
+                return `
+                  <div style="padding:.7rem .85rem;background:var(--surface2);border-radius:8px;font-size:12.5px;line-height:1.6">
+                    <div style="color:var(--ink);font-weight:600;margin-bottom:.35rem">${MultiplyShared.escapeHTML(stem)}</div>
+                    <div style="color:var(--forest);font-size:11.5px"><strong>✓ <span class="en-text">Correct:</span><span class="tl-text">Tama:</span></strong> ${MultiplyShared.escapeHTML(correctText)}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </details>
+        ` : ''}
+      </div>
+
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end">
+        ${!passed ? `
+          <button onclick="_libCloseQuizPlayer()" style="padding:.6rem 1rem;background:var(--cream);color:var(--muted);border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer">
+            <span class="en-text">Close</span><span class="tl-text">Isara</span>
+          </button>
+          <button onclick="_libOpenQuizPlayer('${_quizPlayerState.resourceId}')" style="padding:.6rem 1.25rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+            <span class="en-text">Try again</span><span class="tl-text">Subukan ulit</span>
+          </button>
+        ` : `
+          <button onclick="_libCloseQuizPlayer(); renderLibrary();" style="padding:.6rem 1.25rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+            <span class="en-text">Done</span><span class="tl-text">Tapos na</span>
+          </button>
+        `}
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+
 function _libRenderCard(r, tier, lang){
   // tier: 'current' (full features), 'future' (locked preview),
   // 'past' (same as 'current' — full features so upper-level members can
@@ -3270,6 +3973,37 @@ function _libRenderCard(r, tier, lang){
     </button>`;
   })();
 
+  // ── QUIZ BUTTON ──
+  // Shows on current + past tier cards if this resource has an active quiz.
+  // Color-codes: gold (not taken) / green (passed) / blue (try again).
+  const quiz = _libQuizzes[r.id];
+  const quizBtn = (() => {
+    if (!quiz || !Array.isArray(quiz.questions) || quiz.questions.length === 0) return '';
+    if (tier === 'future') return '';
+    const prog = _libProgress[r.id];
+    const passed = !!(prog && prog.quiz_passed_at);
+    const attempts = _libQuizAttempts[quiz.id] || [];
+    if (passed){
+      return `<button onclick="_libOpenQuizPlayer('${r.id}')"
+        style="padding:.55rem .9rem;background:rgba(52,211,153,.18);color:var(--forest);border:1px solid rgba(52,211,153,.4);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+        <span class="en-text">✓ Quiz passed — review</span>
+        <span class="tl-text">✓ Naipasa — balikan</span>
+      </button>`;
+    }
+    if (attempts.length > 0){
+      return `<button onclick="_libOpenQuizPlayer('${r.id}')"
+        style="padding:.55rem .9rem;background:rgba(74,144,226,.18);color:var(--blue,#4a90e2);border:1px solid rgba(74,144,226,.4);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+        <span class="en-text">↻ Try again</span>
+        <span class="tl-text">↻ Subukan ulit</span>
+      </button>`;
+    }
+    return `<button onclick="_libOpenQuizPlayer('${r.id}')"
+      style="padding:.55rem .9rem;background:rgba(184,136,42,.18);color:var(--gold);border:1px solid rgba(184,136,42,.4);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+      📝 <span class="en-text">Take comprehension check</span>
+      <span class="tl-text">Sagutan ang pagsusuri</span>
+    </button>`;
+  })();
+
   const linkBtn = link
     ? `<a href="${escape(link)}" target="_blank" rel="noopener"
         style="padding:.55rem .9rem;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">
@@ -3353,6 +4087,7 @@ function _libRenderCard(r, tier, lang){
       ${transcriptBlock}
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         ${actionBtn}
+        ${quizBtn}
         ${linkBtn}
       </div>
     </div>
