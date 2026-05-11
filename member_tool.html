@@ -11,8 +11,22 @@
 <link rel="shortcut icon" href="icon_member_192.png">
 <link rel="apple-touch-icon" href="icon_member_192.png">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="multiply_shared.js"></script>
+
+<!-- DEPENDENCY LOAD GUARDS
+     If either the Supabase CDN or multiply_shared.js fails to load (CDN
+     downtime, captive portal, stale service worker that missed the JS),
+     the inline MMT script below will throw "X is not defined" on line 1
+     and the loading spinner stays forever. These onerror handlers catch
+     the load failure and flag it so the gate below can show a clear UI
+     instead of hanging silently. -->
+<script>
+  window.__mmtDepError = null;
+  window.__mmtMarkDepFailed = function(which){
+    window.__mmtDepError = which;
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
+<script src="multiply_shared.js" onerror="__mmtMarkDepFailed('shared')"></script>
 
 <style>
 :root{
@@ -1950,6 +1964,47 @@ body.lang-tl .tl-text{display:inline;}
 // ═══════════════════════════════════════════════════════════════
 // BOOT — gate the page on a valid member session, then load data.
 // ═══════════════════════════════════════════════════════════════
+
+// ─── Dependency guard ───
+// If multiply_shared.js or the Supabase CDN failed to load, the script
+// will throw "MultiplyShared is not defined" or "supabase is not defined"
+// on the very next line and the loading spinner stays forever. This guard
+// detects that case and shows a clear retry screen instead.
+(function depGuard(){
+  const missing = [];
+  if (window.__mmtDepError === 'supabase' || typeof supabase === 'undefined') missing.push('Supabase');
+  if (window.__mmtDepError === 'shared'   || typeof MultiplyShared === 'undefined') missing.push('MultiplyShared');
+  if (missing.length === 0) return;
+
+  // Replace the spinner with an actionable error UI
+  function showDepError(){
+    const ls = document.getElementById('loadingScreen');
+    if (!ls) return;
+    ls.innerHTML = `
+      <div style="text-align:center;padding:2rem 1.5rem;max-width:380px">
+        <div style="font-size:48px;margin-bottom:.75rem">📡</div>
+        <div style="font-size:16px;font-weight:700;color:#1c1810;margin-bottom:.5rem">Couldn't load app files</div>
+        <div style="font-size:13px;color:#6b5f4f;line-height:1.6;margin-bottom:1.25rem">
+          A core file (${missing.join(' &amp; ')}) didn't download. This usually means a flaky connection or a stuck app cache.
+          <br><br>
+          <strong>Try this:</strong> Pull down to reload. If it still won't load, fully close the app and reopen.
+        </div>
+        <button onclick="location.reload(true)" style="padding:.7rem 1.5rem;background:#0e3a2c;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">
+          ↻ Retry
+        </button>
+        <div style="margin-top:1rem;font-size:11px;color:#6b5f4f">If retry doesn't work after a few tries, ask Pastor to help you reinstall the app.</div>
+      </div>
+    `;
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', showDepError);
+  } else {
+    showDepError();
+  }
+  // Stop further script execution — without this, the next line throws a ReferenceError.
+  throw new Error('MMT dependencies missing: ' + missing.join(', '));
+})();
+
 if(!MultiplyShared.gateMemberOrRedirect('member_login.html')){
   // gateMemberOrRedirect already replaced location; nothing else to do.
 } else {
@@ -2093,8 +2148,22 @@ async function initMMT(){
   applySavedLang();
   applySavedFontScale();
 
+  // Spinner safety net: if loadMember takes longer than 8 seconds, swap the
+  // "Loading…" text for a "Taking longer than usual" hint so the user knows
+  // we haven't crashed. After 25s, force-show a retry UI even if the fetch
+  // is still pending — better to show something actionable than spin forever.
+  const slowHintTimer = setTimeout(() => {
+    const ltext = document.querySelector('#loadingScreen .ltext');
+    if (ltext && document.getElementById('loadingScreen').style.display !== 'none') {
+      ltext.innerHTML =
+        '<span class="en-text">Taking longer than usual — still working…</span>' +
+        '<span class="tl-text">Mas matagal kaysa karaniwan — sandali pa…</span>';
+    }
+  }, 8000);
+
   try{
     await loadMember();
+    clearTimeout(slowHintTimer);
     // Each subsequent loader is wrapped — a single failure shouldn't kill init
     try{ await loadDevoStreak(); }catch(e){ console.warn('streak failed:', e); }
     try{ await loadWeeklyVerse(); }catch(e){ console.warn('verse failed:', e); }
@@ -2111,9 +2180,36 @@ async function initMMT(){
     renderProfile();
     showApp();
   }catch(e){
+    clearTimeout(slowHintTimer);
     console.error('initMMT failed:', e);
-    showToast('Could not load. Try again.', true);
-    showApp(); // show anyway, even if some pieces failed
+    // Replace the spinner with a clear retry UI so the user is never stuck
+    // staring at a hung spinner. Most common cause: flaky mobile data.
+    const ls = document.getElementById('loadingScreen');
+    if (ls) {
+      const msg = (e && e.message) ? e.message : 'Could not load your tool.';
+      ls.innerHTML = `
+        <div style="text-align:center;padding:2rem 1.5rem;max-width:360px">
+          <div style="font-size:48px;margin-bottom:.75rem">📡</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-bottom:.5rem">
+            <span class="en-text">Couldn't load</span>
+            <span class="tl-text">Hindi maibukas</span>
+          </div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem">
+            <span class="en-text">${MultiplyShared.escapeHTML(msg)}<br><br>Check your wifi or mobile data, then try again.</span>
+            <span class="tl-text">${MultiplyShared.escapeHTML(msg)}<br><br>Tingnan ang wifi o data, pagkatapos subukan muli.</span>
+          </div>
+          <button onclick="location.reload()" style="padding:.7rem 1.5rem;background:var(--forest);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">
+            ↻ <span class="en-text">Retry</span><span class="tl-text">Subukan ulit</span>
+          </button>
+          <div style="margin-top:.85rem">
+            <button onclick="MultiplyShared.logoutMember && MultiplyShared.logoutMember(); location.href='member_login.html';"
+              style="padding:.5rem 1rem;background:transparent;color:var(--muted);border:none;font-size:11.5px;cursor:pointer;text-decoration:underline">
+              <span class="en-text">Sign out</span><span class="tl-text">Mag-sign out</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
   }
 }
 
@@ -2129,10 +2225,18 @@ function showApp(){
 // DATA LOADING
 // ═══════════════════════════════════════════════════════════════
 async function loadMember(){
-  const {data, error} = await db.from('members')
+  // Race the fetch against a hard 15s timeout — Supabase calls on flaky
+  // Philippine mobile data have been seen to hang silently for 30+ minutes,
+  // which previously meant the loading spinner spun forever. With a timeout,
+  // we throw cleanly and the outer try/catch shows a retry UI.
+  const fetchPromise = db.from('members')
     .select('*')
     .eq('id', MEMBER.memberId)
     .maybeSingle();
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Network slow — please check your connection')), 15000)
+  );
+  const {data, error} = await Promise.race([fetchPromise, timeoutPromise]);
   if(error) throw error;
   if(!data) throw new Error('Member record not found');
   memberRow = data;
