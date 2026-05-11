@@ -299,8 +299,18 @@ let _page = 0;
 const PAGE_SIZE = 50;
 
 function goBack(){
-  if(document.referrer && document.referrer.includes(location.host)) history.back();
-  else location.href = 'multiply_dashboard.html';
+  // MULTIPLY standing rule: pages opened via window.open(_blank) close
+  // themselves on Back so the user returns to the caller tab (preserving
+  // scroll position there). Fallback to history.back() / dashboard nav
+  // for the rare case window.close() is blocked.
+  try { window.close(); } catch(e) {}
+  setTimeout(() => {
+    if(document.referrer && document.referrer.includes(location.host)){
+      history.back();
+    } else {
+      location.href = 'multiply_dashboard.html';
+    }
+  }, 150);
 }
 
 // Default range: last 30 days → today

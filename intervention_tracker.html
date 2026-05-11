@@ -953,7 +953,16 @@ async function saveIntervention() {
 // NAVIGATION
 // ═══════════════════════════════════════
 function goBack() {
-  window.history.back();
+  // MULTIPLY standing rule: pages opened via window.open(_blank) close
+  // themselves on Back so the user returns to the caller tab.
+  try { window.close(); } catch(e) {}
+  setTimeout(() => {
+    if(document.referrer && document.referrer.includes(location.host)){
+      window.history.back();
+    } else {
+      location.href = 'multiply_dashboard.html';
+    }
+  }, 150);
 }
 
 // ═══════════════════════════════════════
