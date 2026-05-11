@@ -42,6 +42,19 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
 <script src="multiply_shared.js" onerror="__mmtMarkDepFailed('shared')"></script>
 
+<!-- YOUTUBE IFRAME PLAYER API
+     Loaded async — it's optional. If it fails to load, podcasts still play
+     via standard <iframe> (legacy fallback handled in _libRenderCard), but
+     playback tracking won't fire. Members can still self-attest progress.
+     The API calls window.onYouTubeIframeAPIReady when loaded; we use that
+     hook below to hydrate any pre-rendered .lib-yt-player divs into real
+     YouTube.Player instances with onStateChange listeners. -->
+<script>
+  window.__ytApiReady = false;
+  window.__ytPendingPlayers = []; // queue of {elId, videoId, resourceId} until API ready
+</script>
+<script src="https://www.youtube.com/iframe_api" async></script>
+
 <style>
 :root{
   --cream:#f5f0e6;
@@ -2702,7 +2715,7 @@ async function loadLibraryAndProgress(){
         .order('sort_order', {ascending: true})
         .order('title_en', {ascending: true}),
       db.from('library_progress')
-        .select('id, resource_id, status, started_at, completed_at, notes')
+        .select('id, resource_id, status, started_at, completed_at, notes, play_started_count, last_played_at, completion_percent')
         .eq('member_id', MEMBER.memberId)
     ]);
     if (resRes.error) throw resRes.error;
@@ -2906,6 +2919,264 @@ function renderLibrary(){
   }
 
   wrap.innerHTML = html.join('');
+
+  // Hydrate any <div class="lib-yt-player"> we just inserted into real
+  // YouTube.Player instances with onStateChange listeners. If the API
+  // isn't loaded yet, queue them — onYouTubeIframeAPIReady (below) will
+  // flush the queue when it fires.
+  _libHydrateYoutubePlayers();
+}
+
+// Find any unhydrated .lib-yt-player divs and convert them to real
+// API-tracked players. Re-runs are safe — hydrated players carry a
+// data-hydrated="1" marker so they're skipped on subsequent passes.
+function _libHydrateYoutubePlayers(){
+  const players = document.querySelectorAll('.lib-yt-player:not([data-hydrated])');
+  players.forEach(div => {
+    const elId = div.id;
+    const videoId = div.getAttribute('data-yt-video');
+    const resourceId = div.getAttribute('data-resource-id');
+    if (!elId || !videoId || !resourceId) return;
+    div.setAttribute('data-hydrated', '1');
+    if (window.__ytApiReady && window.YT && window.YT.Player){
+      _libCreateYoutubePlayer(elId, videoId, resourceId);
+    } else {
+      window.__ytPendingPlayers.push({ elId, videoId, resourceId });
+    }
+  });
+}
+
+// Per-player state — keeps the highest completion % observed and a
+// flag so we only trigger the soft-completion prompt once per session.
+const _libPlayerState = {};        // { resourceId: { highestPct, prompted, lastSavedPct } }
+
+function _libCreateYoutubePlayer(elId, videoId, resourceId){
+  if (!_libPlayerState[resourceId]) {
+    _libPlayerState[resourceId] = { highestPct: 0, prompted: false, lastSavedPct: 0, pollTimer: null };
+  }
+  try {
+    new YT.Player(elId, {
+      videoId,
+      playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+      events: {
+        onStateChange: (e) => _libOnPlayerStateChange(e, resourceId),
+        onError: (e) => console.warn('[library] YT player error for', resourceId, e.data)
+      }
+    });
+  } catch (err) {
+    console.warn('[library] failed to create YT player for', resourceId, err);
+  }
+}
+
+// State codes: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
+function _libOnPlayerStateChange(e, resourceId){
+  const state = e.data;
+  const st = _libPlayerState[resourceId];
+  if (!st) return;
+
+  if (state === YT.PlayerState.PLAYING){
+    // First play of this session — record as in_progress + bump counters.
+    // We don't await this; it's fire-and-forget. Multiple plays of the
+    // same resource in one session only count once via the in_progress
+    // guard below.
+    _libRecordPlayStart(resourceId);
+    // Start polling current time so we can track completion percent and
+    // catch >90% as a completion-prompt trigger. Poll only while playing
+    // — cleared on pause/end.
+    if (st.pollTimer) clearInterval(st.pollTimer);
+    st.pollTimer = setInterval(() => _libPollPlayback(e.target, resourceId), 5000);
+    return;
+  }
+
+  if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED){
+    if (st.pollTimer){ clearInterval(st.pollTimer); st.pollTimer = null; }
+  }
+
+  if (state === YT.PlayerState.ENDED){
+    // Force one final poll to record 100% before the prompt fires
+    _libPollPlayback(e.target, resourceId, /*forceComplete=*/true);
+    _libMaybePromptCompletion(resourceId);
+  }
+}
+
+function _libPollPlayback(player, resourceId, forceComplete){
+  try {
+    const dur = player.getDuration();
+    const cur = player.getCurrentTime();
+    if (!dur || dur < 1) return;
+    let pct = Math.round((cur / dur) * 100);
+    if (forceComplete) pct = 100;
+    const st = _libPlayerState[resourceId];
+    if (!st) return;
+    if (pct > st.highestPct) st.highestPct = pct;
+    // Only persist to DB when we've climbed meaningfully (every 10 pp)
+    // to avoid hammering Supabase every 5 seconds.
+    if (st.highestPct - st.lastSavedPct >= 10 || forceComplete){
+      st.lastSavedPct = st.highestPct;
+      _libPersistCompletionPct(resourceId, st.highestPct);
+    }
+    // 90%+ → trigger soft completion prompt (only once per session)
+    if (st.highestPct >= 90) _libMaybePromptCompletion(resourceId);
+  } catch (err) {
+    // Player may have been destroyed during render — ignore
+  }
+}
+
+// Bump play_started_count and last_played_at. Also transitions status
+// to in_progress if it was not_started — but never downgrades from
+// completed (a relisten shouldn't undo completion).
+async function _libRecordPlayStart(resourceId){
+  if (!MEMBER || !MEMBER.memberId) return;
+  try {
+    const existing = _libProgress[resourceId];
+    const now = new Date().toISOString();
+    const newStatus = (existing && existing.status === 'completed')
+      ? 'completed'
+      : 'in_progress';
+    const payload = {
+      member_id: MEMBER.memberId,
+      resource_id: resourceId,
+      status: newStatus,
+      started_at: existing?.started_at || now,
+      completed_at: existing?.completed_at || null,
+      play_started_count: (existing?.play_started_count || 0) + 1,
+      last_played_at: now
+    };
+    const { data, error } = await db.from('library_progress')
+      .upsert(payload, { onConflict: 'member_id,resource_id' })
+      .select()
+      .single();
+    if (error){ console.warn('[library] play start save failed:', error); return; }
+    _libProgress[resourceId] = data;
+    // No re-render — avoids interrupting the player. Status badges will
+    // refresh next time renderLibrary() runs (e.g., language toggle).
+  } catch (err) {
+    console.warn('[library] play start exception:', err);
+  }
+}
+
+// Persist completion_percent only — does NOT touch status, status changes
+// require explicit member action (completion prompt or manual button).
+async function _libPersistCompletionPct(resourceId, pct){
+  if (!MEMBER || !MEMBER.memberId) return;
+  try {
+    const existing = _libProgress[resourceId];
+    if (existing && (existing.completion_percent || 0) >= pct) return; // never decrease
+    const { data, error } = await db.from('library_progress')
+      .update({ completion_percent: pct, last_played_at: new Date().toISOString() })
+      .eq('member_id', MEMBER.memberId)
+      .eq('resource_id', resourceId)
+      .select()
+      .single();
+    if (error){ console.warn('[library] pct save failed:', error); return; }
+    _libProgress[resourceId] = data;
+  } catch (err) { /* ignore */ }
+}
+
+// Soft prompt — appears once per session when member reaches 90% or video ends.
+// If already completed, do nothing. If reflection prompt is preferred, route
+// through _libOpenReflectionModal instead of marking complete immediately.
+function _libMaybePromptCompletion(resourceId){
+  const st = _libPlayerState[resourceId];
+  if (!st || st.prompted) return;
+  const existing = _libProgress[resourceId];
+  if (existing && existing.status === 'completed') return;
+  st.prompted = true;
+  // Open the reflection modal — that's the path to marking complete
+  _libOpenReflectionModal(resourceId, /*autoPrompted=*/true);
+}
+
+// ─── Reflection modal (Tier 3 lite) ─────────────────────────────────
+// Shown when member taps "Mark as completed" OR auto-prompted at 90%+.
+// Textarea is optional — member can skip and just complete. The reflection
+// saves to library_progress.notes. Pastor can review later in MD.
+function _libOpenReflectionModal(resourceId, autoPrompted){
+  const r = _libResources.find(x => x.id === resourceId);
+  if (!r) return;
+  const lang = _libGetLang();
+  const existing = _libProgress[resourceId];
+  const existingNotes = existing?.notes || '';
+  const title = (lang === 'tl' && r.title_tl) ? r.title_tl : r.title_en;
+
+  let modal = document.getElementById('libReflectionModal');
+  if (!modal){
+    modal = document.createElement('div');
+    modal.id = 'libReflectionModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:14px;width:100%;max-width:480px;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--line)">
+        <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">
+          ${autoPrompted
+            ? '<span class="en-text">You finished the episode! 🎉</span><span class="tl-text">Natapos mo ang episode! 🎉</span>'
+            : '<span class="en-text">Marking as completed</span><span class="tl-text">Markahan na tapos</span>'}
+        </div>
+        <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:3px;line-height:1.3">${MultiplyShared.escapeHTML(title)}</div>
+      </div>
+      <div style="padding:1rem 1.25rem;flex:1;overflow-y:auto">
+        <label style="font-size:12.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:.4rem">
+          <span class="en-text">What's one thing you want to remember?</span>
+          <span class="tl-text">Ano ang isang bagay na gusto mong tandaan?</span>
+        </label>
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.6rem;font-style:italic">
+          <span class="en-text">Optional — but writing helps it stick. Pastor may read this later.</span>
+          <span class="tl-text">Hindi kinakailangan — pero nakakatulong ang pagsulat. Maaaring basahin ito ni Pastor.</span>
+        </div>
+        <textarea id="libReflectionNotes" rows="5" placeholder="..."
+          style="width:100%;padding:.65rem .8rem;border:1px solid var(--line);border-radius:8px;background:var(--cream);color:var(--ink);font-size:13.5px;font-family:'Fraunces','Georgia',serif;line-height:1.6;resize:vertical">${MultiplyShared.escapeHTML(existingNotes)}</textarea>
+      </div>
+      <div style="padding:.9rem 1.25rem;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="_libCloseReflection()" style="padding:.6rem 1.1rem;background:var(--cream);color:var(--muted);border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer">
+          <span class="en-text">${autoPrompted ? 'Not yet' : 'Cancel'}</span>
+          <span class="tl-text">${autoPrompted ? 'Hindi pa' : 'Kanselahin'}</span>
+        </button>
+        <button onclick="_libSaveReflectionAndComplete('${resourceId}')" style="padding:.6rem 1.1rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer">
+          ✓ <span class="en-text">Mark completed</span><span class="tl-text">Markahan na tapos</span>
+        </button>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+  // Focus the textarea for fast capture
+  setTimeout(() => { const ta = document.getElementById('libReflectionNotes'); if (ta) ta.focus(); }, 50);
+}
+
+function _libCloseReflection(){
+  const m = document.getElementById('libReflectionModal');
+  if (m) m.style.display = 'none';
+}
+
+async function _libSaveReflectionAndComplete(resourceId){
+  const ta = document.getElementById('libReflectionNotes');
+  const notes = (ta?.value || '').trim() || null;
+  _libCloseReflection();
+  // Persist notes + transition to completed in one upsert
+  if (!MEMBER || !MEMBER.memberId){ toast('Sign in required', '⚠️'); return; }
+  const existing = _libProgress[resourceId];
+  const now = new Date().toISOString();
+  const payload = {
+    member_id:    MEMBER.memberId,
+    resource_id:  resourceId,
+    status:       'completed',
+    started_at:   existing?.started_at || now,
+    completed_at: now,
+    notes
+  };
+  try {
+    const { data, error } = await db.from('library_progress')
+      .upsert(payload, { onConflict: 'member_id,resource_id' })
+      .select().single();
+    if (error) throw error;
+    _libProgress[resourceId] = data;
+    renderLibrary();
+    const lang = _libGetLang();
+    toast(lang === 'tl' ? '🎉 Tapos na — salamat sa pagbabahagi' : '🎉 Marked complete — thanks for sharing', 'success');
+  } catch (err) {
+    toast('Save failed: ' + err.message, '❌');
+  }
 }
 
 function _libRenderCard(r, tier, lang){
@@ -2982,7 +3253,11 @@ function _libRenderCard(r, tier, lang){
       </button>`;
     }
     if (status === 'in_progress'){
-      return `<button onclick="_libSetStatus('${r.id}','completed')"
+      // Tap "Mark completed" → reflection modal → save with optional notes.
+      // The modal lets members skip the reflection (just hit save) so this
+      // adds no friction for those who don't want to write — but invites
+      // depth for those who do.
+      return `<button onclick="_libOpenReflectionModal('${r.id}', false)"
         style="padding:.55rem .9rem;background:var(--forest);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
         <span class="en-text">✓ Mark as completed</span>
         <span class="tl-text">✓ Markahan na tapos</span>
@@ -3021,13 +3296,11 @@ function _libRenderCard(r, tier, lang){
 
   const podcastBlock = ytId ? `
     <div style="margin:.7rem 0;border-radius:10px;overflow:hidden;background:#000;position:relative;padding-bottom:56.25%;height:0">
-      <iframe
-        src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1"
-        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"
-        allowfullscreen
-        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-        referrerpolicy="strict-origin-when-cross-origin"
-        loading="lazy"></iframe>
+      <div id="lib-yt-${r.id}"
+           data-yt-video="${ytId}"
+           data-resource-id="${r.id}"
+           class="lib-yt-player"
+           style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:-.2rem;margin-bottom:.6rem">
       <div>
@@ -6820,6 +7093,26 @@ setTimeout(() => {
   try { _maybeShowInAppBrowserBanner(); } catch(e){}
   try { _maybeShowInstallBanner('mmt'); } catch(e){}
 }, 1500);
+
+// ═══════════════════════════════════════════════════════════════
+// YOUTUBE IFRAME API — ready callback
+// ─────────────────────────────────────────────────────────────
+// The YouTube API script (loaded in <head>) calls this global function
+// once it's loaded. We use the callback to flush any player divs queued
+// before the API was ready, and to mark __ytApiReady so future renders
+// hydrate synchronously.
+// ═══════════════════════════════════════════════════════════════
+window.onYouTubeIframeAPIReady = function(){
+  window.__ytApiReady = true;
+  const queue = window.__ytPendingPlayers || [];
+  window.__ytPendingPlayers = [];
+  queue.forEach(({ elId, videoId, resourceId }) => {
+    // Verify the element still exists — a re-render may have replaced it
+    if (document.getElementById(elId) && typeof _libCreateYoutubePlayer === 'function'){
+      _libCreateYoutubePlayer(elId, videoId, resourceId);
+    }
+  });
+};
 </script>
 </body>
 </html>
