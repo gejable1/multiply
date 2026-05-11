@@ -521,11 +521,21 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function goBack(){
-  if(document.referrer && document.referrer.includes(location.host)){
-    history.back();
-  } else {
-    location.href = 'multiply_dashboard.html';
-  }
+  // LCAR opens in a new tab from MD via window.open(..., '_blank').
+  // Closing this tab returns the user to the MD Settings tab they came from.
+  // window.close() only works for tabs opened by script — which this one is.
+  // Fallback: if browser blocks close (rare), use history.back() or navigate home.
+  try {
+    window.close();
+  } catch(e) {}
+  // If we're still here ~150ms later, close was blocked — fall back gracefully.
+  setTimeout(() => {
+    if(document.referrer && document.referrer.includes(location.host)){
+      history.back();
+    } else {
+      location.href = 'multiply_dashboard.html';
+    }
+  }, 150);
 }
 
 // ═══════════════════════════════════════════════════════════════
