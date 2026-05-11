@@ -632,9 +632,12 @@ function renderCalendar(){
     grid.appendChild(c);
   }
 
-  // Today's date for highlight
+  // Today's date for highlight — LOCAL date (not UTC).
+  // Bug fixed May 12, 2026: toISOString().slice(0,10) returns UTC date,
+  // so Manila users in early morning hours (UTC+8) saw "today" highlight
+  // land on the previous day's cell (e.g. Monday morning showed Sunday).
   const today = new Date();
-  const todayIso = today.toISOString().slice(0,10);
+  const todayIso = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
   let entryCount = 0, sundayCount = 0;
 
   for(let day=1; day<=lastDay; day++){
