@@ -5539,6 +5539,10 @@ let _cohortState = {
   cohorts: [],           // all cohorts (across programs)
   members: [],           // member directory cache (for member picker)
   cohortMembers: {},     // cohort_id → [cohort_members rows]
+  // Lesson unlock support (Phase 3):
+  lessons: [],           // all published pipeline_lessons (light fetch)
+  lessonGrants: [],      // all pipeline_lesson_grants
+  unlocks: {},           // cohort_id → [cohort_lesson_unlocks rows]
   selectedProgramId: null,
   editingProgram: null,  // program being edited in sub-modal
   editingCohort: null,   // cohort being edited in sub-modal
@@ -5558,29 +5562,47 @@ async function openCohorts(){
 }
 
 async function _coLoadData(){
-  const [pRes, cRes, mRes] = await Promise.all([
+  const [pRes, cRes, mRes, lRes, lgRes] = await Promise.all([
     db.from('cohort_programs').select('*').order('sort_order', { ascending: true }).order('name', { ascending: true }),
     db.from('cohorts').select('*').order('start_date', { ascending: false, nullsFirst: false }),
-    db.from('members').select('id, name, lc_group, pipeline_level').order('name', { ascending: true })
+    db.from('members').select('id, name, lc_group, pipeline_level').order('name', { ascending: true }),
+    // Lessons (for the Unlocks panel — we need to know which lessons are
+    // granted to each cohort). Light fetch — just enough for the picker.
+    db.from('pipeline_lessons').select('id, level, track, lesson_number, title_en, audience, attachments').eq('published', true),
+    // All lesson grants — used to compute which lessons each cohort can see.
+    db.from('pipeline_lesson_grants').select('*')
   ]);
   if(pRes.error) throw pRes.error;
   if(cRes.error) throw cRes.error;
   if(mRes.error) throw mRes.error;
+  if(lRes.error) throw lRes.error;
+  if(lgRes.error) throw lgRes.error;
 
   _cohortState.programs = pRes.data || [];
   _cohortState.cohorts = cRes.data || [];
   _cohortState.members = mRes.data || [];
+  _cohortState.lessons = lRes.data || [];
+  _cohortState.lessonGrants = lgRes.data || [];
 
   // Load cohort members for ALL cohorts in one query, then group locally.
   // Cheaper than N queries even at 50+ cohorts (still small data).
   const allCohortIds = _cohortState.cohorts.map(c => c.id);
   _cohortState.cohortMembers = {};
+  _cohortState.unlocks = {};  // cohort_id → [{lesson_id, unlocked_at, scheduled_for}]
   if(allCohortIds.length > 0){
-    const cmRes = await db.from('cohort_members').select('*').in('cohort_id', allCohortIds);
+    const [cmRes, unRes] = await Promise.all([
+      db.from('cohort_members').select('*').in('cohort_id', allCohortIds),
+      db.from('cohort_lesson_unlocks').select('*').in('cohort_id', allCohortIds)
+    ]);
     if(cmRes.error) throw cmRes.error;
+    if(unRes.error) throw unRes.error;
     (cmRes.data || []).forEach(cm => {
       if(!_cohortState.cohortMembers[cm.cohort_id]) _cohortState.cohortMembers[cm.cohort_id] = [];
       _cohortState.cohortMembers[cm.cohort_id].push(cm);
+    });
+    (unRes.data || []).forEach(u => {
+      if(!_cohortState.unlocks[u.cohort_id]) _cohortState.unlocks[u.cohort_id] = [];
+      _cohortState.unlocks[u.cohort_id].push(u);
     });
   }
 
@@ -5589,6 +5611,34 @@ async function _coLoadData(){
     const withCohorts = _cohortState.programs.find(p => _cohortState.cohorts.some(c => c.program_id === p.id));
     _cohortState.selectedProgramId = (withCohorts || _cohortState.programs[0]).id;
   }
+}
+
+// Compute which lessons are available to a given cohort (via grants).
+// Returns the lessons array filtered to ones this cohort has any access to:
+//   - direct cohort grant
+//   - program grant (lesson granted to the program this cohort belongs to)
+//
+// Member-level grants are NOT included here (they're a different access path).
+function _coLessonsForCohort(cohortId){
+  const cohort = _cohortState.cohorts.find(c => c.id === cohortId);
+  if(!cohort) return [];
+  const lessonIds = new Set();
+  (_cohortState.lessonGrants || []).forEach(g => {
+    if(g.cohort_id === cohortId) lessonIds.add(g.lesson_id);
+    if(g.program_id === cohort.program_id) lessonIds.add(g.lesson_id);
+  });
+  return _cohortState.lessons.filter(l => lessonIds.has(l.id));
+}
+
+// Is this lesson unlocked for this cohort? An unlock is "live" if
+// either unlocked_at is set, OR scheduled_for has passed (future feature).
+function _coIsLessonUnlocked(cohortId, lessonId){
+  const unlocks = _cohortState.unlocks[cohortId] || [];
+  const u = unlocks.find(x => x.lesson_id === lessonId);
+  if(!u) return false;
+  if(u.unlocked_at) return true;
+  if(u.scheduled_for && new Date(u.scheduled_for) <= new Date()) return true;
+  return false;
 }
 
 function _coRenderShell(state){
@@ -6202,6 +6252,9 @@ function _coRenderRoster(){
             No members yet.<br><span style="color:var(--lighter);font-size:11.5px">Use the picker above to add the first one.</span>
           </div>
         ` : cms.map(cm => _coRenderRosterRow(cm, memberName(cm))).join('')}
+
+        <!-- 🔓 LESSON UNLOCKS — Pastor-triggered teacher-level access for apprentices -->
+        ${_coRenderUnlocksPanel(cohortId)}
       </div>
       <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
         <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_coCloseRoster()">Close</button>
@@ -6209,6 +6262,122 @@ function _coRenderRoster(){
     </div>
   `;
 }
+
+// ─────────────────────────────────────────────────────────────────
+// LESSON UNLOCKS PANEL — Pastor unlocks teacher-level access per lesson
+// ─────────────────────────────────────────────────────────────────
+// Without an unlock, apprentices in this cohort see:
+//   - 'all' attachments (participant, slides)
+//   - 'apprentice+' attachments (intern guide)
+// With an unlock for a specific lesson, they additionally see:
+//   - 'teacher+' attachments (facilitator guide) for THAT lesson only
+//
+// This preserves the formational rhythm — Pastor explicitly decides
+// "this cohort is ready to teach this lesson next" by clicking unlock.
+// ─────────────────────────────────────────────────────────────────
+function _coRenderUnlocksPanel(cohortId){
+  const lessons = _coLessonsForCohort(cohortId);
+  if(lessons.length === 0){
+    return `
+      <details style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:.85rem">
+        <summary style="cursor:pointer;font-size:11.5px;color:var(--muted);font-weight:600;padding:.3rem 0;list-style:none;display:flex;align-items:center;gap:.4rem">
+          <span style="font-size:12px">🔓</span> Lesson unlocks
+          <span style="color:var(--lighter);font-weight:400;font-size:10.5px">(no lessons granted to this batch yet)</span>
+        </summary>
+        <div style="margin-top:.65rem;padding:.7rem .85rem;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;font-size:11.5px;color:var(--muted);line-height:1.6;font-style:italic">
+          When you grant a lesson to this batch in the Lesson Library (or to the parent program), it will appear here with an unlock toggle.
+        </div>
+      </details>
+    `;
+  }
+
+  // Count current unlocks for the summary line
+  const unlockedCount = lessons.filter(l => _coIsLessonUnlocked(cohortId, l.id)).length;
+
+  return `
+    <details ${unlockedCount > 0 ? 'open' : ''} style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:.85rem">
+      <summary style="cursor:pointer;font-size:11.5px;color:var(--muted);font-weight:600;padding:.3rem 0;list-style:none;display:flex;align-items:center;gap:.4rem">
+        <span style="font-size:12px">🔓</span> Lesson unlocks
+        <span style="color:var(--lighter);font-weight:400;font-size:10.5px">(${unlockedCount} of ${lessons.length} unlocked)</span>
+      </summary>
+      <div style="margin-top:.55rem;padding:.7rem .85rem;background:rgba(184,136,42,.06);border:1px solid rgba(184,136,42,.2);border-radius:8px;font-size:11px;color:var(--ink);line-height:1.6;margin-bottom:.65rem">
+        <strong>What this does:</strong> By default, apprentices in this batch see participant + slides + intern materials.
+        Unlocking a lesson here also gives them access to <strong>facilitator (teacher-level) materials for that lesson</strong>.
+        Use this when a cohort is ready to teach a specific lesson next.
+      </div>
+      ${lessons.map(l => {
+        const unlocked = _coIsLessonUnlocked(cohortId, l.id);
+        const unlockRow = (_cohortState.unlocks[cohortId] || []).find(u => u.lesson_id === l.id);
+        const unlockedAt = unlockRow?.unlocked_at;
+        const meta = [l.level ? `L${l.level}` : '', l.track, l.lesson_number != null ? `#${l.lesson_number}` : ''].filter(Boolean).join(' · ');
+        const fmt = (ts) => ts ? new Date(ts).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '';
+        return `
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.55rem .75rem;margin-bottom:.35rem;display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:center">
+            <div style="min-width:0">
+              ${meta ? `<div style="font-size:9.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase">${escapeHTMLNotif(meta)}</div>` : ''}
+              <div style="font-size:12.5px;color:var(--ink);font-weight:600;line-height:1.3;margin-top:2px">${escapeHTMLNotif(l.title_en || '(untitled)')}</div>
+              ${unlocked && unlockedAt ? `<div style="font-size:10px;color:var(--green);margin-top:3px">🔓 Unlocked ${fmt(unlockedAt)}</div>` : ''}
+            </div>
+            ${unlocked
+              ? `<button onclick="_coRelock('${cohortId}', '${l.id}')" title="Relock — apprentices lose teacher-level access"
+                  style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">🔒 Relock</button>`
+              : `<button onclick="_coUnlock('${cohortId}', '${l.id}')" title="Unlock — apprentices gain teacher-level access for this lesson"
+                  style="background:rgba(94,125,82,.18);color:var(--green);border:1px solid rgba(94,125,82,.4);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">🔓 Unlock</button>`}
+          </div>
+        `;
+      }).join('')}
+    </details>
+  `;
+}
+
+async function _coUnlock(cohortId, lessonId){
+  const lesson = _cohortState.lessons.find(l => l.id === lessonId);
+  const cohort = _cohortState.cohorts.find(c => c.id === cohortId);
+  if(!confirm(`🔓 Unlock teacher-level access?\n\nApprentices in "${cohort?.name}" will gain access to facilitator materials for:\n"${lesson?.title_en}"\n\nThey'll see this lesson's facilitator guide alongside their existing materials.`)) return;
+
+  // upsert: cohort_lesson_unlocks_unique constraint on (cohort_id, lesson_id) means
+  // a duplicate insert would fail. Use upsert to handle the case of re-unlocking
+  // after a relock (where the row still exists with unlocked_at=null perhaps).
+  try {
+    const { error } = await db.from('cohort_lesson_unlocks').upsert({
+      cohort_id: cohortId,
+      lesson_id: lessonId,
+      unlocked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'cohort_id,lesson_id' });
+    if(error) throw error;
+    toast('🔓 Unlocked', 'success');
+    await _coLoadData();
+    _coRenderRoster();
+    _coRender();
+  } catch(e){
+    toast('Unlock failed: ' + e.message, '❌');
+  }
+}
+
+async function _coRelock(cohortId, lessonId){
+  const lesson = _cohortState.lessons.find(l => l.id === lessonId);
+  if(!confirm(`🔒 Relock?\n\nApprentices will lose teacher-level access to "${lesson?.title_en}". They'll still see participant/slides/intern materials.\n\nYou can unlock again anytime.`)) return;
+
+  try {
+    // Delete the unlock row entirely (rather than null-ing unlocked_at) —
+    // cleaner state, and if a scheduled_for is set the row would otherwise
+    // accidentally re-unlock when the scheduled time arrives. Pastor can
+    // unlock again from scratch if needed.
+    const { error } = await db.from('cohort_lesson_unlocks')
+      .delete()
+      .eq('cohort_id', cohortId)
+      .eq('lesson_id', lessonId);
+    if(error) throw error;
+    toast('🔒 Relocked', 'success');
+    await _coLoadData();
+    _coRenderRoster();
+    _coRender();
+  } catch(e){
+    toast('Relock failed: ' + e.message, '❌');
+  }
+}
+
 
 function _coRenderRosterRow(cm, name){
   const roleColors = {
@@ -6537,6 +6706,7 @@ function _llRender(){
 
 function _llRenderLessonRow(l){
   const grantCount = (_lessonState.grants[l.id] || []).length;
+  const attCount = Array.isArray(l.attachments) ? l.attachments.length : 0;
 
   const levelLabel = l.level ? `L${l.level}` : '';
   const lessonNum = (l.lesson_number != null) ? ` · ${l.lesson_number}` : '';
@@ -6555,6 +6725,7 @@ function _llRenderLessonRow(l){
       <div style="min-width:0">
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
           ${meta ? `<span style="font-size:10px;background:rgba(184,136,42,.18);color:var(--gold,#8a5b2e);padding:1px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em">${escapeHTMLNotif(meta)}${lessonNum}</span>` : ''}
+          ${attCount > 0 ? `<span style="font-size:10px;background:var(--surface);color:var(--muted);padding:1px 7px;border-radius:5px;font-weight:600">📎 ${attCount}</span>` : ''}
         </div>
         <div style="font-size:13.5px;color:var(--ink);font-weight:600;margin-top:5px;line-height:1.3">${escapeHTMLNotif(l.title_en || '(untitled)')}</div>
         ${l.aim ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escapeHTMLNotif(l.aim)}</div>` : ''}
@@ -6599,6 +6770,7 @@ function _llNew(){
     duration_minutes: null,
     materials_needed: '',
     prerequisites: '',
+    attachments: [],   // [{label, url, role_required}, …]
     audience: 'pastor_only',
     published: false
   };
@@ -6608,7 +6780,13 @@ function _llNew(){
 function _llEdit(id){
   const l = _lessonState.lessons.find(x => x.id === id);
   if(!l){ toast('Lesson not found', '❌'); return; }
-  _lessonState.editing = {...l};
+  // Clone deeply enough that local edits to attachments don't mutate the
+  // cached lesson row before save. The attachments array is JSONB from DB
+  // (could be null) — normalize to a real array we can splice/edit.
+  _lessonState.editing = {
+    ...l,
+    attachments: Array.isArray(l.attachments) ? l.attachments.map(a => ({...a})) : []
+  };
   _llRender();
 }
 
@@ -6730,6 +6908,20 @@ function _llRenderEditor(){
           </div>
         </div>
 
+        <!-- 📎 ATTACHMENTS — role-gated file URLs (participant/slides/intern/facilitator) -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📎 Attachments <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(role-gated file URLs)</span></div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.7rem">
+            Host the lesson files (participant guide, slides, intern guide, facilitator guide) on GitHub Pages or any public URL.
+            Paste each URL below and set the role that should see it. Viewers will see only the attachments their role permits.
+          </div>
+          <div id="llAttachmentsList">${_llRenderAttachments(l.attachments || [])}</div>
+          <button onclick="_llAddAttachment()"
+            style="margin-top:.55rem;padding:.5rem .9rem;background:rgba(94,125,82,.18);color:var(--green);border:1px solid rgba(94,125,82,.4);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">
+            ＋ Add attachment
+          </button>
+        </div>
+
         <!-- ACCESS -->
         <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
           <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🔐 Access</div>
@@ -6783,6 +6975,114 @@ function _llRenderEditor(){
     </div>
   `;
 }
+
+// ─────────────────────────────────────────────────────────────────
+// LESSON ATTACHMENTS — role-gated file URLs
+// ─────────────────────────────────────────────────────────────────
+// Attachments are stored as a JSONB array on pipeline_lessons:
+//   [{label, url, role_required}, …]
+//
+// Role vocabulary (carried by viewers in MLT/MMT to filter what they
+// see — see multiply_shared.js access predicate):
+//
+//   'all'         — visible to anyone with lesson access
+//   'apprentice+' — apprentices, co-teachers, teachers, Pastor
+//   'teacher+'    — co-teachers, teachers, Pastor only
+//   'pastor_only' — only Pastor
+//
+// The "+" suffix means "this role AND everyone more privileged."
+// ─────────────────────────────────────────────────────────────────
+
+const LESSON_ATTACHMENT_ROLES = [
+  { value: 'all',         label: 'All — anyone with lesson access' },
+  { value: 'apprentice+', label: 'Apprentice + (apprentices, co-teachers, teachers)' },
+  { value: 'teacher+',    label: 'Teacher + (co-teachers, teachers, Pastor)' },
+  { value: 'pastor_only', label: 'Pastor only' }
+];
+
+function _llRenderAttachments(attachments){
+  if(!attachments || attachments.length === 0){
+    return `
+      <div style="padding:.85rem 1rem;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-size:11.5px;line-height:1.55;text-align:center;font-style:italic">
+        No attachments yet. Tap "＋ Add attachment" below to link a file (e.g. participant guide, slides, intern guide, facilitator guide).
+      </div>
+    `;
+  }
+  return attachments.map((a, idx) => {
+    const role = a.role_required || 'all';
+    return `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .8rem;margin-bottom:.5rem">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:flex-start">
+          <div style="min-width:0">
+            <div style="display:grid;grid-template-columns:1fr 130px;gap:.45rem">
+              <div>
+                <label style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase">Label</label>
+                <input type="text" value="${escapeHTMLNotif(a.label || '')}"
+                  oninput="_llUpdateAttachment(${idx}, 'label', this.value)"
+                  placeholder="e.g. Participant guide"
+                  style="width:100%;padding:.4rem .55rem;margin-top:.15rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px">
+              </div>
+              <div>
+                <label style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase">Role required</label>
+                <select onchange="_llUpdateAttachment(${idx}, 'role_required', this.value)"
+                  style="width:100%;padding:.4rem .5rem;margin-top:.15rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:11.5px">
+                  ${LESSON_ATTACHMENT_ROLES.map(r => `<option value="${r.value}" ${role===r.value?'selected':''} title="${escapeHTMLNotif(r.label)}">${escapeHTMLNotif(r.value)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:.55rem">
+              <label style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase">URL</label>
+              <input type="url" value="${escapeHTMLNotif(a.url || '')}"
+                oninput="_llUpdateAttachment(${idx}, 'url', this.value)"
+                placeholder="https://gejable1.github.io/multiply/lessons/…"
+                style="width:100%;padding:.4rem .55rem;margin-top:.15rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px;font-family:'JetBrains Mono','Courier New',monospace">
+              ${a.url ? `<a href="${escapeHTMLNotif(a.url)}" target="_blank" rel="noopener noreferrer" style="font-size:10.5px;color:var(--gold);margin-top:3px;display:inline-block;text-decoration:underline">↗ Open URL in new tab to verify</a>` : ''}
+            </div>
+          </div>
+          <button onclick="_llRemoveAttachment(${idx})" title="Remove attachment"
+            style="background:rgba(180,80,80,.12);color:#b25050;border:1px solid rgba(180,80,80,.3);border-radius:5px;padding:5px 8px;cursor:pointer;font-size:13px;flex-shrink:0">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function _llAddAttachment(){
+  if(!_lessonState.editing) return;
+  if(!Array.isArray(_lessonState.editing.attachments)) _lessonState.editing.attachments = [];
+  _lessonState.editing.attachments.push({
+    label: '',
+    url: '',
+    role_required: 'all'
+  });
+  _llRefreshAttachmentsInPlace();
+}
+
+function _llUpdateAttachment(idx, key, value){
+  if(!_lessonState.editing || !Array.isArray(_lessonState.editing.attachments)) return;
+  const a = _lessonState.editing.attachments[idx];
+  if(!a) return;
+  a[key] = value;
+  // Don't re-render — just keep in-memory. The DOM input is already updated by the user.
+  // Re-rendering would lose focus on the active input as the user types.
+}
+
+function _llRemoveAttachment(idx){
+  if(!_lessonState.editing || !Array.isArray(_lessonState.editing.attachments)) return;
+  const a = _lessonState.editing.attachments[idx];
+  const label = a?.label || a?.url || `attachment #${idx+1}`;
+  if(!confirm(`Remove attachment "${label}"?`)) return;
+  _lessonState.editing.attachments.splice(idx, 1);
+  _llRefreshAttachmentsInPlace();
+}
+
+function _llRefreshAttachmentsInPlace(){
+  const container = document.getElementById('llAttachmentsList');
+  if(container && _lessonState.editing){
+    container.innerHTML = _llRenderAttachments(_lessonState.editing.attachments || []);
+  }
+}
+
 
 function _llRenderGrants(lessonId, grants){
   if(!grants || grants.length === 0){
@@ -6927,6 +7227,16 @@ async function _llSave(){
     duration_minutes: durRaw === '' ? null : (parseInt(durRaw, 10) || null),
     materials_needed: document.getElementById('llMaterials').value.trim() || null,
     prerequisites: document.getElementById('llPrereqs').value.trim() || null,
+    // Attachments: clean up before save. Drop rows with empty label OR url
+    // (a half-filled row is probably forgotten — don't persist it).
+    // Normalize role to one of the known values; unknown values default to 'all'.
+    attachments: (Array.isArray(l.attachments) ? l.attachments : [])
+      .map(a => ({
+        label: (a.label || '').trim(),
+        url: (a.url || '').trim(),
+        role_required: ['all','apprentice+','teacher+','pastor_only'].includes(a.role_required) ? a.role_required : 'all'
+      }))
+      .filter(a => a.label && a.url),
     audience: document.getElementById('llAudience').value || 'pastor_only',
     published: document.getElementById('llPublished').checked,
     updated_at: new Date().toISOString()
