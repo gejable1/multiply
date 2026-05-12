@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wednesday Preaching · MULTIPLY Admin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzJhNWM0MCIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2I4ODgyYSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TTwvdGV4dD48L3N2Zz4=">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+<style>
+:root{
+  --ink:#1a1612;--paper:#fefcf8;--bg:#f5f0e8;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;
+  --navy:#1b2a4a;--green:#2a5c40;--green-bg:#eef6f1;--green-deep:#1f4530;
+  --red:#a8332a;--red-bg:#fbeae8;
+  --muted:#6b5f4f;--lighter:#9a8f80;
+  --border:#e2d8cc;--border2:#ccc0b0;--surface2:#f9f4ec;
+  --orange:#d4780a;--orange-bg:#fff3e0;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;}
+
+/* ───── HEADER ───── */
+.header{background:var(--green);color:white;padding:1rem 1.25rem;display:flex;align-items:center;gap:.85rem;border-bottom:3px solid var(--gold);}
+.back-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;font-family:inherit;font-size:13px;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
+.back-btn:hover{background:rgba(255,255,255,.2);}
+.htitle{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:#f5edd8;}
+.hsub{font-size:11px;color:rgba(255,255,255,.55);margin-top:1px;letter-spacing:.04em;}
+
+/* ───── LAYOUT ───── */
+.page{max-width:1100px;margin:0 auto;padding:1.5rem 1rem 5rem;}
+.tab-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.5rem;border-bottom:1px solid var(--border);}
+.tab{padding:9px 16px;background:transparent;border:none;font-family:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;}
+.tab:hover{color:var(--ink);}
+.tab.active{color:var(--green);border-bottom-color:var(--gold);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ───── CARDS ───── */
+.card{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.15rem;margin-bottom:1rem;}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:.85rem;padding-bottom:.65rem;border-bottom:1px solid var(--border);}
+.card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--gold-bg);flex-shrink:0;}
+.card-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;color:var(--ink);}
+.card-sub{font-size:11.5px;color:var(--muted);margin-top:1px;}
+
+/* ───── BUTTONS ───── */
+.btn{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:7px;border:1px solid var(--border2);background:var(--paper);color:var(--ink);cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:5px;}
+.btn:hover{background:var(--gold-bg);border-color:var(--gold);}
+.btn-primary{background:var(--green);color:white;border-color:var(--green);}
+.btn-primary:hover{background:var(--green-deep);border-color:var(--green-deep);color:white;}
+.btn-gold{background:var(--gold);color:white;border-color:var(--gold);}
+.btn-gold:hover{background:var(--gold-dim);border-color:var(--gold-dim);color:white;}
+.btn-danger{background:var(--red);color:white;border-color:var(--red);}
+.btn-danger:hover{filter:brightness(.92);color:white;}
+.btn-sm{font-size:11px;padding:4px 9px;}
+.btn-icon{padding:5px 8px;font-size:13px;line-height:1;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+
+/* ───── ROSTER TABLE ───── */
+.roster-add-row{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;background:var(--gold-bg);border:1px dashed var(--gold);border-radius:8px;padding:.7rem .85rem;}
+.roster-add-row label{font-size:11px;font-weight:700;color:var(--gold-dim);letter-spacing:.05em;text-transform:uppercase;}
+.member-search-wrap{flex:1;min-width:200px;position:relative;}
+.member-search{width:100%;padding:7px 10px;font-family:inherit;font-size:13px;background:var(--paper);border:1.5px solid var(--border2);border-radius:6px;color:var(--ink);}
+.member-search:focus{outline:none;border-color:var(--gold);}
+.member-results{position:absolute;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:var(--paper);border:1px solid var(--border);border-radius:6px;margin-top:3px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.08);}
+.member-result{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);}
+.member-result:hover{background:var(--gold-bg);}
+.member-result:last-child{border-bottom:none;}
+.member-result .mr-meta{font-size:10.5px;color:var(--lighter);margin-top:1px;}
+
+.roster-list{display:flex;flex-direction:column;gap:5px;}
+.roster-row{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;background:var(--paper);border:1px solid var(--border);border-radius:7px;padding:.55rem .75rem;transition:background .12s;}
+.roster-row:hover{background:#faf6f0;}
+.roster-row.inactive{opacity:.55;background:var(--surface2);}
+.rr-seq{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold);text-align:center;}
+.rr-name{font-size:13.5px;font-weight:600;color:var(--ink);}
+.rr-notes{font-size:11px;color:var(--muted);margin-top:1px;font-style:italic;}
+.rr-actions{display:flex;gap:3px;align-items:center;flex-shrink:0;}
+.rr-empty{text-align:center;padding:1.5rem;color:var(--lighter);font-size:13px;font-style:italic;}
+
+/* ───── CALENDAR ───── */
+.cal-month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem;}
+.cal-month-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;color:var(--ink);}
+.cal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
+.cal-cell{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:.7rem .85rem;cursor:pointer;transition:all .15s;}
+.cal-cell:hover{border-color:var(--gold);background:#faf6f0;}
+.cal-cell.assigned{border-left:4px solid var(--green);}
+.cal-cell.unassigned{border-left:4px solid var(--lighter);background:var(--surface2);}
+.cal-cell.past{opacity:.6;}
+.cal-cell.swapped{border-left:4px solid var(--gold);}
+.cal-date{font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--ink);margin-bottom:3px;}
+.cal-preacher{font-size:13px;color:var(--ink);font-weight:500;}
+.cal-preacher .none{color:var(--lighter);font-style:italic;font-weight:400;}
+.cal-meta{font-size:10.5px;color:var(--muted);margin-top:3px;}
+
+/* ───── MODALS ───── */
+.modal-bg{position:fixed;inset:0;background:rgba(20,18,14,.55);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;}
+.modal-bg.open{display:flex;}
+.modal{background:var(--paper);border-radius:12px;max-width:480px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.2);}
+.modal-h{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;margin-bottom:.85rem;color:var(--ink);}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1.2rem;}
+.modal label{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;margin-top:.85rem;}
+.modal label:first-child,.modal label.first{margin-top:0;}
+.modal input,.modal textarea,.modal select{width:100%;padding:9px 11px;font-family:inherit;font-size:13.5px;background:var(--paper);border:1.5px solid var(--border2);border-radius:7px;color:var(--ink);}
+.modal input:focus,.modal textarea:focus,.modal select:focus{outline:none;border-color:var(--gold);}
+
+/* ───── SWAP REQUESTS ───── */
+.swap-card{background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;padding:.85rem 1rem;margin-bottom:.6rem;}
+.swap-h{font-size:12px;font-weight:700;color:var(--gold-dim);margin-bottom:.4rem;}
+.swap-detail{font-size:13px;color:var(--ink);line-height:1.55;margin-bottom:.5rem;}
+.swap-actions{display:flex;gap:6px;margin-top:.55rem;}
+
+/* ───── TOAST ───── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:white;padding:10px 18px;border-radius:8px;font-size:13px;z-index:200;display:none;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.toast.show{display:block;animation:tIn .3s ease;}
+@keyframes tIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* ───── EMPTY STATE ───── */
+.empty{text-align:center;padding:2rem 1rem;color:var(--lighter);font-style:italic;}
+
+/* ───── BADGE ───── */
+.badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-left:5px;vertical-align:middle;}
+.badge-inactive{background:var(--surface2);color:var(--muted);}
+.badge-swapped{background:var(--gold-bg);color:var(--gold-dim);}
+.badge-pending{background:var(--orange-bg);color:var(--orange);}
+
+@media(max-width:700px){
+  .cal-grid{grid-template-columns:1fr 1fr;gap:6px;}
+  .cal-cell{padding:.55rem .65rem;}
+  .roster-row{grid-template-columns:32px 1fr auto;gap:7px;padding:.5rem;}
+  .rr-actions .btn{padding:4px 6px;font-size:10.5px;}
+  .header{padding:.85rem 1rem;gap:.65rem;}
+  .htitle{font-size:1rem;}
+}
+@media(max-width:480px){
+  .cal-grid{grid-template-columns:1fr;}
+  .tab{padding:8px 11px;font-size:12px;}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="back-btn" onclick="goBack()" title="Back to dashboard">← Back</button>
+  <div>
+    <div class="htitle">Wednesday Preaching</div>
+    <div class="hsub">Roster · Calendar · Swaps</div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ───── TAB BAR ───── -->
+  <div class="tab-bar">
+    <button class="tab active" data-tab="calendar" onclick="switchTab('calendar')">📅 Calendar</button>
+    <button class="tab" data-tab="roster" onclick="switchTab('roster')">👥 Preacher Roster</button>
+    <button class="tab" data-tab="swaps" onclick="switchTab('swaps')">🔄 Swap Requests <span id="swapBadge" style="display:none" class="badge badge-pending">0</span></button>
+  </div>
+
+  <!-- ───── CALENDAR TAB ───── -->
+  <div class="tab-panel active" id="tab-calendar">
+    <div class="card">
+      <div class="card-h">
+        <div class="card-icon">📅</div>
+        <div>
+          <div class="card-title">Monthly Calendar</div>
+          <div class="card-sub">Click any Wednesday to assign or change preacher</div>
+        </div>
+        <div style="margin-left:auto;">
+          <button class="btn btn-gold btn-sm" onclick="autofillNext12()">⚡ Auto-fill Next 12 Wednesdays</button>
+        </div>
+      </div>
+
+      <div class="cal-month-nav">
+        <button class="btn btn-sm" onclick="changeMonth(-1)">← Prev</button>
+        <div class="cal-month-title" id="calMonthTitle">…</div>
+        <button class="btn btn-sm" onclick="changeMonth(1)">Next →</button>
+      </div>
+
+      <div id="calGrid" class="cal-grid">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── ROSTER TAB ───── -->
+  <div class="tab-panel" id="tab-roster">
+    <div class="card">
+      <div class="card-h">
+        <div class="card-icon">👥</div>
+        <div>
+          <div class="card-title">Preacher Roster</div>
+          <div class="card-sub">Order = rotation sequence. Use ↑↓ to reorder.</div>
+        </div>
+      </div>
+
+      <div class="roster-add-row">
+        <label>+ Add Preacher:</label>
+        <div class="member-search-wrap">
+          <input type="text" id="memberSearch" class="member-search" placeholder="Type a member's name…" oninput="searchMembers(this.value)" onfocus="searchMembers(this.value)">
+          <div class="member-results" id="memberResults" style="display:none"></div>
+        </div>
+      </div>
+
+      <div id="rosterList" class="roster-list">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── SWAPS TAB ───── -->
+  <div class="tab-panel" id="tab-swaps">
+    <div class="card">
+      <div class="card-h">
+        <div class="card-icon">🔄</div>
+        <div>
+          <div class="card-title">Swap Requests</div>
+          <div class="card-sub">Audit trail and override (Pastor only — preachers handle their own normally)</div>
+        </div>
+      </div>
+      <div id="swapList">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ───── ASSIGN MODAL ───── -->
+<div class="modal-bg" id="assignModal">
+  <div class="modal">
+    <div class="modal-h" id="assignModalTitle">Assign Preacher</div>
+    <label class="first">Date</label>
+    <input type="text" id="assignDate" readonly style="background:var(--surface2)">
+    <label>Preacher</label>
+    <select id="assignPreacher">
+      <option value="">— None / Unassign —</option>
+    </select>
+    <label>Notes (optional)</label>
+    <input type="text" id="assignNotes" placeholder="e.g. topic suggestion, special prayer focus">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAssignModal()">Cancel</button>
+      <button class="btn btn-danger btn-sm" id="assignDeleteBtn" onclick="deleteAssignment()" style="display:none">🗑 Unassign</button>
+      <button class="btn btn-primary" onclick="saveAssignment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── PREACHER NOTES MODAL ───── -->
+<div class="modal-bg" id="preacherModal">
+  <div class="modal">
+    <div class="modal-h" id="preacherModalTitle">Preacher Notes</div>
+    <label class="first">Notes</label>
+    <textarea id="preacherNotes" rows="3" placeholder="e.g. 'prefers OT books', 'available 1st/3rd Wed only'"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closePreacherModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePreacherNotes()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// GATE — Pastor only (leaderLevel >= 5)
+// ═══════════════════════════════════════════════════════════════
+if (!MultiplyShared || !MultiplyShared.gateOrRedirect('leader_login.html')) {
+  // gateOrRedirect already redirected
+} else if ((window.LEADER.leaderLevel || 0) < 5) {
+  alert('Only the Pastor can manage the Wednesday Preaching roster.');
+  goBack();
+}
+
+const db = MultiplyShared.getDB();
+const esc = MultiplyShared.escapeHTML;
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let _members = [];          // all members (for search/dropdown)
+let _preachers = [];        // preachers table rows, with .member joined
+let _assignments = [];      // wednesday_preaching rows for current view window
+let _swaps = [];            // preaching_swap_requests rows (pending + recent)
+let _viewMonth = startOfMonth(new Date());  // first day of currently-viewed month
+let _editingAssignmentDate = null;          // ISO date string when assign modal open
+let _editingPreacherId = null;              // preachers.id when notes modal open
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function ymd(d){ return d.toISOString().slice(0,10); }
+function parseDate(s){ return new Date(s + 'T00:00:00'); }
+function fmtDate(d){
+  const opts = { weekday:'short', month:'short', day:'numeric', year:'numeric' };
+  return d.toLocaleDateString('en-US', opts);
+}
+function fmtMonth(d){
+  return d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+}
+function toast(msg, icon){
+  const t = document.getElementById('toast');
+  t.textContent = (icon ? icon + '  ' : '') + msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function goBack(){
+  // Standing rule: try window.close() first, fallback to history.back(),
+  // fallback to multiply_dashboard.html
+  try {
+    window.close();
+    setTimeout(() => {
+      if (!window.closed) {
+        if (document.referrer && new URL(document.referrer).host === location.host) {
+          history.back();
+        } else {
+          location.href = 'multiply_dashboard.html';
+        }
+      }
+    }, 150);
+  } catch(e) {
+    location.href = 'multiply_dashboard.html';
+  }
+}
+
+// Get all Wednesdays in a given month
+function wednesdaysInMonth(monthStart){
+  const out = [];
+  const y = monthStart.getFullYear();
+  const m = monthStart.getMonth();
+  const last = new Date(y, m+1, 0).getDate();
+  for (let day = 1; day <= last; day++) {
+    const d = new Date(y, m, day);
+    if (d.getDay() === 3) out.push(d); // 3 = Wednesday
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════════════════
+async function loadAll(){
+  await Promise.all([
+    loadMembers(),
+    loadPreachers(),
+    loadAssignments(),
+    loadSwaps()
+  ]);
+  renderCalendar();
+  renderRoster();
+  renderSwaps();
+  updateSwapBadge();
+}
+
+async function loadMembers(){
+  const { data, error } = await db.from('members')
+    .select('id, name, pipeline_level, lc_group, is_test_member, is_external_user')
+    .order('name');
+  if (error) { console.error(error); return; }
+  _members = (data || []).filter(m => !m.is_test_member && !m.is_external_user);
+}
+
+async function loadPreachers(){
+  const { data, error } = await db.from('preachers')
+    .select('*')
+    .order('sequence');
+  if (error) { console.error(error); return; }
+  _preachers = data || [];
+  // Hydrate with member name
+  const memberMap = new Map(_members.map(m => [m.id, m]));
+  _preachers.forEach(p => { p.member = memberMap.get(p.member_id) || { name: '(unknown)' }; });
+}
+
+async function loadAssignments(){
+  // Fetch assignments for the current viewed month +/- 1 month buffer
+  // (so we can show pending swaps spanning month boundaries)
+  const start = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() - 1, 1);
+  const end = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() + 3, 0);
+  const { data, error } = await db.from('wednesday_preaching')
+    .select('*')
+    .gte('preach_date', ymd(start))
+    .lte('preach_date', ymd(end))
+    .order('preach_date');
+  if (error) { console.error(error); return; }
+  _assignments = data || [];
+}
+
+async function loadSwaps(){
+  const { data, error } = await db.from('preaching_swap_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) { console.error(error); return; }
+  _swaps = data || [];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALENDAR
+// ═══════════════════════════════════════════════════════════════
+function changeMonth(delta){
+  _viewMonth = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() + delta, 1);
+  loadAssignments().then(renderCalendar);
+}
+
+function renderCalendar(){
+  document.getElementById('calMonthTitle').textContent = fmtMonth(_viewMonth);
+  const grid = document.getElementById('calGrid');
+  const weds = wednesdaysInMonth(_viewMonth);
+  if (weds.length === 0) {
+    grid.innerHTML = '<div class="empty">No Wednesdays this month (impossible 😅)</div>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  const html = weds.map(d => {
+    const dateStr = ymd(d);
+    const assignment = _assignments.find(a => a.preach_date === dateStr);
+    const member = assignment ? _members.find(m => m.id === assignment.preacher_member_id) : null;
+    const isPast = d < today;
+    const isSwapped = assignment && assignment.original_preacher_member_id && assignment.original_preacher_member_id !== assignment.preacher_member_id;
+    const classes = ['cal-cell'];
+    if (assignment) classes.push('assigned'); else classes.push('unassigned');
+    if (isPast) classes.push('past');
+    if (isSwapped) classes.push('swapped');
+    return `
+      <div class="${classes.join(' ')}" onclick="openAssignModal('${dateStr}')">
+        <div class="cal-date">${fmtDate(d)}</div>
+        <div class="cal-preacher">${member ? esc(member.name) : '<span class="none">— Unassigned —</span>'}${isSwapped ? '<span class="badge badge-swapped">Swapped</span>' : ''}</div>
+        ${assignment && assignment.notes ? `<div class="cal-meta">${esc(assignment.notes)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+  grid.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ASSIGNMENT MODAL
+// ═══════════════════════════════════════════════════════════════
+function openAssignModal(dateStr){
+  _editingAssignmentDate = dateStr;
+  const d = parseDate(dateStr);
+  const assignment = _assignments.find(a => a.preach_date === dateStr);
+
+  document.getElementById('assignDate').value = fmtDate(d);
+  // Populate dropdown with active preachers
+  const sel = document.getElementById('assignPreacher');
+  sel.innerHTML = '<option value="">— None / Unassign —</option>' +
+    _preachers
+      .filter(p => p.is_active)
+      .map(p => `<option value="${p.member_id}">${esc(p.member.name)} (#${p.sequence})</option>`)
+      .join('');
+  sel.value = assignment ? assignment.preacher_member_id : '';
+  document.getElementById('assignNotes').value = assignment?.notes || '';
+  document.getElementById('assignDeleteBtn').style.display = assignment ? '' : 'none';
+  document.getElementById('assignModal').classList.add('open');
+}
+
+function closeAssignModal(){
+  document.getElementById('assignModal').classList.remove('open');
+  _editingAssignmentDate = null;
+}
+
+async function saveAssignment(){
+  const dateStr = _editingAssignmentDate;
+  const preacherId = document.getElementById('assignPreacher').value;
+  const notes = document.getElementById('assignNotes').value.trim() || null;
+  if (!preacherId) { return deleteAssignment(); }
+
+  const existing = _assignments.find(a => a.preach_date === dateStr);
+  if (existing) {
+    // Update — but if preacher changes, treat this as a Pastor-override and
+    // do NOT touch original_preacher_member_id (Pastor-side change isn't a
+    // member-driven swap — but we still preserve the very first assignment).
+    const { error } = await db.from('wednesday_preaching')
+      .update({
+        preacher_member_id: preacherId,
+        notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existing.id);
+    if (error) { toast(error.message, '⚠️'); return; }
+  } else {
+    const { error } = await db.from('wednesday_preaching')
+      .insert({
+        preach_date: dateStr,
+        preacher_member_id: preacherId,
+        original_preacher_member_id: preacherId,  // first assignment = "original"
+        notes
+      });
+    if (error) { toast(error.message, '⚠️'); return; }
+  }
+
+  closeAssignModal();
+  await loadAssignments();
+  renderCalendar();
+  toast('Saved', '✓');
+}
+
+async function deleteAssignment(){
+  const dateStr = _editingAssignmentDate;
+  const existing = _assignments.find(a => a.preach_date === dateStr);
+  if (!existing) { closeAssignModal(); return; }
+  if (!confirm('Unassign preacher for ' + fmtDate(parseDate(dateStr)) + '?')) return;
+  const { error } = await db.from('wednesday_preaching')
+    .delete()
+    .eq('id', existing.id);
+  if (error) { toast(error.message, '⚠️'); return; }
+  closeAssignModal();
+  await loadAssignments();
+  renderCalendar();
+  toast('Unassigned', '✓');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-FILL NEXT 12 WEDNESDAYS
+// ═══════════════════════════════════════════════════════════════
+async function autofillNext12(){
+  const active = _preachers.filter(p => p.is_active);
+  if (active.length === 0) { toast('No active preachers in roster', '⚠️'); return; }
+
+  // Build list of next 12 Wednesdays starting from today
+  const today = new Date(); today.setHours(0,0,0,0);
+  // If today is Wednesday, include it; else find next Wednesday
+  let firstWed = new Date(today);
+  while (firstWed.getDay() !== 3) firstWed.setDate(firstWed.getDate() + 1);
+
+  const next12 = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(firstWed);
+    d.setDate(d.getDate() + (i * 7));
+    next12.push(d);
+  }
+
+  // For each Wednesday: if no existing assignment, assign next preacher in rotation
+  // Continue rotation order from wherever the last existing assignment left off.
+  await loadAssignmentsRange(ymd(next12[0]), ymd(next12[11]));
+
+  // Find rotation pointer: look at most recent existing assignment within the next 12
+  // (or just before), and find that preacher's sequence index. Otherwise start at 0.
+  let rotIdx = 0;
+  const sortedRecent = [..._assignments]
+    .filter(a => a.preach_date <= ymd(next12[11]))
+    .sort((a,b) => b.preach_date.localeCompare(a.preach_date));
+  if (sortedRecent.length > 0) {
+    const last = sortedRecent[0];
+    const lastSeqIdx = active.findIndex(p => p.member_id === last.preacher_member_id);
+    if (lastSeqIdx >= 0) rotIdx = (lastSeqIdx + 1) % active.length;
+  }
+
+  const inserts = [];
+  for (const d of next12) {
+    const dateStr = ymd(d);
+    if (_assignments.find(a => a.preach_date === dateStr)) continue; // skip already-assigned
+    const preacher = active[rotIdx % active.length];
+    inserts.push({
+      preach_date: dateStr,
+      preacher_member_id: preacher.member_id,
+      original_preacher_member_id: preacher.member_id
+    });
+    rotIdx++;
+  }
+
+  if (inserts.length === 0) { toast('All next 12 Wednesdays already assigned', 'ℹ️'); return; }
+
+  if (!confirm(`Auto-fill ${inserts.length} unassigned Wednesday${inserts.length > 1 ? 's' : ''} using rotation order?`)) return;
+
+  const { error } = await db.from('wednesday_preaching').insert(inserts);
+  if (error) { toast(error.message, '⚠️'); return; }
+
+  await loadAssignments();
+  renderCalendar();
+  toast(`Filled ${inserts.length} Wednesday${inserts.length > 1 ? 's' : ''}`, '✓');
+}
+
+// Used by autofill — load a specific range without changing the calendar's view
+async function loadAssignmentsRange(startStr, endStr){
+  const { data, error } = await db.from('wednesday_preaching')
+    .select('*')
+    .gte('preach_date', startStr)
+    .lte('preach_date', endStr)
+    .order('preach_date');
+  if (error) { console.error(error); return; }
+  // Merge into _assignments, deduping by id
+  const ids = new Set(_assignments.map(a => a.id));
+  (data || []).forEach(a => { if (!ids.has(a.id)) _assignments.push(a); });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ROSTER MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+function renderRoster(){
+  const wrap = document.getElementById('rosterList');
+  if (_preachers.length === 0) {
+    wrap.innerHTML = '<div class="rr-empty">No preachers yet. Search a member above to add the first one.</div>';
+    return;
+  }
+  wrap.innerHTML = _preachers.map((p, idx) => `
+    <div class="roster-row ${p.is_active ? '' : 'inactive'}">
+      <div class="rr-seq">${p.sequence}</div>
+      <div>
+        <div class="rr-name">${esc(p.member.name)}${!p.is_active ? '<span class="badge badge-inactive">Inactive</span>' : ''}</div>
+        ${p.notes ? `<div class="rr-notes">${esc(p.notes)}</div>` : ''}
+      </div>
+      <div class="rr-actions">
+        <button class="btn btn-icon" onclick="moveUp(${p.id})" title="Move up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn btn-icon" onclick="moveDown(${p.id})" title="Move down" ${idx === _preachers.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn btn-icon" onclick="moveToTop(${p.id})" title="Move to top" ${idx === 0 ? 'disabled' : ''}>⤒</button>
+        <button class="btn btn-icon" onclick="moveToBottom(${p.id})" title="Move to bottom" ${idx === _preachers.length - 1 ? 'disabled' : ''}>⤓</button>
+        <button class="btn btn-icon" onclick="openPreacherNotes(${p.id})" title="Notes">📝</button>
+        <button class="btn btn-icon" onclick="toggleActive(${p.id})" title="${p.is_active ? 'Deactivate' : 'Activate'}">${p.is_active ? '⏸' : '▶'}</button>
+        <button class="btn btn-icon btn-danger" onclick="removePreacher(${p.id})" title="Remove">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function searchMembers(query){
+  const results = document.getElementById('memberResults');
+  query = (query || '').trim().toLowerCase();
+  if (!query) { results.style.display = 'none'; return; }
+  const inRoster = new Set(_preachers.map(p => p.member_id));
+  const matches = _members
+    .filter(m => !inRoster.has(m.id))
+    .filter(m => m.name.toLowerCase().includes(query))
+    .slice(0, 10);
+  if (matches.length === 0) {
+    results.innerHTML = '<div class="member-result" style="color:var(--lighter);font-style:italic">No matches (or already in roster)</div>';
+  } else {
+    results.innerHTML = matches.map(m => `
+      <div class="member-result" onclick="addPreacher('${m.id}')">
+        ${esc(m.name)}
+        <div class="mr-meta">L${m.pipeline_level || 0} · ${esc(m.lc_group || '—')}</div>
+      </div>
+    `).join('');
+  }
+  results.style.display = 'block';
+}
+
+// Close results when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.member-search-wrap')) {
+    document.getElementById('memberResults').style.display = 'none';
+  }
+});
+
+async function addPreacher(memberId){
+  const nextSeq = (_preachers.length > 0 ? Math.max(..._preachers.map(p => p.sequence)) : 0) + 1;
+  const { error } = await db.from('preachers').insert({
+    member_id: memberId,
+    sequence: nextSeq,
+    is_active: true
+  });
+  if (error) { toast(error.message, '⚠️'); return; }
+  document.getElementById('memberSearch').value = '';
+  document.getElementById('memberResults').style.display = 'none';
+  await loadPreachers();
+  renderRoster();
+  toast('Added to roster', '✓');
+}
+
+async function removePreacher(preacherId){
+  const p = _preachers.find(x => x.id === preacherId);
+  if (!p) return;
+  if (!confirm(`Remove ${p.member.name} from the preaching roster?\n\nNote: their past assignments are preserved for the historical record.`)) return;
+  const { error } = await db.from('preachers').delete().eq('id', preacherId);
+  if (error) { toast(error.message, '⚠️'); return; }
+  await loadPreachers();
+  // Re-pack sequence numbers to fill the gap
+  await repackSequence();
+  renderRoster();
+  toast('Removed', '✓');
+}
+
+async function toggleActive(preacherId){
+  const p = _preachers.find(x => x.id === preacherId);
+  if (!p) return;
+  const { error } = await db.from('preachers')
+    .update({ is_active: !p.is_active, updated_at: new Date().toISOString() })
+    .eq('id', preacherId);
+  if (error) { toast(error.message, '⚠️'); return; }
+  await loadPreachers();
+  renderRoster();
+  toast(p.is_active ? 'Marked inactive' : 'Reactivated', '✓');
+}
+
+async function moveUp(preacherId){
+  const idx = _preachers.findIndex(p => p.id === preacherId);
+  if (idx <= 0) return;
+  await swapSequence(_preachers[idx], _preachers[idx - 1]);
+}
+async function moveDown(preacherId){
+  const idx = _preachers.findIndex(p => p.id === preacherId);
+  if (idx < 0 || idx >= _preachers.length - 1) return;
+  await swapSequence(_preachers[idx], _preachers[idx + 1]);
+}
+async function swapSequence(a, b){
+  // Two-step due to UNIQUE constraint (deferrable, but be safe):
+  // first move 'a' to a temporary high value, then assign 'b' to 'a's old slot,
+  // then move 'a' to 'b's old slot.
+  const tempSeq = 100000 + a.id;
+  const oldA = a.sequence, oldB = b.sequence;
+  await db.from('preachers').update({ sequence: tempSeq }).eq('id', a.id);
+  await db.from('preachers').update({ sequence: oldA }).eq('id', b.id);
+  await db.from('preachers').update({ sequence: oldB }).eq('id', a.id);
+  await loadPreachers();
+  renderRoster();
+}
+
+async function moveToTop(preacherId){
+  const p = _preachers.find(x => x.id === preacherId);
+  if (!p || _preachers[0].id === preacherId) return;
+  await reorderToPosition(p, 1);
+}
+async function moveToBottom(preacherId){
+  const p = _preachers.find(x => x.id === preacherId);
+  if (!p || _preachers[_preachers.length - 1].id === preacherId) return;
+  await reorderToPosition(p, _preachers.length);
+}
+async function reorderToPosition(preacher, newSeq){
+  // Move preacher to newSeq position; shift others accordingly.
+  // Strategy: temporarily set everyone's sequence to negative-of-current,
+  // then assign final values in one pass. Simpler approach: pull everyone
+  // into local memory, reorder array, write back all sequences.
+  const order = _preachers.map(p => p.id);
+  const fromIdx = order.indexOf(preacher.id);
+  if (fromIdx < 0) return;
+  order.splice(fromIdx, 1);
+  order.splice(newSeq - 1, 0, preacher.id);
+  // Bulk update: first move everyone to negative ids to avoid unique conflicts
+  for (const id of order) {
+    await db.from('preachers').update({ sequence: -id }).eq('id', id);
+  }
+  for (let i = 0; i < order.length; i++) {
+    await db.from('preachers').update({ sequence: i + 1 }).eq('id', order[i]);
+  }
+  await loadPreachers();
+  renderRoster();
+  toast('Reordered', '✓');
+}
+
+async function repackSequence(){
+  // After delete, sequences may have gaps. Re-pack 1..N in current order.
+  // Move all to negative temporarily, then re-number.
+  const sorted = [..._preachers].sort((a,b) => a.sequence - b.sequence);
+  for (const p of sorted) {
+    await db.from('preachers').update({ sequence: -p.id }).eq('id', p.id);
+  }
+  for (let i = 0; i < sorted.length; i++) {
+    await db.from('preachers').update({ sequence: i + 1 }).eq('id', sorted[i].id);
+  }
+  await loadPreachers();
+}
+
+function openPreacherNotes(preacherId){
+  const p = _preachers.find(x => x.id === preacherId);
+  if (!p) return;
+  _editingPreacherId = preacherId;
+  document.getElementById('preacherModalTitle').textContent = 'Notes for ' + p.member.name;
+  document.getElementById('preacherNotes').value = p.notes || '';
+  document.getElementById('preacherModal').classList.add('open');
+}
+function closePreacherModal(){
+  document.getElementById('preacherModal').classList.remove('open');
+  _editingPreacherId = null;
+}
+async function savePreacherNotes(){
+  if (!_editingPreacherId) return;
+  const notes = document.getElementById('preacherNotes').value.trim() || null;
+  const { error } = await db.from('preachers')
+    .update({ notes, updated_at: new Date().toISOString() })
+    .eq('id', _editingPreacherId);
+  if (error) { toast(error.message, '⚠️'); return; }
+  closePreacherModal();
+  await loadPreachers();
+  renderRoster();
+  toast('Notes saved', '✓');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SWAP REQUESTS (read-only audit + override)
+// ═══════════════════════════════════════════════════════════════
+function renderSwaps(){
+  const wrap = document.getElementById('swapList');
+  if (_swaps.length === 0) {
+    wrap.innerHTML = '<div class="empty">No swap requests yet.</div>';
+    return;
+  }
+  const memberMap = new Map(_members.map(m => [m.id, m]));
+  const html = _swaps.map(s => {
+    const requester = memberMap.get(s.requester_member_id);
+    const target = memberMap.get(s.target_member_id);
+    const reqAssignment = _assignments.find(a => a.id === s.requester_assignment_id);
+    const tgtAssignment = _assignments.find(a => a.id === s.target_assignment_id);
+    const reqDate = reqAssignment ? fmtDate(parseDate(reqAssignment.preach_date)) : '(unknown date)';
+    const tgtDate = tgtAssignment ? fmtDate(parseDate(tgtAssignment.preach_date)) : '(unknown date)';
+
+    const badgeClass = {
+      pending: 'badge-pending', accepted: 'badge-inactive',
+      declined: 'badge-inactive', cancelled: 'badge-inactive'
+    }[s.status] || 'badge-inactive';
+
+    return `
+      <div class="swap-card">
+        <div class="swap-h">${esc(requester?.name || '?')} → ${esc(target?.name || '?')} <span class="badge ${badgeClass}">${s.status}</span></div>
+        <div class="swap-detail">
+          <strong>${esc(requester?.name || '?')}</strong> wants to swap their <strong>${reqDate}</strong> with <strong>${esc(target?.name || '?')}</strong>'s <strong>${tgtDate}</strong>.
+          ${s.reason ? `<br><em>"${esc(s.reason)}"</em>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--lighter)">Requested ${new Date(s.created_at).toLocaleString()}${s.responded_at ? ' · Responded ' + new Date(s.responded_at).toLocaleString() : ''}</div>
+        ${s.status === 'pending' ? `
+          <div class="swap-actions">
+            <button class="btn btn-primary btn-sm" onclick="overrideSwap(${s.id}, 'accept')">Force Accept</button>
+            <button class="btn btn-danger btn-sm" onclick="overrideSwap(${s.id}, 'decline')">Force Decline</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  wrap.innerHTML = html;
+}
+
+function updateSwapBadge(){
+  const pending = _swaps.filter(s => s.status === 'pending').length;
+  const badge = document.getElementById('swapBadge');
+  if (pending > 0) {
+    badge.textContent = pending;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+async function overrideSwap(swapId, action){
+  const s = _swaps.find(x => x.id === swapId);
+  if (!s) return;
+  if (action === 'accept') {
+    if (!confirm('Force-accept this swap? Pastor override.')) return;
+    await acceptSwapInternal(s);
+  } else {
+    if (!confirm('Force-decline this swap?')) return;
+    await db.from('preaching_swap_requests')
+      .update({ status: 'declined', responded_at: new Date().toISOString() })
+      .eq('id', swapId);
+    toast('Force-declined', '✓');
+  }
+  await loadSwaps();
+  await loadAssignments();
+  renderSwaps();
+  renderCalendar();
+  updateSwapBadge();
+}
+
+// Shared accept-swap logic: flip preacher_member_id on both assignments
+async function acceptSwapInternal(s){
+  const reqA = _assignments.find(a => a.id === s.requester_assignment_id);
+  const tgtA = _assignments.find(a => a.id === s.target_assignment_id);
+  if (!reqA || !tgtA) { toast('Cannot find assignments', '⚠️'); return; }
+  await Promise.all([
+    db.from('wednesday_preaching').update({
+      preacher_member_id: tgtA.preacher_member_id,
+      updated_at: new Date().toISOString()
+    }).eq('id', reqA.id),
+    db.from('wednesday_preaching').update({
+      preacher_member_id: reqA.preacher_member_id,
+      updated_at: new Date().toISOString()
+    }).eq('id', tgtA.id),
+    db.from('preaching_swap_requests').update({
+      status: 'accepted', responded_at: new Date().toISOString()
+    }).eq('id', s.id)
+  ]);
+  toast('Swap accepted', '✓');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+loadAll();
+</script>
+</body>
+</html>

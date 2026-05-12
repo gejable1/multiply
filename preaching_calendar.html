@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wednesday Preaching Calendar · MULTIPLY</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzJhNWM0MCIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2I4ODgyYSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TTwvdGV4dD48L3N2Zz4=">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+<style>
+:root{
+  --ink:#1a1612;--paper:#fefcf8;--bg:#f5f0e8;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;
+  --green:#2a5c40;--green-bg:#eef6f1;--green-deep:#1f4530;
+  --muted:#6b5f4f;--lighter:#9a8f80;--border:#e2d8cc;
+  --orange:#d4780a;--orange-bg:#fff3e0;
+  --red:#a8332a;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;}
+
+.header{background:var(--green);color:white;padding:1rem 1.25rem;display:flex;align-items:center;gap:.85rem;border-bottom:3px solid var(--gold);}
+.back-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;font-family:inherit;font-size:13px;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer;}
+.back-btn:hover{background:rgba(255,255,255,.2);}
+.htitle{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:#f5edd8;}
+.hsub{font-size:11px;color:rgba(255,255,255,.55);margin-top:1px;}
+
+.page{max-width:900px;margin:0 auto;padding:1.5rem 1rem 5rem;}
+.intro{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;margin-bottom:1.25rem;}
+.intro h2{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:600;margin-bottom:.35rem;}
+.intro p{font-size:13px;color:var(--muted);line-height:1.55;}
+
+.month-section{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;margin-bottom:1rem;}
+.month-h{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;color:var(--ink);margin-bottom:.85rem;padding-bottom:.65rem;border-bottom:1px solid var(--border);}
+
+.entry{display:grid;grid-template-columns:60px 1fr auto;gap:12px;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--border);}
+.entry:last-child{border-bottom:none;}
+.entry.past{opacity:.5;}
+.entry.today{background:var(--gold-bg);margin:0 -.65rem;padding:.65rem;border-radius:7px;border-bottom:1px solid var(--border);}
+.e-date{text-align:center;}
+.e-day{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
+.e-num{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--gold);line-height:1;}
+.e-preacher{font-size:14.5px;font-weight:600;color:var(--ink);}
+.e-preacher .none{color:var(--lighter);font-style:italic;font-weight:400;font-size:13px;}
+.e-meta{font-size:11px;color:var(--muted);margin-top:2px;font-style:italic;}
+.e-badge{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:5px;}
+.badge-today{background:var(--red);color:white;}
+.badge-soon{background:var(--orange-bg);color:var(--orange);}
+.badge-next{background:var(--green-bg);color:var(--green);}
+.badge-swapped{background:var(--gold-bg);color:var(--gold-dim);}
+
+.empty{text-align:center;padding:2rem 1rem;color:var(--lighter);font-style:italic;}
+
+@media(max-width:520px){
+  .entry{grid-template-columns:52px 1fr auto;gap:8px;padding:.55rem 0;}
+  .e-num{font-size:19px;}
+  .e-preacher{font-size:13.5px;}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="back-btn" onclick="goBack()" title="Back">← Back</button>
+  <div>
+    <div class="htitle">Wednesday Preaching Calendar</div>
+    <div class="hsub">Prayer Meeting · Rosehill Christian Church</div>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="intro">
+    <h2>Who's preaching when</h2>
+    <p>Pasubukan kung kailan ka mag-aaral, magpray, at magprepare. Ipinagdarasal ng buong simbahan ang bawat isa sa atin na nagsasalita ng Salita ng Diyos. 🙏</p>
+  </div>
+
+  <div id="monthsWrap">
+    <div class="empty">Loading…</div>
+  </div>
+
+</div>
+
+<script>
+const db = MultiplyShared.getDB();
+const esc = MultiplyShared.escapeHTML;
+
+function goBack(){
+  try {
+    window.close();
+    setTimeout(() => {
+      if (!window.closed) {
+        if (document.referrer && new URL(document.referrer).host === location.host) {
+          history.back();
+        } else {
+          location.href = 'multiply_dashboard.html';
+        }
+      }
+    }, 150);
+  } catch(e) { location.href = 'multiply_dashboard.html'; }
+}
+
+function ymd(d){ return d.toISOString().slice(0,10); }
+function parseDate(s){ return new Date(s + 'T00:00:00'); }
+
+async function loadAndRender(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+  const end = new Date(today.getFullYear(), today.getMonth() + 3, 0);
+
+  const [assignmentsRes, membersRes] = await Promise.all([
+    db.from('wednesday_preaching')
+      .select('*')
+      .gte('preach_date', ymd(start))
+      .lte('preach_date', ymd(end))
+      .order('preach_date'),
+    db.from('members').select('id, name')
+  ]);
+
+  if (assignmentsRes.error || membersRes.error) {
+    document.getElementById('monthsWrap').innerHTML = '<div class="empty">⚠️ Could not load. Please try again later.</div>';
+    return;
+  }
+
+  const memberMap = new Map((membersRes.data || []).map(m => [m.id, m]));
+  const assignments = assignmentsRes.data || [];
+
+  // Group by month
+  const monthGroups = new Map();
+  for (const a of assignments) {
+    const d = parseDate(a.preach_date);
+    const monthKey = d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    if (!monthGroups.has(monthKey)) monthGroups.set(monthKey, []);
+    monthGroups.get(monthKey).push({ ...a, dateObj: d, member: memberMap.get(a.preacher_member_id) });
+  }
+
+  if (monthGroups.size === 0) {
+    document.getElementById('monthsWrap').innerHTML = '<div class="empty">No preaching schedule set up yet. Pastor needs to assign preachers from the admin tool.</div>';
+    return;
+  }
+
+  // Also include this month's Wednesdays that are unassigned, so the calendar is complete
+  // for at least the current month.
+  const html = Array.from(monthGroups.entries()).map(([monthLabel, entries]) => {
+    return `
+      <div class="month-section">
+        <div class="month-h">${esc(monthLabel)}</div>
+        ${entries.map(e => renderEntry(e, today)).join('')}
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('monthsWrap').innerHTML = html;
+}
+
+function renderEntry(a, today){
+  const d = a.dateObj;
+  const dayNum = d.getDate();
+  const dayName = d.toLocaleDateString('en-US', { weekday:'short' });
+  const isPast = d < today;
+  const isToday = d.getTime() === today.getTime();
+  const daysDiff = Math.round((d - today) / 86400000);
+  const isSwapped = a.original_preacher_member_id && a.original_preacher_member_id !== a.preacher_member_id;
+
+  let badge = '';
+  if (isToday) badge = '<div class="e-badge badge-today">TODAY</div>';
+  else if (daysDiff > 0 && daysDiff <= 7) badge = '<div class="e-badge badge-soon">' + daysDiff + 'd</div>';
+  else if (daysDiff > 7 && daysDiff <= 14) badge = '<div class="e-badge badge-next">Next</div>';
+  else if (isSwapped) badge = '<div class="e-badge badge-swapped">Swapped</div>';
+
+  const classes = ['entry'];
+  if (isPast) classes.push('past');
+  if (isToday) classes.push('today');
+
+  return `
+    <div class="${classes.join(' ')}">
+      <div class="e-date">
+        <div class="e-day">${esc(dayName)}</div>
+        <div class="e-num">${dayNum}</div>
+      </div>
+      <div>
+        <div class="e-preacher">${a.member ? esc(a.member.name) : '<span class="none">— Unassigned —</span>'}</div>
+        ${a.notes ? `<div class="e-meta">${esc(a.notes)}</div>` : ''}
+      </div>
+      ${badge}
+    </div>
+  `;
+}
+
+loadAndRender();
+</script>
+</body>
+</html>
