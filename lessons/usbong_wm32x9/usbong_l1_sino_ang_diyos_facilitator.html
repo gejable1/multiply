@@ -1,1 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usbong Lesson 1 — Sino Ang Diyos? · Facilitator Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a1612;--paper:#fefcf8;--bg:#f5f0e8;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;
+  --navy:#1b2a4a;--green:#2a5c40;--green-bg:#eef6f1;
+  --muted:#6b5f4f;--lighter:#9a8f80;
+  --border:#e2d8cc;--border2:#ccc0b0;
+  --intern:#1a4a6b;--intern-bg:#e8f0f8;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;}
 
+/* HERO */
+.hero{background:var(--green);padding:2rem 1.5rem 1.75rem;text-align:center;border-bottom:3px solid var(--gold);}
+.h-badge{display:inline-block;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.15);padding:3px 12px;border-radius:20px;margin-bottom:.75rem;}
+.h-title{font-family:'Playfair Display',serif;font-size:clamp(1.4rem,4vw,2.2rem);font-weight:700;color:#f5edd8;line-height:1.15;}
+.h-sub{font-size:12px;color:rgba(255,255,255,.5);margin-top:.35rem;letter-spacing:.04em;}
+.h-meta{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:.85rem;}
+.mt{font-size:11px;padding:3px 10px;border-radius:12px;}
+.mt-g{background:rgba(201,168,42,.18);color:#e8c870;border:1px solid rgba(201,168,42,.3);}
+.mt-gr{background:rgba(255,255,255,.1);color:#c5e0c8;border:1px solid rgba(255,255,255,.2);}
+.mt-b{background:rgba(255,255,255,.08);color:#cdd8e8;border:1px solid rgba(255,255,255,.18);}
+
+/* MODE TOGGLE BAR */
+.mode-bar{position:sticky;top:0;z-index:100;background:rgba(254,252,248,.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:.7rem 1rem;display:flex;align-items:center;justify-content:center;gap:.8rem;flex-wrap:wrap;}
+.mode-bar-label{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--lighter);font-weight:600;margin-right:.25rem;}
+.mode-pill{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border2);background:var(--paper);color:var(--muted);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
+.mode-pill:hover{border-color:var(--gold);color:var(--ink);}
+.mode-pill.active{background:var(--gold);color:white;border-color:var(--gold);box-shadow:0 1px 4px rgba(184,136,42,.3);}
+.mode-pill.active:hover{background:var(--gold-dim);border-color:var(--gold-dim);}
+
+/* FONT-SCALE CONTROL (paired with mode toggle in sticky bar) */
+.font-toggle{display:inline-flex;align-items:center;gap:2px;background:var(--paper);border:1.5px solid var(--border2);border-radius:20px;padding:2px;}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:18px;color:var(--muted);transition:all .15s;padding:5px 9px;line-height:1;}
+.ft-btn.ft-minus{font-size:12px;}
+.ft-btn.ft-plus{font-size:15px;}
+.ft-btn:hover:not(:disabled){background:var(--gold-bg);color:var(--gold-dim);}
+.ft-btn:disabled{opacity:.35;cursor:not-allowed;}
+.ft-label{font-size:10.5px;font-weight:700;color:var(--ink);padding:0 5px;min-width:34px;text-align:center;}
+
+/* MODE-SPECIFIC CONTENT */
+/* By default, hide both. Body class enables one. */
+body:not(.mode-1on1):not(.mode-sg) .m1, body:not(.mode-1on1):not(.mode-sg) .msg{display:block;}
+body.mode-1on1 .msg{display:none;}
+body.mode-sg .m1{display:none;}
+
+/* MODE-AWARE INLINE TEXT — shorter than full block swaps */
+.mt-1on1, .mt-sg{display:none;}
+body.mode-1on1 .mt-1on1{display:inline;}
+body.mode-sg .mt-sg{display:inline;}
+
+.page{max-width:820px;margin:0 auto;padding:1.5rem 1.25rem 5rem;}
+
+/* FLOW BAR — 5 movements, no buffer (Usbong is tighter) */
+.flow-bar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 1.5rem;}
+.fc{font-size:11px;font-weight:500;padding:4px 10px;border-radius:12px;}
+.fc1{background:#fff3e0;color:#d4780a;}
+.fc2{background:#e8f0f8;color:var(--intern);}
+.fc3{background:var(--green-bg);color:var(--green);}
+.fc4{background:#fdecea;color:#8a2020;}
+.fc5{background:#f3e8ff;color:#5a2080;}
+/* Mode-aware timing inside flow bar pills */
+.fc-time{display:none;}
+body.mode-1on1 .fc-time-1on1{display:inline;}
+body.mode-sg .fc-time-sg{display:inline;}
+
+/* MOVEMENTS — collapsible cards */
+.mv{background:var(--paper);border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden;}
+.mv-h{display:flex;align-items:center;gap:12px;padding:1rem 1.25rem;cursor:pointer;transition:background .12s;user-select:none;}
+.mv-h:hover{background:#faf6f0;}
+.mv-ico{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.mv-inf{flex:1;}
+.mv-lbl{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;margin-bottom:2px;}
+.mv-ttl{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--ink);}
+.mv-tm{font-size:11px;color:var(--lighter);}
+.mv-ch{font-size:11px;color:var(--lighter);transition:transform .2s;flex-shrink:0;}
+.mv.open .mv-ch{transform:rotate(180deg);}
+.mv-body{display:none;padding:0 1.25rem 1.25rem;border-top:1px solid var(--border);}
+.mv.open .mv-body{display:block;}
+
+.pukaw .mv-ico{background:#fff3e0;} .pukaw .mv-lbl{color:#d4780a;}
+.tuklas .mv-ico{background:#e8f0f8;} .tuklas .mv-lbl{color:var(--intern);}
+.talakay .mv-ico{background:var(--green-bg);} .talakay .mv-lbl{color:var(--green);}
+.gawin .mv-ico{background:#fdecea;} .gawin .mv-lbl{color:#8a2020;}
+.dalhin .mv-ico{background:#f3e8ff;} .dalhin .mv-lbl{color:#5a2080;}
+
+/* Pre-session block (different from movements visually) */
+.pre{background:var(--paper);border:1px solid var(--border2);border-radius:12px;margin-bottom:1rem;border-style:dashed;}
+
+.sec{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--lighter);margin:1.1rem 0 .45rem;display:flex;align-items:center;gap:8px;}
+.sec::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.prose{font-size:13.5px;color:var(--ink);line-height:1.8;margin-bottom:.65rem;}
+.prose p{margin-bottom:.5rem;}
+.prose strong{color:var(--navy);}
+
+/* ACTIVITY block (gold) */
+.act{background:#f8f4ee;border:1px solid var(--border);border-left:4px solid var(--gold);border-radius:0 8px 8px 0;padding:.9rem 1rem;margin:.65rem 0;}
+.act-lbl{font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:.3rem;}
+.act-ttl{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;color:var(--ink);margin-bottom:.35rem;}
+.act-txt{font-size:13px;color:var(--muted);line-height:1.7;}
+.act-txt strong{color:var(--ink);}
+.act-txt em{color:var(--green);font-style:normal;font-weight:600;}
+
+/* Mode tag inside .act block */
+.mode-tag{display:inline-block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:10px;margin-bottom:.4rem;}
+.mode-tag-1on1{background:#e8d5b8;color:var(--gold-dim);}
+.mode-tag-sg{background:#d5e0d8;color:var(--green);}
+
+/* SCRIPTURE block (navy) */
+.scr{background:var(--navy);border-radius:8px;padding:1rem 1.1rem;margin:.65rem 0;}
+.scr-ref{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.35rem;}
+.scr-tl{font-family:'Playfair Display',serif;font-size:14px;color:#f5edd8;line-height:1.75;font-style:italic;margin-bottom:.4rem;}
+.scr-en{font-size:12px;color:rgba(255,255,255,.4);line-height:1.6;font-style:italic;}
+
+/* SCRIPT block (navy, for facilitator's spoken words) */
+.script{background:var(--navy);border-radius:8px;padding:.9rem 1rem;margin:.65rem 0;}
+.script-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:.3rem;}
+.script-txt{font-family:'Playfair Display',serif;font-size:13.5px;color:#f0e8d4;line-height:1.8;font-style:italic;}
+
+/* PASTORAL NOTE block (gold-bg) */
+.pnote{background:var(--gold-bg);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:.8rem .95rem;margin:.65rem 0;font-size:12.5px;color:#3a2e10;line-height:1.7;}
+.pn-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:3px;}
+
+/* Discovery question list */
+.ql{list-style:none;margin:.45rem 0;}
+.ql li{padding:.55rem .8rem .55rem 2rem;margin-bottom:4px;border-radius:6px;font-size:13.5px;line-height:1.6;position:relative;}
+.ql li::before{position:absolute;left:.65rem;}
+.qo{background:#e8f0f8;color:var(--intern);}.qo::before{content:'👁';}
+.qi{background:var(--gold-bg);color:var(--gold-dim);}.qi::before{content:'💡';}
+.qa{background:var(--green-bg);color:var(--green);}.qa::before{content:'🙌';}
+.ql li em{font-style:normal;font-weight:600;display:block;margin-top:3px;font-size:12px;opacity:.85;}
+
+/* TA-style step list */
+.ta{background:#f0f4f8;border:1px solid #d0dcec;border-radius:8px;padding:.9rem 1rem;margin:.65rem 0;}
+.ta-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--intern);margin-bottom:.35rem;}
+.ta-steps{list-style:none;counter-reset:step;}
+.ta-steps li{font-size:13px;color:var(--ink);line-height:1.6;padding:4px 0 4px 1.5rem;position:relative;border-bottom:1px solid rgba(0,0,0,.05);}
+.ta-steps li:last-child{border-bottom:none;}
+.ta-steps li::before{content:counter(step);counter-increment:step;position:absolute;left:0;background:var(--intern);color:white;width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;top:6px;}
+
+/* MEMORY VERSE card */
+.mv-card{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:.65rem 0;text-align:center;}
+.mvc-lbl{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.3rem;}
+.mvc-ref{font-family:'Playfair Display',serif;font-size:11px;color:var(--gold2);margin-bottom:.25rem;}
+.mvc-txt{font-family:'Playfair Display',serif;font-size:14px;color:var(--navy);line-height:1.7;font-style:italic;}
+
+/* Materials checklist (slimmer than BTLI's grid) */
+.mat-list{margin:.45rem 0;}
+.mat-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.4rem .7rem;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.mat-item::before{content:'□';font-size:13px;color:var(--gold);}
+
+/* Footer */
+.foot{margin:2.5rem auto 0;padding:1.25rem;text-align:center;color:var(--lighter);font-size:11px;border-top:1px solid var(--border);max-width:820px;}
+.foot strong{color:var(--gold);font-weight:600;}
+
+@media(max-width:600px){
+  .page{padding:1rem .75rem 4rem;}
+  .mode-bar{flex-direction:column;gap:.4rem;align-items:stretch;}
+  .mode-bar > div{display:flex;justify-content:center;gap:.55rem;}
+}
+@media print{
+  body{background:white;}
+  .mode-bar{position:static;}
+  .mv-body{display:block!important;}
+  /* Print whichever mode is active */
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="h-badge">Usbong · Lesson 1 · Pre-Pipeline · Facilitator Guide</div>
+  <div class="h-title">Sino Ang Diyos?</div>
+  <div class="h-sub">Who Is God? · The Foundation of Everything</div>
+  <div class="h-meta">
+    <span class="mt mt-g">⏱ <span class="mt-1on1">~60 min</span><span class="mt-sg">~80 min</span></span>
+    <span class="mt mt-gr">🌿 Character: Reverence</span>
+    <span class="mt mt-b">⚡ Competence: Personal Witness</span>
+  </div>
+</div>
+
+<!-- MODE TOGGLE BAR -->
+<div class="mode-bar">
+  <div>
+    <span class="mode-bar-label">Mode:</span>
+    <button class="mode-pill" data-mode="1on1" onclick="setMode('1on1')">👥 1-on-1</button>
+    <button class="mode-pill" data-mode="sg" onclick="setMode('sg')">👨‍👩‍👧 Small Group</button>
+  </div>
+  <div class="font-toggle" role="group" aria-label="Font size">
+    <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+    <span class="ft-label" id="ft-label">100%</span>
+    <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- FLOW BAR — 5 movements with mode-aware timing -->
+<div class="flow-bar">
+  <span class="fc fc1">⚡ PUKAW <span class="mt-1on1">8min</span><span class="mt-sg">12min</span></span>
+  <span class="fc fc2">📖 TUKLAS <span class="mt-1on1">15min</span><span class="mt-sg">20min</span></span>
+  <span class="fc fc3">💡 TALAKAY <span class="mt-1on1">15min</span><span class="mt-sg">20min</span></span>
+  <span class="fc fc4">🙌 GAWIN <span class="mt-1on1">15min</span><span class="mt-sg">20min</span></span>
+  <span class="fc fc5">🏠 DALHIN <span class="mt-1on1">7min</span><span class="mt-sg">8min</span></span>
+</div>
+
+<!-- PRE-SESSION -->
+<div class="mv pre open">
+  <div class="mv-h" onclick="this.closest('.mv').classList.toggle('open')">
+    <div class="mv-ico" style="background:#f5f0e8">📦</div>
+    <div class="mv-inf">
+      <div class="mv-lbl" style="color:var(--muted)">Pre-Session</div>
+      <div class="mv-ttl">Bago Magsimula · Preparation</div>
+      <div class="mv-tm">15–20 minutes before the meeting</div>
+    </div>
+    <span class="mv-ch">▼</span>
+  </div>
+  <div class="mv-body">
+    <div class="sec">What You Need</div>
+    <div class="mat-list">
+      <div class="mat-item">Your Bible (Tagalog and/or English)</div>
+      <div class="mat-item">A journal or notebook + pen</div>
+      <div class="mat-item">Phone with the participant page open (QR or URL)</div>
+      <div class="mat-item m1">Comfortable, semi-private spot for 2 people (coffee shop corner, your home, theirs)</div>
+      <div class="mat-item msg">Comfortable space for 3–8 people (living room, café back room, classroom corner)</div>
+      <div class="mat-item">No projector, no manila paper, no setup needed</div>
+    </div>
+
+    <div class="sec">Spiritual Preparation</div>
+    <div class="prose">
+      <p>Bago ka mag-meet, magpray. Hindi pang-show — pang-real. <strong>"Lord, this session is not about me delivering content. It's about You meeting <span class="mt-1on1">this person</span><span class="mt-sg">these people</span> where they are. Use me. Take my words. Open <span class="mt-1on1">their</span><span class="mt-sg">their</span> hearts."</strong></p>
+      <p class="m1">Recall the name of your learner. What do you know about them? Where are they in their faith journey? What might today's lesson surface for them — joy, doubt, conviction, longing? Bring that to God in prayer.</p>
+      <p class="msg">Think through each person in your group by name. Who's curious? Who's resistant? Who's quiet? Who tends to dominate? Pray specifically for each. Ask God to balance the conversation so no one is overlooked and no one over-talks.</p>
+    </div>
+
+    <div class="pnote">
+      <div class="pn-lbl">🎯 The Heart of Usbong</div>
+      Pre-Pipeline is where seekers and brand-new believers begin. Some at your table may not yet know if Jesus is real for them. <strong>Your role is not to convince — it is to make space.</strong> Make space for honest questions. Make space for silence. Make space for the Holy Spirit to do what only He can do. You are a guide, not a salesman.
+    </div>
+  </div>
+</div>
+
+<!-- PUKAW -->
+<div class="mv pukaw open">
+  <div class="mv-h" onclick="this.closest('.mv').classList.toggle('open')">
+    <div class="mv-ico">⚡</div>
+    <div class="mv-inf">
+      <div class="mv-lbl">Movement 1 · PUKAW</div>
+      <div class="mv-ttl">Engage — Create Felt Need</div>
+      <div class="mv-tm"><span class="mt-1on1">8 minutes · 1-on-1</span><span class="mt-sg">12 minutes · Small Group</span></div>
+    </div>
+    <span class="mv-ch">▼</span>
+  </div>
+  <div class="mv-body">
+
+    <div class="sec">The Opening Question</div>
+
+    <!-- 1-ON-1 MODE -->
+    <div class="act m1">
+      <span class="mode-tag mode-tag-1on1">👥 1-on-1 Mode</span>
+      <div class="act-lbl">⚡ Pukaw Conversation</div>
+      <div class="act-ttl">"Kilala mo ba siya?"</div>
+      <div class="act-txt">
+        <strong>The whole exercise is a conversation, not an activity.</strong> Begin warmly. Skip the celebrity column drawing — you don't need it for two people.<br><br>
+        <strong>Step 1 (2 min):</strong> Ask your learner: <em>"Sino ang isang celebrity, leader, o public figure na ALAM mo nang husto ang TUNGKOL sa kanya — kung sino siya, ano ang ginagawa niya — pero hindi mo naman talaga KILALA nang personal?"</em> Let them name one. Listen.<br><br>
+        <strong>Step 2 (2 min):</strong> Then ask: <em>"At sino naman ang isang KAIBIGAN mo na talagang KILALA mo nang personal? Hindi lang alam mo sino siya — kilala mo siya — sa loob at labas."</em> Listen.<br><br>
+        <strong>Step 3 (2 min):</strong> Now the bridge — slow it down. <em>"Pansinin mo ang pagkakaiba. Sa una — alam mo TUNGKOL sa kanya. Sa pangalawa — KILALA mo siya. Magkaibang-magkaiba 'di ba? Walang ako ang taong masasabing sila ay kilala mo, kung tungkol lang sa kanila ang alam mo."</em><br><br>
+        <strong>Step 4 (2 min):</strong> The pivot. <em>"Tara, isang tanong — wag mo munang sasagutin ngayon, isipin mo lang. Ang Diyos ba — alam mo lang TUNGKOL sa Kanya, o KILALA mo Siya?"</em> Let the question hang. Don't rush to fill the silence.
+      </div>
+    </div>
+
+    <!-- SMALL GROUP MODE -->
+    <div class="act msg">
+      <span class="mode-tag mode-tag-sg">👨‍👩‍👧 Small Group Mode</span>
+      <div class="act-lbl">⚡ Pukaw Activity</div>
+      <div class="act-ttl">"Alam Ko Tungkol Sa Kanya / Kilala Ko Siya"</div>
+      <div class="act-txt">
+        <strong>Each person uses their own notebook.</strong> No manila paper needed. The whole group works at the same pace.<br><br>
+        <strong>Step 1 (3 min):</strong> Have everyone draw two columns on a fresh page: <em>"Alam ko TUNGKOL kay ___"</em> and <em>"Kilala ko si ___"</em>. <em>"Pumili ng KAHIT SINO — celebrity, leader, kaibigan, kapatid. Sa column 1, isulat ang mga bagay na alam mo TUNGKOL sa kanya. Sa column 2, isulat kung gaano mo siya KILALA — ang mga bagay na alam mo lang kung talagang kilala mo siya nang personal."</em><br><br>
+        <strong>Step 2 (4 min):</strong> Go around — each person shares ONE example briefly (1 min each). Keep it tight; you're not solving anyone's problem here, just collecting observations.<br><br>
+        <strong>Step 3 (2 min):</strong> Reflect together: <em>"Anong napansin niyo? Kapag tungkol lang sa isang tao ang alam mo — alam mo ba talaga siya? May pagkakaiba ba ang dalawa?"</em> Let 1–2 people answer. Don't lecture — let the observation surface from them.<br><br>
+        <strong>Step 4 (3 min):</strong> The pivot. <em>"Ngayon, gawin natin muli — pero ngayon, para sa Diyos. Isulat sa sariling notebook ninyo: 'Alam ko TUNGKOL sa Diyos...' at 'Kilala ko ang Diyos...'. Wag muna i-share. Sariling pagmuni-muni lang. Tatlong minuto."</em>
+      </div>
+    </div>
+
+    <div class="sec">Bridge to TUKLAS</div>
+    <div class="script">
+      <div class="script-lbl">🎤 Your own words — taglish is natural</div>
+      <div class="script-txt">"Ang karamihan sa atin — pati na ako — lumaki na may maraming alam TUNGKOL sa Diyos. Nadinig natin ang Kanyang pangalan sa simbahan. Sinabi natin ang Ama Namin. Alam natin ang mga kwento. Pero ang tanong ngayon — at ang tanong na pag-uusapan natin sa buong Usbong journey — ay ito: kilala mo ba Siya? Hindi kung alam mo ang tungkol sa Kanya. Kilala mo ba Siya — parang kaibigan? Parang Ama? Parang Persona na aktwal na nagmamahal sa iyo ngayon mismo? Iyan ang simula ng lahat. Tingnan natin sa Bible kung ano sabi tungkol dito."</div>
+    </div>
+
+    <div class="pnote">
+      <div class="pn-lbl">🎯 Pastoral Note — What to Watch For</div>
+      <span class="m1">During the pivot question, watch your learner's face. Some look confident, some look quiet, some look uncomfortable. <strong>Don't fill the silence — the discomfort is the lesson.</strong> Years of church attendance with no genuine personal connection is heavy to acknowledge. Give space. They don't need to perform an answer for you.</span>
+      <span class="msg">During the personal reflection (Step 4), watch the room. Some will write enthusiastically. Many will pause and write very little. A few may write nothing at all. <strong>Do not call anyone out.</strong> See them. They are precisely who this session is for. The honest answer "I don't really know Him" is the most important answer in the room.</span>
+    </div>
+  </div>
+</div>
+
+<!-- TUKLAS -->
+<div class="mv tuklas open">
+  <div class="mv-h" onclick="this.closest('.mv').classList.toggle('open')">
+    <div class="mv-ico">📖</div>
+    <div class="mv-inf">
+      <div class="mv-lbl">Movement 2 · TUKLAS</div>
+      <div class="mv-ttl">Discover — Encounter the Truth</div>
+      <div class="mv-tm"><span class="mt-1on1">15 minutes · Guide, do not lecture</span><span class="mt-sg">20 minutes · Guide discovery</span></div>
+    </div>
+    <span class="mv-ch">▼</span>
+  </div>
+  <div class="mv-body">
+
+    <div class="sec">Scripture — Read Together</div>
+
+    <div class="scr">
+      <div class="scr-ref">Jeremias 29:11–13 · Primary Text</div>
+      <div class="scr-tl">"Sapagkat kilala Ko ang mga plano Ko para sa inyo — sabi ng Panginoon — mga planong magbibigay sa inyo ng pag-asa at kinabukasan, hindi kapahamakan. Pagkatapos, tatawag kayo sa Akin at magsusumamo sa Akin, at pakikinggan Ko kayo. Hahanapin ninyo Ako at mahahanap Ako, kapag hinahanap ninyo Ako nang buong puso."</div>
+      <div class="scr-en">"For I know the plans I have for you, declares the Lord, plans to prosper you and not to harm you, plans to give you hope and a future. You will seek me and find me when you seek me with all your heart."</div>
+    </div>
+
+    <div class="scr">
+      <div class="scr-ref">Awit 139:1–6 · Supporting Text</div>
+      <div class="scr-tl">"Panginoon, siniyasat Mo ako at kilala Mo ako. Alam Mo kung kailan ako umuupo at tumitindig; naiintindihan Mo ang aking mga iniisip mula sa malayo. Nababantayan Mo ang aking mga lakad at ang aking pahinga; pamilyar Ka sa lahat ng aking mga gawi."</div>
+      <div class="scr-en">"You have searched me, Lord, and you know me. You know when I sit and when I rise; you perceive my thoughts from afar. You are familiar with all my ways."</div>
+    </div>
+
+    <!-- READING METHOD — mode-specific -->
+    <div class="pnote m1">
+      <div class="pn-lbl">📖 Reading Method · 1-on-1</div>
+      Read Jeremias 29:11–13 yourself, slowly, in Tagalog. Then ask your learner: <em>"Pwede mong basahin uli — pero sa iyong sariling boses?"</em> They read it aloud themselves. The act of speaking the words changes how they land. For Awit 139, you read it once together — share one Bible if needed. <strong>Two readings is enough.</strong> Don't make this rote.
+    </div>
+    <div class="pnote msg">
+      <div class="pn-lbl">📖 Reading Method · Small Group</div>
+      <strong>Three readings, three voices.</strong> First reading: you read Jeremias 29:11–13 aloud, slowly, in Tagalog. Second reading: ask one volunteer to read it again in English (or Tagalog if they're not comfortable). Third reading: the whole group reads it together aloud in Tagalog. Then for Awit 139: one person reads silently first (give 30 seconds), then aloud to the group. Three readings creates ownership without feeling repetitive.
+    </div>
+
+    <div class="sec">Discovery Questions</div>
+
+    <!-- 1-ON-1 -->
+    <div class="m1">
+      <div class="act">
+        <span class="mode-tag mode-tag-1on1">👥 1-on-1 Mode</span>
+        <div class="act-lbl">🗣 Conversational Discovery</div>
+        <div class="act-txt">
+          <strong>Walk through the questions as a conversation</strong> — ask one, listen, reflect back what you hear, follow up. Don't fire all three at once. Don't write anything on paper. The discovery happens in the dialogue itself.<br><br>
+          Ask each question, let them think, give space. If they freeze, gently re-read the verse and ask again in different words. Reflect back: <em>"Sabi mo, 'kilala' — pa-explain mo nga, ano ang ibig mong sabihin doon?"</em>
+        </div>
+      </div>
+      <ul class="ql">
+        <li class="qo"><strong>OBSERVATION:</strong> "Sa Jeremias 29:11–13 — anong tatlong bagay sinasabi ng Diyos na gagawin Niya? Tingnan natin ang text." <em>Guide toward: He KNOWS the plans · He HEARS when we call · He IS FOUND when sought with all the heart.</em></li>
+        <li class="qi"><strong>INTERPRETATION:</strong> "Sa Awit 139 — anong klaseng pagkakilala mayroon ang Diyos sa atin? Hindi lang basta alam — sabi ng verse, 'kilala'. Ano ang pagkakaiba?" <em>Guide toward: Intimate, personal knowledge — sitting, rising, thinking, even before we speak. He is familiar with ALL our ways.</em></li>
+        <li class="qa"><strong>APPLICATION:</strong> "Kung totoo ito — na kilala ka talaga ng Diyos, hindi lang alam — paano nito babaguhin ang paraan ng pagdarasal mo? O ang pagbabasa mo ng Bible?" <em>Guide toward: Prayer becomes conversation. Bible reading becomes listening to someone who already knows you.</em></li>
+      </ul>
+    </div>
+
+    <!-- SMALL GROUP -->
+    <div class="msg">
+      <div class="act">
+        <span class="mode-tag mode-tag-sg">👨‍👩‍👧 Small Group Mode</span>
+        <div class="act-lbl">🗣 Group Discovery</div>
+        <div class="act-txt">
+          <strong>One question at a time — open to the whole group.</strong> Don't break into pairs (group is already small enough). Let people answer freely; if no one volunteers, look at one person warmly and say <em>"Ano sa tingin mo, ___?"</em>. Affirm honest answers, especially the uncertain ones. <strong>"Hindi ko alam" is a beautiful answer in Usbong.</strong>
+        </div>
+      </div>
+      <ul class="ql">
+        <li class="qo"><strong>OBSERVATION:</strong> "Sa Jeremias 29:11–13 — anong tatlong bagay sinasabi ng Diyos na gagawin Niya? Hayaan natin ang verse mismo ang magsalita." <em>Guide toward: He KNOWS the plans · He HEARS when we call · He IS FOUND when sought with all the heart.</em></li>
+        <li class="qi"><strong>INTERPRETATION:</strong> "Sa Awit 139 — anong klaseng pagkakilala mayroon ang Diyos sa atin? Hindi lang basta alam — sabi ng verse, 'kilala'. Ano ang pagkakaiba?" <em>Guide toward: Intimate, personal knowledge — sitting, rising, thinking, even before we speak. He is familiar with ALL our ways.</em></li>
+        <li class="qa"><strong>APPLICATION:</strong> "Kung totoo ito — na kilala kayo talaga ng Diyos, hindi lang alam — paano nito babaguhin ang paraan ng pagdarasal niyo? O ang pagbabasa niyo ng Bible?" <em>Guide toward: Prayer becomes conversation. Bible reading becomes listening to someone who already knows you.</em></li>
+      </ul>
+    </div>
+
+    <div class="sec">Bridge to TALAKAY</div>
+    <div class="script">
+      <div class="script-lbl">🎤 Draw out the main truth</div>
+      <div class="script-txt">"<span class="mt-1on1">Napansin ko ang sagot mo</span><span class="mt-sg">Napansin ko ang sagot ninyo</span> — paulit-ulit na lumalabas ang isang salita: kilala. Ang Diyos ay hindi lamang makapangyarihan. Siya ay isang Persona — at kilala ka Niya. Ang Kanyang kaalaman tungkol sa iyo ay mas malalim pa kaysa sa kaalaman ng iyong pinaka-malapit na kaibigan. At ang tanong ngayon — kilala mo rin ba Siya?"</div>
+    </div>
+  </div>
+</div>
+
+<!-- TALAKAY -->
+<div class="mv talakay open">
+  <div class="mv-h" onclick="this.closest('.mv').classList.toggle('open')">
+    <div class="mv-ico">💡</div>
+    <div class="mv-inf">
+      <div class="mv-lbl">Movement 3 · TALAKAY</div>
+      <div class="mv-ttl">Deepen — Truth Becomes Personal</div>
+      <div class="mv-tm"><span class="mt-1on1">15 minutes · Story + Silence</span><span class="mt-sg">20 minutes · Teaching + Story + Reflection</span></div>
+    </div>
+    <span class="mv-ch">▼</span>
+  </div>
+  <div class="mv-body">
+
+    <div class="sec">Part A · The Truth (3 min)</div>
+    <div class="pnote">
+      <div class="pn-lbl">💡 Say This Plainly</div>
+      <strong>"Ang Diyos ay hindi isang ideya na dapat paniwalaan — Siya ay isang Persona na gustong makilala ka."</strong><br>
+      <em>"Faith is not religion — it is relationship."</em><br><br>
+      Don't rush past this. Say it. Let it sit for a moment. Don't add five more sentences trying to explain it. The truth is enough.
+    </div>
+
+    <div class="sec">Part B · Your Story <span class="mt-1on1">(7 min · mutual exchange)</span><span class="mt-sg">(8 min · facilitator story + group story)</span></div>
+
+    <div class="act m1">
+      <span class="mode-tag mode-tag-1on1">👥 1-on-1 Mode</span>
+      <div class="act-lbl">📖 Mutual Story Exchange</div>
+      <div class="act-txt">
+        <strong>Step 1 (3 min):</strong> You share briefly — not your whole conversion story, just <em>"Ito ang isang specific moment nung naramdaman ko na ang Diyos ay hindi lang concept para sa akin — Persona Siya."</em> Be honest. Be brief. <strong>Don't preach.</strong><br><br>
+        <strong>Step 2 (4 min):</strong> Then turn it back: <em>"Ikaw, may ganyang moment ka na ba — kahit isa lang? O hindi mo pa ba naranasan iyon — at gusto mong maranasan?"</em> Listen. <strong>Whatever they say is the right answer.</strong> "Wala pa" is honest. "Meron, pero matagal na" is honest. "Hindi ko alam" is honest. Receive whatever comes.
+      </div>
+    </div>
+
+    <div class="act msg">
+      <span class="mode-tag mode-tag-sg">👨‍👩‍👧 Small Group Mode</span>
+      <div class="act-lbl">📖 Story + Story</div>
+      <div class="act-txt">
+        <strong>Step 1 (4 min):</strong> You tell a brief, specific personal story — <em>"Sa buhay ko, ito ang isang specific moment nung naramdaman ko na ang Diyos ay hindi lang concept — Persona Siya."</em> Use the framework: Before / The Moment / After. <strong>Keep it under 4 minutes.</strong> Tighter is better. You're modeling vulnerability, not delivering a sermon.<br><br>
+        <strong>Step 2 (4 min):</strong> Open invitation: <em>"Sino sa inyo gustong mag-share ng katulad? Hindi mo kailangan i-share kung hindi ka pa ready. Pero kung meron — pwede mong i-share ng maikling moment lang, isang sandali nung naramdaman mong totoo ang Diyos."</em> Take 1–2 voluntary stories max. Don't go around the room — that pressures the quiet ones.
+      </div>
+    </div>
+
+    <div class="sec">Part C · Personal Reflection <span class="mt-1on1">(5 min · silence)</span><span class="mt-sg">(8 min · participant page + silence)</span></div>
+
+    <div class="act">
+      <div class="act-lbl">💡 Sariling Pagmumuni-muni · The 4-Minute Silence</div>
+      <div class="act-txt m1">
+        <strong>This is the moment, kapatid.</strong> Say: <em>"May ilang tanong sa participant page mo. I-open mo ang page sa phone mo. Sagutin mo ng tapat — para sa iyong sarili lamang. Hindi mo kailangang ibahagi sa akin. Limang minuto."</em><br><br>
+        <strong>Now stop talking.</strong> Don't fill the silence with helpful comments. Don't check your phone. Don't sigh. Sit present with them. If they look up at you, smile gently and look back down. <strong>The silence is the lesson.</strong> Many will encounter God for the first time in this silence — not in your words.
+      </div>
+      <div class="act-txt msg">
+        <strong>This is the moment, kapatid.</strong> Say: <em>"May ilang tanong sa participant page niyo. Open the page on your phones. Sagutin niyo nang tapat — para sa sarili niyo lamang. Walang share, walang group reading. Tahimik. Walong minuto."</em><br><br>
+        <strong>Now stop talking.</strong> Don't pace. Don't peek over shoulders. Don't ask "kumusta na?" halfway through. Sit at the table with them. Use the time to pray silently for each person by name. <strong>The silence is the lesson.</strong> Many will encounter God for the first time in this silence — not in your words.
+      </div>
+    </div>
+
+    <div class="pnote">
+      <div class="pn-lbl">🎯 Pastoral Note — Honoring the Silence</div>
+      Beginners always want to break silence with chatter. Resist it. <span class="m1">Your learner may shift, look uncomfortable, glance at you. Smile and look down at your own Bible. Don't rescue them from the silence — the silence is what they need.</span><span class="msg">Someone in the group will try to break the silence — joke, sigh loudly, comment. Gently raise one hand to signal "wait" and look down. Hold the space. <strong>Eight minutes of true silence in a small group of seekers is rarer and more powerful than any sermon you could preach.</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- GAWIN -->
+<div class="mv gawin open">
+  <div class="mv-h" onclick="this.closest('.mv').classList.toggle('open')">
+    <div class="mv-ico">🙌</div>
+    <div class="mv-inf">
+      <div class="mv-lbl">Movement 4 · GAWIN</div>
+      <div class="mv-ttl">Practice — Do Something With Truth</div>
+      <div class="mv-tm"><span class="mt-1on1">15 minutes · Practice + Pray</span><span class="mt-sg">20 minutes · Practicum + EOLO</span></div>
+    </div>
+    <span class="mv-ch">▼</span>
+  </div>
+  <div class="mv-body">
+
+    <div class="sec">Part A · Practice Articulating <span class="mt-1on1">(8 min)</span><span class="mt-sg">(10 min)</span></div>
+
+    <div class="act m1">
+      <span class="mode-tag mode-tag-1on1">👥 1-on-1 Mode</span>
+      <div class="act-lbl">🙌 You As Their Practice Partner</div>
+      <div class="act-ttl">"Kung Sasabihin Mo..."</div>
+      <div class="act-txt">
+        <strong>Step 1 — You play the skeptical friend (4 min):</strong> Say: <em>"Pretend lang, ako 'yung kaibigan mo na walang faith. Nakausap kita, nabanggit kong: 'Bakit ka ba lagi sa simbahan? Ano ba meron doon para sa iyo?' — Paano mo ako sasagutin nang natural, hindi mukhang nagse-sermon?"</em><br><br>
+        Let them try. Whatever they say, don't correct. After they're done, give ONE affirmation: <em>"Ang pinaka-natural na parte ng sagot mo ay ___."</em> No critique. Just affirm what worked.<br><br>
+        <strong>Step 2 — Swap roles (4 min):</strong> <em>"Ngayon palitan tayo. Ikaw ang magtatanong, ako ang sasagot. Pag-aralan mo kung paano ko sasabihin."</em> You model it briefly — natural, personal, no sermon language. Then debrief: <em>"Ano ang napansin mo? Ano ang kakaiba sa style ko kumpara sa style mo?"</em>
+      </div>
+    </div>
+
+    <div class="act msg">
+      <span class="mode-tag mode-tag-sg">👨‍👩‍👧 Small Group Mode</span>
+      <div class="act-lbl">🙌 Pair Roleplay</div>
+      <div class="act-ttl">"Kung Sasabihin Mo..."</div>
+      <div class="act-txt">
+        <strong>Step 1 (1 min):</strong> Pair off everyone in the group (if odd number, you join the leftover person). Scenario: <em>"Kaibigan mo, walang faith, tinanong: 'Bakit ka ba lagi sa simbahan?' — Paano mo siya sasagutin nang natural?"</em><br><br>
+        <strong>Step 2 — Round 1 (3 min):</strong> Person A responds. Person B listens, then gives ONE affirmation: <em>"Ang pinaka-natural na parte ay ___."</em><br><br>
+        <strong>Step 3 — Round 2 (3 min):</strong> Switch roles.<br><br>
+        <strong>Step 4 — Group debrief (3 min):</strong> <em>"Sino ang nakatuklas ng isang bagay na hindi pa nila nasasabi noon?"</em> 1–2 voluntary shares only.<br><br>
+        <strong>You close with:</strong> <em>"Hindi niyo kailangan ng perpektong script. Kailangan lang ninyo ng tunay na karanasan at ang tapang na ibahagi ito."</em>
+      </div>
+    </div>
+
+    <div class="sec">Part B · Pray Together <span class="mt-1on1">(7 min)</span><span class="mt-sg">(10 min · EOLO Check-in)</span></div>
+
+    <div class="ta m1">
+      <div class="ta-lbl">🙏 Closing Prayer Practice · 1-on-1</div>
+      <ol class="ta-steps">
+        <li>Say: <em>"Bago tayo tapusin ang Gawin, magpray tayo. Pero ngayon — ikaw magpray. Wag mag-formal. Magpray ka na parang nag-uusap ka sa isang Persona na kilala ka. Kasi totoo iyon — kilala ka Niya."</em></li>
+        <li>Wait. Give them space. If they freeze, gently model the start: <em>"Pwede mong simulan sa 'Lord, salamat sa lesson na ito...' o 'Lord, hindi ako sigurado kung naririnig Mo ako, pero...'"</em></li>
+        <li>They pray aloud — short is fine. Then you pray for them by name, specifically.</li>
+        <li>This may be the first time they have ever prayed out loud personally. <strong>It is a sacred moment. Treat it that way.</strong></li>
+      </ol>
+    </div>
+
+    <div class="ta msg">
+      <div class="ta-lbl">🌏 EOLO Check-in · Small Group</div>
+      <ol class="ta-steps">
+        <li>Have everyone stay seated. Say: <em>"Hindi pa rin ako nagmamadali, pero gusto kong itanong na: may isang tao ba kayo sa isip? Isang tao sa buhay niyo na hindi pa nakakakilala kay Jesus?"</em></li>
+        <li>Pause. Allow silence. Say: <em>"Maaaring wala pa. Okay lang iyon — Session 1 pa lang tayo. Pero kung may pumasok sa isip mo — isang specific na pangalan, hindi grupo — ilagay mo na sa puso mo ngayon."</em></li>
+        <li>Go around briefly: each person says ONE name or honestly says "wala pa ako". <strong>No judgment.</strong></li>
+        <li>You close with a 60-second specific prayer, naming each person mentioned by name in your prayer.</li>
+        <li>Have them update the EOLO section on their participant page if they have a name.</li>
+      </ol>
+    </div>
+
+    <div class="pnote">
+      <div class="pn-lbl">🎯 Session 1 EOLO Note</div>
+      <span class="m1">For Pre-Pipeline 1-on-1, EOLO is gentler — your learner may not yet feel like they have anyone to share Jesus with, because they're still working out their own relationship with Him. That's fine. Plant the seed today; harvest it in Session 3 or later. Today's prayer is enough.</span>
+      <span class="msg">Many seekers will not have a name yet — they're still working out their own relationship with God. That is fine and expected. The question "Who is the one person?" is planted today. By Session 3 most will have a name. By Session 6 most will have had a conversation. This check-in is cumulative — it builds every session.</span>
+    </div>
+  </div>
+</div>
+
+<!-- DALHIN SA BAHAY -->
+<div class="mv dalhin open">
+  <div class="mv-h" onclick="this.closest('.mv').classList.toggle('open')">
+    <div class="mv-ico">🏠</div>
+    <div class="mv-inf">
+      <div class="mv-lbl">Movement 5 · DALHIN SA BAHAY</div>
+      <div class="mv-ttl">Send — Formation Continues at Home</div>
+      <div class="mv-tm"><span class="mt-1on1">7 minutes</span><span class="mt-sg">8 minutes</span> · Assignment + Verse + Pangako + Close</div>
+    </div>
+    <span class="mv-ch">▼</span>
+  </div>
+  <div class="mv-body">
+
+    <div class="sec">The Assignment</div>
+    <div class="act">
+      <div class="act-lbl">🏠 Takdang-Aralin · Sampung Araw</div>
+      <div class="act-ttl">Mag-usap sa Diyos — Isang Pangungusap Bawat Gabi</div>
+      <div class="act-txt">
+        "Sa susunod na sampung araw — bago matulog — magsulat ng isang pangungusap. Hindi pormal na panalangin. Isang pangungusap lamang:<br><br>
+        <em>'Diyos, ngayong araw naramdaman ko ___.'</em> &nbsp;·&nbsp; <em>'Diyos, hindi ko maintindihan ang ___.'</em> &nbsp;·&nbsp; <em>'Diyos, salamat sa ___.'</em><br><br>
+        Sa susunod na <span class="mt-1on1">meeting natin</span><span class="mt-sg">session natin</span>, ang unang tanong: <strong>'Ilang araw kang nakapagsulat?'</strong> Walang shame — datos lang."
+      </div>
+    </div>
+
+    <div class="sec">Memory Verse</div>
+    <div class="mv-card">
+      <div class="mvc-lbl">📝 Talata ng Memorya · Usbong Lesson 1</div>
+      <div class="mvc-ref">Jeremias 29:13</div>
+      <div class="mvc-txt">"Hahanapin ninyo Ako at mahahanap Ako, kapag hinahanap ninyo Ako nang buong puso."</div>
+    </div>
+
+    <div class="ta">
+      <div class="ta-lbl">📝 Memory Verse Drill</div>
+      <ol class="ta-steps">
+        <li>Read the verse together aloud — twice</li>
+        <li>Cover the verse. Say it from memory together</li>
+        <li class="m1">You and your learner say it to each other without looking</li>
+        <li class="msg">Pairs in the group say it to each other without looking</li>
+        <li>Have them screenshot the verse card or write it in their journal</li>
+      </ol>
+    </div>
+
+    <div class="sec">Pangako Ko · My Commitment</div>
+    <div class="script">
+      <div class="script-lbl">🎤 Lead this — no rushing</div>
+      <div class="script-txt">"Bago tayo mag-close, gusto kong makuha ang <span class="mt-1on1">pangako mo</span><span class="mt-sg">pangako ninyo</span>. Sa participant page o journal: <strong>'Sa susunod na dalawang linggo, isasabuhay ko ang katotohanang kilala ako ng Diyos sa pamamagitan ng _______________.'</strong> Isang bagay. Specific. Magagawa mo talaga."</div>
+    </div>
+
+    <div class="sec">The Closing Ritual — Same Every Session</div>
+
+    <div class="ta m1">
+      <div class="ta-lbl">🕊 Closing · 1-on-1</div>
+      <ol class="ta-steps">
+        <li>Both of you stand (or stay seated, but face each other)</li>
+        <li>Say the memory verse together from memory — final time</li>
+        <li>Place a hand on their shoulder (if culturally appropriate) and pray specifically for them BY NAME, and for their EOLO person if they have one</li>
+        <li>Look them in the eye. Say: <strong>"Disciple ka na, kapatid. Magdi-disciple ka rin."</strong></li>
+        <li>Confirm the date of your next meeting. Walk out together if possible — don't end abruptly.</li>
+      </ol>
+    </div>
+
+    <div class="ta msg">
+      <div class="ta-lbl">🕊 Closing · Small Group</div>
+      <ol class="ta-steps">
+        <li>Everyone stands in a small circle</li>
+        <li>Say the memory verse together from memory — final time</li>
+        <li>You pray specifically — name 2–3 people in the group and their EOLO person (if mentioned)</li>
+        <li>Everyone together, hands at heart or raised: <strong>"Disciples who make disciples."</strong></li>
+        <li>Remind of the 10-day assignment and confirm the next session date</li>
+      </ol>
+    </div>
+
+    <div class="pnote">
+      <div class="pn-lbl">🎯 The Closing Ritual Matters</div>
+      <strong>The same closing — every session — is not boring. It is sacred.</strong> Liturgy is how transformation gets into the bones. By Session 10 of Usbong, your <span class="mt-1on1">learner</span><span class="mt-sg">group</span> will say "Disciples who make disciples" — and mean it from the deepest part of themselves. Don't shortcut this. Don't get creative. Same closing. Every session. <em>Disciples who make disciples.</em>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  <strong>USBONG · Pre-Pipeline · Lesson 1</strong><br>
+  Sino Ang Diyos? · Who Is God? · The Foundation of Everything<br>
+  <em>Rosehill Christian Church · MULTIPLY Leadership Pipeline</em>
+</div>
+
+</div>
+
+<script>
+// Mode toggle — persists in localStorage
+const MODE_KEY = 'usbong_mode';
+function setMode(mode) {
+  document.body.classList.remove('mode-1on1', 'mode-sg');
+  document.body.classList.add('mode-' + mode);
+  document.querySelectorAll('.mode-pill').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+}
+// Initialize on load
+(function() {
+  let saved = 'sg'; // default to small group
+  try { saved = localStorage.getItem(MODE_KEY) || 'sg'; } catch (e) {}
+  setMode(saved);
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER
+// ─────────────────────────────────────────────────────────────────
+// Five steps via the "A−" / "A+" buttons. Uses CSS zoom — wide browser
+// support and scales the whole page proportionally. Default is 100%.
+// Persists per-document so the facilitator's preference sticks
+// across sessions. Same pattern as salvation_assurance_diagnostic.html.
+// ═══════════════════════════════════════════════════════════════
+const FONT_KEY = 'usbong_l1_fontscale';
+const FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40]; // 90% to 140%
+let _fontIdx = 1; // index into FONT_STEPS — default to 100%
+
+function applyFontScale() {
+  const scale = FONT_STEPS[_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_fontIdx <= 0);
+  if (up) up.disabled = (_fontIdx >= FONT_STEPS.length - 1);
+}
+
+function changeFontScale(direction) {
+  _fontIdx = Math.max(0, Math.min(FONT_STEPS.length - 1, _fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(FONT_KEY, String(_fontIdx)); } catch (e) {}
+}
+
+(function initFontScale() {
+  try {
+    const saved = parseInt(localStorage.getItem(FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < FONT_STEPS.length) _fontIdx = saved;
+  } catch (e) {}
+  applyFontScale();
+})();
+</script>
+
+</body>
+</html>
