@@ -312,6 +312,261 @@
     ));
   }
 
+  // ═════════════════════════════════════════════════════════════
+  // LESSON ACCESS PREDICATE (Phase 3 — May 2026)
+  // ───────────────────────────────────────────────────────────
+  // Determines which pipeline_lessons (and which attachments WITHIN
+  // each lesson) a given user can see.
+  //
+  // Audience model (lesson-level — pipeline_lessons.audience):
+  //   'pastor_only' → only Pastor (level >= PASTOR_LEVEL)
+  //   'cohort_only' → only people via pipeline_lesson_grants OR cohort membership
+  //   'lc_leaders'  → leader (level >= 2) + Pastor
+  //   'all_members' → everyone
+  //
+  // Attachment-level (per row in attachments JSONB):
+  //   role_required ∈ {'all', 'apprentice+', 'teacher+', 'pastor_only'}
+  //
+  //   'all'         — anyone with lesson access
+  //   'apprentice+' — apprentices, co-teachers, teachers (in granted cohort), Pastor
+  //   'teacher+'    — co-teachers, teachers (in granted cohort), Pastor; OR
+  //                   apprentices in a granted cohort IF the cohort has an unlock
+  //                   for this lesson (cohort_lesson_unlocks row)
+  //   'pastor_only' — only Pastor
+  //
+  // The viewer (MLT/MMT) calls fetchVisibleLessons() which returns a
+  // ready-to-render array. No further filtering needed downstream.
+  //
+  // API:
+  //   await MultiplyShared.lessons.fetchVisibleLessons({
+  //     memberId: '…',
+  //     isPastor: boolean,
+  //     isLeader: boolean        // level >= 2
+  //   })
+  //   → returns [{ lesson, role, attachments, lockedAttachmentCount }, …]
+  //
+  // Where:
+  //   lesson — full pipeline_lessons row
+  //   role   — the user's effective role for THIS lesson:
+  //              'pastor' | 'teacher' | 'co-teacher' | 'apprentice'
+  //              | 'observer' | 'leader' | 'member'
+  //   attachments — filtered + sorted list of {label, url, role_required}
+  //                  that the user CAN see
+  //   lockedAttachmentCount — how many were hidden (for UI hint)
+  // ═════════════════════════════════════════════════════════════
+
+  // Role rank — higher means more privileged.
+  // The role_required gate compares the user's rank to the attachment's
+  // minimum-required rank. 'all' = 0, 'apprentice+' = 1, 'teacher+' = 2,
+  // 'pastor_only' = 3. We compute the user's role-for-this-lesson and
+  // compare ranks.
+  const ROLE_RANK = {
+    'all':         0,
+    'apprentice+': 1,
+    'teacher+':    2,
+    'pastor_only': 3
+  };
+
+  // Map the user's batch-role string (from cohort_members.role) to an
+  // attachment-rank number.
+  // Pastor always = 3. Leader-not-in-cohort = 0 (sees only 'all' attachments).
+  function _userRoleRankForLesson(opts) {
+    if (opts.isPastor) return 3;
+    if (opts.batchRole === 'teacher')    return 2;
+    if (opts.batchRole === 'co-teacher') return 2;
+    if (opts.batchRole === 'apprentice') {
+      // Apprentice with cohort unlock for this lesson → promoted to teacher rank
+      return opts.cohortUnlockedForThisLesson ? 2 : 1;
+    }
+    if (opts.batchRole === 'observer') return 0;
+    // Not in any cohort that grants this lesson
+    return 0;
+  }
+
+  async function fetchVisibleLessons(opts) {
+    opts = opts || {};
+    const memberId = opts.memberId;
+    const isPastor = !!opts.isPastor;
+    const isLeader = !!opts.isLeader;
+    const db = getDB();
+    if (!db) return [];
+    if (!memberId && !isPastor) return [];
+
+    // Parallel fetch. Use only published lessons unless Pastor (who can
+    // preview drafts via MD; but in MLT context we still show only published
+    // since MLT viewers shouldn't see Pastor's drafts).
+    const [lRes, gRes, cmRes, unRes] = await Promise.all([
+      db.from('pipeline_lessons').select('*').eq('published', true),
+      db.from('pipeline_lesson_grants').select('*'),
+      memberId
+        ? db.from('cohort_members').select('cohort_id, role, status').eq('member_id', memberId).eq('status', 'active')
+        : Promise.resolve({ data: [] }),
+      // Unlocks for any cohort the user is in. We over-fetch slightly
+      // (could narrow to relevant cohorts) but the table is small.
+      db.from('cohort_lesson_unlocks').select('*')
+    ]);
+    if (lRes.error) throw lRes.error;
+    if (gRes.error) throw gRes.error;
+    if (cmRes.error) throw cmRes.error;
+    if (unRes.error) throw unRes.error;
+
+    const lessons = lRes.data || [];
+    const grants = gRes.data || [];
+    const myCohortRoles = (cmRes.data || []);
+    const allUnlocks = unRes.data || [];
+
+    // Index cohort program ids for program-level grants
+    const myCohortIds = new Set(myCohortRoles.map(cm => cm.cohort_id));
+
+    // Build a lookup: cohort_id → role
+    const cohortRoleMap = {};
+    myCohortRoles.forEach(cm => { cohortRoleMap[cm.cohort_id] = cm.role; });
+
+    // Pre-fetch program ids for my cohorts (needed for program-level grant match)
+    // We can derive this from the cohorts table — but to avoid another query,
+    // we'll filter grants of type cohort_id first, then check program_id grants
+    // against cohorts we already know we're in.
+    // For program-level grants, we need to know which programs our cohorts belong to.
+    // Best: fetch the cohorts the user is in.
+    let myCohortPrograms = new Set();
+    if (myCohortIds.size > 0) {
+      const cRes = await db.from('cohorts')
+        .select('id, program_id')
+        .in('id', Array.from(myCohortIds));
+      if (cRes.error) throw cRes.error;
+      (cRes.data || []).forEach(c => myCohortPrograms.add(c.program_id));
+    }
+
+    // Compute per-lesson: do I have lesson-level access? if so, my role for it.
+    const result = [];
+    for (const l of lessons) {
+      // 1. Lesson-level audience check
+      let lessonAccessible = false;
+      let accessReason = null;
+      if (isPastor) {
+        lessonAccessible = true;
+        accessReason = 'pastor';
+      } else if (l.audience === 'all_members') {
+        lessonAccessible = true;
+        accessReason = 'all_members';
+      } else if (l.audience === 'lc_leaders') {
+        if (isLeader) {
+          lessonAccessible = true;
+          accessReason = 'lc_leaders';
+        }
+      } else if (l.audience === 'cohort_only') {
+        // Check if any grant matches
+        const lessonGrants = grants.filter(g => g.lesson_id === l.id);
+        for (const g of lessonGrants) {
+          if (g.cohort_id && myCohortIds.has(g.cohort_id)) {
+            lessonAccessible = true;
+            accessReason = 'cohort_grant';
+            break;
+          }
+          if (g.program_id && myCohortPrograms.has(g.program_id)) {
+            lessonAccessible = true;
+            accessReason = 'program_grant';
+            break;
+          }
+          if (g.member_id && g.member_id === memberId) {
+            lessonAccessible = true;
+            accessReason = 'member_grant';
+            break;
+          }
+        }
+      }
+      // 'pastor_only' audience falls through — nobody non-Pastor sees it.
+
+      if (!lessonAccessible) continue;
+
+      // 2. Determine the user's role for THIS lesson
+      // Pick the most-privileged role across all granting cohorts.
+      let bestRole = null;
+      let cohortUnlockedForThisLesson = false;
+      if (isPastor) {
+        bestRole = 'pastor';
+      } else if (accessReason === 'cohort_grant' || accessReason === 'program_grant') {
+        // Walk the user's cohorts that have access to this lesson; pick the highest role.
+        const grantingCohorts = [];
+        const lessonGrants = grants.filter(g => g.lesson_id === l.id);
+        myCohortRoles.forEach(cm => {
+          const hasCohortGrant = lessonGrants.some(g => g.cohort_id === cm.cohort_id);
+          const cohortInProgramGrant = lessonGrants.some(g =>
+            g.program_id && myCohortPrograms.has(g.program_id)
+          );
+          // A program-level grant covers all my cohorts in that program — but
+          // for simplicity, if ANY program-level grant matched my membership,
+          // count every active cohort role I have toward role-promotion.
+          if (hasCohortGrant || cohortInProgramGrant) {
+            grantingCohorts.push(cm);
+          }
+        });
+        // Role priority: teacher > co-teacher > apprentice > observer
+        const rolePriority = { teacher: 4, 'co-teacher': 3, apprentice: 2, observer: 1 };
+        grantingCohorts.sort((a,b) => (rolePriority[b.role]||0) - (rolePriority[a.role]||0));
+        bestRole = grantingCohorts[0]?.role || 'member';
+        // Check if any of the granting cohorts have unlocked this lesson
+        cohortUnlockedForThisLesson = grantingCohorts.some(cm => {
+          const u = allUnlocks.find(x => x.cohort_id === cm.cohort_id && x.lesson_id === l.id);
+          if (!u) return false;
+          if (u.unlocked_at) return true;
+          if (u.scheduled_for && new Date(u.scheduled_for) <= new Date()) return true;
+          return false;
+        });
+      } else if (accessReason === 'member_grant') {
+        // Individual grant — treat as 'member' rank (sees only 'all' attachments
+        // unless we want to make grants role-promote too. For now: treat as basic.)
+        bestRole = 'member';
+      } else if (accessReason === 'lc_leaders') {
+        bestRole = 'leader';
+      } else if (accessReason === 'all_members') {
+        bestRole = 'member';
+      }
+
+      // 3. Filter attachments by role rank
+      const userRank = _userRoleRankForLesson({
+        isPastor,
+        batchRole: ['teacher','co-teacher','apprentice','observer'].includes(bestRole) ? bestRole : null,
+        cohortUnlockedForThisLesson
+      });
+      const rawAttachments = Array.isArray(l.attachments) ? l.attachments : [];
+      const visibleAttachments = [];
+      let lockedCount = 0;
+      rawAttachments.forEach(a => {
+        const requiredRank = ROLE_RANK[a.role_required || 'all'];
+        if (requiredRank == null) {
+          // unknown role_required — be conservative, treat as pastor-only
+          if (isPastor) visibleAttachments.push(a);
+          else lockedCount++;
+          return;
+        }
+        if (userRank >= requiredRank) visibleAttachments.push(a);
+        else lockedCount++;
+      });
+
+      result.push({
+        lesson: l,
+        role: bestRole,
+        attachments: visibleAttachments,
+        lockedAttachmentCount: lockedCount,
+        cohortUnlockedForThisLesson  // for UI hints
+      });
+    }
+
+    // Sort: by level, then track, then lesson_number
+    result.sort((a, b) => {
+      const al = a.lesson, bl = b.lesson;
+      const lv = (al.level || 99) - (bl.level || 99);
+      if (lv !== 0) return lv;
+      const tr = (al.track || '').localeCompare(bl.track || '');
+      if (tr !== 0) return tr;
+      return (al.lesson_number || 99) - (bl.lesson_number || 99);
+    });
+
+    return result;
+  }
+
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -328,6 +583,10 @@
     makeLeaderScope,
     logView,
     tierLockCard,
-    escapeHTML
+    escapeHTML,
+    // Lesson access predicate (Phase 3)
+    lessons: {
+      fetchVisibleLessons
+    }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

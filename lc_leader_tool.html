@@ -565,6 +565,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-label">Announcements</div>
       <div class="qa-desc">Draft & track approvals</div>
     </div>
+    <div class="qa-btn" onclick="openMyLessons()">
+      <div class="qa-icon">📖</div>
+      <div class="qa-label">My Lessons</div>
+      <div class="qa-desc">Pipeline lessons available to you</div>
+    </div>
     <div class="qa-btn" onclick="openInstallGuide()">
       <div class="qa-icon">📱</div>
       <div class="qa-label">How to install</div>
@@ -5178,6 +5183,247 @@ function _installStepsHtmlFor(platform){
     <div style="${stepStyle}"><span style="${numStyle}">2</span><span>Look for the <strong>install icon</strong> in the URL bar, or use the menu → <strong>Install</strong>.</span></div>
     <div style="${stepStyle}"><span style="${numStyle}">3</span><span>Confirm. The app appears on your dock/taskbar.</span></div>
   `;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// MY LESSONS — pipeline lessons available to this leader (Phase 3)
+// ─────────────────────────────────────────────────────────────────
+// Shows the cohort/program/leader-audience lessons granted to this
+// user, with role-modulated attachments. Tapping an attachment
+// opens it in a full-screen iframe modal.
+//
+// Backed by MultiplyShared.lessons.fetchVisibleLessons() — see
+// shared.js for the access predicate. This file is the viewer side.
+// ═══════════════════════════════════════════════════════════════
+
+let _lessonsState = {
+  loaded: false,
+  rows: [],         // [{lesson, role, attachments, lockedAttachmentCount, …}]
+  error: null
+};
+
+async function openMyLessons(){
+  let modal = document.getElementById('myLessonsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'myLessonsModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-start;justify-content:center;z-index:9000;padding:0;overflow-y:auto';
+    document.body.appendChild(modal);
+  }
+  _renderMyLessonsShell('loading');
+
+  try {
+    const L = LEADER || {};
+    const isPastor = (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+    const isLeader = (L.leaderLevel || 0) >= 2;
+    const rows = await MultiplyShared.lessons.fetchVisibleLessons({
+      memberId: L.leaderId,
+      isPastor,
+      isLeader
+    });
+    _lessonsState.rows = rows;
+    _lessonsState.loaded = true;
+    _lessonsState.error = null;
+    _renderMyLessons();
+  } catch (e) {
+    _lessonsState.error = e.message || String(e);
+    _renderMyLessonsShell('error');
+  }
+}
+
+function closeMyLessons(){
+  const m = document.getElementById('myLessonsModal');
+  if (m) m.remove();
+  _lessonsState = { loaded: false, rows: [], error: null };
+}
+
+function _renderMyLessonsShell(state){
+  const modal = document.getElementById('myLessonsModal');
+  if (!modal) return;
+  const body = (state === 'loading')
+    ? `<div style="font-size:30px;margin-bottom:.5rem">📖</div>
+       <div style="font-size:13.5px;color:var(--muted)">Loading your lessons…</div>`
+    : `<div style="font-size:30px;margin-bottom:.5rem">⚠️</div>
+       <div style="font-size:13.5px;color:var(--red);margin-bottom:.5rem">Could not load lessons</div>
+       <div style="font-size:11.5px;color:var(--muted);max-width:300px;line-height:1.5">${MultiplyShared.escapeHTML(_lessonsState.error || '')}</div>
+       <button onclick="closeMyLessons()" style="margin-top:1.25rem;padding:.55rem 1.25rem;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer">Close</button>`;
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:560px;min-height:60vh;border-radius:14px;padding:2.5rem 1.5rem;text-align:center;margin-top:1rem;color:var(--text)">
+      ${body}
+    </div>
+  `;
+}
+
+function _renderMyLessons(){
+  const modal = document.getElementById('myLessonsModal');
+  if (!modal) return;
+  const rows = _lessonsState.rows;
+  const L = LEADER || {};
+  const isPastor = (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:680px;min-height:80vh;border-radius:14px;display:flex;flex-direction:column;margin-top:1rem;margin-bottom:2rem;color:var(--text);overflow:hidden">
+      <div style="padding:1rem 1.15rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Leadership Pipeline</div>
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-top:2px">📖 My Lessons</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+            ${rows.length} lesson${rows.length===1?'':'s'} available to you
+          </div>
+        </div>
+        <button onclick="closeMyLessons()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1;padding:0 6px">×</button>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:.75rem 1rem 1rem">
+        ${rows.length === 0 ? `
+          <div style="padding:2.5rem 1rem;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7">
+            No lessons are available to you yet.<br>
+            <span style="color:var(--lighter);font-size:11.5px">When Pastor adds you to a training batch, or grants you access to a program, lessons will appear here.</span>
+          </div>
+        ` : rows.map(r => _renderLessonCard(r)).join('')}
+      </div>
+
+      <div style="padding:.85rem 1.15rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+        <button onclick="closeMyLessons()" style="padding:.55rem 1.1rem;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer">Close</button>
+      </div>
+    </div>
+  `;
+}
+
+function _renderLessonCard(row){
+  const l = row.lesson;
+  const esc = MultiplyShared.escapeHTML;
+
+  // Role pill — show the viewer their own role for this lesson
+  const roleLabels = {
+    pastor:       { label: 'Pastor',       bg: 'rgba(167,139,250,.18)', col: 'var(--purple)' },
+    teacher:      { label: 'Teacher',      bg: 'rgba(232,184,75,.18)',  col: 'var(--gold)' },
+    'co-teacher': { label: 'Co-teacher',   bg: 'rgba(232,184,75,.10)',  col: 'var(--gold)' },
+    apprentice:   { label: 'Apprentice',   bg: 'rgba(52,211,153,.15)',  col: 'var(--green)' },
+    observer:     { label: 'Observer',     bg: 'rgba(136,136,168,.15)', col: 'var(--muted)' },
+    leader:       { label: 'LC Leader',    bg: 'rgba(96,165,250,.15)',  col: 'var(--blue)' },
+    member:       { label: 'Member',       bg: 'rgba(96,165,250,.12)',  col: 'var(--blue)' }
+  }[row.role] || { label: row.role || 'Member', bg: 'rgba(136,136,168,.15)', col: 'var(--muted)' };
+
+  const levelLabel = l.level ? `L${l.level}` : '';
+  const meta = [levelLabel, l.track, l.duration_minutes ? `${l.duration_minutes} min` : ''].filter(Boolean).join(' · ');
+  const lessonNum = (l.lesson_number != null) ? ` · #${l.lesson_number}` : '';
+
+  // Attachments — group buttons
+  const atts = row.attachments || [];
+  const attHtml = atts.length === 0
+    ? `<div style="font-size:11.5px;color:var(--muted);font-style:italic;padding:.5rem 0">No attachments available for your role yet.${row.lockedAttachmentCount>0 ? ` (${row.lockedAttachmentCount} locked)` : ''}</div>`
+    : `
+      <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-top:.4rem">
+        ${atts.map((a, i) => _renderAttachmentButton(a, l.id, i)).join('')}
+        ${row.lockedAttachmentCount > 0 ? `
+          <div style="font-size:10.5px;color:var(--lighter);font-style:italic;padding:.3rem .5rem;margin-top:2px">
+            🔒 ${row.lockedAttachmentCount} additional material${row.lockedAttachmentCount===1?'':'s'} not yet available to your role.${row.role==='apprentice' ? ' Pastor unlocks teacher-level materials when you are ready to teach.' : ''}
+          </div>
+        ` : ''}
+      </div>`;
+
+  // Unlock indicator for apprentices whose cohort has the lesson unlocked
+  const unlockBadge = row.cohortUnlockedForThisLesson && row.role === 'apprentice'
+    ? '<span style="font-size:9.5px;background:rgba(232,184,75,.18);color:var(--gold);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:6px">🔓 Unlocked</span>'
+    : '';
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:.95rem 1rem;margin-bottom:.65rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.55rem;margin-bottom:.45rem">
+        <div style="min-width:0;flex:1">
+          ${meta ? `<div style="font-size:9.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase">${esc(meta)}${esc(lessonNum)}</div>` : ''}
+          <div style="font-size:14.5px;color:var(--text);font-weight:700;margin-top:3px;line-height:1.3">${esc(l.title_en || '(untitled)')}</div>
+          ${l.title_tl ? `<div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-style:italic">${esc(l.title_tl)}</div>` : ''}
+          ${l.aim ? `<div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5">${esc(l.aim)}</div>` : ''}
+          ${l.scripture_refs ? `<div style="font-size:11px;color:var(--gold);margin-top:5px">📖 ${esc(l.scripture_refs)}</div>` : ''}
+        </div>
+        <div style="flex-shrink:0">
+          <span style="display:inline-flex;align-items:center;font-size:9.5px;background:${roleLabels.bg};color:${roleLabels.col};padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">${roleLabels.label}</span>
+          ${unlockBadge}
+        </div>
+      </div>
+      ${attHtml}
+    </div>
+  `;
+}
+
+function _renderAttachmentButton(a, lessonId, idx){
+  const esc = MultiplyShared.escapeHTML;
+  // Pick an icon based on label (lightweight heuristic)
+  const label = (a.label || '').toLowerCase();
+  let icon = '📄';
+  if (label.includes('slide')) icon = '🎞';
+  else if (label.includes('participant')) icon = '📋';
+  else if (label.includes('apprentice') || label.includes('intern')) icon = '🌿';
+  else if (label.includes('facilitator') || label.includes('teacher')) icon = '🎯';
+  else if (label.includes('handout')) icon = '📄';
+  else if (label.includes('video')) icon = '🎬';
+
+  // role pill (small, on right)
+  const rolePill = {
+    'all':         { label: 'all',         bg: 'rgba(136,136,168,.15)', col: 'var(--muted)' },
+    'apprentice+': { label: 'apprentice+', bg: 'rgba(52,211,153,.18)',  col: 'var(--green)' },
+    'teacher+':    { label: 'teacher+',    bg: 'rgba(232,184,75,.18)',  col: 'var(--gold)' },
+    'pastor_only': { label: 'pastor',      bg: 'rgba(167,139,250,.18)', col: 'var(--purple)' }
+  }[a.role_required || 'all'] || { label: a.role_required || '', bg: 'rgba(136,136,168,.15)', col: 'var(--muted)' };
+
+  // URL is passed through encodeURIComponent for the onclick. Since onclick attribute parsing is
+  // sensitive to quote characters, we use a function call with stored URL retrieval via dataset.
+  return `
+    <button type="button"
+      data-lesson-id="${esc(lessonId)}"
+      data-att-idx="${idx}"
+      data-att-url="${esc(a.url)}"
+      data-att-label="${esc(a.label || '(unnamed)')}"
+      onclick="_openLessonAttachment(this)"
+      style="display:flex;align-items:center;gap:.65rem;width:100%;padding:.65rem .85rem;background:var(--surface3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-align:left;font-family:inherit">
+      <span style="font-size:17px;flex-shrink:0">${icon}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.label || '(unnamed)')}</span>
+      <span style="font-size:9px;background:${rolePill.bg};color:${rolePill.col};padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex-shrink:0">${rolePill.label}</span>
+      <span style="color:var(--muted);font-size:16px;flex-shrink:0">›</span>
+    </button>
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Lesson attachment viewer — full-screen iframe modal
+// ─────────────────────────────────────────────────────────────────
+function _openLessonAttachment(btn){
+  const url = btn.getAttribute('data-att-url');
+  const label = btn.getAttribute('data-att-label') || 'Attachment';
+  if (!url) { toast('No URL set for this attachment','error'); return; }
+  _openLessonViewerModal(url, label);
+}
+
+function _openLessonViewerModal(url, label){
+  let modal = document.getElementById('lessonViewerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'lessonViewerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;z-index:9500';
+    document.body.appendChild(modal);
+  }
+  const esc = MultiplyShared.escapeHTML;
+  modal.innerHTML = `
+    <div style="padding:.65rem .9rem;display:flex;align-items:center;gap:.55rem;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+      <button onclick="_closeLessonViewer()" style="background:transparent;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">‹</button>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-size:13.5px;color:var(--text);font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</div>
+        <div style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(url)}</div>
+      </div>
+      <a href="${esc(url)}" target="_blank" rel="noopener noreferrer"
+        style="font-size:11px;color:var(--gold);padding:5px 10px;background:rgba(232,184,75,.12);border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0">↗ New tab</a>
+    </div>
+    <iframe src="${esc(url)}" style="flex:1;border:none;width:100%;background:#fff"
+      allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+  `;
+}
+
+function _closeLessonViewer(){
+  const m = document.getElementById('lessonViewerModal');
+  if (m) m.remove();
 }
 
 
