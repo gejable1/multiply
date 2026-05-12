@@ -768,6 +768,8 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div class="sr"><span class="sl">Publish weekly sermon summaries (members read in MMT)</span><button class="sbtn" style="margin-top:0;background:#5b6fbf" onclick="openSermonLibrary()">⛪ Sermon Library</button></div>
     <div class="sr"><span class="sl">Manage level-gated reading materials (books, articles, study guides)</span><button class="sbtn" style="margin-top:0;background:#8a5b2e" onclick="openLibraryManager()">📚 Library Manager</button></div>
     <div class="sr"><span class="sl">Review members' comprehension check attempts &amp; reflection answers</span><button class="sbtn" style="margin-top:0;background:#5e7d52" onclick="openQuizReview()">📝 Quiz Review</button></div>
+    <div class="sr"><span class="sl">Manage BTLI and other training batches (apprentices, teachers, observers)</span><button class="sbtn" style="margin-top:0;background:#6b4e8a" onclick="openCohorts()">🎓 Batches</button></div>
+    <div class="sr"><span class="sl">Lesson plans, handouts, and leader notes for all levels and tracks</span><button class="sbtn" style="margin-top:0;background:#a36a3f" onclick="openLessonLibrary()">📖 Lesson Library</button></div>
   </div>
   <!-- ─── DIAGNOSTIC SETTINGS (Pastor-configurable) ─── -->
   <div class="ss" id="diagSettingsSection"><div class="st">⚙️ Diagnostic Settings</div>
@@ -5404,6 +5406,1462 @@ function _qrExportCSV(){
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast(`Exported ${filtered.length} attempt${filtered.length===1?'':'s'}`, '📥');
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// COHORTS (UI: "Batches") — generic system for BTLI / EOLO / etc.
+// ─────────────────────────────────────────────────────────────────
+// Three nested concepts:
+//   Program → Cohort → Members
+//
+// UI terminology: "Cohort" is technical (in code/DB); "Batch" is what
+// the Pastor sees. Programs are "Programs" everywhere.
+//
+// Pastoral framing:
+//   • Apprentices are being FORMED, not yet sent — this is a stage,
+//     not a permanent identity (so we resist the ministry-membership
+//     mental model that would keep them in forever).
+//   • Graduation is a meaningful event worth celebrating.
+//   • Cohort history is preserved (graduated members stay as alumni).
+// ═══════════════════════════════════════════════════════════════════
+
+let _cohortState = {
+  programs: [],          // all programs
+  cohorts: [],           // all cohorts (across programs)
+  members: [],           // member directory cache (for member picker)
+  cohortMembers: {},     // cohort_id → [cohort_members rows]
+  selectedProgramId: null,
+  editingProgram: null,  // program being edited in sub-modal
+  editingCohort: null,   // cohort being edited in sub-modal
+  rosterCohortId: null   // cohort whose roster is shown in side panel
+};
+
+async function openCohorts(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage batches','🔒'); return; }
+  _coRenderShell('loading');
+  try {
+    await _coLoadData();
+    _coRender();
+  } catch(e){
+    toast('Could not load batches: ' + (e.message || e), '❌');
+    _coClose();
+  }
+}
+
+async function _coLoadData(){
+  const [pRes, cRes, mRes] = await Promise.all([
+    db.from('cohort_programs').select('*').order('sort_order', { ascending: true }).order('name', { ascending: true }),
+    db.from('cohorts').select('*').order('start_date', { ascending: false, nullsFirst: false }),
+    db.from('members').select('id, name, lc_group, pipeline_level').order('name', { ascending: true })
+  ]);
+  if(pRes.error) throw pRes.error;
+  if(cRes.error) throw cRes.error;
+  if(mRes.error) throw mRes.error;
+
+  _cohortState.programs = pRes.data || [];
+  _cohortState.cohorts = cRes.data || [];
+  _cohortState.members = mRes.data || [];
+
+  // Load cohort members for ALL cohorts in one query, then group locally.
+  // Cheaper than N queries even at 50+ cohorts (still small data).
+  const allCohortIds = _cohortState.cohorts.map(c => c.id);
+  _cohortState.cohortMembers = {};
+  if(allCohortIds.length > 0){
+    const cmRes = await db.from('cohort_members').select('*').in('cohort_id', allCohortIds);
+    if(cmRes.error) throw cmRes.error;
+    (cmRes.data || []).forEach(cm => {
+      if(!_cohortState.cohortMembers[cm.cohort_id]) _cohortState.cohortMembers[cm.cohort_id] = [];
+      _cohortState.cohortMembers[cm.cohort_id].push(cm);
+    });
+  }
+
+  // Default selection: first program with at least one cohort, else first program
+  if(!_cohortState.selectedProgramId && _cohortState.programs.length > 0){
+    const withCohorts = _cohortState.programs.find(p => _cohortState.cohorts.some(c => c.program_id === p.id));
+    _cohortState.selectedProgramId = (withCohorts || _cohortState.programs[0]).id;
+  }
+}
+
+function _coRenderShell(state){
+  let modal = document.getElementById('cohortsModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'cohortsModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+  if(state === 'loading'){
+    modal.innerHTML = `
+      <div style="background:var(--surface);border-radius:12px;padding:2.5rem 2rem;text-align:center;color:var(--muted);font-size:13px">
+        <div style="font-size:22px;margin-bottom:.5rem">🎓</div>
+        Loading batches…
+      </div>`;
+  }
+}
+
+function _coRender(){
+  let modal = document.getElementById('cohortsModal');
+  if(!modal){ _coRenderShell('loading'); modal = document.getElementById('cohortsModal'); }
+
+  const programs = _cohortState.programs;
+  const selectedProgram = programs.find(p => p.id === _cohortState.selectedProgramId);
+  const programCohorts = selectedProgram
+    ? _cohortState.cohorts.filter(c => c.program_id === selectedProgram.id)
+    : [];
+
+  // Quick stats per program for the left rail
+  const programStats = (p) => {
+    const cohorts = _cohortState.cohorts.filter(c => c.program_id === p.id);
+    const active = cohorts.filter(c => c.status === 'active' || c.status === 'forming').length;
+    const memberCount = cohorts.reduce((s, c) => {
+      const ms = _cohortState.cohortMembers[c.id] || [];
+      return s + ms.filter(m => m.status === 'active').length;
+    }, 0);
+    return { cohorts: cohorts.length, active, memberCount };
+  };
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:920px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Pastor Tools</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-top:2px">🎓 Batches</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+            ${programs.length} program${programs.length===1?'':'s'} · ${_cohortState.cohorts.length} batch${_cohortState.cohorts.length===1?'':'es'}
+          </div>
+        </div>
+        <button onclick="_coClose()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <div style="flex:1;overflow:hidden;display:grid;grid-template-columns:240px 1fr;gap:0">
+
+        <!-- LEFT: Programs list -->
+        <div style="border-right:1px solid var(--border);background:var(--surface2);overflow-y:auto;display:flex;flex-direction:column">
+          <div style="padding:.75rem .9rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase">Programs</div>
+            <button onclick="_coOpenProgramEditor(null)" title="New program"
+              style="background:rgba(94,125,82,.18);color:var(--green);border:1px solid rgba(94,125,82,.4);border-radius:5px;padding:2px 8px;font-size:12px;font-weight:600;cursor:pointer">＋</button>
+          </div>
+          <div style="flex:1;overflow-y:auto">
+            ${programs.length === 0 ? `
+              <div style="padding:1.5rem 1rem;text-align:center;color:var(--muted);font-size:12px;line-height:1.6">
+                No programs yet.<br><span style="font-size:11px;color:var(--lighter)">Tap ＋ to create one (e.g. "BTLI 101").</span>
+              </div>
+            ` : programs.map(p => {
+              const isSel = p.id === _cohortState.selectedProgramId;
+              const st = programStats(p);
+              return `
+                <div onclick="_coSelectProgram('${p.id}')"
+                  style="padding:.7rem .9rem;border-bottom:1px solid var(--border);cursor:pointer;background:${isSel?'var(--surface)':'transparent'};border-left:3px solid ${isSel?'var(--gold,#8a5b2e)':'transparent'}">
+                  <div style="font-size:13px;color:var(--ink);font-weight:${isSel?700:600};line-height:1.3">${escapeHTMLNotif(p.name)}</div>
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:3px">
+                    ${st.cohorts} batch${st.cohorts===1?'':'es'} · ${st.active} active · ${st.memberCount} member${st.memberCount===1?'':'s'}
+                  </div>
+                  ${!p.is_active ? '<div style="font-size:10px;color:var(--lighter);margin-top:2px;font-style:italic">inactive</div>' : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- RIGHT: Cohorts (batches) for selected program -->
+        <div style="overflow-y:auto;display:flex;flex-direction:column">
+          ${selectedProgram ? `
+            <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem">
+              <div style="min-width:0;flex:1">
+                <div style="font-size:15px;color:var(--ink);font-weight:700;line-height:1.3">${escapeHTMLNotif(selectedProgram.name)}</div>
+                ${selectedProgram.description ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.45">${escapeHTMLNotif(selectedProgram.description)}</div>` : ''}
+                <div style="font-size:10.5px;color:var(--muted);margin-top:5px">
+                  ${selectedProgram.category ? `<span>${escapeHTMLNotif(selectedProgram.category)}</span>` : ''}
+                  ${selectedProgram.pipeline_level ? ` · <span>Pipeline L${selectedProgram.pipeline_level}</span>` : ''}
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0">
+                <button onclick="_coOpenProgramEditor('${selectedProgram.id}')" title="Edit program"
+                  style="background:rgba(94,125,82,.15);color:var(--green);border:1px solid rgba(94,125,82,.35);border-radius:5px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer">✏️</button>
+                <button onclick="_coOpenCohortEditor(null, '${selectedProgram.id}')"
+                  style="background:rgba(94,125,82,.18);color:var(--green);border:1px solid rgba(94,125,82,.4);border-radius:5px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap">＋ New Batch</button>
+              </div>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:.6rem 1.25rem 1rem">
+              ${programCohorts.length === 0 ? `
+                <div style="padding:2rem 1rem;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">
+                  No batches yet for this program.<br>
+                  <span style="font-size:11.5px;color:var(--lighter)">Tap "＋ New Batch" to start one.</span>
+                </div>
+              ` : programCohorts.map(c => _coRenderCohortCard(c)).join('')}
+            </div>
+          ` : `
+            <div style="padding:3rem 2rem;text-align:center;color:var(--muted);font-size:13px;line-height:1.6">
+              Select a program from the left, or<br>
+              <button onclick="_coOpenProgramEditor(null)" style="margin-top:1rem;background:var(--green);color:#fff;border:none;border-radius:7px;padding:.55rem 1.1rem;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600">＋ Create your first program</button>
+            </div>
+          `}
+        </div>
+      </div>
+
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_coClose()">Close</button>
+      </div>
+    </div>
+  `;
+}
+
+function _coRenderCohortCard(c){
+  const cms = _cohortState.cohortMembers[c.id] || [];
+  const activeCount = cms.filter(m => m.status === 'active').length;
+  const apprenticeCount = cms.filter(m => m.status === 'active' && m.role === 'apprentice').length;
+  const teacherCount   = cms.filter(m => m.status === 'active' && (m.role === 'teacher' || m.role === 'co-teacher')).length;
+  const observerCount  = cms.filter(m => m.status === 'active' && m.role === 'observer').length;
+  const graduatedCount = cms.filter(m => m.status === 'graduated').length;
+
+  const statusColors = {
+    forming:    { bg: 'rgba(184,136,42,.18)', col: 'var(--gold,#8a5b2e)' },
+    active:     { bg: 'var(--green-bg)',      col: 'var(--green)' },
+    graduated:  { bg: 'rgba(74,144,226,.15)', col: 'var(--blue,#4a90e2)' },
+    paused:     { bg: 'var(--surface2)',      col: 'var(--muted)' },
+    archived:   { bg: 'var(--surface2)',      col: 'var(--lighter)' }
+  }[c.status] || { bg: 'var(--surface2)', col: 'var(--muted)' };
+
+  const fmtDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '—';
+  const dateLine = c.start_date
+    ? (c.end_date ? `${fmtDate(c.start_date)} → ${fmtDate(c.end_date)}` : `${fmtDate(c.start_date)} →`)
+    : 'Dates not set';
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:.85rem 1rem;margin-bottom:.55rem">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:.7rem;align-items:flex-start">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+            <span style="font-size:13.5px;color:var(--ink);font-weight:700;line-height:1.3">${escapeHTMLNotif(c.name)}</span>
+            <span style="font-size:9.5px;background:${statusColors.bg};color:${statusColors.col};padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">${c.status}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">${dateLine}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;flex-wrap:wrap;gap:.5rem">
+            ${apprenticeCount ? `<span>👤 ${apprenticeCount} apprentice${apprenticeCount===1?'':'s'}</span>` : ''}
+            ${teacherCount    ? `<span>🎓 ${teacherCount} teacher${teacherCount===1?'':'s'}</span>`     : ''}
+            ${observerCount   ? `<span>👁 ${observerCount} observer${observerCount===1?'':'s'}</span>`   : ''}
+            ${graduatedCount  ? `<span style="color:var(--lighter)">✓ ${graduatedCount} graduated</span>` : ''}
+            ${activeCount === 0 && graduatedCount === 0 ? '<span style="color:var(--lighter);font-style:italic">No members yet</span>' : ''}
+          </div>
+          ${c.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic;line-height:1.45">"${escapeHTMLNotif(c.notes)}"</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+          <button onclick="_coOpenRoster('${c.id}')"
+            style="background:rgba(74,144,226,.15);color:var(--blue,#4a90e2);border:1px solid rgba(74,144,226,.35);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">👥 Roster</button>
+          <button onclick="_coOpenCohortEditor('${c.id}', '${c.program_id}')"
+            style="background:rgba(94,125,82,.15);color:var(--green);border:1px solid rgba(94,125,82,.35);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer">✏️ Edit</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _coSelectProgram(id){
+  _cohortState.selectedProgramId = id;
+  _coRender();
+}
+
+function _coClose(){
+  const m = document.getElementById('cohortsModal');
+  if(m) m.remove();
+  // Reset transient state but keep selectedProgramId so re-opens feel continuous
+  _cohortState.editingProgram = null;
+  _cohortState.editingCohort = null;
+  _cohortState.rosterCohortId = null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Program editor sub-modal
+// ─────────────────────────────────────────────────────────────────
+function _coOpenProgramEditor(programId){
+  if(programId){
+    const p = _cohortState.programs.find(x => x.id === programId);
+    if(!p){ toast('Program not found', '❌'); return; }
+    _cohortState.editingProgram = {...p};
+  } else {
+    _cohortState.editingProgram = {
+      name: '',
+      description: '',
+      category: 'BTLI',
+      pipeline_level: null,
+      is_active: true,
+      sort_order: 0
+    };
+  }
+  _coRenderProgramEditor();
+}
+
+function _coRenderProgramEditor(){
+  const p = _cohortState.editingProgram;
+  if(!p) return;
+  const isNew = !p.id;
+
+  let modal = document.getElementById('cohortProgramEditorModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'cohortProgramEditorModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">${isNew?'New Program':'Edit Program'}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px">📚 Program details</div>
+        </div>
+        <button onclick="_coCloseProgramEditor()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        <div>
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Program name *</label>
+          <input type="text" id="cpName" value="${escapeHTMLNotif(p.name||'')}" placeholder="e.g. BTLI 101"
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+        </div>
+        <div style="margin-top:.7rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Description</label>
+          <textarea id="cpDescription" rows="3" placeholder="What's this program for? Who's it designed for?"
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(p.description||'')}</textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.7rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Category</label>
+            <select id="cpCategory" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+              <option ${p.category==='BTLI'?'selected':''}>BTLI</option>
+              <option ${p.category==='Evangelism'?'selected':''}>Evangelism</option>
+              <option ${p.category==='Leadership'?'selected':''}>Leadership</option>
+              <option ${p.category==='Discipleship'?'selected':''}>Discipleship</option>
+              <option ${p.category==='Other'?'selected':''}>Other</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Pipeline Level <span style="font-weight:400;color:var(--muted);font-size:10.5px">(if applicable)</span></label>
+            <select id="cpLevel" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+              <option value="">(cross-level)</option>
+              <option value="1" ${p.pipeline_level===1?'selected':''}>L1 — Lead Yourself</option>
+              <option value="2" ${p.pipeline_level===2?'selected':''}>L2 — Lead Others</option>
+              <option value="3" ${p.pipeline_level===3?'selected':''}>L3 — Lead Leaders</option>
+              <option value="4" ${p.pipeline_level===4?'selected':''}>L4 — Lead Department</option>
+              <option value="5" ${p.pipeline_level===5?'selected':''}>L5 — Lead Organization</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:1rem;padding:.65rem .85rem;background:var(--surface2);border-radius:8px;display:flex;align-items:center;gap:.6rem">
+          <input type="checkbox" id="cpActive" ${p.is_active !== false ? 'checked' : ''} style="width:15px;height:15px;cursor:pointer">
+          <label for="cpActive" style="font-size:12.5px;color:var(--ink);cursor:pointer;flex:1">
+            <strong>Active</strong> <span style="font-weight:400;color:var(--muted)">— uncheck to retire this program (existing batches keep working).</span>
+          </label>
+        </div>
+      </div>
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_coCloseProgramEditor()">Cancel</button>
+        ${!isNew ? `<button class="sbtn" style="margin-top:0;background:var(--red)" onclick="_coDeleteProgram('${p.id}')">🗑 Delete</button>` : ''}
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_coSaveProgram()">💾 Save</button>
+      </div>
+    </div>
+  `;
+}
+
+function _coCloseProgramEditor(){
+  const m = document.getElementById('cohortProgramEditorModal');
+  if(m) m.remove();
+  _cohortState.editingProgram = null;
+}
+
+async function _coSaveProgram(){
+  const name = document.getElementById('cpName').value.trim();
+  if(!name){ toast('Program name required', '⚠️'); return; }
+
+  const levelRaw = document.getElementById('cpLevel').value;
+  const payload = {
+    name,
+    description: document.getElementById('cpDescription').value.trim() || null,
+    category: document.getElementById('cpCategory').value || null,
+    pipeline_level: levelRaw === '' ? null : parseInt(levelRaw, 10),
+    is_active: document.getElementById('cpActive').checked,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const editing = _cohortState.editingProgram;
+    if(editing.id){
+      const { error } = await db.from('cohort_programs').update(payload).eq('id', editing.id);
+      if(error) throw error;
+      toast('✓ Program updated', 'success');
+    } else {
+      const { data, error } = await db.from('cohort_programs').insert(payload).select().single();
+      if(error) throw error;
+      _cohortState.selectedProgramId = data.id;
+      toast('✓ Program created', 'success');
+    }
+    _coCloseProgramEditor();
+    await _coLoadData();
+    _coRender();
+  } catch(e){
+    const msg = (e.message || '').toLowerCase();
+    if(msg.includes('cohort_programs_name_unique')){
+      toast('A program with that name already exists.', '❌');
+    } else {
+      toast('Save failed: ' + e.message, '❌');
+    }
+  }
+}
+
+async function _coDeleteProgram(id){
+  const p = _cohortState.programs.find(x => x.id === id);
+  if(!p) return;
+  const hasCohorts = _cohortState.cohorts.some(c => c.program_id === id);
+  if(hasCohorts){
+    alert(`Cannot delete "${p.name}" — it has batches.\n\nDelete the batches first, or mark the program as inactive instead.`);
+    return;
+  }
+  if(!confirm(`Delete program "${p.name}"?\n\nThis is permanent.`)) return;
+  try {
+    const { error } = await db.from('cohort_programs').delete().eq('id', id);
+    if(error) throw error;
+    toast('Program deleted', 'success');
+    if(_cohortState.selectedProgramId === id) _cohortState.selectedProgramId = null;
+    _coCloseProgramEditor();
+    await _coLoadData();
+    _coRender();
+  } catch(e){
+    toast('Delete failed: ' + e.message, '❌');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Cohort (batch) editor sub-modal
+// ─────────────────────────────────────────────────────────────────
+function _coOpenCohortEditor(cohortId, programId){
+  if(cohortId){
+    const c = _cohortState.cohorts.find(x => x.id === cohortId);
+    if(!c){ toast('Batch not found', '❌'); return; }
+    _cohortState.editingCohort = {...c};
+  } else {
+    _cohortState.editingCohort = {
+      program_id: programId,
+      name: '',
+      start_date: '',
+      end_date: '',
+      status: 'forming',
+      notes: ''
+    };
+  }
+  _coRenderCohortEditor();
+}
+
+function _coRenderCohortEditor(){
+  const c = _cohortState.editingCohort;
+  if(!c) return;
+  const isNew = !c.id;
+  const program = _cohortState.programs.find(p => p.id === c.program_id);
+
+  let modal = document.getElementById('cohortCohortEditorModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'cohortCohortEditorModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">${isNew?'New Batch':'Edit Batch'}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px">🎓 ${escapeHTMLNotif(program?.name||'Program')}</div>
+        </div>
+        <button onclick="_coCloseCohortEditor()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        <div>
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Batch name *</label>
+          <input type="text" id="ccName" value="${escapeHTMLNotif(c.name||'')}" placeholder="e.g. March 2026 Batch"
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.7rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Start date</label>
+            <input type="date" id="ccStart" value="${c.start_date||''}"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">End date <span style="font-weight:400;color:var(--muted);font-size:10.5px">(if known)</span></label>
+            <input type="date" id="ccEnd" value="${c.end_date||''}"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+        </div>
+        <div style="margin-top:.7rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Status</label>
+          <select id="ccStatus" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+            <option value="forming"   ${c.status==='forming'?'selected':''}>Forming — recruiting members</option>
+            <option value="active"    ${c.status==='active'?'selected':''}>Active — currently meeting</option>
+            <option value="graduated" ${c.status==='graduated'?'selected':''}>Graduated — completed</option>
+            <option value="paused"    ${c.status==='paused'?'selected':''}>Paused</option>
+            <option value="archived"  ${c.status==='archived'?'selected':''}>Archived</option>
+          </select>
+        </div>
+        <div style="margin-top:.7rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Notes</label>
+          <textarea id="ccNotes" rows="3" placeholder="Anything to remember about this batch — meeting time, location, special arrangements, etc."
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(c.notes||'')}</textarea>
+        </div>
+        ${!isNew && c.status !== 'graduated' ? `
+          <div style="margin-top:1rem;padding:.7rem .85rem;background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.25);border-radius:8px">
+            <div style="font-size:11.5px;color:var(--ink);line-height:1.5">
+              <strong>🎉 Mark batch as graduated?</strong> Sets the status to "graduated", stamps the end date to today, and marks every active member as graduated too. A celebration of completion!
+            </div>
+            <button onclick="_coGraduateBatch('${c.id}')" style="margin-top:.6rem;background:var(--blue,#4a90e2);color:#fff;border:none;border-radius:6px;padding:.4rem .9rem;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:600">🎉 Graduate this batch</button>
+          </div>
+        ` : ''}
+      </div>
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_coCloseCohortEditor()">Cancel</button>
+        ${!isNew ? `<button class="sbtn" style="margin-top:0;background:var(--red)" onclick="_coDeleteCohort('${c.id}')">🗑 Delete</button>` : ''}
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_coSaveCohort()">💾 Save</button>
+      </div>
+    </div>
+  `;
+}
+
+function _coCloseCohortEditor(){
+  const m = document.getElementById('cohortCohortEditorModal');
+  if(m) m.remove();
+  _cohortState.editingCohort = null;
+}
+
+async function _coSaveCohort(){
+  const c = _cohortState.editingCohort;
+  if(!c) return;
+  const name = document.getElementById('ccName').value.trim();
+  if(!name){ toast('Batch name required', '⚠️'); return; }
+
+  const payload = {
+    program_id: c.program_id,
+    name,
+    start_date: document.getElementById('ccStart').value || null,
+    end_date: document.getElementById('ccEnd').value || null,
+    status: document.getElementById('ccStatus').value || 'forming',
+    notes: document.getElementById('ccNotes').value.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    if(c.id){
+      const { error } = await db.from('cohorts').update(payload).eq('id', c.id);
+      if(error) throw error;
+      toast('✓ Batch updated', 'success');
+    } else {
+      const { error } = await db.from('cohorts').insert(payload);
+      if(error) throw error;
+      toast('✓ Batch created', 'success');
+    }
+    _coCloseCohortEditor();
+    await _coLoadData();
+    _coRender();
+  } catch(e){
+    toast('Save failed: ' + e.message, '❌');
+  }
+}
+
+async function _coDeleteCohort(id){
+  const c = _cohortState.cohorts.find(x => x.id === id);
+  if(!c) return;
+  const memberCount = (_cohortState.cohortMembers[id] || []).length;
+  const warning = memberCount > 0
+    ? `\n\nThis batch has ${memberCount} member${memberCount===1?'':'s'} — they will be removed from this batch (but their main member records stay intact).`
+    : '';
+  if(!confirm(`Delete batch "${c.name}"?\n\nThis is permanent.${warning}`)) return;
+  try {
+    const { error } = await db.from('cohorts').delete().eq('id', id);
+    if(error) throw error;
+    toast('Batch deleted', 'success');
+    _coCloseCohortEditor();
+    await _coLoadData();
+    _coRender();
+  } catch(e){
+    toast('Delete failed: ' + e.message, '❌');
+  }
+}
+
+async function _coGraduateBatch(cohortId){
+  const c = _cohortState.cohorts.find(x => x.id === cohortId);
+  if(!c) return;
+  const cms = _cohortState.cohortMembers[cohortId] || [];
+  const activeMembers = cms.filter(m => m.status === 'active');
+  if(!confirm(`🎉 Graduate "${c.name}"?\n\n` +
+              `${activeMembers.length} active member${activeMembers.length===1?'':'s'} will be marked graduated.\n` +
+              `Batch status → graduated. End date → today.\n\nGod be praised!`)) return;
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;  // local — not UTC
+  try {
+    // Update cohort row
+    const r1 = await db.from('cohorts').update({
+      status: 'graduated',
+      end_date: c.end_date || todayIso,
+      updated_at: new Date().toISOString()
+    }).eq('id', cohortId);
+    if(r1.error) throw r1.error;
+
+    // Bulk-update active cohort_members → graduated
+    if(activeMembers.length > 0){
+      const r2 = await db.from('cohort_members').update({
+        status: 'graduated',
+        exited_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('cohort_id', cohortId).eq('status', 'active');
+      if(r2.error) throw r2.error;
+    }
+    toast(`🎉 ${c.name} graduated!`, 'success');
+    _coCloseCohortEditor();
+    await _coLoadData();
+    _coRender();
+  } catch(e){
+    toast('Graduate failed: ' + e.message, '❌');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Roster modal — manage members of a single cohort
+// ─────────────────────────────────────────────────────────────────
+function _coOpenRoster(cohortId){
+  _cohortState.rosterCohortId = cohortId;
+  _coRenderRoster();
+}
+
+function _coRenderRoster(){
+  const cohortId = _cohortState.rosterCohortId;
+  const c = _cohortState.cohorts.find(x => x.id === cohortId);
+  if(!c){ _coCloseRoster(); return; }
+  const program = _cohortState.programs.find(p => p.id === c.program_id);
+  const cms = (_cohortState.cohortMembers[cohortId] || []).slice();
+
+  // Sort: active first (by role: teacher, co-teacher, apprentice, observer), then graduated, then withdrew
+  const statusOrder = { active: 0, graduated: 1, withdrew: 2 };
+  const roleOrder = { teacher: 0, 'co-teacher': 1, apprentice: 2, observer: 3 };
+  cms.sort((a,b) => {
+    const sd = (statusOrder[a.status]??99) - (statusOrder[b.status]??99);
+    if(sd !== 0) return sd;
+    return (roleOrder[a.role]??99) - (roleOrder[b.role]??99);
+  });
+
+  const memberName = (cm) => {
+    const mem = _cohortState.members.find(m => m.id === cm.member_id);
+    return mem?.name || '(member not found)';
+  };
+
+  let modal = document.getElementById('cohortRosterModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'cohortRosterModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:600px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="min-width:0">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">${escapeHTMLNotif(program?.name||'')}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px">👥 ${escapeHTMLNotif(c.name)} · Roster</div>
+        </div>
+        <button onclick="_coCloseRoster()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+      <div style="padding:.85rem 1.25rem;border-bottom:1px solid var(--border);background:var(--surface2)">
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:.45rem;font-weight:600">Add member to this batch:</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:.4rem">
+          <select id="crNewMember" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+            <option value="">— Pick a member —</option>
+            ${_cohortState.members
+              .filter(m => !cms.some(cm => cm.member_id === m.id))
+              .map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}</option>`).join('')}
+          </select>
+          <select id="crNewRole" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+            <option value="apprentice">apprentice</option>
+            <option value="teacher">teacher</option>
+            <option value="co-teacher">co-teacher</option>
+            <option value="observer">observer</option>
+          </select>
+          <button onclick="_coAddRosterMember()" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">＋ Add</button>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:.5rem 1.25rem 1rem">
+        ${cms.length === 0 ? `
+          <div style="padding:2rem 1rem;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">
+            No members yet.<br><span style="color:var(--lighter);font-size:11.5px">Use the picker above to add the first one.</span>
+          </div>
+        ` : cms.map(cm => _coRenderRosterRow(cm, memberName(cm))).join('')}
+      </div>
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_coCloseRoster()">Close</button>
+      </div>
+    </div>
+  `;
+}
+
+function _coRenderRosterRow(cm, name){
+  const roleColors = {
+    teacher:      { bg: 'rgba(184,136,42,.18)', col: 'var(--gold,#8a5b2e)' },
+    'co-teacher': { bg: 'rgba(184,136,42,.10)', col: 'var(--gold,#8a5b2e)' },
+    apprentice:   { bg: 'rgba(94,125,82,.15)',  col: 'var(--green)' },
+    observer:     { bg: 'var(--surface2)',      col: 'var(--muted)' }
+  }[cm.role] || { bg: 'var(--surface2)', col: 'var(--muted)' };
+
+  const statusBadge = cm.status === 'graduated'
+    ? '<span style="font-size:9.5px;background:rgba(74,144,226,.15);color:var(--blue,#4a90e2);padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.05em">GRADUATED</span>'
+    : cm.status === 'withdrew'
+    ? '<span style="font-size:9.5px;background:rgba(180,80,80,.12);color:#b25050;padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.05em">WITHDREW</span>'
+    : '';
+
+  const isActive = cm.status === 'active';
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.65rem .8rem;margin-bottom:.4rem;display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:center;${isActive?'':'opacity:.7'}">
+      <div style="min-width:0">
+        <div style="font-size:13px;color:var(--ink);font-weight:600;line-height:1.3">${escapeHTMLNotif(name)} ${statusBadge}</div>
+        <div style="margin-top:4px;display:flex;align-items:center;gap:.4rem">
+          <span style="font-size:10px;background:${roleColors.bg};color:${roleColors.col};padding:1px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">${cm.role}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        ${isActive ? `
+          <select onchange="_coChangeRosterRole('${cm.id}', this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-family:inherit;font-size:11px;color:var(--ink)">
+            <option value="apprentice"  ${cm.role==='apprentice'?'selected':''}>apprentice</option>
+            <option value="teacher"     ${cm.role==='teacher'?'selected':''}>teacher</option>
+            <option value="co-teacher"  ${cm.role==='co-teacher'?'selected':''}>co-teacher</option>
+            <option value="observer"    ${cm.role==='observer'?'selected':''}>observer</option>
+          </select>
+          <button onclick="_coChangeRosterStatus('${cm.id}', 'graduated')" title="Mark graduated"
+            style="background:rgba(74,144,226,.12);color:var(--blue,#4a90e2);border:1px solid rgba(74,144,226,.3);border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px;font-weight:600">🎓</button>
+          <button onclick="_coChangeRosterStatus('${cm.id}', 'withdrew')" title="Mark withdrew"
+            style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px">↩</button>
+        ` : `
+          <button onclick="_coChangeRosterStatus('${cm.id}', 'active')" title="Reactivate"
+            style="background:rgba(94,125,82,.12);color:var(--green);border:1px solid rgba(94,125,82,.3);border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px;font-weight:600">↻</button>
+        `}
+        <button onclick="_coRemoveRosterMember('${cm.id}')" title="Remove from batch"
+          style="background:rgba(180,80,80,.1);color:#b25050;border:1px solid rgba(180,80,80,.3);border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px">🗑</button>
+      </div>
+    </div>
+  `;
+}
+
+function _coCloseRoster(){
+  const m = document.getElementById('cohortRosterModal');
+  if(m) m.remove();
+  _cohortState.rosterCohortId = null;
+}
+
+async function _coAddRosterMember(){
+  const cohortId = _cohortState.rosterCohortId;
+  const memberId = document.getElementById('crNewMember').value;
+  const role = document.getElementById('crNewRole').value;
+  if(!memberId){ toast('Pick a member first', '⚠️'); return; }
+  try {
+    const { error } = await db.from('cohort_members').insert({
+      cohort_id: cohortId,
+      member_id: memberId,
+      role,
+      status: 'active'
+    });
+    if(error) throw error;
+    toast('✓ Member added', 'success');
+    await _coLoadData();
+    _coRenderRoster();
+    _coRender();  // refresh batch card counts in the background view
+  } catch(e){
+    const msg = (e.message || '').toLowerCase();
+    if(msg.includes('cohort_members_unique')){
+      toast('That member is already in this batch.', '⚠️');
+    } else {
+      toast('Add failed: ' + e.message, '❌');
+    }
+  }
+}
+
+async function _coChangeRosterRole(cmId, newRole){
+  try {
+    const { error } = await db.from('cohort_members').update({
+      role: newRole,
+      updated_at: new Date().toISOString()
+    }).eq('id', cmId);
+    if(error) throw error;
+    toast('✓ Role updated', 'success');
+    await _coLoadData();
+    _coRenderRoster();
+    _coRender();
+  } catch(e){
+    toast('Update failed: ' + e.message, '❌');
+  }
+}
+
+async function _coChangeRosterStatus(cmId, newStatus){
+  const payload = {
+    status: newStatus,
+    updated_at: new Date().toISOString()
+  };
+  if(newStatus === 'graduated' || newStatus === 'withdrew'){
+    payload.exited_at = new Date().toISOString();
+  } else {
+    payload.exited_at = null;
+  }
+  try {
+    const { error } = await db.from('cohort_members').update(payload).eq('id', cmId);
+    if(error) throw error;
+    toast('✓ Status updated', 'success');
+    await _coLoadData();
+    _coRenderRoster();
+    _coRender();
+  } catch(e){
+    toast('Update failed: ' + e.message, '❌');
+  }
+}
+
+async function _coRemoveRosterMember(cmId){
+  if(!confirm('Remove this member from the batch?\n\nThis deletes their batch record. The main member record stays intact.')) return;
+  try {
+    const { error } = await db.from('cohort_members').delete().eq('id', cmId);
+    if(error) throw error;
+    toast('Member removed', 'success');
+    await _coLoadData();
+    _coRenderRoster();
+    _coRender();
+  } catch(e){
+    toast('Remove failed: ' + e.message, '❌');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// LESSON LIBRARY — Pastor stores lesson plans, handouts, leader notes
+// ─────────────────────────────────────────────────────────────────
+// "The filing cabinet" for prepared lessons. NOT the same as the
+// reading library (library_resources) — those are books/articles for
+// members to consume. These are TEACHING ARTIFACTS for leaders.
+//
+// Structure of a lesson:
+//   - title, aim, scripture refs (metadata)
+//   - outline_md     (full teaching plan — for the teacher)
+//   - handout_md     (learner-facing — printable)
+//   - leader_notes_md (private — only granted leaders see)
+//   - audience       (pastor_only / cohort_only / lc_leaders / all_members)
+//   - grants[]       (specific cohorts/programs/members when cohort_only)
+//
+// Pastoral framing:
+//   • The filing-cabinet view: by level + track. "L1 BTLI" or "L2 EOLO".
+//   • Access defaults to PASTOR_ONLY (safest). Pastor explicitly opens
+//     access when they're ready to share.
+//   • Published flag separate from audience — a published L1 BTLI lesson
+//     with audience=cohort_only is only visible to people in granted
+//     cohorts, even though it's "published".
+// ═══════════════════════════════════════════════════════════════════
+
+let _lessonState = {
+  lessons: [],          // all lessons
+  cohorts: [],          // all cohorts (for grant pickers)
+  programs: [],         // all programs (for grant pickers)
+  members: [],          // member directory cache (for grant pickers)
+  grants: {},           // lesson_id → [grant rows]
+  editing: null,        // lesson currently being edited
+  filters: {
+    level: '',          // '', '1', '2', '3', '4', '5'
+    track: '',          // '', 'BTLI', 'EOLO', etc.
+    search: '',         // text in title
+    audience: ''        // '', 'pastor_only', 'cohort_only', 'lc_leaders', 'all_members'
+  }
+};
+
+async function openLessonLibrary(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage lessons','🔒'); return; }
+  _llRenderShell('loading');
+  try {
+    await _llLoadData();
+    _llRender();
+  } catch(e){
+    toast('Could not load lessons: ' + (e.message || e), '❌');
+    _llClose();
+  }
+}
+
+async function _llLoadData(){
+  const [lRes, cRes, pRes, mRes, gRes] = await Promise.all([
+    db.from('pipeline_lessons').select('*').order('level', { ascending: true, nullsFirst: false }).order('track', { ascending: true, nullsFirst: false }).order('lesson_number', { ascending: true, nullsFirst: false }),
+    db.from('cohorts').select('id, program_id, name, status'),
+    db.from('cohort_programs').select('id, name, is_active'),
+    db.from('members').select('id, name, lc_group'),
+    db.from('pipeline_lesson_grants').select('*')
+  ]);
+  if(lRes.error) throw lRes.error;
+  if(cRes.error) throw cRes.error;
+  if(pRes.error) throw pRes.error;
+  if(mRes.error) throw mRes.error;
+  if(gRes.error) throw gRes.error;
+
+  _lessonState.lessons = lRes.data || [];
+  _lessonState.cohorts = cRes.data || [];
+  _lessonState.programs = pRes.data || [];
+  _lessonState.members = mRes.data || [];
+
+  _lessonState.grants = {};
+  (gRes.data || []).forEach(g => {
+    if(!_lessonState.grants[g.lesson_id]) _lessonState.grants[g.lesson_id] = [];
+    _lessonState.grants[g.lesson_id].push(g);
+  });
+}
+
+function _llRenderShell(state){
+  let modal = document.getElementById('lessonLibraryModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'lessonLibraryModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+  if(state === 'loading'){
+    modal.innerHTML = `
+      <div style="background:var(--surface);border-radius:12px;padding:2.5rem 2rem;text-align:center;color:var(--muted);font-size:13px">
+        <div style="font-size:22px;margin-bottom:.5rem">📖</div>
+        Loading lessons…
+      </div>`;
+  }
+}
+
+function _llFilteredLessons(){
+  const f = _lessonState.filters;
+  const q = (f.search || '').trim().toLowerCase();
+  return _lessonState.lessons.filter(l => {
+    if(f.level !== '' && String(l.level||'') !== f.level) return false;
+    if(f.track && (l.track || '') !== f.track) return false;
+    if(f.audience && l.audience !== f.audience) return false;
+    if(q){
+      const blob = (l.title_en||'') + ' ' + (l.title_tl||'') + ' ' + (l.aim||'') + ' ' + (l.scripture_refs||'');
+      if(!blob.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function _llRender(){
+  let modal = document.getElementById('lessonLibraryModal');
+  if(!modal){ _llRenderShell('loading'); modal = document.getElementById('lessonLibraryModal'); }
+
+  if(_lessonState.editing){
+    // Editor view occupies the whole modal
+    _llRenderEditor();
+    return;
+  }
+
+  const filtered = _llFilteredLessons();
+  const f = _lessonState.filters;
+  const hasFilters = f.level || f.track || f.search || f.audience;
+
+  // Build track dropdown options from existing data + a sensible defaults set
+  const knownTracks = new Set(['BTLI', 'EOLO', 'Leadership', 'Discipleship', 'GRACE']);
+  _lessonState.lessons.forEach(l => { if(l.track) knownTracks.add(l.track); });
+  const trackOptions = Array.from(knownTracks).sort();
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:920px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Pastor Tools</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);margin-top:2px">📖 Lesson Library</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+            ${_lessonState.lessons.length} lesson${_lessonState.lessons.length===1?'':'s'} stored
+          </div>
+        </div>
+        <button onclick="_llClose()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <!-- Filters -->
+      <div style="padding:.85rem 1.25rem .4rem;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr 1.5fr;gap:.5rem">
+        <select onchange="_llSetFilter('level', this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+          <option value="">All levels</option>
+          <option value="1" ${f.level==='1'?'selected':''}>L1 — Lead Yourself</option>
+          <option value="2" ${f.level==='2'?'selected':''}>L2 — Lead Others</option>
+          <option value="3" ${f.level==='3'?'selected':''}>L3 — Lead Leaders</option>
+          <option value="4" ${f.level==='4'?'selected':''}>L4 — Lead Department</option>
+          <option value="5" ${f.level==='5'?'selected':''}>L5 — Lead Organization</option>
+        </select>
+        <select onchange="_llSetFilter('track', this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+          <option value="">All tracks</option>
+          ${trackOptions.map(t => `<option value="${escapeHTMLNotif(t)}" ${f.track===t?'selected':''}>${escapeHTMLNotif(t)}</option>`).join('')}
+        </select>
+        <select onchange="_llSetFilter('audience', this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+          <option value="">All audiences</option>
+          <option value="pastor_only"  ${f.audience==='pastor_only'?'selected':''}>Pastor only</option>
+          <option value="cohort_only"  ${f.audience==='cohort_only'?'selected':''}>Cohort only</option>
+          <option value="lc_leaders"   ${f.audience==='lc_leaders'?'selected':''}>LC leaders</option>
+          <option value="all_members"  ${f.audience==='all_members'?'selected':''}>All members</option>
+        </select>
+        <input type="search" placeholder="Search title, aim, scripture…" value="${escapeHTMLNotif(f.search||'')}"
+          oninput="_llSetFilter('search', this.value)"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+      </div>
+      ${hasFilters ? `
+        <div style="padding:.35rem 1.25rem .55rem;font-size:11px;color:var(--muted)">
+          Showing ${filtered.length} of ${_lessonState.lessons.length}
+          <button onclick="_llClearFilters()" style="margin-left:.5rem;background:transparent;border:none;color:var(--gold);font-family:inherit;font-size:11px;cursor:pointer;text-decoration:underline">clear filters</button>
+        </div>
+      ` : ''}
+
+      <!-- Lesson list -->
+      <div style="flex:1;overflow-y:auto;padding:.65rem 1.25rem 1rem">
+        ${filtered.length === 0 ? `
+          <div style="padding:2.5rem 1rem;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6">
+            ${_lessonState.lessons.length === 0
+              ? 'No lessons stored yet.<br><span style="color:var(--lighter);font-size:11.5px">Tap "＋ New Lesson" below to create your first one.</span>'
+              : 'No lessons match these filters.'}
+          </div>
+        ` : filtered.map(l => _llRenderLessonRow(l)).join('')}
+      </div>
+
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_llClose()">Close</button>
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_llNew()">＋ New Lesson</button>
+      </div>
+    </div>
+  `;
+}
+
+function _llRenderLessonRow(l){
+  const grantCount = (_lessonState.grants[l.id] || []).length;
+  const audienceLabel = {
+    pastor_only:  { label: 'Pastor only',  col: 'var(--muted)' },
+    cohort_only:  { label: grantCount > 0 ? `${grantCount} grant${grantCount===1?'':'s'}` : 'No grants yet', col: grantCount > 0 ? 'var(--gold,#8a5b2e)' : '#b25050' },
+    lc_leaders:   { label: 'LC leaders',   col: 'var(--green)' },
+    all_members:  { label: 'All members',  col: 'var(--blue,#4a90e2)' }
+  }[l.audience] || { label: l.audience, col: 'var(--muted)' };
+
+  const levelLabel = l.level ? `L${l.level}` : '';
+  const lessonNum = (l.lesson_number != null) ? ` · ${l.lesson_number}` : '';
+  const meta = [levelLabel, l.track, l.duration_minutes ? `${l.duration_minutes} min` : ''].filter(Boolean).join(' · ');
+
+  return `
+    <div onclick="_llEdit('${l.id}')"
+      style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:.75rem .95rem;margin-bottom:.45rem;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:.65rem;align-items:center"
+      onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='var(--surface2)'">
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          ${meta ? `<span style="font-size:10px;background:rgba(184,136,42,.18);color:var(--gold,#8a5b2e);padding:1px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em">${escapeHTMLNotif(meta)}${lessonNum}</span>` : ''}
+          ${!l.published ? '<span style="font-size:10px;background:var(--surface);color:var(--muted);padding:1px 6px;border-radius:5px;font-weight:600">Draft</span>' : ''}
+        </div>
+        <div style="font-size:13.5px;color:var(--ink);font-weight:600;margin-top:5px;line-height:1.3">${escapeHTMLNotif(l.title_en || '(untitled)')}</div>
+        ${l.aim ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escapeHTMLNotif(l.aim)}</div>` : ''}
+        ${l.scripture_refs ? `<div style="font-size:10.5px;color:var(--lighter);margin-top:4px;font-family:'Fraunces',Georgia,serif;font-style:italic">📖 ${escapeHTMLNotif(l.scripture_refs)}</div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
+        <span style="font-size:10px;color:${audienceLabel.col};font-weight:700;letter-spacing:.05em;text-transform:uppercase">${audienceLabel.label}</span>
+        <span style="color:var(--muted);font-size:16px">›</span>
+      </div>
+    </div>
+  `;
+}
+
+function _llSetFilter(key, val){
+  _lessonState.filters[key] = val;
+  _llRender();
+}
+
+function _llClearFilters(){
+  _lessonState.filters = { level: '', track: '', search: '', audience: '' };
+  _llRender();
+}
+
+function _llClose(){
+  const m = document.getElementById('lessonLibraryModal');
+  if(m) m.remove();
+  _lessonState.editing = null;
+  _lessonState.filters = { level: '', track: '', search: '', audience: '' };
+}
+
+function _llNew(){
+  _lessonState.editing = {
+    level: null,
+    track: '',
+    lesson_number: null,
+    title_en: '', title_tl: '',
+    aim: '',
+    scripture_refs: '',
+    outline_md: '',
+    handout_md: '',
+    leader_notes_md: '',
+    duration_minutes: null,
+    materials_needed: '',
+    prerequisites: '',
+    audience: 'pastor_only',
+    published: false
+  };
+  _llRender();
+}
+
+function _llEdit(id){
+  const l = _lessonState.lessons.find(x => x.id === id);
+  if(!l){ toast('Lesson not found', '❌'); return; }
+  _lessonState.editing = {...l};
+  _llRender();
+}
+
+function _llCancel(){
+  _lessonState.editing = null;
+  _llRender();
+}
+
+function _llRenderEditor(){
+  const modal = document.getElementById('lessonLibraryModal');
+  const l = _lessonState.editing;
+  const isNew = !l.id;
+  const grants = l.id ? (_lessonState.grants[l.id] || []) : [];
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:780px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">${isNew?'New Lesson':'Edit Lesson'}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.3">📖 ${escapeHTMLNotif(l.title_en || 'Untitled lesson')}</div>
+        </div>
+        <button onclick="_llCancel()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        <!-- Metadata -->
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:.65rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Level</label>
+            <select id="llLevel" style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px">
+              <option value="">(cross-level)</option>
+              <option value="1" ${l.level===1?'selected':''}>L1</option>
+              <option value="2" ${l.level===2?'selected':''}>L2</option>
+              <option value="3" ${l.level===3?'selected':''}>L3</option>
+              <option value="4" ${l.level===4?'selected':''}>L4</option>
+              <option value="5" ${l.level===5?'selected':''}>L5</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Track</label>
+            <input type="text" id="llTrack" value="${escapeHTMLNotif(l.track||'')}" placeholder="BTLI, EOLO, Leadership…" list="llTrackList"
+              style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px">
+            <datalist id="llTrackList">
+              <option value="BTLI"><option value="EOLO"><option value="Leadership"><option value="Discipleship"><option value="GRACE">
+            </datalist>
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Lesson #</label>
+            <input type="number" id="llLessonNum" value="${l.lesson_number ?? ''}" min="1" placeholder="e.g. 1"
+              style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px">
+          </div>
+        </div>
+
+        <div style="margin-top:.7rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Title (English) *</label>
+          <input type="text" id="llTitleEn" value="${escapeHTMLNotif(l.title_en||'')}" placeholder="e.g. The Heart of a Leader"
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+        </div>
+        <div style="margin-top:.55rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Pamagat (Tagalog) <span style="font-weight:400;color:var(--muted);font-size:10.5px">(optional)</span></label>
+          <input type="text" id="llTitleTl" value="${escapeHTMLNotif(l.title_tl||'')}"
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+        </div>
+
+        <div style="margin-top:.7rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Aim / objective</label>
+          <textarea id="llAim" rows="2" placeholder="The lesson's purpose in one paragraph. What should they walk away with?"
+            style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(l.aim||'')}</textarea>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:.7rem;margin-top:.7rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Scripture references</label>
+            <input type="text" id="llScripture" value="${escapeHTMLNotif(l.scripture_refs||'')}" placeholder="e.g. John 3:16, Eph 4:11-13"
+              style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px">
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Duration (min)</label>
+            <input type="number" id="llDuration" value="${l.duration_minutes ?? ''}" min="0" placeholder="e.g. 45"
+              style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px">
+          </div>
+        </div>
+
+        <!-- BODY: outline / handout / leader notes -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📋 Outline (Markdown)</div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.4rem">
+            The full teaching plan — for the leader/teacher. Use Markdown for headings, lists, scripture blocks.
+          </div>
+          <textarea id="llOutline" rows="10" placeholder="# Introduction (5 min)&#10;&#10;## Scripture reading&#10;> John 3:16-21&#10;&#10;## Key points&#10;1. …&#10;2. …&#10;&#10;## Discussion questions&#10;- …"
+            style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:12.5px;font-family:'JetBrains Mono','Courier New',monospace;line-height:1.55;resize:vertical">${escapeHTMLNotif(l.outline_md||'')}</textarea>
+        </div>
+
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📄 Handout (Markdown) <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(printable, for learners)</span></div>
+          <textarea id="llHandout" rows="7" placeholder="# [Lesson title]&#10;&#10;## Key passages&#10;- …&#10;&#10;## Reflection questions&#10;1. …&#10;2. …"
+            style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:12.5px;font-family:'JetBrains Mono','Courier New',monospace;line-height:1.55;resize:vertical">${escapeHTMLNotif(l.handout_md||'')}</textarea>
+        </div>
+
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🔒 Leader notes (Markdown) <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(private — only granted leaders see)</span></div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.4rem">
+            Anticipated questions, stories to share, warnings, pastoral cautions — anything you'd whisper to the apprentice before they teach.
+          </div>
+          <textarea id="llLeaderNotes" rows="6" placeholder="## Anticipate&#10;- Some may ask about…&#10;&#10;## Stories that work well here&#10;- …&#10;&#10;## Pastoral cautions&#10;- …"
+            style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:12.5px;font-family:'JetBrains Mono','Courier New',monospace;line-height:1.55;resize:vertical">${escapeHTMLNotif(l.leader_notes_md||'')}</textarea>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Materials needed</label>
+            <textarea id="llMaterials" rows="2" placeholder="Whiteboard, printed handouts, projector…"
+              style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(l.materials_needed||'')}</textarea>
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Prerequisites</label>
+            <textarea id="llPrereqs" rows="2" placeholder="e.g. Must have completed L1"
+              style="width:100%;padding:.5rem .65rem;margin-top:.25rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--ink);font-size:12.5px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(l.prerequisites||'')}</textarea>
+          </div>
+        </div>
+
+        <!-- ACCESS -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🔐 Access</div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Who can see this lesson?</label>
+            <select id="llAudience" onchange="_llOnAudienceChange(this.value)" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+              <option value="pastor_only"  ${l.audience==='pastor_only'?'selected':''}>Pastor only (default)</option>
+              <option value="cohort_only"  ${l.audience==='cohort_only'?'selected':''}>Specific batches / programs / members only</option>
+              <option value="lc_leaders"   ${l.audience==='lc_leaders'?'selected':''}>All LC leaders + Pastor</option>
+              <option value="all_members"  ${l.audience==='all_members'?'selected':''}>All members</option>
+            </select>
+          </div>
+
+          <div id="llGrantsSection" style="${l.audience==='cohort_only' ? '' : 'display:none'};margin-top:.85rem;padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+            <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:.5rem">Grant access to:</div>
+            ${!l.id ? `
+              <div style="font-size:11.5px;color:var(--muted);font-style:italic;line-height:1.5">
+                Save the lesson first, then you can grant access to specific batches, programs, or individuals.
+              </div>
+            ` : `
+              <div id="llGrantsList">${_llRenderGrants(l.id, grants)}</div>
+              <div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border);font-size:11px;color:var(--muted);font-weight:600">＋ Add grant:</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-top:.4rem">
+                <select id="llGrantType" onchange="_llRefreshGrantTargetOptions()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
+                  <option value="cohort">A batch</option>
+                  <option value="program">A whole program</option>
+                  <option value="member">A specific member</option>
+                </select>
+                <select id="llGrantTarget" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
+                  ${_llRenderGrantTargetOptions('cohort')}
+                </select>
+                <button onclick="_llAddGrant('${l.id}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:600">＋</button>
+              </div>
+            `}
+          </div>
+        </div>
+
+        <div style="margin-top:1rem;padding:.65rem .85rem;background:var(--surface2);border-radius:8px;display:flex;align-items:center;gap:.6rem">
+          <input type="checkbox" id="llPublished" ${l.published?'checked':''} style="width:16px;height:16px;cursor:pointer">
+          <label for="llPublished" style="font-size:12.5px;color:var(--ink);cursor:pointer;flex:1">
+            <strong>Published</strong> <span style="font-weight:400;color:var(--muted)">— unchecked means it's a draft (still only visible to you).</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_llCancel()">Cancel</button>
+        ${!isNew ? `<button class="sbtn" style="margin-top:0;background:var(--red)" onclick="_llDelete('${l.id}')">🗑 Delete</button>` : ''}
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_llSave()">💾 Save</button>
+      </div>
+    </div>
+  `;
+}
+
+function _llRenderGrants(lessonId, grants){
+  if(!grants || grants.length === 0){
+    return '<div style="font-size:11.5px;color:var(--muted);font-style:italic;padding:.5rem 0">No grants yet — only the Pastor can see this lesson until you add grants below.</div>';
+  }
+  return grants.map(g => {
+    let label = '?', icon = '?';
+    if(g.cohort_id){
+      const c = _lessonState.cohorts.find(x => x.id === g.cohort_id);
+      const p = c ? _lessonState.programs.find(x => x.id === c.program_id) : null;
+      label = `${p?.name || ''} · ${c?.name || '(batch)'}`.trim();
+      icon = '🎓';
+    } else if(g.program_id){
+      const p = _lessonState.programs.find(x => x.id === g.program_id);
+      label = `All batches in ${p?.name || '(program)'}`;
+      icon = '📚';
+    } else if(g.member_id){
+      const m = _lessonState.members.find(x => x.id === g.member_id);
+      label = m?.name || '(member)';
+      icon = '👤';
+    }
+    return `
+      <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .55rem;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:.3rem">
+        <span style="font-size:13px">${icon}</span>
+        <span style="font-size:12px;color:var(--ink);flex:1;line-height:1.3;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTMLNotif(label)}</span>
+        <button onclick="_llRemoveGrant('${g.id}', '${lessonId}')" title="Remove grant"
+          style="background:transparent;color:var(--muted);border:none;cursor:pointer;font-size:13px;padding:0 4px">×</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function _llRenderGrantTargetOptions(type){
+  if(type === 'cohort'){
+    // Group by program so the picker is organized
+    const byProgram = {};
+    _lessonState.cohorts.forEach(c => {
+      const pid = c.program_id;
+      if(!byProgram[pid]) byProgram[pid] = [];
+      byProgram[pid].push(c);
+    });
+    const opts = ['<option value="">— Pick a batch —</option>'];
+    _lessonState.programs.forEach(p => {
+      const cs = byProgram[p.id] || [];
+      if(cs.length === 0) return;
+      opts.push(`<optgroup label="${escapeHTMLNotif(p.name)}">`);
+      cs.forEach(c => {
+        opts.push(`<option value="${c.id}">${escapeHTMLNotif(c.name)}${c.status==='graduated'?' (graduated)':''}</option>`);
+      });
+      opts.push('</optgroup>');
+    });
+    return opts.join('');
+  }
+  if(type === 'program'){
+    return ['<option value="">— Pick a program —</option>',
+      ..._lessonState.programs.map(p => `<option value="${p.id}">${escapeHTMLNotif(p.name)}</option>`)
+    ].join('');
+  }
+  if(type === 'member'){
+    return ['<option value="">— Pick a member —</option>',
+      ..._lessonState.members.map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}</option>`)
+    ].join('');
+  }
+  return '';
+}
+
+function _llRefreshGrantTargetOptions(){
+  const type = document.getElementById('llGrantType').value;
+  const target = document.getElementById('llGrantTarget');
+  target.innerHTML = _llRenderGrantTargetOptions(type);
+}
+
+function _llOnAudienceChange(val){
+  const sec = document.getElementById('llGrantsSection');
+  if(sec){
+    sec.style.display = (val === 'cohort_only') ? '' : 'none';
+  }
+}
+
+async function _llAddGrant(lessonId){
+  const type = document.getElementById('llGrantType').value;
+  const targetId = document.getElementById('llGrantTarget').value;
+  if(!targetId){ toast('Pick a target first', '⚠️'); return; }
+
+  const payload = { lesson_id: lessonId, cohort_id: null, program_id: null, member_id: null };
+  if(type === 'cohort')  payload.cohort_id  = targetId;
+  if(type === 'program') payload.program_id = targetId;
+  if(type === 'member')  payload.member_id  = targetId;
+
+  try {
+    const { error } = await db.from('pipeline_lesson_grants').insert(payload);
+    if(error) throw error;
+    toast('✓ Grant added', 'success');
+    await _llLoadData();
+    // Re-render editor (the lesson is still in editing state)
+    _llRender();
+  } catch(e){
+    const msg = (e.message || '').toLowerCase();
+    if(msg.includes('no_dup')){
+      toast('That grant already exists.', '⚠️');
+    } else if(msg.includes('target_xor')){
+      toast('Internal error: bad grant target (please report).', '❌');
+    } else {
+      toast('Add failed: ' + e.message, '❌');
+    }
+  }
+}
+
+async function _llRemoveGrant(grantId, lessonId){
+  try {
+    const { error } = await db.from('pipeline_lesson_grants').delete().eq('id', grantId);
+    if(error) throw error;
+    toast('Grant removed', 'success');
+    await _llLoadData();
+    _llRender();
+  } catch(e){
+    toast('Remove failed: ' + e.message, '❌');
+  }
+}
+
+async function _llSave(){
+  const l = _lessonState.editing;
+  if(!l) return;
+  const titleEn = document.getElementById('llTitleEn').value.trim();
+  if(!titleEn){ toast('English title required', '⚠️'); return; }
+
+  const levelRaw = document.getElementById('llLevel').value;
+  const numRaw = document.getElementById('llLessonNum').value.trim();
+  const durRaw = document.getElementById('llDuration').value.trim();
+
+  const payload = {
+    level: levelRaw === '' ? null : parseInt(levelRaw, 10),
+    track: document.getElementById('llTrack').value.trim() || null,
+    lesson_number: numRaw === '' ? null : (parseInt(numRaw, 10) || null),
+    title_en: titleEn,
+    title_tl: document.getElementById('llTitleTl').value.trim() || null,
+    aim: document.getElementById('llAim').value.trim() || null,
+    scripture_refs: document.getElementById('llScripture').value.trim() || null,
+    outline_md: document.getElementById('llOutline').value || null,
+    handout_md: document.getElementById('llHandout').value || null,
+    leader_notes_md: document.getElementById('llLeaderNotes').value || null,
+    duration_minutes: durRaw === '' ? null : (parseInt(durRaw, 10) || null),
+    materials_needed: document.getElementById('llMaterials').value.trim() || null,
+    prerequisites: document.getElementById('llPrereqs').value.trim() || null,
+    audience: document.getElementById('llAudience').value || 'pastor_only',
+    published: document.getElementById('llPublished').checked,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    let savedId = l.id;
+    if(l.id){
+      const { error } = await db.from('pipeline_lessons').update(payload).eq('id', l.id);
+      if(error) throw error;
+      toast('✓ Lesson updated', 'success');
+    } else {
+      const { data, error } = await db.from('pipeline_lessons').insert(payload).select().single();
+      if(error) throw error;
+      savedId = data.id;
+      toast('✓ Lesson created', 'success');
+    }
+    await _llLoadData();
+    // After saving, return to list (so the user sees their new lesson in context).
+    // If this was a brand-new lesson and they set audience=cohort_only, the grants
+    // section was disabled — re-opening the editor lets them add grants now.
+    _lessonState.editing = null;
+    _llRender();
+  } catch(e){
+    toast('Save failed: ' + e.message, '❌');
+  }
+}
+
+async function _llDelete(id){
+  const l = _lessonState.lessons.find(x => x.id === id);
+  if(!l) return;
+  if(!confirm(`Delete lesson "${l.title_en}"?\n\nThis is permanent. All grants on this lesson will also be deleted.`)) return;
+  try {
+    const { error } = await db.from('pipeline_lessons').delete().eq('id', id);
+    if(error) throw error;
+    toast('Lesson deleted', 'success');
+    _lessonState.editing = null;
+    await _llLoadData();
+    _llRender();
+  } catch(e){
+    toast('Delete failed: ' + e.message, '❌');
+  }
 }
 
 
