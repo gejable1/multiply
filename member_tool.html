@@ -77,23 +77,6 @@
   --red-bg:#fdecea;
   --shadow: 0 1px 3px rgba(28,24,16,.08), 0 8px 24px -8px rgba(28,24,16,.12);
 
-  /* ─────────────────────────────────────────────────────────────
-   * Aliases for MD-style variable names referenced by code that
-   * was ported/shared from multiply_dashboard.html (quiz player,
-   * library player, results screens, etc.). MMT uses --cream /
-   * --paper / --muted natively; these aliases let MD-named refs
-   * resolve correctly so panels render with the right background
-   * instead of falling back to transparent.
-   *
-   * Critical bug fix May 12, 2026: without these, the quiz modal
-   * panels rendered transparent, letting the article behind them
-   * bleed through the question screen.
-   * ───────────────────────────────────────────────────────────── */
-  --surface: var(--paper);     /* panel / card background */
-  --surface2: var(--cream-2);  /* alt card / inset background */
-  --lighter: #9a8f80;          /* softer than --muted, for placeholders / hint text */
-  --blue: #4a90e2;             /* used in info banners (already has inline fallback) */
-
   /* Font scale for the A−/A+ slider.
      Applied as `zoom` on .content-wrap (NOT body) because most of MMT's
      font-sizes are in px, not rem — so `html { font-size: calc() }` would
@@ -1644,6 +1627,24 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
+      <!-- 📖 My Lessons — pipeline lessons available to this member.
+           Backed by MultiplyShared.lessons.fetchVisibleLessons() — same predicate
+           used by MLT. Audience + per-attachment role gating is enforced there. -->
+      <button class="headsup-btn" onclick="openLessonsScreen()" style="margin-top:.5rem">
+        <div class="hu-icon">📖</div>
+        <div class="hu-body">
+          <div class="hu-title">
+            <span class="en-text">My lessons</span>
+            <span class="tl-text">Mga aralin ko</span>
+          </div>
+          <div class="hu-meta">
+            <span class="en-text">Pipeline lessons available to you</span>
+            <span class="tl-text">Mga aralin para sa iyo</span>
+          </div>
+        </div>
+        <div style="color:var(--muted);font-size:18px">›</div>
+      </button>
+
       <!-- My recent heads-ups (only shown if any) -->
       <div id="myHeadsUpsSection" style="display:none">
         <div class="section-label">
@@ -1855,6 +1856,25 @@ body.lang-tl .tl-text{display:inline;}
     <div class="content" id="sermonsContent" style="padding:1rem 0 calc(1rem + 60px)">
       <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">
         <span class="en-text">Loading sermons…</span><span class="tl-text">Naglo-load…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ MY LESSONS SCREEN ═══════════════ -->
+  <!-- Pipeline lessons available to this member.
+       Backed by MultiplyShared.lessons.fetchVisibleLessons() in shared.js.
+       Same predicate as MLT — Audience gate (Pastor only / cohort_only /
+       lc_leaders / all_members) decides whether the lesson row shows up;
+       per-attachment role_required (all / apprentice+ / teacher+ / pastor_only)
+       decides which attachments are tap-able. -->
+  <div class="screen-page" id="page-lessons">
+    <div class="topbar" style="display:flex;align-items:center;gap:.6rem;padding:.6rem .75rem;background:var(--forest);color:#fff;position:sticky;top:0;z-index:10">
+      <button onclick="goTo('home')" style="background:transparent;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px 8px;line-height:1">←</button>
+      <div style="flex:1;font-size:15px;font-weight:600">📖 <span class="en-text">My Lessons</span><span class="tl-text">Mga Aralin Ko</span></div>
+    </div>
+    <div class="content" id="lessonsContent" style="padding:1rem 0 calc(1rem + 60px)">
+      <div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">
+        <span class="en-text">Loading lessons…</span><span class="tl-text">Naglo-load…</span>
       </div>
     </div>
   </div>
@@ -8065,6 +8085,259 @@ window.onYouTubeIframeAPIReady = function(){
     }
   });
 };
+// ═══════════════════════════════════════════════════════════════
+// MY LESSONS (MMT) — pipeline lessons available to this member
+// ─────────────────────────────────────────────────────────────────
+// Backed by MultiplyShared.lessons.fetchVisibleLessons() — the same
+// access predicate that powers MLT's "📖 My Lessons" screen.
+//
+// Audience gate (lesson-level — pipeline_lessons.audience):
+//   'all_members'  → every active member sees the lesson
+//   'lc_leaders'   → only level >= 2 + Pastor
+//   'cohort_only'  → members granted via cohort/program/individual
+//   'pastor_only'  → only Pastor
+//
+// Per-attachment role gate (pipeline_lessons.attachments[].role_required):
+//   'all'          → any member with lesson access
+//   'apprentice+'  → apprentices in cohort, co-teachers, teachers, Pastor
+//   'teacher+'     → co-teachers, teachers, Pastor (and apprentices with
+//                    cohort_lesson_unlocks for THIS lesson)
+//   'pastor_only'  → Pastor only
+//
+// Per the May 2026 shared.js fix, members with pipeline_level >= 2
+// (i.e. LC leaders who use MMT) ALSO get teacher-rank attachment access
+// — so an LC leader sees both participant + facilitator guides in MMT,
+// matching their experience in MLT. Consistent.
+// ═══════════════════════════════════════════════════════════════
+
+let _mmtLessonsState = {
+  loaded: false,
+  rows: [],
+  error: null
+};
+
+async function openLessonsScreen(){
+  goTo('lessons');
+  _renderLessonsLoading();
+  try {
+    const M = MEMBER || {};
+    const isPastor = (M.memberLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+    const isLeader = (M.memberLevel || 0) >= 2;
+    const rows = await MultiplyShared.lessons.fetchVisibleLessons({
+      memberId: M.memberId,
+      isPastor,
+      isLeader
+    });
+    _mmtLessonsState.rows = rows;
+    _mmtLessonsState.loaded = true;
+    _mmtLessonsState.error = null;
+    _renderLessonsScreen();
+  } catch (e) {
+    console.warn('[lessons] load failed:', e);
+    _mmtLessonsState.error = e.message || String(e);
+    _renderLessonsError();
+  }
+}
+
+function _renderLessonsLoading(){
+  const c = document.getElementById('lessonsContent');
+  if (!c) return;
+  c.innerHTML = `
+    <div style="padding:2.5rem 1rem;text-align:center">
+      <div style="font-size:28px;margin-bottom:.5rem">📖</div>
+      <div style="font-size:13px;color:var(--muted)">
+        <span class="en-text">Loading your lessons…</span>
+        <span class="tl-text">Naglo-load ng mga aralin…</span>
+      </div>
+    </div>
+  `;
+}
+
+function _renderLessonsError(){
+  const c = document.getElementById('lessonsContent');
+  if (!c) return;
+  const esc = MultiplyShared.escapeHTML;
+  c.innerHTML = `
+    <div style="padding:2.5rem 1rem;text-align:center">
+      <div style="font-size:30px;margin-bottom:.5rem">⚠️</div>
+      <div style="font-size:13px;color:var(--red);margin-bottom:.5rem;font-weight:600">
+        <span class="en-text">Could not load lessons</span>
+        <span class="tl-text">Hindi mai-load ang mga aralin</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);max-width:300px;line-height:1.5;margin:0 auto">
+        ${esc(_mmtLessonsState.error || '')}
+      </div>
+      <button onclick="openLessonsScreen()" style="margin-top:1.25rem;padding:.55rem 1.25rem;background:var(--cream);border:1px solid var(--line);color:var(--ink);border-radius:8px;font-size:12.5px;cursor:pointer;font-family:inherit">
+        <span class="en-text">Try again</span>
+        <span class="tl-text">Subukan muli</span>
+      </button>
+    </div>
+  `;
+}
+
+function _renderLessonsScreen(){
+  const c = document.getElementById('lessonsContent');
+  if (!c) return;
+  const rows = _mmtLessonsState.rows;
+  if (rows.length === 0) {
+    c.innerHTML = `
+      <div style="padding:3rem 1.5rem;text-align:center;color:var(--muted);font-size:13px;line-height:1.7">
+        <div style="font-size:30px;margin-bottom:.7rem;opacity:.5">📖</div>
+        <div style="font-weight:600;color:var(--ink);margin-bottom:.4rem">
+          <span class="en-text">No lessons yet</span>
+          <span class="tl-text">Wala pang aralin</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);max-width:300px;margin:0 auto;line-height:1.6">
+          <span class="en-text">When your Pastor or LC leader assigns you a lesson, or when a lesson is shared with all members, it will appear here.</span>
+          <span class="tl-text">Kapag binigyan ka ng aralin ng iyong pastor o LC leader, o kung may aralin na ibinabahagi sa lahat ng members, makikita mo dito.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  c.innerHTML = `
+    <div style="padding:0 1rem;font-size:11.5px;color:var(--muted);margin-bottom:.75rem">
+      <span class="en-text">${rows.length} lesson${rows.length===1?'':'s'} available to you</span>
+      <span class="tl-text">${rows.length} aralin para sa iyo</span>
+    </div>
+    <div style="padding:0 .85rem">
+      ${rows.map(r => _mmtRenderLessonCard(r)).join('')}
+    </div>
+  `;
+}
+
+function _mmtRenderLessonCard(row){
+  const l = row.lesson;
+  const esc = MultiplyShared.escapeHTML;
+
+  const roleLabels = {
+    pastor:       { label: 'Pastor',     bg: 'rgba(167,139,250,.18)', col: '#7c5cd4' },
+    teacher:      { label: 'Teacher',    bg: 'rgba(184,136,42,.22)',  col: 'var(--gold)' },
+    'co-teacher': { label: 'Co-teacher', bg: 'rgba(184,136,42,.13)',  col: 'var(--gold)' },
+    apprentice:   { label: 'Apprentice', bg: 'rgba(52,211,153,.18)',  col: 'var(--forest-2)' },
+    observer:     { label: 'Observer',   bg: 'rgba(107,95,79,.15)',   col: 'var(--muted)' },
+    leader:       { label: 'LC Leader',  bg: 'rgba(14,58,44,.12)',    col: 'var(--forest)' },
+    member:       { label: 'Member',     bg: 'rgba(14,58,44,.08)',    col: 'var(--forest)' }
+  }[row.role] || { label: row.role || 'Member', bg: 'rgba(107,95,79,.15)', col: 'var(--muted)' };
+
+  const levelLabel = (l.level != null) ? `L${l.level}` : '';
+  const meta = [levelLabel, l.track, l.duration_minutes ? `${l.duration_minutes} min` : ''].filter(Boolean).join(' · ');
+  const lessonNum = (l.lesson_number != null) ? ` · #${l.lesson_number}` : '';
+
+  const atts = row.attachments || [];
+  const attHtml = atts.length === 0
+    ? `<div style="font-size:11.5px;color:var(--muted);font-style:italic;padding:.5rem 0">
+         <span class="en-text">No attachments available for your role yet.</span>
+         <span class="tl-text">Wala pang attachment para sa iyong role.</span>
+         ${row.lockedAttachmentCount>0 ? ` (${row.lockedAttachmentCount} <span class="en-text">locked</span><span class="tl-text">naka-lock</span>)` : ''}
+       </div>`
+    : `<div style="display:grid;grid-template-columns:1fr;gap:6px;margin-top:.55rem">
+         ${atts.map((a, i) => _mmtRenderAttachmentBtn(a, l.id, i)).join('')}
+         ${row.lockedAttachmentCount > 0 ? `
+           <div style="font-size:10.5px;color:var(--muted);font-style:italic;padding:.3rem .55rem;margin-top:2px;background:rgba(245,232,196,.4);border-radius:6px">
+             🔒 <span class="en-text">${row.lockedAttachmentCount} additional material${row.lockedAttachmentCount===1?'':'s'} not yet available to your role.</span>
+             <span class="tl-text">${row.lockedAttachmentCount} ibang material${row.lockedAttachmentCount===1?'':'s'} hindi pa available para sa iyong role.</span>
+           </div>
+         ` : ''}
+       </div>`;
+
+  const unlockBadge = row.cohortUnlockedForThisLesson && row.role === 'apprentice'
+    ? '<span style="font-size:9px;background:rgba(184,136,42,.22);color:var(--gold);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-left:5px">🔓 Unlocked</span>'
+    : '';
+
+  return `
+    <div style="background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:.95rem 1rem;margin-bottom:.75rem;box-shadow:var(--shadow)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.55rem;margin-bottom:.45rem">
+        <div style="min-width:0;flex:1">
+          ${meta ? `<div style="font-size:9.5px;color:var(--muted);font-weight:700;letter-spacing:.05em;text-transform:uppercase">${esc(meta)}${esc(lessonNum)}</div>` : ''}
+          <div style="font-size:14.5px;color:var(--ink);font-weight:700;margin-top:3px;line-height:1.3">${esc(l.title_en || '(untitled)')}</div>
+          ${l.title_tl ? `<div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-style:italic">${esc(l.title_tl)}</div>` : ''}
+          ${l.aim ? `<div style="font-size:11.5px;color:var(--ink-soft);margin-top:5px;line-height:1.55">${esc(l.aim)}</div>` : ''}
+          ${l.scripture_refs ? `<div style="font-size:11px;color:var(--gold);margin-top:5px;font-weight:600">📖 ${esc(l.scripture_refs)}</div>` : ''}
+        </div>
+        <div style="flex-shrink:0;text-align:right">
+          <span style="display:inline-flex;align-items:center;font-size:9.5px;background:${roleLabels.bg};color:${roleLabels.col};padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">${roleLabels.label}</span>
+          ${unlockBadge}
+        </div>
+      </div>
+      ${attHtml}
+    </div>
+  `;
+}
+
+function _mmtRenderAttachmentBtn(a, lessonId, idx){
+  const esc = MultiplyShared.escapeHTML;
+  const label = (a.label || '').toLowerCase();
+  let icon = '📄';
+  if (label.includes('slide')) icon = '🎞';
+  else if (label.includes('participant')) icon = '📋';
+  else if (label.includes('apprentice') || label.includes('intern')) icon = '🌿';
+  else if (label.includes('facilitator') || label.includes('teacher')) icon = '🎯';
+  else if (label.includes('handout')) icon = '📄';
+  else if (label.includes('video')) icon = '🎬';
+
+  const rolePill = {
+    'all':         { label: 'all',         bg: 'rgba(107,95,79,.15)',  col: 'var(--muted)' },
+    'apprentice+': { label: 'apprentice+', bg: 'rgba(52,211,153,.18)', col: 'var(--forest-2)' },
+    'teacher+':    { label: 'teacher+',    bg: 'rgba(184,136,42,.22)', col: 'var(--gold)' },
+    'pastor_only': { label: 'pastor',      bg: 'rgba(167,139,250,.18)', col: '#7c5cd4' }
+  }[a.role_required || 'all'] || { label: a.role_required || '', bg: 'rgba(107,95,79,.15)', col: 'var(--muted)' };
+
+  return `
+    <button type="button"
+      data-lesson-id="${esc(lessonId)}"
+      data-att-idx="${idx}"
+      data-att-url="${esc(a.url)}"
+      data-att-label="${esc(a.label || '(unnamed)')}"
+      onclick="_mmtOpenLessonAttachment(this)"
+      style="display:flex;align-items:center;gap:.65rem;width:100%;padding:.65rem .85rem;background:var(--cream);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;text-align:left;font-family:inherit">
+      <span style="font-size:17px;flex-shrink:0">${icon}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.label || '(unnamed)')}</span>
+      <span style="font-size:9px;background:${rolePill.bg};color:${rolePill.col};padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex-shrink:0">${rolePill.label}</span>
+      <span style="color:var(--muted);font-size:16px;flex-shrink:0">›</span>
+    </button>
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Lesson attachment viewer — full-screen iframe modal
+// ─────────────────────────────────────────────────────────────────
+function _mmtOpenLessonAttachment(btn){
+  const url = btn.getAttribute('data-att-url');
+  const label = btn.getAttribute('data-att-label') || 'Attachment';
+  if (!url) { toast('No URL set for this attachment','⚠️'); return; }
+  _mmtOpenLessonViewerModal(url, label);
+}
+
+function _mmtOpenLessonViewerModal(url, label){
+  let modal = document.getElementById('mmtLessonViewerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'mmtLessonViewerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.92);display:flex;flex-direction:column;z-index:9500';
+    document.body.appendChild(modal);
+  }
+  const esc = MultiplyShared.escapeHTML;
+  modal.innerHTML = `
+    <div style="padding:.65rem .9rem;display:flex;align-items:center;gap:.55rem;background:var(--forest);border-bottom:1px solid rgba(255,255,255,.12);flex-shrink:0;color:#fff">
+      <button onclick="_mmtCloseLessonViewer()" style="background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">‹</button>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-size:13.5px;color:#fff;font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(url)}</div>
+      </div>
+      <a href="${esc(url)}" target="_blank" rel="noopener noreferrer"
+        style="font-size:11px;color:var(--gold-bright);padding:5px 10px;background:rgba(255,255,255,.1);border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0">↗ <span class="en-text">New tab</span><span class="tl-text">Bagong tab</span></a>
+    </div>
+    <iframe src="${esc(url)}" style="flex:1;border:none;width:100%;background:#fff"
+      allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+  `;
+}
+
+function _mmtCloseLessonViewer(){
+  const m = document.getElementById('mmtLessonViewerModal');
+  if (m) m.remove();
+}
+
 </script>
 </body>
 </html>
