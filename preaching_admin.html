@@ -122,6 +122,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 /* ───── BADGE ───── */
 .badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-left:5px;vertical-align:middle;}
 .badge-inactive{background:var(--surface2);color:var(--muted);}
+.badge-recurring{background:#e8eef8;color:#2a4a8a;}
+.badge-leave{background:#fbeae8;color:var(--red);}
 .badge-swapped{background:var(--gold-bg);color:var(--gold-dim);}
 .badge-pending{background:var(--orange-bg);color:var(--orange);}
 
@@ -250,9 +252,26 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 <!-- ───── PREACHER NOTES MODAL ───── -->
 <div class="modal-bg" id="preacherModal">
   <div class="modal">
-    <div class="modal-h" id="preacherModalTitle">Preacher Notes</div>
-    <label class="first">Notes</label>
+    <div class="modal-h" id="preacherModalTitle">Preacher Settings</div>
+
+    <label class="first">🔁 Recurring Slot</label>
+    <select id="preacherRecurrence">
+      <option value="">None — normal rotation</option>
+      <option value="every_3rd">Every 3rd Wednesday (e.g., Pastor's regular slot)</option>
+    </select>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45">
+      A "recurring" preacher claims one slot in every cycle (e.g., every 3rd Wed). The cycle re-anchors from their most recent preaching date, so swaps don't break the pattern.
+    </div>
+
+    <label>🏥 On Leave Until <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(temporary absence)</span></label>
+    <input type="date" id="preacherOnLeaveUntil">
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45">
+      Leave blank if available. Auto-fill will skip this preacher up to and including this date, then auto-reactivate them. Use for cataract op, travel, sabbatical, etc.
+    </div>
+
+    <label>📝 Notes</label>
     <textarea id="preacherNotes" rows="3" placeholder="e.g. 'prefers OT books', 'available 1st/3rd Wed only'"></textarea>
+
     <div class="modal-actions">
       <button class="btn" onclick="closePreacherModal()">Cancel</button>
       <button class="btn btn-primary" onclick="savePreacherNotes()">Save</button>
@@ -286,6 +305,7 @@ let _swaps = [];            // preaching_swap_requests rows (pending + recent)
 let _viewMonth = startOfMonth(new Date());  // first day of currently-viewed month
 let _editingAssignmentDate = null;          // ISO date string when assign modal open
 let _editingPreacherId = null;              // preachers.id when notes modal open
+let _reorderBusy = false;                   // race-guard for rapid reorder clicks
 
 // ═══════════════════════════════════════════════════════════════
 // HELPERS
@@ -452,12 +472,24 @@ function openAssignModal(dateStr){
   const assignment = _assignments.find(a => a.preach_date === dateStr);
 
   document.getElementById('assignDate').value = fmtDate(d);
-  // Populate dropdown with active preachers
+  // Populate dropdown with active preachers. On-leave preachers stay in
+  // the list (Pastor may override knowingly) but are visually flagged.
+  // The dropdown also shows recurring badge so Pastor knows their slot pattern.
   const sel = document.getElementById('assignPreacher');
   sel.innerHTML = '<option value="">— None / Unassign —</option>' +
     _preachers
       .filter(p => p.is_active)
-      .map(p => `<option value="${p.member_id}">${esc(p.member.name)} (#${p.sequence})</option>`)
+      .map(p => {
+        const onLeave = p.on_leave_until && p.on_leave_until >= dateStr;
+        const recurring = !!p.recurrence_pattern;
+        const labelParts = [esc(p.member.name), '(#' + p.sequence + ')'];
+        if (recurring) labelParts.push('🔁');
+        if (onLeave) {
+          const ld = new Date(p.on_leave_until + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+          labelParts.push('🏥 on leave until ' + ld);
+        }
+        return `<option value="${p.member_id}">${labelParts.join(' ')}</option>`;
+      })
       .join('');
   sel.value = assignment ? assignment.preacher_member_id : '';
   document.getElementById('assignNotes').value = assignment?.notes || '';
@@ -524,13 +556,31 @@ async function deleteAssignment(){
 // ═══════════════════════════════════════════════════════════════
 // AUTO-FILL NEXT 12 WEDNESDAYS
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// AUTO-FILL — recurrence + leave-aware (May 2026)
+// ─────────────────────────────────────────────────────────────────
+// Logic:
+//   1. Build next 12 Wednesdays.
+//   2. Load any existing assignments in that window (preserve them).
+//   3. PASS 1 — Recurring claims:
+//      For each recurring preacher (e.g., 'every_3rd'), figure out
+//      which of the next 12 Wednesdays they claim (based on their
+//      pattern, re-anchored from their most recent past preaching
+//      date so swaps don't break the cycle). Skip dates where they
+//      are on leave. Skip dates that already have a manual assignment.
+//   4. PASS 2 — Fill remaining slots with NON-recurring preachers in
+//      sequence order, skipping anyone who is currently on leave at
+//      that date. Continue rotation from where last assignment left off.
+// ═══════════════════════════════════════════════════════════════
 async function autofillNext12(){
-  const active = _preachers.filter(p => p.is_active);
-  if (active.length === 0) { toast('No active preachers in roster', '⚠️'); return; }
+  const allActive = _preachers.filter(p => p.is_active);
+  if (allActive.length === 0) { toast('No active preachers in roster', '⚠️'); return; }
 
-  // Build list of next 12 Wednesdays starting from today
+  const recurring   = allActive.filter(p => p.recurrence_pattern);
+  const normal      = allActive.filter(p => !p.recurrence_pattern);
+
+  // Build list of next 12 Wednesdays starting from today (include today if Wed)
   const today = new Date(); today.setHours(0,0,0,0);
-  // If today is Wednesday, include it; else find next Wednesday
   let firstWed = new Date(today);
   while (firstWed.getDay() !== 3) firstWed.setDate(firstWed.getDate() + 1);
 
@@ -540,39 +590,126 @@ async function autofillNext12(){
     d.setDate(d.getDate() + (i * 7));
     next12.push(d);
   }
+  const next12Strs = next12.map(ymd);
 
-  // For each Wednesday: if no existing assignment, assign next preacher in rotation
-  // Continue rotation order from wherever the last existing assignment left off.
-  await loadAssignmentsRange(ymd(next12[0]), ymd(next12[11]));
+  // Load existing assignments in window
+  await loadAssignmentsRange(next12Strs[0], next12Strs[11]);
 
-  // Find rotation pointer: look at most recent existing assignment within the next 12
-  // (or just before), and find that preacher's sequence index. Otherwise start at 0.
-  let rotIdx = 0;
-  const sortedRecent = [..._assignments]
-    .filter(a => a.preach_date <= ymd(next12[11]))
-    .sort((a,b) => b.preach_date.localeCompare(a.preach_date));
-  if (sortedRecent.length > 0) {
-    const last = sortedRecent[0];
-    const lastSeqIdx = active.findIndex(p => p.member_id === last.preacher_member_id);
-    if (lastSeqIdx >= 0) rotIdx = (lastSeqIdx + 1) % active.length;
-  }
+  const assignedByDate = new Map();
+  _assignments.forEach(a => {
+    if (next12Strs.includes(a.preach_date)) assignedByDate.set(a.preach_date, a);
+  });
 
+  // Helper: is preacher on leave on this date?
+  const onLeave = (preacher, dateStr) => {
+    if (!preacher.on_leave_until) return false;
+    return dateStr <= preacher.on_leave_until;
+  };
+
+  // ─── PASS 1: Recurring claims ───────────────────────────────
+  // For each recurring preacher, figure out their next cycle dates within
+  // the 12-Wed window. Strategy: compute the "anchor" — the most recent
+  // Wednesday they preached. Then their next claims are anchor + cycleLen,
+  // anchor + 2*cycleLen, etc. Soft re-anchoring means a swap last week
+  // doesn't displace the cycle — the next claim is just 3 weeks later.
   const inserts = [];
-  for (const d of next12) {
-    const dateStr = ymd(d);
-    if (_assignments.find(a => a.preach_date === dateStr)) continue; // skip already-assigned
-    const preacher = active[rotIdx % active.length];
-    inserts.push({
-      preach_date: dateStr,
-      preacher_member_id: preacher.member_id,
-      original_preacher_member_id: preacher.member_id
-    });
-    rotIdx++;
+  const claimedDates = new Set();  // dates claimed by recurring preachers this run
+
+  for (const rec of recurring) {
+    const cycleLen = _recurrenceCycleLength(rec.recurrence_pattern);
+    if (!cycleLen) continue;
+
+    // Find most recent past assignment for this preacher (any date before today)
+    const todayStr = ymd(today);
+    const { data: pastA } = await db.from('wednesday_preaching')
+      .select('preach_date')
+      .eq('preacher_member_id', rec.member_id)
+      .lt('preach_date', todayStr)
+      .order('preach_date', { ascending: false })
+      .limit(1);
+    const lastDate = (pastA && pastA[0]) ? pastA[0].preach_date : null;
+
+    // Compute their target dates within the next-12-Wed window
+    let targetDates = [];
+    if (lastDate) {
+      // Next claim is lastDate + cycleLen weeks. Step forward until we're
+      // inside or past the window.
+      let d = new Date(lastDate + 'T00:00:00');
+      d.setDate(d.getDate() + cycleLen * 7);
+      while (ymd(d) <= next12Strs[11]) {
+        if (ymd(d) >= next12Strs[0]) targetDates.push(ymd(d));
+        d.setDate(d.getDate() + cycleLen * 7);
+      }
+    } else {
+      // No history — claim every Nth Wednesday starting from the cycleLen-th
+      // slot (so user "preaches every 3rd Wed" naturally falls in position 3,
+      // 6, 9, 12 of the window).
+      for (let i = cycleLen - 1; i < next12Strs.length; i += cycleLen) {
+        targetDates.push(next12Strs[i]);
+      }
+    }
+
+    // Apply claims — skip if already assigned manually, skip if on leave,
+    // soft-skip to next slot if blocked
+    for (const dateStr of targetDates) {
+      if (assignedByDate.has(dateStr)) continue;       // manual override wins
+      if (onLeave(rec, dateStr)) continue;             // they can't preach that day — drop the claim
+      if (claimedDates.has(dateStr)) continue;         // another recurring preacher already claimed
+      inserts.push({
+        preach_date: dateStr,
+        preacher_member_id: rec.member_id,
+        original_preacher_member_id: rec.member_id
+      });
+      claimedDates.add(dateStr);
+    }
   }
 
-  if (inserts.length === 0) { toast('All next 12 Wednesdays already assigned', 'ℹ️'); return; }
+  // ─── PASS 2: Fill remaining slots with NORMAL preachers in rotation ───
+  if (normal.length > 0) {
+    // Find rotation pointer: look at most recent NORMAL preacher's assignment
+    // (within the window or just before), and continue from there.
+    let rotIdx = 0;
+    const normalMemberIds = new Set(normal.map(p => p.member_id));
+    const recentNormal = [..._assignments]
+      .filter(a => normalMemberIds.has(a.preacher_member_id))
+      .filter(a => a.preach_date <= next12Strs[11])
+      .sort((a,b) => b.preach_date.localeCompare(a.preach_date));
+    if (recentNormal.length > 0) {
+      const lastIdx = normal.findIndex(p => p.member_id === recentNormal[0].preacher_member_id);
+      if (lastIdx >= 0) rotIdx = (lastIdx + 1) % normal.length;
+    }
 
-  if (!confirm(`Auto-fill ${inserts.length} unassigned Wednesday${inserts.length > 1 ? 's' : ''} using rotation order?`)) return;
+    for (const dateStr of next12Strs) {
+      if (assignedByDate.has(dateStr)) continue;       // existing manual assignment
+      if (claimedDates.has(dateStr)) continue;         // recurring preacher's slot
+      // Find next normal preacher not on leave on this date. Safety cap
+      // to avoid infinite loop if everyone is on leave that day.
+      let picked = null;
+      for (let attempt = 0; attempt < normal.length; attempt++) {
+        const candidate = normal[(rotIdx + attempt) % normal.length];
+        if (!onLeave(candidate, dateStr)) { picked = candidate; rotIdx = (rotIdx + attempt + 1) % normal.length; break; }
+      }
+      if (!picked) continue;  // everyone on leave — leave slot unassigned
+      inserts.push({
+        preach_date: dateStr,
+        preacher_member_id: picked.member_id,
+        original_preacher_member_id: picked.member_id
+      });
+    }
+  }
+
+  if (inserts.length === 0) {
+    toast('Nothing to fill — all 12 Wednesdays already assigned (or all preachers on leave)', 'ℹ️');
+    return;
+  }
+
+  // Show a summary in the confirm dialog
+  const recCount = inserts.filter(i => recurring.some(r => r.member_id === i.preacher_member_id)).length;
+  const normCount = inserts.length - recCount;
+  const msg = `Auto-fill ${inserts.length} unassigned Wednesday${inserts.length > 1 ? 's' : ''}?` +
+              (recCount > 0 ? `\n  • ${recCount} recurring slot${recCount > 1 ? 's' : ''}` : '') +
+              (normCount > 0 ? `\n  • ${normCount} rotation slot${normCount > 1 ? 's' : ''}` : '');
+  if (!confirm(msg)) return;
 
   const { error } = await db.from('wednesday_preaching').insert(inserts);
   if (error) { toast(error.message, '⚠️'); return; }
@@ -580,6 +717,16 @@ async function autofillNext12(){
   await loadAssignments();
   renderCalendar();
   toast(`Filled ${inserts.length} Wednesday${inserts.length > 1 ? 's' : ''}`, '✓');
+}
+
+// Map recurrence_pattern to cycle length (in weeks). Extensible.
+function _recurrenceCycleLength(pattern){
+  switch (pattern) {
+    case 'every_2nd': return 2;
+    case 'every_3rd': return 3;
+    case 'every_4th': return 4;
+    default: return null;
+  }
 }
 
 // Used by autofill — load a specific range without changing the calendar's view
@@ -604,11 +751,31 @@ function renderRoster(){
     wrap.innerHTML = '<div class="rr-empty">No preachers yet. Search a member above to add the first one.</div>';
     return;
   }
-  wrap.innerHTML = _preachers.map((p, idx) => `
-    <div class="roster-row ${p.is_active ? '' : 'inactive'}">
+  const todayStr = new Date().toISOString().slice(0,10);
+  wrap.innerHTML = _preachers.map((p, idx) => {
+    // Compute leave status — only "on leave" if date is today or future
+    const isOnLeave = p.on_leave_until && p.on_leave_until >= todayStr;
+    const isRecurring = !!p.recurrence_pattern;
+    // Visual: inactive OR on-leave both fade the row
+    const rowClasses = ['roster-row'];
+    if (!p.is_active) rowClasses.push('inactive');
+    else if (isOnLeave) rowClasses.push('inactive'); // reuse fade style
+
+    // Format leave date for badge: "Jun 15"
+    let leaveLabel = '';
+    if (isOnLeave) {
+      const d = new Date(p.on_leave_until + 'T00:00:00');
+      leaveLabel = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    }
+
+    const recurrenceLabels = { 'every_3rd': 'Every 3rd Wed' };
+    const recurringLabel = isRecurring ? (recurrenceLabels[p.recurrence_pattern] || p.recurrence_pattern) : '';
+
+    return `
+    <div class="${rowClasses.join(' ')}">
       <div class="rr-seq">${p.sequence}</div>
       <div>
-        <div class="rr-name">${esc(p.member.name)}${!p.is_active ? '<span class="badge badge-inactive">Inactive</span>' : ''}</div>
+        <div class="rr-name">${esc(p.member.name)}${!p.is_active ? '<span class="badge badge-inactive">Inactive</span>' : ''}${isRecurring ? `<span class="badge badge-recurring" title="${esc(recurringLabel)}">🔁 ${esc(recurringLabel)}</span>` : ''}${isOnLeave ? `<span class="badge badge-leave" title="Returns ${esc(leaveLabel)}">🏥 On leave until ${esc(leaveLabel)}</span>` : ''}</div>
         ${p.notes ? `<div class="rr-notes">${esc(p.notes)}</div>` : ''}
       </div>
       <div class="rr-actions">
@@ -616,12 +783,12 @@ function renderRoster(){
         <button class="btn btn-icon" onclick="moveDown(${p.id})" title="Move down" ${idx === _preachers.length - 1 ? 'disabled' : ''}>↓</button>
         <button class="btn btn-icon" onclick="moveToTop(${p.id})" title="Move to top" ${idx === 0 ? 'disabled' : ''}>⤒</button>
         <button class="btn btn-icon" onclick="moveToBottom(${p.id})" title="Move to bottom" ${idx === _preachers.length - 1 ? 'disabled' : ''}>⤓</button>
-        <button class="btn btn-icon" onclick="openPreacherNotes(${p.id})" title="Notes">📝</button>
+        <button class="btn btn-icon" onclick="openPreacherNotes(${p.id})" title="Settings">📝</button>
         <button class="btn btn-icon" onclick="toggleActive(${p.id})" title="${p.is_active ? 'Deactivate' : 'Activate'}">${p.is_active ? '⏸' : '▶'}</button>
         <button class="btn btn-icon btn-danger" onclick="removePreacher(${p.id})" title="Remove">🗑</button>
       </div>
     </div>
-  `).join('');
+  `;}).join('');
 }
 
 function searchMembers(query){
@@ -693,59 +860,92 @@ async function toggleActive(preacherId){
   toast(p.is_active ? 'Marked inactive' : 'Reactivated', '✓');
 }
 
-async function moveUp(preacherId){
-  const idx = _preachers.findIndex(p => p.id === preacherId);
-  if (idx <= 0) return;
-  await swapSequence(_preachers[idx], _preachers[idx - 1]);
-}
-async function moveDown(preacherId){
-  const idx = _preachers.findIndex(p => p.id === preacherId);
-  if (idx < 0 || idx >= _preachers.length - 1) return;
-  await swapSequence(_preachers[idx], _preachers[idx + 1]);
-}
-async function swapSequence(a, b){
-  // Two-step due to UNIQUE constraint (deferrable, but be safe):
-  // first move 'a' to a temporary high value, then assign 'b' to 'a's old slot,
-  // then move 'a' to 'b's old slot.
-  const tempSeq = 100000 + a.id;
-  const oldA = a.sequence, oldB = b.sequence;
-  await db.from('preachers').update({ sequence: tempSeq }).eq('id', a.id);
-  await db.from('preachers').update({ sequence: oldA }).eq('id', b.id);
-  await db.from('preachers').update({ sequence: oldB }).eq('id', a.id);
-  await loadPreachers();
-  renderRoster();
+// ───────────────────────────────────────────────────────────────
+// REORDER — single code path for all four move operations
+// ─────────────────────────────────────────────────────────────
+// The "negative-sweep then positive-sweep" pattern is the only
+// reliable way to bulk-update sequences without hitting the UNIQUE
+// constraint, because each Supabase .update() auto-commits (the
+// DEFERRABLE constraint only works inside an explicit transaction
+// which the JS client cannot start).
+//
+// Race protection: _reorderBusy flag blocks rapid clicks. We also
+// re-disable all reorder buttons immediately on click so visual
+// feedback matches the lock state.
+// ───────────────────────────────────────────────────────────────
+function _setReorderBusy(busy){
+  _reorderBusy = busy;
+  document.querySelectorAll('.rr-actions button').forEach(b => {
+    if (busy) { b.dataset._prevDisabled = b.disabled ? '1' : '0'; b.disabled = true; }
+    else { b.disabled = (b.dataset._prevDisabled === '1'); delete b.dataset._prevDisabled; }
+  });
 }
 
+async function moveUp(preacherId){
+  if (_reorderBusy) return;
+  const idx = _preachers.findIndex(p => p.id === preacherId);
+  if (idx <= 0) return;
+  await _reorderMove(preacherId, idx - 1);
+}
+async function moveDown(preacherId){
+  if (_reorderBusy) return;
+  const idx = _preachers.findIndex(p => p.id === preacherId);
+  if (idx < 0 || idx >= _preachers.length - 1) return;
+  await _reorderMove(preacherId, idx + 1);
+}
 async function moveToTop(preacherId){
-  const p = _preachers.find(x => x.id === preacherId);
-  if (!p || _preachers[0].id === preacherId) return;
-  await reorderToPosition(p, 1);
+  if (_reorderBusy) return;
+  const idx = _preachers.findIndex(p => p.id === preacherId);
+  if (idx <= 0) return;
+  await _reorderMove(preacherId, 0);
 }
 async function moveToBottom(preacherId){
-  const p = _preachers.find(x => x.id === preacherId);
-  if (!p || _preachers[_preachers.length - 1].id === preacherId) return;
-  await reorderToPosition(p, _preachers.length);
+  if (_reorderBusy) return;
+  const idx = _preachers.findIndex(p => p.id === preacherId);
+  if (idx < 0 || idx >= _preachers.length - 1) return;
+  await _reorderMove(preacherId, _preachers.length - 1);
 }
-async function reorderToPosition(preacher, newSeq){
-  // Move preacher to newSeq position; shift others accordingly.
-  // Strategy: temporarily set everyone's sequence to negative-of-current,
-  // then assign final values in one pass. Simpler approach: pull everyone
-  // into local memory, reorder array, write back all sequences.
-  const order = _preachers.map(p => p.id);
-  const fromIdx = order.indexOf(preacher.id);
-  if (fromIdx < 0) return;
-  order.splice(fromIdx, 1);
-  order.splice(newSeq - 1, 0, preacher.id);
-  // Bulk update: first move everyone to negative ids to avoid unique conflicts
-  for (const id of order) {
-    await db.from('preachers').update({ sequence: -id }).eq('id', id);
+
+// Core: move preacher to a specific 0-indexed position. All four
+// public move functions converge here so there's only ONE place
+// where the SQL writes happen — only ONE place where bugs can hide.
+async function _reorderMove(preacherId, targetIdx){
+  _setReorderBusy(true);
+  try {
+    // Build the new id-order array locally (the source of truth)
+    const order = _preachers.map(p => p.id);
+    const fromIdx = order.indexOf(preacherId);
+    if (fromIdx < 0) return;
+    order.splice(fromIdx, 1);
+    order.splice(targetIdx, 0, preacherId);
+
+    // PASS 1 — flip every row to a negative sequence (id-based, unique
+    // across rows). This frees up positive slots 1..N so the constraint
+    // can never fire in PASS 2.
+    for (const id of order) {
+      const r = await db.from('preachers').update({ sequence: -id }).eq('id', id);
+      if (r.error) throw r.error;
+    }
+    // PASS 2 — assign final positive sequences in the new order.
+    for (let i = 0; i < order.length; i++) {
+      const r = await db.from('preachers')
+        .update({ sequence: i + 1, updated_at: new Date().toISOString() })
+        .eq('id', order[i]);
+      if (r.error) throw r.error;
+    }
+
+    await loadPreachers();
+    renderRoster();
+    toast('Reordered', '✓');
+  } catch (e) {
+    console.error('Reorder failed:', e);
+    toast('Reorder failed — refreshing', '⚠️');
+    // Reload from DB to recover from any half-applied state
+    await loadPreachers();
+    renderRoster();
+  } finally {
+    _setReorderBusy(false);
   }
-  for (let i = 0; i < order.length; i++) {
-    await db.from('preachers').update({ sequence: i + 1 }).eq('id', order[i]);
-  }
-  await loadPreachers();
-  renderRoster();
-  toast('Reordered', '✓');
 }
 
 async function repackSequence(){
@@ -765,8 +965,17 @@ function openPreacherNotes(preacherId){
   const p = _preachers.find(x => x.id === preacherId);
   if (!p) return;
   _editingPreacherId = preacherId;
-  document.getElementById('preacherModalTitle').textContent = 'Notes for ' + p.member.name;
+  document.getElementById('preacherModalTitle').textContent = 'Settings for ' + p.member.name;
   document.getElementById('preacherNotes').value = p.notes || '';
+  document.getElementById('preacherRecurrence').value = p.recurrence_pattern || '';
+  // on_leave_until is a DATE — Supabase returns 'YYYY-MM-DD' which the date
+  // input accepts directly. If past, clear it (UX: don't show stale dates).
+  let leaveStr = p.on_leave_until || '';
+  if (leaveStr) {
+    const todayStr = new Date().toISOString().slice(0,10);
+    if (leaveStr < todayStr) leaveStr = '';
+  }
+  document.getElementById('preacherOnLeaveUntil').value = leaveStr;
   document.getElementById('preacherModal').classList.add('open');
 }
 function closePreacherModal(){
@@ -776,14 +985,31 @@ function closePreacherModal(){
 async function savePreacherNotes(){
   if (!_editingPreacherId) return;
   const notes = document.getElementById('preacherNotes').value.trim() || null;
+  const recurrence = document.getElementById('preacherRecurrence').value || null;
+  const onLeaveRaw = document.getElementById('preacherOnLeaveUntil').value;
+  const onLeaveUntil = onLeaveRaw && /^\d{4}-\d{2}-\d{2}$/.test(onLeaveRaw) ? onLeaveRaw : null;
+
+  // Guard: prevent setting a past date (would be a no-op anyway, but confusing)
+  if (onLeaveUntil) {
+    const todayStr = new Date().toISOString().slice(0,10);
+    if (onLeaveUntil < todayStr) {
+      if (!confirm('That leave date is in the past. Save anyway? (It will have no effect on auto-fill.)')) return;
+    }
+  }
+
   const { error } = await db.from('preachers')
-    .update({ notes, updated_at: new Date().toISOString() })
+    .update({
+      notes,
+      recurrence_pattern: recurrence,
+      on_leave_until: onLeaveUntil,
+      updated_at: new Date().toISOString()
+    })
     .eq('id', _editingPreacherId);
   if (error) { toast(error.message, '⚠️'); return; }
   closePreacherModal();
   await loadPreachers();
   renderRoster();
-  toast('Notes saved', '✓');
+  toast('Saved', '✓');
 }
 
 // ═══════════════════════════════════════════════════════════════
