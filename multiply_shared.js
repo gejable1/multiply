@@ -567,6 +567,296 @@
   }
 
 
+  // ═════════════════════════════════════════════════════════════
+  // WEDNESDAY PREACHING HELPERS (May 2026)
+  // ───────────────────────────────────────────────────────────
+  // Used by MLT and MMT to show the reminder banner for upcoming
+  // preaching assignments + pending swap requests targeted at this
+  // member. Pulls from three tables:
+  //   • wednesday_preaching       — assignments
+  //   • preaching_swap_requests   — pending swaps to respond to
+  //   • preachers                 — to know if member is in roster
+  //
+  // Banner logic:
+  //   • If you have an assignment within 7 days, banner shows.
+  //   • Color escalates: 7d=gold, 3d=orange, 0d (today)=red
+  //   • Day-of dismissal persists in localStorage so the day-of
+  //     reminder doesn't reappear on every page load
+  //
+  // Dismissal storage key:
+  //   multiply_preaching_dismissed_<member_id>_<preach_date>_<stage>
+  //   where stage ∈ {'7d','3d','0d'}
+  //
+  // Public API:
+  //   await MultiplyShared.preaching.getUpcomingForMember(memberId, daysAhead?)
+  //     → returns nearest upcoming assignment within daysAhead (default 7)
+  //       or null if none
+  //
+  //   await MultiplyShared.preaching.getPendingSwapsForMember(memberId)
+  //     → returns array of pending swap requests where this member is TARGET
+  //
+  //   MultiplyShared.preaching.computeReminderStage(preachDateStr)
+  //     → returns '7d' | '3d' | '0d' | null (null if outside window or past)
+  //
+  //   MultiplyShared.preaching.isDismissed(memberId, preachDate, stage)
+  //   MultiplyShared.preaching.dismiss(memberId, preachDate, stage)
+  //
+  //   await MultiplyShared.preaching.renderReminderBanner(containerId, memberId, opts?)
+  //     → drop-in renderer. Injects banner HTML into containerId.
+  //     opts.onSwapClick(assignment) → custom handler (default: open admin)
+  //     opts.bilingual = true → emit en-text/tl-text spans (for MMT)
+  // ═════════════════════════════════════════════════════════════
+
+  async function _preaching_getUpcomingForMember(memberId, daysAhead) {
+    daysAhead = daysAhead || 7;
+    const db = getDB();
+    if (!db || !memberId) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(today); end.setDate(end.getDate() + daysAhead);
+    const todayStr = today.toISOString().slice(0,10);
+    const endStr = end.toISOString().slice(0,10);
+    const { data, error } = await db.from('wednesday_preaching')
+      .select('*')
+      .eq('preacher_member_id', memberId)
+      .gte('preach_date', todayStr)
+      .lte('preach_date', endStr)
+      .order('preach_date')
+      .limit(1);
+    if (error) { console.warn('preaching.getUpcoming:', error); return null; }
+    return (data && data[0]) || null;
+  }
+
+  async function _preaching_getPendingSwapsForMember(memberId) {
+    const db = getDB();
+    if (!db || !memberId) return [];
+    const { data, error } = await db.from('preaching_swap_requests')
+      .select('*')
+      .eq('target_member_id', memberId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) { console.warn('preaching.getPendingSwaps:', error); return []; }
+    return data || [];
+  }
+
+  function _preaching_computeReminderStage(preachDateStr) {
+    if (!preachDateStr) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const d = new Date(preachDateStr + 'T00:00:00');
+    const diff = Math.round((d - today) / 86400000);
+    if (diff < 0) return null;      // past — no banner
+    if (diff === 0) return '0d';    // today
+    if (diff <= 3) return '3d';
+    if (diff <= 7) return '7d';
+    return null;                     // > 7 days — no banner yet
+  }
+
+  function _preaching_dismissKey(memberId, preachDate, stage) {
+    return 'multiply_preaching_dismissed_' + memberId + '_' + preachDate + '_' + stage;
+  }
+
+  function _preaching_isDismissed(memberId, preachDate, stage) {
+    try { return localStorage.getItem(_preaching_dismissKey(memberId, preachDate, stage)) === '1'; }
+    catch (e) { return false; }
+  }
+
+  function _preaching_dismiss(memberId, preachDate, stage) {
+    try { localStorage.setItem(_preaching_dismissKey(memberId, preachDate, stage), '1'); }
+    catch (e) { /* localStorage unavailable */ }
+  }
+
+  // Drop-in HTML renderer for both MLT and MMT.
+  // The banner is injected into containerId (which should be an empty div
+  // located at the top of the home screen).
+  async function _preaching_renderReminderBanner(containerId, memberId, opts) {
+    opts = opts || {};
+    const container = document.getElementById(containerId);
+    if (!container || !memberId) return;
+    const bilingual = !!opts.bilingual;
+
+    // Fetch in parallel
+    const [assignment, swaps] = await Promise.all([
+      _preaching_getUpcomingForMember(memberId, 7),
+      _preaching_getPendingSwapsForMember(memberId)
+    ]);
+
+    const parts = [];
+
+    // ── Pending swap requests targeting this member ──
+    if (swaps && swaps.length > 0) {
+      // Fetch the requester's name + assignment dates
+      const db = getDB();
+      const reqIds = swaps.map(s => s.requester_member_id);
+      const assignIds = swaps.flatMap(s => [s.requester_assignment_id, s.target_assignment_id]);
+      const [memRes, asnRes] = await Promise.all([
+        db.from('members').select('id, name').in('id', reqIds),
+        db.from('wednesday_preaching').select('id, preach_date').in('id', assignIds)
+      ]);
+      const memMap = new Map((memRes.data || []).map(m => [m.id, m]));
+      const asnMap = new Map((asnRes.data || []).map(a => [a.id, a]));
+      for (const s of swaps) {
+        const requester = memMap.get(s.requester_member_id) || { name:'Someone' };
+        const reqA = asnMap.get(s.requester_assignment_id);
+        const tgtA = asnMap.get(s.target_assignment_id);
+        if (!reqA || !tgtA) continue;
+        const reqDate = new Date(reqA.preach_date + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+        const tgtDate = new Date(tgtA.preach_date + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+        parts.push(_preaching_swapTargetBannerHTML(s, requester.name, reqDate, tgtDate, bilingual));
+      }
+    }
+
+    // ── Upcoming assignment reminder ──
+    if (assignment) {
+      const stage = _preaching_computeReminderStage(assignment.preach_date);
+      if (stage && !_preaching_isDismissed(memberId, assignment.preach_date, stage)) {
+        parts.push(_preaching_assignmentBannerHTML(assignment, stage, bilingual));
+      }
+    }
+
+    container.innerHTML = parts.join('');
+
+    // Wire up the dismiss + swap-request buttons
+    container.querySelectorAll('[data-preaching-action]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.preachingAction;
+        const assignmentId = btn.dataset.assignmentId;
+        const preachDate = btn.dataset.preachDate;
+        const stage = btn.dataset.stage;
+        const swapId = btn.dataset.swapId;
+        if (action === 'dismiss') {
+          _preaching_dismiss(memberId, preachDate, stage);
+          // Re-render
+          _preaching_renderReminderBanner(containerId, memberId, opts);
+        } else if (action === 'request-swap') {
+          if (typeof opts.onRequestSwap === 'function') {
+            opts.onRequestSwap(assignmentId, preachDate);
+          } else {
+            alert('Swap request: contact Pastor or open preaching_admin.html to manage swaps.');
+          }
+        } else if (action === 'view-calendar') {
+          window.open('preaching_calendar.html', '_blank');
+        } else if (action === 'respond-swap') {
+          if (typeof opts.onRespondSwap === 'function') {
+            opts.onRespondSwap(swapId);
+          } else {
+            // Default: prompt accept/decline and call DB directly
+            await _preaching_handleSwapResponse(swapId, memberId, containerId, opts);
+          }
+        }
+      });
+    });
+  }
+
+  function _preaching_assignmentBannerHTML(assignment, stage, bilingual) {
+    const date = new Date(assignment.preach_date + 'T00:00:00');
+    const dateLabel = date.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    const colors = {
+      '7d': { bg:'linear-gradient(135deg,rgba(184,136,42,.12),rgba(184,136,42,.04))', border:'rgba(184,136,42,.4)', icon:'📅' },
+      '3d': { bg:'linear-gradient(135deg,rgba(212,120,10,.15),rgba(212,120,10,.05))', border:'rgba(212,120,10,.45)', icon:'⚠️' },
+      '0d': { bg:'linear-gradient(135deg,rgba(168,51,42,.15),rgba(168,51,42,.05))', border:'rgba(168,51,42,.5)', icon:'🎤' }
+    };
+    const c = colors[stage];
+
+    const msgs = {
+      '7d': bilingual ? {
+        en: 'You\'re preaching this coming Wednesday, ' + dateLabel + '. Time to start preparing!',
+        tl: 'Ikaw ang mangangaral sa darating na Miyerkules, ' + dateLabel + '. Tara, magsimula nang magprepare!'
+      } : { en: 'You\'re preaching this coming Wednesday, ' + dateLabel + '. Time to start preparing!', tl: null },
+      '3d': bilingual ? {
+        en: '3 days until you preach (' + dateLabel + '). What message is God placing on your heart?',
+        tl: '3 araw na lang bago ka mangaral (' + dateLabel + '). Anong mensahe ang inilalagay ng Diyos sa puso mo?'
+      } : { en: '3 days until you preach (' + dateLabel + '). What message is God placing on your heart?', tl: null },
+      '0d': bilingual ? {
+        en: 'You preach tonight. Praying for you, kapatid.',
+        tl: 'Ikaw ang mangangaral ngayong gabi. Ipinagdarasal ka namin, kapatid.'
+      } : { en: 'You preach tonight. Praying for you, kapatid.', tl: null }
+    };
+    const m = msgs[stage];
+    const titles = { '7d':'Upcoming · This Wednesday', '3d':'Reminder · 3 Days', '0d':'Tonight' };
+
+    return (
+      '<div style="background:' + c.bg + ';border:1px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px">' +
+        '<div style="font-size:22px;flex-shrink:0;line-height:1">' + c.icon + '</div>' +
+        '<div style="flex:1;min-width:0;line-height:1.4">' +
+          '<div style="font-weight:700;font-size:13.5px;margin-bottom:2px">' + escapeHTML(titles[stage]) + '</div>' +
+          '<div style="font-size:12.5px;color:rgba(0,0,0,.7)">' +
+            (bilingual && m.tl
+              ? '<span class="en-text">' + escapeHTML(m.en) + '</span><span class="tl-text">' + escapeHTML(m.tl) + '</span>'
+              : escapeHTML(m.en)) +
+          '</div>' +
+          '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
+            '<button type="button" data-preaching-action="request-swap" data-assignment-id="' + assignment.id + '" data-preach-date="' + assignment.preach_date + '" style="background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.15);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;font-weight:600;color:#1a1612">🔄 Request Swap</button>' +
+            '<button type="button" data-preaching-action="view-calendar" style="background:transparent;border:1px solid rgba(0,0,0,.15);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:rgba(0,0,0,.7)">📅 View Calendar</button>' +
+          '</div>' +
+        '</div>' +
+        '<button type="button" data-preaching-action="dismiss" data-preach-date="' + assignment.preach_date + '" data-stage="' + stage + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.4);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
+      '</div>'
+    );
+  }
+
+  function _preaching_swapTargetBannerHTML(swap, requesterName, requesterDate, targetDate, bilingual) {
+    const msg = bilingual
+      ? '<span class="en-text">' + escapeHTML(requesterName) + ' is asking to swap their <strong>' + escapeHTML(requesterDate) + '</strong> preaching with your <strong>' + escapeHTML(targetDate) + '</strong>.</span>' +
+        '<span class="tl-text">' + escapeHTML(requesterName) + ' ay humihiling makipag-swap ng kanyang <strong>' + escapeHTML(requesterDate) + '</strong> sa iyong <strong>' + escapeHTML(targetDate) + '</strong>.</span>'
+      : escapeHTML(requesterName) + ' is asking to swap their <strong>' + escapeHTML(requesterDate) + '</strong> preaching with your <strong>' + escapeHTML(targetDate) + '</strong>.';
+    const reason = swap.reason ? '<div style="font-style:italic;font-size:11.5px;color:rgba(0,0,0,.6);margin-top:4px">"' + escapeHTML(swap.reason) + '"</div>' : '';
+
+    return (
+      '<div style="background:linear-gradient(135deg,rgba(184,136,42,.15),rgba(184,136,42,.04));border:1px solid rgba(184,136,42,.5);border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px">' +
+        '<div style="font-size:22px;flex-shrink:0">🔄</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Swap Request</div>' +
+          '<div style="font-size:12.5px;color:rgba(0,0,0,.75);line-height:1.45">' + msg + '</div>' +
+          reason +
+          '<div style="display:flex;gap:6px;margin-top:8px">' +
+            '<button type="button" data-preaching-action="respond-swap" data-swap-id="' + swap.id + '" data-decision="accept" style="background:#2a5c40;color:white;border:none;font-family:inherit;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600">✓ Accept</button>' +
+            '<button type="button" data-preaching-action="respond-swap" data-swap-id="' + swap.id + '" data-decision="decline" style="background:white;color:#a8332a;border:1px solid #a8332a;font-family:inherit;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600">✕ Decline</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  // Default swap-response handler — accept or decline, then re-render banner.
+  // Pages can override via opts.onRespondSwap.
+  async function _preaching_handleSwapResponse(swapId, memberId, containerId, opts) {
+    const db = getDB();
+    if (!db) return;
+    // Find the button clicked to know decision
+    const btn = document.querySelector('[data-preaching-action="respond-swap"][data-swap-id="' + swapId + '"]');
+    const decision = btn ? btn.dataset.decision : null;
+    if (!decision) return;
+    if (!confirm(decision === 'accept' ? 'Accept this swap?' : 'Decline this swap?')) return;
+
+    // Fetch the swap row
+    const { data: sData, error: sErr } = await db.from('preaching_swap_requests').select('*').eq('id', swapId).single();
+    if (sErr || !sData) { alert('Could not load swap request: ' + (sErr?.message || 'not found')); return; }
+    if (sData.status !== 'pending') { alert('This swap is no longer pending.'); return; }
+
+    if (decision === 'accept') {
+      // Flip preacher_member_id on both assignments
+      const { data: assignments, error: aErr } = await db.from('wednesday_preaching')
+        .select('*').in('id', [sData.requester_assignment_id, sData.target_assignment_id]);
+      if (aErr || !assignments || assignments.length !== 2) {
+        alert('Could not load assignments.'); return;
+      }
+      const reqA = assignments.find(a => a.id === sData.requester_assignment_id);
+      const tgtA = assignments.find(a => a.id === sData.target_assignment_id);
+      await Promise.all([
+        db.from('wednesday_preaching').update({ preacher_member_id: tgtA.preacher_member_id, updated_at: new Date().toISOString() }).eq('id', reqA.id),
+        db.from('wednesday_preaching').update({ preacher_member_id: reqA.preacher_member_id, updated_at: new Date().toISOString() }).eq('id', tgtA.id),
+        db.from('preaching_swap_requests').update({ status: 'accepted', responded_at: new Date().toISOString() }).eq('id', swapId)
+      ]);
+    } else {
+      await db.from('preaching_swap_requests')
+        .update({ status: 'declined', responded_at: new Date().toISOString() })
+        .eq('id', swapId);
+    }
+    // Re-render banner so the swap card disappears
+    _preaching_renderReminderBanner(containerId, memberId, opts);
+  }
+
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -587,6 +877,15 @@
     // Lesson access predicate (Phase 3)
     lessons: {
       fetchVisibleLessons
+    },
+    // Wednesday Preaching (May 2026)
+    preaching: {
+      getUpcomingForMember: _preaching_getUpcomingForMember,
+      getPendingSwapsForMember: _preaching_getPendingSwapsForMember,
+      computeReminderStage: _preaching_computeReminderStage,
+      isDismissed: _preaching_isDismissed,
+      dismiss: _preaching_dismiss,
+      renderReminderBanner: _preaching_renderReminderBanner
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
