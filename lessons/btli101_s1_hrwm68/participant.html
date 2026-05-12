@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>BTLI 101 · Session 1 · Rosehill</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;--green-light:#f5fbf7;--gold:#b8882a;--gold-bg:#fdf6e8;--ink:#1a1612;--muted:#5a6655;--border:#c0d8c8;--paper:white;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{font-family:'DM Sans',sans-serif;background:var(--green-bg);color:var(--ink);font-size:15px;line-height:1.7;-webkit-tap-highlight-color:transparent;}
+
+/* HEADER */
+.header{background:var(--green);padding:1.25rem 1rem 1rem;text-align:center;}
+.h-church{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:.3rem;}
+.h-title{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:700;color:white;margin-bottom:.15rem;}
+.h-sub{font-size:11.5px;color:rgba(255,255,255,.5);}
+.h-chips{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:.65rem;}
+.hc{font-size:10px;padding:2px 9px;border-radius:10px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.65);}
+
+/* PROGRESS BAR */
+.progress-bar{height:4px;background:rgba(255,255,255,.2);}
+.progress-fill{height:100%;background:var(--gold);transition:width .5s;width:0%;}
+
+/* SECTIONS */
+.wrap{padding:.85rem .9rem 5rem;max-width:480px;margin:0 auto;}
+.section{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:.75rem;overflow:hidden;}
+.section-header{display:flex;align-items:center;gap:8px;margin-bottom:.6rem;cursor:pointer;user-select:none;}
+.sh-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.sh-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;}
+.sh-title{font-size:14px;font-weight:600;color:var(--ink);flex:1;}
+.sh-chev{font-size:11px;color:#aaa;transition:transform .2s;}
+.section.collapsed .sh-chev{transform:rotate(-90deg);}
+.section.collapsed .section-body{display:none;}
+
+/* VERSE CARD */
+.verse-card{background:var(--green);border-radius:10px;padding:1rem;text-align:center;margin-bottom:.75rem;}
+.vc-label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:.3rem;}
+.vc-verse{font-family:'Playfair Display',serif;font-size:15px;color:white;line-height:1.7;font-style:italic;}
+.vc-ref{font-size:11px;color:rgba(255,255,255,.5);margin-top:.25rem;}
+
+/* INPUTS */
+.q-label{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:.3rem;line-height:1.5;}
+.q-sub{font-size:12px;color:var(--muted);margin-bottom:.4rem;padding-left:.65rem;border-left:2px solid var(--border);line-height:1.5;}
+textarea,input[type=text]{width:100%;border:1.5px solid var(--border);border-radius:7px;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);background:var(--green-light);resize:vertical;transition:border-color .15s;-webkit-appearance:none;}
+textarea:focus,input[type=text]:focus{outline:none;border-color:var(--green);}
+textarea::placeholder,input::placeholder{color:#aab8a8;}
+.field{margin-bottom:.75rem;}
+.field:last-child{margin-bottom:0;}
+
+/* EOLO */
+.eolo-card{background:var(--gold-bg);border:1px solid #e0c888;border-radius:10px;padding:1rem;margin-bottom:.75rem;}
+.ec-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--gold);margin-bottom:.45rem;}
+.ec-q{font-size:13.5px;font-weight:500;color:var(--ink);margin-bottom:.4rem;}
+
+/* DAY TRACKER */
+.day-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:.6rem;}
+.day-item{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.day-cb{width:22px;height:22px;accent-color:var(--green);cursor:pointer;}
+.day-lbl{font-size:10px;color:var(--muted);}
+
+/* PANGAKO KO */
+.pangako-box{background:var(--green);border-radius:10px;padding:1rem;margin-bottom:.75rem;}
+.pb-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:.4rem;}
+.pb-prompt{font-family:'Playfair Display',serif;font-size:14px;color:white;line-height:1.65;font-style:italic;margin-bottom:.65rem;}
+textarea.light{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;}
+textarea.light::placeholder{color:rgba(255,255,255,.35);}
+textarea.light:focus{border-color:rgba(255,255,255,.5);}
+
+/* SAVE BUTTON */
+.save-btn{width:100%;background:var(--green);color:white;border:none;border-radius:9px;padding:13px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:filter .15s;margin-bottom:.75rem;}
+.save-btn:hover{filter:brightness(1.1);}
+.save-btn:active{filter:brightness(.9);}
+.saved-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:7px;padding:.7rem;text-align:center;font-size:13px;color:#1a5a30;margin-bottom:.75rem;}
+.saved-msg.show{display:block;}
+
+/* FOOTER */
+.footer{text-align:center;padding:1rem;font-size:11px;color:var(--muted);}
+
+/* COMPLETION BADGE */
+.complete-badge{display:none;background:var(--green);border-radius:10px;padding:1rem;text-align:center;margin-bottom:.75rem;color:white;}
+.complete-badge.show{display:block;}
+.cb2-icon{font-size:2rem;margin-bottom:.3rem;}
+.cb2-txt{font-size:14px;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="h-church">Rosehill Christian Church · MULTIPLY</div>
+  <div class="h-title">Sino ang Diyos?</div>
+  <div class="h-sub">BTLI 101 · Session 1 · Participant Page</div>
+  <div class="h-chips">
+    <span class="hc">⏱ 2 Oras</span>
+    <span class="hc">📖 Jeremias 29:11–13</span>
+    <span class="hc">🌿 Character: Reverence</span>
+  </div>
+</div>
+<div class="progress-bar"><div class="progress-fill" id="pf"></div></div>
+
+<div class="wrap">
+
+  <!-- MEMORY VERSE -->
+  <div class="verse-card">
+    <div class="vc-label">📝 Talata ng Memorya · Session 1</div>
+    <div class="vc-verse">"Hahanapin ninyo Ako at mahahanap Ako, kapag hinahanap ninyo Ako nang buong puso."</div>
+    <div class="vc-ref">Jeremias 29:13</div>
+  </div>
+
+  <!-- TALAKAY REFLECTION -->
+  <div class="section" id="sec-reflect">
+    <div class="section-header" onclick="toggleSec('reflect')">
+      <div class="sh-icon" style="background:#eef6f1">💡</div>
+      <div>
+        <div class="sh-label" style="color:var(--green)">Talakay · Reflection</div>
+        <div class="sh-title">Ang Aking Sagot</div>
+      </div>
+      <span class="sh-chev">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field">
+        <div class="q-label">Bago ang session na ito —</div>
+        <div class="q-sub">Paano ko inilarawan ang Diyos sa aking buhay?</div>
+        <textarea id="r1" placeholder="Isulat dito..." rows="3"></textarea>
+      </div>
+      <div class="field">
+        <div class="q-label">Ano ang gusto kong maging iba</div>
+        <div class="q-sub">sa aming relasyon sa Diyos?</div>
+        <textarea id="r2" placeholder="Isulat dito..." rows="3"></textarea>
+      </div>
+      <div class="field">
+        <div class="q-label">Isang bagay na nais kong sabihin sa Diyos ngayon —</div>
+        <div class="q-sub">na hindi ko pa nasasabi noon:</div>
+        <textarea id="r3" placeholder="Isulat para sa iyong sarili lamang..." rows="3"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- EOLO -->
+  <div class="eolo-card">
+    <div class="ec-label">🌏 EOLO · Each One Love One</div>
+    <div class="ec-q">Ang pangalan ng aking EOLO person:</div>
+    <input type="text" id="eoloName" placeholder="Pangalan o initials para sa privacy">
+    <div class="ec-q" style="margin-top:.65rem">Isang specific na bagay na ipagdarasal ko para sa kanya:</div>
+    <textarea id="eoloPrayer" placeholder="Ang aking dasal para sa kanya ngayon..." rows="2"></textarea>
+  </div>
+
+  <!-- PANGAKO KO -->
+  <div class="pangako-box">
+    <div class="pb-label">🏠 Pangako Ko · My Commitment</div>
+    <div class="pb-prompt">"Sa susunod na dalawang linggo, isasabuhay ko ang katotohanang kilala ako ng Diyos sa pamamagitan ng..."</div>
+    <textarea class="light" id="pangako" placeholder="Isang bagay. Specific. Magagawa ko talaga..." rows="3"></textarea>
+  </div>
+
+  <!-- DAY TRACKER -->
+  <div class="section" id="sec-days">
+    <div class="section-header" onclick="toggleSec('days')">
+      <div class="sh-icon" style="background:#fdf6e8">📅</div>
+      <div>
+        <div class="sh-label" style="color:var(--gold)">Takdang-Aralin · 10 Araw</div>
+        <div class="sh-title">Mag-usap sa Diyos — I-Track Dito</div>
+      </div>
+      <span class="sh-chev">▼</span>
+    </div>
+    <div class="section-body">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:.5rem">Isang pangungusap bawat gabi bago matulog. I-check kapag nagawa mo.</div>
+      <div class="day-grid" id="dayGrid"></div>
+      <div style="font-size:12px;color:var(--green);margin-top:.65rem;text-align:center" id="dayCount">0 ng 10 araw</div>
+    </div>
+  </div>
+
+  <!-- COMPLETE BADGE -->
+  <div class="complete-badge" id="completeBadge">
+    <div class="cb2-icon">🎉</div>
+    <div class="cb2-txt"><strong>Napuno ang 10 Araw!</strong><br>Dalhin ito sa susunod na session — patunay ng iyong katapatan.</div>
+  </div>
+
+  <!-- SAVE -->
+  <button class="save-btn" onclick="save()">💾 I-save ang Aking mga Sagot</button>
+  <div class="saved-msg" id="savedMsg">✅ Nai-save ang iyong mga sagot sa device na ito.</div>
+
+  <div class="footer">
+    BTLI 101 · Session 1 · Rosehill Christian Church<br>
+    <strong>Disciples who make disciples.</strong>
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+// ── SECTION TOGGLE ────────────────────────────
+function toggleSec(id) {
+  document.getElementById('sec-' + id).classList.toggle('collapsed');
+}
+
+// ── DAY TRACKER ───────────────────────────────
+const DAYS_KEY = 'btli101_s1_days';
+function buildDays() {
+  const saved = JSON.parse(localStorage.getItem(DAYS_KEY) || '{}');
+  const grid = document.getElementById('dayGrid');
+  grid.innerHTML = '';
+  for (let d = 1; d <= 10; d++) {
+    const div = document.createElement('div');
+    div.className = 'day-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'day-cb';
+    cb.checked = !!saved[d];
+    cb.onchange = () => { saveDay(d, cb.checked); updateCount(); };
+    const lbl = document.createElement('span');
+    lbl.className = 'day-lbl';
+    lbl.textContent = 'Araw ' + d;
+    div.appendChild(cb);
+    div.appendChild(lbl);
+    grid.appendChild(div);
+  }
+  updateCount();
+}
+
+function saveDay(day, checked) {
+  const saved = JSON.parse(localStorage.getItem(DAYS_KEY) || '{}');
+  saved[day] = checked ? new Date().toISOString() : null;
+  localStorage.setItem(DAYS_KEY, JSON.stringify(saved));
+}
+
+function updateCount() {
+  const saved = JSON.parse(localStorage.getItem(DAYS_KEY) || '{}');
+  const count = Object.values(saved).filter(Boolean).length;
+  document.getElementById('dayCount').textContent = count + ' ng 10 araw';
+  document.getElementById('completeBadge').classList.toggle('show', count >= 10);
+  updateProgress();
+}
+
+// ── PROGRESS BAR ──────────────────────────────
+function updateProgress() {
+  const fields = ['r1','r2','r3','eoloName','eoloPrayer','pangako'];
+  let filled = fields.filter(id => (document.getElementById(id)?.value||'').trim()).length;
+  const days = JSON.parse(localStorage.getItem(DAYS_KEY) || '{}');
+  const dayCount = Math.min(Object.values(days).filter(Boolean).length, 4);
+  const pct = Math.round(((filled / fields.length) * 70) + (dayCount / 4 * 30));
+  document.getElementById('pf').style.width = pct + '%';
+}
+
+// ── SAVE ALL ──────────────────────────────────
+const DATA_KEY = 'btli101_s1_data';
+
+function save() {
+  const data = {
+    r1: document.getElementById('r1').value,
+    r2: document.getElementById('r2').value,
+    r3: document.getElementById('r3').value,
+    eoloName: document.getElementById('eoloName').value,
+    eoloPrayer: document.getElementById('eoloPrayer').value,
+    pangako: document.getElementById('pangako').value,
+    savedAt: new Date().toISOString()
+  };
+  localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  const msg = document.getElementById('savedMsg');
+  msg.classList.add('show');
+  setTimeout(() => msg.classList.remove('show'), 3000);
+  updateProgress();
+}
+
+// ── LOAD SAVED DATA ───────────────────────────
+function loadSaved() {
+  const data = JSON.parse(localStorage.getItem(DATA_KEY) || '{}');
+  if (data.r1) document.getElementById('r1').value = data.r1;
+  if (data.r2) document.getElementById('r2').value = data.r2;
+  if (data.r3) document.getElementById('r3').value = data.r3;
+  if (data.eoloName) document.getElementById('eoloName').value = data.eoloName;
+  if (data.eoloPrayer) document.getElementById('eoloPrayer').value = data.eoloPrayer;
+  if (data.pangako) document.getElementById('pangako').value = data.pangako;
+}
+
+// ── AUTO-SAVE ON INPUT ────────────────────────
+['r1','r2','r3','eoloName','eoloPrayer','pangako'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateProgress);
+});
+
+// ── INIT ──────────────────────────────────────
+loadSaved();
+buildDays();
+updateProgress();
+</script>
+</body>
+</html>
