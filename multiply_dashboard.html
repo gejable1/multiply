@@ -3714,7 +3714,19 @@ async function _sermonDelete(id){
 // Smart-paste applied to text fields (strips Word/Docs formatting).
 // ═══════════════════════════════════════════════════════════════════
 
-let _libraryState = { resources: [], editing: null };
+let _libraryState = {
+  resources: [],
+  editing: null,
+  // Chapter support (Phase 2):
+  //   `chapters` is loaded when an existing resource is opened for edit.
+  //   New (unsaved) resources have []. Updates here mirror DB; the
+  //   resource's `has_chapters` toggle is purely a UI state and is
+  //   computed from chapters.length > 0 most of the time.
+  chapters: [],            // current resource's chapters, ordered by chapter_number
+  showChapters: false,     // UI toggle: "This resource has chapters"
+  chapterEditing: null,    // chapter currently being edited (in sub-modal)
+  chapterEditOriginalId: null   // for distinguishing new vs existing in sub-modal
+};
 
 const LIBRARY_LEVELS = [
   { value: 0, label: 'All Members (Level 0+)' },
@@ -3927,6 +3939,52 @@ function _renderLibraryEditForm(modal, editing){
           </div>
         </div>
 
+        <!-- 📚 CHAPTERS TOGGLE (Phase 2 — chapter-level podcasts/transcripts/quizzes) -->
+        ${!isNew ? `
+        <div style="margin-top:1.25rem;padding:.85rem 1rem;background:rgba(138,91,46,.08);border:1px solid rgba(138,91,46,.25);border-radius:8px">
+          <div style="display:flex;align-items:center;gap:.65rem">
+            <input type="checkbox" id="libHasChapters" ${_libraryState.showChapters ? 'checked' : ''} onchange="_libToggleChapters(this.checked)" style="width:16px;height:16px;cursor:pointer">
+            <label for="libHasChapters" style="font-size:12.5px;color:var(--ink);cursor:pointer;flex:1">
+              <strong>📚 This resource has chapters</strong>
+              <span style="font-weight:400;color:var(--muted);display:block;margin-top:2px;font-size:11px">For books with multiple chapters. Each chapter gets its own podcast, transcript, and optional quiz. When on, the resource-level podcast and transcript below are ignored.</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 📚 CHAPTER LIST (shown only when toggle is on) -->
+        <div id="libChapterSection" style="${_libraryState.showChapters ? '' : 'display:none'};margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.65rem">
+            <div>
+              <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">📚 Chapters</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px" id="libChapterCount">${_libraryState.chapters.length} chapter${_libraryState.chapters.length===1?'':'s'}</div>
+            </div>
+            <button onclick="_chOpenEditor(null)"
+              style="padding:.45rem .85rem;background:rgba(94,125,82,.18);color:var(--green);border:1px solid rgba(94,125,82,.4);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+              ＋ Add Chapter
+            </button>
+          </div>
+          <div id="libChapterList">
+            ${_renderChapterList()}
+          </div>
+        </div>
+        ` : `
+        <div style="margin-top:1.25rem;padding:.65rem .85rem;background:var(--surface2);border-radius:8px;font-size:11.5px;color:var(--muted);line-height:1.55;font-style:italic">
+          💡 After saving this resource, you can add chapters (for multi-chapter books) and a comprehension quiz.
+        </div>
+        `}
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- The next section (podcast/transcripts/required-flag/quiz) is    -->
+        <!-- visually muted when chapter mode is on, signaling that chapters -->
+        <!-- carry these per-chapter (not on the resource itself).           -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <div id="libResourceLevelMedia" style="${_libraryState.showChapters ? 'opacity:.45;pointer-events:none;position:relative' : ''}">
+          ${_libraryState.showChapters ? `
+            <div style="position:absolute;top:1rem;right:1rem;z-index:2;background:var(--surface);padding:5px 11px;border:1px solid rgba(138,91,46,.4);border-radius:6px;font-size:10.5px;color:var(--gold,#8a5b2e);font-weight:700;letter-spacing:.05em;pointer-events:auto">
+              ↑ Per-chapter (above)
+            </div>
+          ` : ''}
+
         <!-- 🎙 PODCAST (Phase 1: YouTube unlisted) -->
         <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
           <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🎙 Podcast Episode <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(YouTube unlisted)</span></div>
@@ -4020,6 +4078,7 @@ function _renderLibraryEditForm(modal, editing){
           💡 After saving this resource, you'll be able to add a comprehension quiz from here.
         </div>
         `}
+        </div><!-- /libResourceLevelMedia -->
 
         <div style="margin-top:1rem;padding:.65rem .85rem;background:var(--surface2);border-radius:8px;display:flex;align-items:center;gap:.6rem">
           <input type="checkbox" id="libPublished" ${editing.published === false ? '' : 'checked'} style="width:16px;height:16px;cursor:pointer">
@@ -4086,6 +4145,8 @@ function _libClose(){
   const m = document.getElementById('libraryManagerModal');
   if(m) m.style.display = 'none';
   _libraryState.editing = null;
+  _libraryState.chapters = [];
+  _libraryState.showChapters = false;
 }
 
 function _libNew(){
@@ -4104,18 +4165,47 @@ function _libNew(){
     is_required_for_next_level: false,
     published: true
   };
+  // Chapter UI: new resources start with no chapters; toggle off.
+  _libraryState.chapters = [];
+  _libraryState.showChapters = false;
   _renderLibraryManager();
 }
 
-function _libEdit(id){
+async function _libEdit(id){
   const r = _libraryState.resources.find(x => x.id === id);
   if(!r){ toast('Resource not found', '❌'); return; }
   _libraryState.editing = {...r};
+
+  // Load chapters for this resource. If any exist, default the toggle on.
+  // Render immediately with empty chapters; refresh once data arrives so
+  // the form doesn't block waiting for the chapter query.
+  _libraryState.chapters = [];
+  _libraryState.showChapters = false;
   _renderLibraryManager();
+
+  try {
+    const { data, error } = await db.from('library_chapters')
+      .select('*')
+      .eq('resource_id', id)
+      .order('chapter_number', { ascending: true });
+    if(error) throw error;
+    _libraryState.chapters = data || [];
+    _libraryState.showChapters = _libraryState.chapters.length > 0;
+    // Re-render only if we're still on the same resource (user might
+    // have closed the form in the meantime).
+    if(_libraryState.editing && _libraryState.editing.id === id){
+      _renderLibraryManager();
+    }
+  } catch(e){
+    // Soft fail — the resource still edits fine without chapters loaded.
+    console.warn('Chapter load failed:', e);
+  }
 }
 
 function _libCancel(){
   _libraryState.editing = null;
+  _libraryState.chapters = [];
+  _libraryState.showChapters = false;
   _renderLibraryManager();
 }
 
@@ -4160,6 +4250,8 @@ async function _libSave(){
       toast('✓ Resource added', 'success');
     }
     _libraryState.editing = null;
+    _libraryState.chapters = [];
+    _libraryState.showChapters = false;
     await _loadLibrary();
     _renderLibraryManager();
   } catch(e){
@@ -4170,16 +4262,547 @@ async function _libSave(){
 async function _libDelete(id){
   const r = _libraryState.resources.find(x => x.id === id);
   if(!r) return;
-  if(!confirm(`Delete "${r.title_en}"?\n\nThis is permanent. Members' reading progress for this resource will also be deleted.`)) return;
+  // Cascade deletes are configured on library_chapters and library_chapter_progress,
+  // so we don't need to manually clean those — but we DO mention them in the warning.
+  const chCount = (_libraryState.chapters || []).length;
+  const chWarn = chCount > 0 ? `\n\nThis includes ${chCount} chapter${chCount===1?'':'s'} and ALL member progress on them.` : '';
+  if(!confirm(`Delete "${r.title_en}"?\n\nThis is permanent. Members' reading progress for this resource will also be deleted.${chWarn}`)) return;
   try {
     const { error } = await db.from('library_resources').delete().eq('id', id);
     if(error) throw error;
     toast('Resource deleted', 'success');
     _libraryState.editing = null;
+    _libraryState.chapters = [];
+    _libraryState.showChapters = false;
     await _loadLibrary();
     _renderLibraryManager();
   } catch(e){
     toast('Delete failed: ' + e.message, '❌');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// LIBRARY CHAPTERS — Pastor authors per-chapter podcasts/transcripts/quizzes
+// ─────────────────────────────────────────────────────────────────
+// Design contract (see library_chapters_migration.sql):
+//   - Chapters are OPTIONAL on a resource
+//   - When chapters exist, the resource-level podcast/transcript fields
+//     are ignored by the UI (Phase 3 enforces this for members; here we
+//     just visually mute them)
+//   - Each chapter: title (EN/TL), summary (EN/TL), podcast (EN/TL),
+//     transcript (EN/TL), reflection prompt (EN/TL), is_required toggle
+//   - Quizzes attach to either resource OR chapter (XOR enforced at DB)
+//
+// State on _libraryState:
+//   chapters[]              — current resource's chapters, ordered by chapter_number
+//   showChapters            — UI toggle (true if chapters.length > 0 or user enabled)
+//   chapterEditing          — chapter currently being edited in sub-modal
+//   chapterEditOriginalId   — id of chapter being edited (null for new)
+//
+// All chapter ops save immediately to DB (no batched save). This avoids
+// the "did I save the resource AND its chapters?" confusion.
+// ═══════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────
+// Toggle "this resource has chapters" — purely a UI affordance.
+// When turning ON: show chapter section. (Empty chapter list is OK.)
+// When turning OFF: if chapters exist in DB, warn before hiding.
+//   The chapters STAY in the DB — toggle is for UX visibility.
+//   To actually delete chapters, Pastor uses each chapter's 🗑 button.
+// ─────────────────────────────────────────────────────────────────
+function _libToggleChapters(checked){
+  if(!checked && _libraryState.chapters.length > 0){
+    const ok = confirm(
+      'Turn off chapter mode?\n\n' +
+      'Your ' + _libraryState.chapters.length + ' chapter' + (_libraryState.chapters.length===1?'':'s') + ' will REMAIN in the database. ' +
+      'They\'ll just be hidden in this editor. To actually delete chapters, use each chapter\'s 🗑 button first.'
+    );
+    if(!ok){
+      // Re-check the box
+      document.getElementById('libHasChapters').checked = true;
+      return;
+    }
+  }
+  // Preserve in-progress field edits across the re-render. The toggle
+  // triggers a full re-render of the form; without this snapshot, a
+  // half-typed transcript / summary would be lost.
+  _libSnapshotFormIntoState();
+  _libraryState.showChapters = checked;
+  _renderLibraryManager();
+}
+
+// Copy current form values into _libraryState.editing so that a re-render
+// preserves what the user has typed. Called before any structural toggle
+// that re-renders the resource editor.
+function _libSnapshotFormIntoState(){
+  const e = _libraryState.editing;
+  if(!e) return;
+  const get = (id) => document.getElementById(id);
+  const v = (id) => get(id)?.value;
+  const c = (id) => get(id)?.checked;
+
+  // Each get() may be null if the section is currently hidden by another
+  // mode toggle — guard with the ?. and fall back to existing state.
+  if(get('libTitleEn'))    e.title_en    = v('libTitleEn') ?? e.title_en;
+  if(get('libTitleTl'))    e.title_tl    = v('libTitleTl') ?? e.title_tl;
+  if(get('libAuthor'))     e.author      = v('libAuthor') ?? e.author;
+  if(get('libSummaryEn'))  e.summary_en  = v('libSummaryEn') ?? e.summary_en;
+  if(get('libSummaryTl'))  e.summary_tl  = v('libSummaryTl') ?? e.summary_tl;
+  if(get('libWhyEn'))      e.why_matters_en = v('libWhyEn') ?? e.why_matters_en;
+  if(get('libWhyTl'))      e.why_matters_tl = v('libWhyTl') ?? e.why_matters_tl;
+  if(get('libYoutubeEn'))  e.youtube_url_en = v('libYoutubeEn') ?? e.youtube_url_en;
+  if(get('libYoutubeTl'))  e.youtube_url_tl = v('libYoutubeTl') ?? e.youtube_url_tl;
+  if(get('libAudioDuration')){
+    const raw = v('libAudioDuration');
+    e.audio_duration_seconds = (raw === '' || raw == null) ? null : (parseInt(raw, 10) || null);
+  }
+  if(get('libTranscriptEn')) e.transcript_en = v('libTranscriptEn') ?? e.transcript_en;
+  if(get('libTranscriptTl')) e.transcript_tl = v('libTranscriptTl') ?? e.transcript_tl;
+  if(get('libExternalUrl'))  e.external_url  = v('libExternalUrl') ?? e.external_url;
+  if(get('libPdfUrl'))       e.pdf_url       = v('libPdfUrl') ?? e.pdf_url;
+  if(get('libLevel'))        e.level         = parseInt(v('libLevel'), 10);
+  if(get('libCategory'))     e.category      = v('libCategory') || null;
+  if(get('libSortOrder'))    e.sort_order    = parseInt(v('libSortOrder'), 10) || 0;
+  if(get('libRequired'))     e.is_required_for_next_level = c('libRequired');
+  if(get('libPublished'))    e.published     = c('libPublished');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Render the chapter list inside the resource editor.
+// Each row: drag-handle-like position indicator, title preview, status
+// pills (has podcast / has transcript / has quiz / required), and the
+// action buttons (↑ ↓ ✏ 🗑).
+// ─────────────────────────────────────────────────────────────────
+function _renderChapterList(){
+  const chapters = _libraryState.chapters || [];
+  if(chapters.length === 0){
+    return `
+      <div style="padding:1.5rem 1rem;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-size:12.5px;line-height:1.6">
+        ✨ No chapters yet.<br>
+        <span style="font-size:11.5px;color:var(--lighter)">Tap "＋ Add Chapter" above to create your first chapter.</span>
+      </div>
+    `;
+  }
+
+  return chapters.map((ch, idx) => {
+    const hasEn = !!(ch.youtube_url_en);
+    const hasTl = !!(ch.youtube_url_tl);
+    const hasTranscript = !!(ch.transcript_en || ch.transcript_tl);
+    const isFirst = idx === 0;
+    const isLast = idx === chapters.length - 1;
+    const pills = [];
+    if(hasEn) pills.push('<span style="background:rgba(94,125,82,.15);color:var(--green);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600">🎙 EN</span>');
+    if(hasTl) pills.push('<span style="background:rgba(94,125,82,.15);color:var(--green);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600">🎙 TL</span>');
+    if(hasTranscript) pills.push('<span style="background:rgba(74,144,226,.15);color:var(--blue,#4a90e2);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600">📜</span>');
+    if(ch.is_required) pills.push('<span style="background:rgba(184,136,42,.18);color:var(--gold,#8a5b2e);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600">🔑 Required</span>');
+    if(!ch.published) pills.push('<span style="background:var(--surface2);color:var(--muted);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600">Draft</span>');
+
+    const titlePreview = ch.title_en || '(untitled)';
+
+    return `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .85rem;margin-bottom:.45rem;display:grid;grid-template-columns:auto 1fr auto;gap:.65rem;align-items:center">
+        <div style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:13px;font-weight:700;min-width:32px">
+          <span style="opacity:.6">${ch.chapter_number}.</span>
+        </div>
+        <div style="min-width:0">
+          <div style="font-size:13px;color:var(--ink);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTMLNotif(titlePreview)}</div>
+          ${pills.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${pills.join('')}</div>` : '<div style="font-size:10.5px;color:var(--lighter);margin-top:3px;font-style:italic">No content yet</div>'}
+        </div>
+        <div style="display:flex;gap:3px;align-items:center">
+          <button onclick="_chReorder('${ch.id}', -1)" ${isFirst ? 'disabled' : ''} title="Move up"
+            style="padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:5px;cursor:${isFirst?'not-allowed':'pointer'};opacity:${isFirst?.35:1};font-size:12px;color:var(--muted)">↑</button>
+          <button onclick="_chReorder('${ch.id}', 1)" ${isLast ? 'disabled' : ''} title="Move down"
+            style="padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:5px;cursor:${isLast?'not-allowed':'pointer'};opacity:${isLast?.35:1};font-size:12px;color:var(--muted)">↓</button>
+          <button onclick="openLibraryQuizBuilder({type:'chapter',id:'${ch.id}'})" title="Manage chapter quiz"
+            style="padding:4px 8px;background:rgba(74,144,226,.12);border:1px solid rgba(74,144,226,.35);border-radius:5px;cursor:pointer;font-size:11px;color:var(--blue,#4a90e2);font-weight:600">📝</button>
+          <button onclick="_chOpenEditor('${ch.id}')" title="Edit chapter"
+            style="padding:4px 8px;background:rgba(94,125,82,.15);border:1px solid rgba(94,125,82,.35);border-radius:5px;cursor:pointer;font-size:11px;color:var(--green);font-weight:600">✏️</button>
+          <button onclick="_chDelete('${ch.id}')" title="Delete chapter"
+            style="padding:4px 8px;background:rgba(180,80,80,.12);border:1px solid rgba(180,80,80,.3);border-radius:5px;cursor:pointer;font-size:11px;color:#b25050;font-weight:600">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Refresh just the chapter list section without re-rendering the
+// whole resource editor (which would lose any in-progress field
+// values like a half-typed transcript edit on the resource).
+// ─────────────────────────────────────────────────────────────────
+function _refreshChapterListInPlace(){
+  const list = document.getElementById('libChapterList');
+  const count = document.getElementById('libChapterCount');
+  if(list) list.innerHTML = _renderChapterList();
+  if(count){
+    const n = _libraryState.chapters.length;
+    count.textContent = `${n} chapter${n===1?'':'s'}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Reorder chapters by swapping chapter_number with neighbor.
+// direction: -1 (up) or +1 (down)
+// Persists both swaps to DB before refreshing local state.
+// ─────────────────────────────────────────────────────────────────
+async function _chReorder(chapterId, direction){
+  const chapters = _libraryState.chapters;
+  const idx = chapters.findIndex(c => c.id === chapterId);
+  if(idx === -1) return;
+  const neighborIdx = idx + direction;
+  if(neighborIdx < 0 || neighborIdx >= chapters.length) return;
+
+  const a = chapters[idx];
+  const b = chapters[neighborIdx];
+  const aOld = a.chapter_number;
+  const bOld = b.chapter_number;
+
+  // Postgres won't let us swap directly because of the UNIQUE(resource_id, chapter_number)
+  // constraint — we'd briefly have two rows with the same number. So we
+  // park `a` at a high temp value (-1 wouldn't work for unsigned in theory;
+  // we use 100000 + bOld which won't collide with any real chapter number),
+  // then move `b` to a's old number, then `a` to b's old number.
+  const PARK = 100000;
+  try {
+    let r;
+    r = await db.from('library_chapters').update({ chapter_number: PARK + aOld, updated_at: new Date().toISOString() }).eq('id', a.id);
+    if(r.error) throw r.error;
+    r = await db.from('library_chapters').update({ chapter_number: aOld, updated_at: new Date().toISOString() }).eq('id', b.id);
+    if(r.error) throw r.error;
+    r = await db.from('library_chapters').update({ chapter_number: bOld, updated_at: new Date().toISOString() }).eq('id', a.id);
+    if(r.error) throw r.error;
+
+    // Update local state
+    a.chapter_number = bOld;
+    b.chapter_number = aOld;
+    _libraryState.chapters.sort((x,y) => x.chapter_number - y.chapter_number);
+    _refreshChapterListInPlace();
+  } catch(e){
+    toast('Reorder failed: ' + e.message, '❌');
+    // Best-effort recovery: reload chapters from DB to undo any partial parking
+    await _chReload();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Reload chapters for the currently-edited resource from DB.
+// Used as a recovery hook after an error and after batch ops.
+// ─────────────────────────────────────────────────────────────────
+async function _chReload(){
+  if(!_libraryState.editing || !_libraryState.editing.id) return;
+  try {
+    const { data, error } = await db.from('library_chapters')
+      .select('*')
+      .eq('resource_id', _libraryState.editing.id)
+      .order('chapter_number', { ascending: true });
+    if(error) throw error;
+    _libraryState.chapters = data || [];
+    _refreshChapterListInPlace();
+  } catch(e){
+    console.warn('Chapter reload failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Delete a chapter. Confirms first; the DB cascade also removes
+// library_chapter_progress rows for this chapter, and any quiz
+// (and its attempts) attached to the chapter.
+// ─────────────────────────────────────────────────────────────────
+async function _chDelete(chapterId){
+  const ch = _libraryState.chapters.find(c => c.id === chapterId);
+  if(!ch) return;
+  const title = ch.title_en || `Chapter ${ch.chapter_number}`;
+  if(!confirm(`Delete "${title}"?\n\nThis is permanent. Member progress on this chapter and any chapter quiz (with all attempts) will be deleted too.`)) return;
+  try {
+    const { error } = await db.from('library_chapters').delete().eq('id', chapterId);
+    if(error) throw error;
+    toast('Chapter deleted', 'success');
+    // Remove locally; chapter numbers are NOT auto-renumbered (gaps are fine).
+    // If Pastor wants a tidy 1..N sequence again, they can manually reorder
+    // or use the (future) "Renumber" button.
+    _libraryState.chapters = _libraryState.chapters.filter(c => c.id !== chapterId);
+    _refreshChapterListInPlace();
+  } catch(e){
+    toast('Delete failed: ' + e.message, '❌');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Open the chapter editor sub-modal.
+//   chapterId = null   → new chapter (next chapter_number assigned)
+//   chapterId = <uuid> → edit existing
+// ─────────────────────────────────────────────────────────────────
+function _chOpenEditor(chapterId){
+  if(!_libraryState.editing || !_libraryState.editing.id){
+    toast('Save the resource first', '⚠️');
+    return;
+  }
+  if(chapterId){
+    const ch = _libraryState.chapters.find(c => c.id === chapterId);
+    if(!ch){ toast('Chapter not found', '❌'); return; }
+    _libraryState.chapterEditing = {...ch};
+    _libraryState.chapterEditOriginalId = chapterId;
+  } else {
+    // New chapter — assign next available chapter_number
+    const maxNum = _libraryState.chapters.reduce((m, c) => Math.max(m, c.chapter_number), 0);
+    _libraryState.chapterEditing = {
+      resource_id: _libraryState.editing.id,
+      chapter_number: maxNum + 1,
+      title_en: '', title_tl: '',
+      summary_en: '', summary_tl: '',
+      youtube_url_en: '', youtube_url_tl: '',
+      audio_duration_seconds: null,
+      transcript_en: '', transcript_tl: '',
+      reflection_prompt_en: '', reflection_prompt_tl: '',
+      is_required: true,
+      published: true
+    };
+    _libraryState.chapterEditOriginalId = null;
+  }
+  _renderChapterEditor();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Render the chapter editor sub-modal. Sits above the resource editor
+// at z-index 9200 (resource is 9100). Closing returns to resource editor
+// without re-rendering it (preserves any in-progress field edits).
+// ─────────────────────────────────────────────────────────────────
+function _renderChapterEditor(){
+  const ch = _libraryState.chapterEditing;
+  if(!ch) return;
+  const isNew = !_libraryState.chapterEditOriginalId;
+
+  let modal = document.getElementById('chapterEditorModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'chapterEditorModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.55);z-index:9200;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:640px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">${isNew ? 'New Chapter' : 'Edit Chapter'}</div>
+          <div style="font-size:17px;font-weight:700;color:var(--ink);margin-top:2px">📚 Chapter ${ch.chapter_number}</div>
+        </div>
+        <button onclick="_chCloseEditor()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.25rem">
+        <!-- Number + required + published -->
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:.75rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Chapter #</label>
+            <input type="number" id="chNumber" value="${ch.chapter_number}" min="1"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding-bottom:2px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="chRequired" ${ch.is_required ? 'checked' : ''} style="width:15px;height:15px;cursor:pointer">
+              <label for="chRequired" style="font-size:12px;color:var(--ink);cursor:pointer">🔑 Required for book completion</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="chPublished" ${ch.published !== false ? 'checked' : ''} style="width:15px;height:15px;cursor:pointer">
+              <label for="chPublished" style="font-size:12px;color:var(--ink);cursor:pointer">Published (visible to members)</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ENGLISH -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">English</div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Title (English) *</label>
+            <input type="text" id="chTitleEn" value="${escapeHTMLNotif(ch.title_en || '')}" placeholder="e.g. The Heart of a Leader"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Summary (English) <span style="font-weight:400;color:var(--muted);font-size:10.5px">— short, ~2-3 sentences for card preview</span></label>
+            <textarea id="chSummaryEn" rows="3" placeholder="A short summary of this chapter…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(ch.summary_en || '')}</textarea>
+          </div>
+        </div>
+
+        <!-- TAGALOG -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Tagalog <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(optional)</span></div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Pamagat (Tagalog)</label>
+            <input type="text" id="chTitleTl" value="${escapeHTMLNotif(ch.title_tl || '')}"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Buod (Tagalog)</label>
+            <textarea id="chSummaryTl" rows="3"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(ch.summary_tl || '')}</textarea>
+          </div>
+        </div>
+
+        <!-- PODCAST -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">🎙 Podcast (NotebookLM)</div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.65rem">
+            Generate the chapter's audio overview in NotebookLM → upload to YouTube as Unlisted → paste URL here.
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">YouTube URL — English</label>
+            <input type="url" id="chYoutubeEn" value="${escapeHTMLNotif(ch.youtube_url_en || '')}" placeholder="https://youtu.be/…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">YouTube URL — Tagalog</label>
+            <input type="url" id="chYoutubeTl" value="${escapeHTMLNotif(ch.youtube_url_tl || '')}" placeholder="https://youtu.be/…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Audio duration <span style="font-weight:400;color:var(--muted);font-size:10.5px">(seconds — for "12 min" display)</span></label>
+            <input type="number" id="chDuration" value="${ch.audio_duration_seconds || ''}" min="0" placeholder="e.g. 720 for 12 minutes"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+          </div>
+        </div>
+
+        <!-- TRANSCRIPTS -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">📜 Transcripts <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(optional)</span></div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Transcript — English</label>
+            <textarea id="chTranscriptEn" rows="5" placeholder="The chapter transcript in English…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(ch.transcript_en || '')}</textarea>
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Transcript — Tagalog</label>
+            <textarea id="chTranscriptTl" rows="5" placeholder="Buong transcript sa Tagalog…"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(ch.transcript_tl || '')}</textarea>
+          </div>
+        </div>
+
+        <!-- REFLECTION PROMPT (auto-shown at 90% playback in MMT) -->
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">✦ Reflection Prompt <span style="font-weight:400;color:var(--lighter);text-transform:none;letter-spacing:0">(optional — auto-shown at 90% playback)</span></div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin-bottom:.65rem">
+            A short question that appears when the member is nearly done listening. Leave blank to skip the reflection prompt for this chapter.
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Reflection prompt — English</label>
+            <textarea id="chReflectionEn" rows="2" placeholder="e.g. What one phrase from this chapter spoke to you most? Why?"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(ch.reflection_prompt_en || '')}</textarea>
+          </div>
+          <div style="margin-top:.7rem">
+            <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Reflection prompt — Tagalog</label>
+            <textarea id="chReflectionTl" rows="2"
+              style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px;font-family:'DM Sans',sans-serif;line-height:1.55;resize:vertical">${escapeHTMLNotif(ch.reflection_prompt_tl || '')}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:1rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)" onclick="_chCloseEditor()">Cancel</button>
+        <button class="sbtn" style="margin-top:0;background:var(--green)" onclick="_chSave()">💾 Save Chapter</button>
+      </div>
+    </div>
+  `;
+
+  // Smart-paste support (matches the resource editor pattern)
+  ['chTitleEn','chTitleTl','chSummaryEn','chSummaryTl','chTranscriptEn','chTranscriptTl','chReflectionEn','chReflectionTl'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el && typeof _sermonSmartPaste === 'function') el.addEventListener('paste', _sermonSmartPaste);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Close the chapter editor without saving.
+// ─────────────────────────────────────────────────────────────────
+function _chCloseEditor(){
+  const m = document.getElementById('chapterEditorModal');
+  if(m) m.remove();
+  _libraryState.chapterEditing = null;
+  _libraryState.chapterEditOriginalId = null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Save chapter (insert or update). Validates title required and
+// chapter_number uniqueness. On success, refreshes the chapter list
+// in place and closes the sub-modal.
+// ─────────────────────────────────────────────────────────────────
+async function _chSave(){
+  const ch = _libraryState.chapterEditing;
+  if(!ch) return;
+
+  // Collect form values
+  const titleEn = document.getElementById('chTitleEn').value.trim();
+  if(!titleEn){ toast('English title required', '⚠️'); return; }
+
+  const numberRaw = parseInt(document.getElementById('chNumber').value, 10);
+  if(!numberRaw || numberRaw < 1){ toast('Chapter number must be 1 or higher', '⚠️'); return; }
+
+  // Check chapter_number uniqueness within this resource (client-side guard;
+  // the DB constraint will also enforce it, but a friendly toast is nicer).
+  const conflict = _libraryState.chapters.find(c =>
+    c.chapter_number === numberRaw && c.id !== _libraryState.chapterEditOriginalId
+  );
+  if(conflict){
+    toast(`Chapter ${numberRaw} already exists ("${conflict.title_en || '—'}"). Pick a different number.`, '⚠️');
+    return;
+  }
+
+  const durationRaw = document.getElementById('chDuration').value.trim();
+  const payload = {
+    resource_id:           _libraryState.editing.id,
+    chapter_number:        numberRaw,
+    title_en:              titleEn,
+    title_tl:              document.getElementById('chTitleTl').value.trim() || null,
+    summary_en:            document.getElementById('chSummaryEn').value.trim() || null,
+    summary_tl:            document.getElementById('chSummaryTl').value.trim() || null,
+    youtube_url_en:        document.getElementById('chYoutubeEn').value.trim() || null,
+    youtube_url_tl:        document.getElementById('chYoutubeTl').value.trim() || null,
+    audio_duration_seconds: durationRaw === '' ? null : (parseInt(durationRaw, 10) || null),
+    transcript_en:         document.getElementById('chTranscriptEn').value.trim() || null,
+    transcript_tl:         document.getElementById('chTranscriptTl').value.trim() || null,
+    reflection_prompt_en:  document.getElementById('chReflectionEn').value.trim() || null,
+    reflection_prompt_tl:  document.getElementById('chReflectionTl').value.trim() || null,
+    is_required:           document.getElementById('chRequired').checked,
+    published:             document.getElementById('chPublished').checked,
+    updated_at:            new Date().toISOString()
+  };
+
+  try {
+    let savedRow;
+    if(_libraryState.chapterEditOriginalId){
+      const { data, error } = await db.from('library_chapters')
+        .update(payload)
+        .eq('id', _libraryState.chapterEditOriginalId)
+        .select()
+        .single();
+      if(error) throw error;
+      savedRow = data;
+      // Replace in local state
+      const idx = _libraryState.chapters.findIndex(c => c.id === savedRow.id);
+      if(idx !== -1) _libraryState.chapters[idx] = savedRow;
+    } else {
+      const { data, error } = await db.from('library_chapters')
+        .insert(payload)
+        .select()
+        .single();
+      if(error) throw error;
+      savedRow = data;
+      _libraryState.chapters.push(savedRow);
+    }
+    // Keep sorted by chapter_number
+    _libraryState.chapters.sort((a,b) => a.chapter_number - b.chapter_number);
+    toast(_libraryState.chapterEditOriginalId ? '✓ Chapter updated' : '✓ Chapter added', 'success');
+    _chCloseEditor();
+    _refreshChapterListInPlace();
+  } catch(e){
+    // Surface DB constraint violations clearly
+    const msg = (e.message || '').toLowerCase();
+    if(msg.includes('library_chapters_resource_chapter_unique')){
+      toast(`Chapter ${numberRaw} already exists in this resource.`, '❌');
+    } else {
+      toast('Save failed: ' + e.message, '❌');
+    }
   }
 }
 
@@ -4231,15 +4854,18 @@ async function openQuizReview(){
 }
 
 async function _qrLoadData(){
-  // Four parallel queries
-  const [attRes, qzRes, resRes, memRes] = await Promise.all([
+  // Five parallel queries (added library_chapters in Phase 2 so we can
+  // resolve chapter-level quizzes to their chapter titles).
+  const [attRes, qzRes, resRes, chRes, memRes] = await Promise.all([
     db.from('library_quiz_attempts')
       .select('id, member_id, quiz_id, started_at, completed_at, score, passed, answers, created_at')
       .order('completed_at', { ascending: false, nullsFirst: false }),
     db.from('library_quizzes')
-      .select('id, resource_id, passing_score, questions, intro_text_en, intro_text_tl, outro_text_pass_en, outro_text_pass_tl, outro_text_fail_en, outro_text_fail_tl, active'),
+      .select('id, resource_id, chapter_id, passing_score, questions, intro_text_en, intro_text_tl, outro_text_pass_en, outro_text_pass_tl, outro_text_fail_en, outro_text_fail_tl, active'),
     db.from('library_resources')
       .select('id, title_en, title_tl, level, author'),
+    db.from('library_chapters')
+      .select('id, resource_id, chapter_number, title_en, title_tl'),
     db.from('members')
       .select('id, name, lc_group, pipeline_level')
   ]);
@@ -4247,6 +4873,7 @@ async function _qrLoadData(){
   if(attRes.error) throw attRes.error;
   if(qzRes.error) throw qzRes.error;
   if(resRes.error) throw resRes.error;
+  if(chRes.error) throw chRes.error;
   if(memRes.error) throw memRes.error;
 
   _quizReviewState.attempts = attRes.data || [];
@@ -4257,8 +4884,39 @@ async function _qrLoadData(){
   _quizReviewState.resources = {};
   (resRes.data || []).forEach(r => { _quizReviewState.resources[r.id] = r; });
 
+  _quizReviewState.chapters = {};
+  (chRes.data || []).forEach(c => { _quizReviewState.chapters[c.id] = c; });
+
   _quizReviewState.members = {};
   (memRes.data || []).forEach(m => { _quizReviewState.members[m.id] = m; });
+}
+
+// Resolve a quiz to its display title and resource_id (works for both
+// resource-level and chapter-level quizzes). Returns null fields if the
+// quiz can't be resolved (rare — orphan attempt).
+function _qrResolveQuizContext(quiz){
+  if(!quiz) return { title: '(quiz not found)', resourceId: null, isChapter: false };
+  if(quiz.chapter_id){
+    const ch = _quizReviewState.chapters?.[quiz.chapter_id];
+    if(!ch) return { title: '(chapter not found)', resourceId: null, isChapter: true };
+    const res = _quizReviewState.resources[ch.resource_id];
+    const bookTitle = res?.title_en || '(book)';
+    return {
+      title: `${bookTitle} — Ch. ${ch.chapter_number}: ${ch.title_en || ''}`.trim(),
+      resourceId: ch.resource_id,
+      chapterId: quiz.chapter_id,
+      isChapter: true
+    };
+  }
+  if(quiz.resource_id){
+    const res = _quizReviewState.resources[quiz.resource_id];
+    return {
+      title: res?.title_en || '(resource not found)',
+      resourceId: quiz.resource_id,
+      isChapter: false
+    };
+  }
+  return { title: '(no owner)', resourceId: null, isChapter: false };
 }
 
 function _qrFilteredAttempts(){
@@ -4268,7 +4926,9 @@ function _qrFilteredAttempts(){
     if(f.memberId && a.member_id !== f.memberId) return false;
     const qz = _quizReviewState.quizzes[a.quiz_id];
     if(f.resourceId){
-      if(!qz || qz.resource_id !== f.resourceId) return false;
+      // Quiz might be owned by resource directly OR by a chapter under that resource.
+      const ctx = _qrResolveQuizContext(qz);
+      if(ctx.resourceId !== f.resourceId) return false;
     }
     if(f.status === 'passed' && !a.passed) return false;
     if(f.status === 'failed' && a.passed) return false;
@@ -4334,8 +4994,14 @@ function _qrRender(){
     .filter(m => m)
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
-  // Resource dropdown options (every resource with a quiz that has attempts)
-  const everQuizzed = new Set(allAttempts.map(a => _quizReviewState.quizzes[a.quiz_id]?.resource_id).filter(Boolean));
+  // Resource dropdown options — include resources whose quizzes (book-level
+  // or chapter-level) have attempts. Resolve chapter-level quizzes back to
+  // their parent resource so the filter buckets them together.
+  const everQuizzed = new Set();
+  allAttempts.forEach(a => {
+    const ctx = _qrResolveQuizContext(_quizReviewState.quizzes[a.quiz_id]);
+    if(ctx.resourceId) everQuizzed.add(ctx.resourceId);
+  });
   const resourceOptions = Array.from(everQuizzed)
     .map(id => _quizReviewState.resources[id])
     .filter(r => r)
@@ -4452,8 +5118,9 @@ function _qrRenderMemberCard(memId, attempts){
 
 function _qrRenderAttemptRow(a){
   const qz = _quizReviewState.quizzes[a.quiz_id];
-  const res = qz ? _quizReviewState.resources[qz.resource_id] : null;
-  const title = res?.title_en || '(resource not found)';
+  const ctx = _qrResolveQuizContext(qz);
+  const title = ctx.title;
+  const isChapter = ctx.isChapter;
   const when = a.completed_at ? new Date(a.completed_at).toLocaleString('en-PH', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : '—';
   const score = (a.score != null) ? `${a.score}%` : '—';
   const passBadge = a.passed
@@ -4472,7 +5139,7 @@ function _qrRenderAttemptRow(a){
       onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
       <div style="min-width:0">
         <div style="font-size:12.5px;color:var(--ink);font-weight:500;line-height:1.3">
-          ${escapeHTMLNotif(title)}
+          ${isChapter ? '<span style="font-size:9.5px;background:rgba(138,91,46,.15);color:var(--gold,#8a5b2e);padding:1px 5px;border-radius:4px;font-weight:700;margin-right:5px">CH</span>' : ''}${escapeHTMLNotif(title)}
           ${hasReflection ? '<span style="font-size:9.5px;color:var(--gold);margin-left:5px">✦ reflection</span>' : ''}
         </div>
         <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${when} · ${score}</div>
@@ -4507,10 +5174,11 @@ function _qrRenderDetail(){
   if(!a){ _qrCloseDetail(); return; }
 
   const qz = _quizReviewState.quizzes[a.quiz_id];
-  const res = qz ? _quizReviewState.resources[qz.resource_id] : null;
+  const ctx = _qrResolveQuizContext(qz);
   const m  = _quizReviewState.members[a.member_id];
 
-  const title = res?.title_en || '(resource not found)';
+  const title = ctx.title;
+  const isChapter = ctx.isChapter;
   const memName = m?.name || '(member not found)';
   const when = a.completed_at ? new Date(a.completed_at).toLocaleString('en-PH', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : '—';
   const score = (a.score != null) ? `${a.score}%` : '—';
@@ -4536,7 +5204,7 @@ function _qrRenderDetail(){
           <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Attempt detail</div>
           <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.3">${escapeHTMLNotif(memName)}</div>
           <div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4">
-            ${escapeHTMLNotif(title)}<br>${when}
+            ${isChapter ? '<span style="font-size:9.5px;background:rgba(138,91,46,.15);color:var(--gold,#8a5b2e);padding:1px 5px;border-radius:4px;font-weight:700;margin-right:5px;letter-spacing:.05em">CHAPTER QUIZ</span>' : ''}${escapeHTMLNotif(title)}<br>${when}
           </div>
         </div>
         <button onclick="_qrCloseDetail()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px;line-height:1">×</button>
@@ -4680,13 +5348,22 @@ function _qrExportCSV(){
   };
 
   const rows = [
-    ['Member', 'LC Group', 'Resource', 'Level', 'Score (%)', 'Passing (%)', 'Passed', 'Completed At', 'Reflection']
+    ['Member', 'LC Group', 'Resource', 'Chapter', 'Level', 'Score (%)', 'Passing (%)', 'Passed', 'Completed At', 'Reflection']
   ];
 
   filtered.forEach(a => {
     const qz = _quizReviewState.quizzes[a.quiz_id];
-    const res = qz ? _quizReviewState.resources[qz.resource_id] : null;
+    const ctx = _qrResolveQuizContext(qz);
+    // Resolve to parent resource (for both book and chapter quizzes)
+    const res = ctx.resourceId ? _quizReviewState.resources[ctx.resourceId] : null;
     const m  = _quizReviewState.members[a.member_id];
+
+    // Chapter label (blank for book-level quizzes)
+    let chapterLabel = '';
+    if(ctx.isChapter && ctx.chapterId){
+      const ch = _quizReviewState.chapters?.[ctx.chapterId];
+      if(ch) chapterLabel = `Ch. ${ch.chapter_number}: ${ch.title_en || ''}`.trim();
+    }
 
     // Concatenate all reflection answers for this attempt
     let reflection = '';
@@ -4705,6 +5382,7 @@ function _qrExportCSV(){
       m?.name || '',
       m?.lc_group || '',
       res?.title_en || '',
+      chapterLabel,
       res?.level != null ? `L${res.level}` : '',
       a.score != null ? a.score : '',
       qz?.passing_score != null ? qz.passing_score : '',
@@ -4745,37 +5423,92 @@ function _qrExportCSV(){
 // ═══════════════════════════════════════════════════════════════════
 
 let _quizBuilderState = {
+  // Legacy fields (still set for backward compat with any existing
+  // reads that may live in the codebase / future refactor cleanup):
   resourceId: null,
-  resource: null,  // for header display
-  quiz: null,      // current quiz row (or skeleton if new)
+  resource: null,    // for header display (when ownerType === 'resource')
+  // New ownership model (Phase 2): a quiz belongs to either a resource
+  // OR a chapter (XOR enforced at DB level — see migration).
+  ownerType: null,   // 'resource' or 'chapter'
+  ownerId: null,     // the id of the owner (resource_id or chapter_id)
+  chapter: null,     // for header display (when ownerType === 'chapter')
+  quiz: null,        // current quiz row (or skeleton if new)
   dirty: false
 };
 
-async function openLibraryQuizBuilder(resourceId){
+async function openLibraryQuizBuilder(arg){
   if(!LeaderScope.isPastor()){ toast('Only the Pastor can manage quizzes','🔒'); return; }
-  _quizBuilderState.resourceId = resourceId;
+
+  // Normalize the argument:
+  //   string  → legacy {type:'resource', id: string}
+  //   {type, id} → new format
+  let ownerType, ownerId;
+  if(typeof arg === 'string'){
+    ownerType = 'resource';
+    ownerId = arg;
+  } else if(arg && typeof arg === 'object' && arg.id){
+    ownerType = arg.type || 'resource';
+    ownerId = arg.id;
+  } else {
+    toast('Invalid quiz target', '❌');
+    return;
+  }
+
+  _quizBuilderState.ownerType = ownerType;
+  _quizBuilderState.ownerId = ownerId;
+  _quizBuilderState.resourceId = (ownerType === 'resource') ? ownerId : null;  // legacy
   _quizBuilderState.dirty = false;
+  _quizBuilderState.resource = null;
+  _quizBuilderState.chapter = null;
 
-  // Load resource + existing quiz (if any) in parallel
   try {
-    const [resRes, qzRes] = await Promise.all([
-      db.from('library_resources').select('id, title_en, title_tl, level').eq('id', resourceId).maybeSingle(),
-      db.from('library_quizzes').select('*').eq('resource_id', resourceId).eq('active', true).maybeSingle()
-    ]);
-    if (resRes.error) throw resRes.error;
-    if (qzRes.error)  throw qzRes.error;
-    if (!resRes.data) { toast('Resource not found', '❌'); return; }
+    if(ownerType === 'resource'){
+      // Resource-level quiz: load resource + existing quiz keyed on resource_id
+      const [resRes, qzRes] = await Promise.all([
+        db.from('library_resources').select('id, title_en, title_tl, level').eq('id', ownerId).maybeSingle(),
+        db.from('library_quizzes').select('*').eq('resource_id', ownerId).eq('active', true).maybeSingle()
+      ]);
+      if (resRes.error) throw resRes.error;
+      if (qzRes.error)  throw qzRes.error;
+      if (!resRes.data) { toast('Resource not found', '❌'); return; }
 
-    _quizBuilderState.resource = resRes.data;
-    _quizBuilderState.quiz = qzRes.data || {
-      resource_id: resourceId,
-      passing_score: 70,
-      questions: [],
-      intro_text_en: '', intro_text_tl: '',
-      outro_text_pass_en: '', outro_text_pass_tl: '',
-      outro_text_fail_en: '', outro_text_fail_tl: '',
-      active: true
-    };
+      _quizBuilderState.resource = resRes.data;
+      _quizBuilderState.quiz = qzRes.data || {
+        resource_id: ownerId,
+        chapter_id: null,
+        passing_score: 70,
+        questions: [],
+        intro_text_en: '', intro_text_tl: '',
+        outro_text_pass_en: '', outro_text_pass_tl: '',
+        outro_text_fail_en: '', outro_text_fail_tl: '',
+        active: true
+      };
+    } else {
+      // Chapter-level quiz: load chapter + its parent resource (for breadcrumb) + existing quiz keyed on chapter_id
+      const chRes = await db.from('library_chapters').select('*').eq('id', ownerId).maybeSingle();
+      if(chRes.error) throw chRes.error;
+      if(!chRes.data){ toast('Chapter not found', '❌'); return; }
+
+      const [parentRes, qzRes] = await Promise.all([
+        db.from('library_resources').select('id, title_en, title_tl, level').eq('id', chRes.data.resource_id).maybeSingle(),
+        db.from('library_quizzes').select('*').eq('chapter_id', ownerId).eq('active', true).maybeSingle()
+      ]);
+      if(parentRes.error) throw parentRes.error;
+      if(qzRes.error) throw qzRes.error;
+
+      _quizBuilderState.chapter = chRes.data;
+      _quizBuilderState.resource = parentRes.data;  // parent book, used for breadcrumb
+      _quizBuilderState.quiz = qzRes.data || {
+        resource_id: null,
+        chapter_id: ownerId,
+        passing_score: 70,
+        questions: [],
+        intro_text_en: '', intro_text_tl: '',
+        outro_text_pass_en: '', outro_text_pass_tl: '',
+        outro_text_fail_en: '', outro_text_fail_tl: '',
+        active: true
+      };
+    }
   } catch (e) {
     toast('Could not load quiz: ' + e.message, '❌');
     return;
@@ -4827,8 +5560,19 @@ function _renderQuizBuilder(){
     <div style="background:var(--surface);border-radius:12px;width:100%;max-width:720px;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border)">
       <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
         <div style="flex:1;min-width:0">
-          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">📝 Comprehension Quiz</div>
-          <div style="font-size:17px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.25">${escapeHTMLNotif(r.title_en || '(resource)')}</div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">
+            📝 ${_quizBuilderState.ownerType === 'chapter' ? 'Chapter Comprehension Quiz' : 'Comprehension Quiz'}
+          </div>
+          ${_quizBuilderState.ownerType === 'chapter' ? `
+            <div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.3">
+              ${escapeHTMLNotif(r.title_en || '(book)')}
+            </div>
+            <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.25">
+              Ch. ${_quizBuilderState.chapter?.chapter_number || '?'} · ${escapeHTMLNotif(_quizBuilderState.chapter?.title_en || '(chapter)')}
+            </div>
+          ` : `
+            <div style="font-size:17px;font-weight:700;color:var(--ink);margin-top:2px;line-height:1.25">${escapeHTMLNotif(r.title_en || '(resource)')}</div>
+          `}
         </div>
         <button onclick="_quizBuilderClose()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px">×</button>
       </div>
@@ -5101,8 +5845,13 @@ async function _quizSaveQuiz(){
   qz.outro_text_fail_en = (document.getElementById('quizFailEn')?.value || '').trim() || null;
   qz.outro_text_fail_tl = (document.getElementById('quizFailTl')?.value || '').trim() || null;
 
+  // Build the payload — write whichever owner column matches the current
+  // ownerType, and explicitly NULL the other (the XOR constraint requires
+  // exactly one of them to be set; an UPDATE that doesn't touch the OTHER
+  // field could leave a stale value behind in edge cases).
   const payload = {
-    resource_id: qz.resource_id,
+    resource_id: (_quizBuilderState.ownerType === 'resource') ? _quizBuilderState.ownerId : null,
+    chapter_id:  (_quizBuilderState.ownerType === 'chapter')  ? _quizBuilderState.ownerId : null,
     passing_score: qz.passing_score,
     questions: qz.questions,
     intro_text_en: qz.intro_text_en,
@@ -5125,9 +5874,11 @@ async function _quizSaveQuiz(){
     _quizBuilderState.quiz = result.data;
     _quizBuilderState.dirty = false;
     toast('✓ Quiz saved', 'success');
-    // Refresh the edit form's quiz status indicator
-    if (typeof _libFetchQuizStatusForEditForm === 'function' && qz.resource_id){
-      _libFetchQuizStatusForEditForm(qz.resource_id);
+    // Refresh the edit form's quiz status indicator — only for resource-level
+    // quizzes (chapter quizzes refresh via the chapter list, not via the
+    // resource form's inline status block).
+    if (_quizBuilderState.ownerType === 'resource' && typeof _libFetchQuizStatusForEditForm === 'function'){
+      _libFetchQuizStatusForEditForm(_quizBuilderState.ownerId);
     }
     _renderQuizBuilder();
   } catch (e) {
