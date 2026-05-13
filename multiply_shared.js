@@ -761,6 +761,16 @@
   function _preaching_assignmentBannerHTML(assignment, stage, bilingual) {
     const date = new Date(assignment.preach_date + 'T00:00:00');
     const dateLabel = date.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    // Service type drives messaging — Sunday vs Wednesday phrasing differs.
+    // Defaults to 'wednesday' for legacy rows that pre-date the column.
+    const svc = (assignment.service_type || 'wednesday');
+    const isSunday = svc === 'sunday';
+    const dayWord = isSunday ? 'Sunday' : 'Wednesday';
+    const dayWordTL = isSunday ? 'Linggo' : 'Miyerkules';
+    // Service-specific time-of-service phrasing
+    const tonightOrMorning = isSunday ? 'morning' : 'tonight';
+    const tonightOrMorningTL = isSunday ? 'umaga' : 'gabi';
+
     const colors = {
       '7d': { bg:'linear-gradient(135deg,rgba(184,136,42,.12),rgba(184,136,42,.04))', border:'rgba(184,136,42,.4)', icon:'📅' },
       '3d': { bg:'linear-gradient(135deg,rgba(212,120,10,.15),rgba(212,120,10,.05))', border:'rgba(212,120,10,.45)', icon:'⚠️' },
@@ -770,20 +780,24 @@
 
     const msgs = {
       '7d': bilingual ? {
-        en: 'You\'re preaching this coming Wednesday, ' + dateLabel + '. Time to start preparing!',
-        tl: 'Ikaw ang mangangaral sa darating na Miyerkules, ' + dateLabel + '. Tara, magsimula nang magprepare!'
-      } : { en: 'You\'re preaching this coming Wednesday, ' + dateLabel + '. Time to start preparing!', tl: null },
+        en: 'You\'re preaching this coming ' + dayWord + ', ' + dateLabel + '. Time to start preparing!',
+        tl: 'Ikaw ang mangangaral sa darating na ' + dayWordTL + ', ' + dateLabel + '. Tara, magsimula nang magprepare!'
+      } : { en: 'You\'re preaching this coming ' + dayWord + ', ' + dateLabel + '. Time to start preparing!', tl: null },
       '3d': bilingual ? {
         en: '3 days until you preach (' + dateLabel + '). What message is God placing on your heart?',
         tl: '3 araw na lang bago ka mangaral (' + dateLabel + '). Anong mensahe ang inilalagay ng Diyos sa puso mo?'
       } : { en: '3 days until you preach (' + dateLabel + '). What message is God placing on your heart?', tl: null },
       '0d': bilingual ? {
-        en: 'You preach tonight. Praying for you, kapatid.',
-        tl: 'Ikaw ang mangangaral ngayong gabi. Ipinagdarasal ka namin, kapatid.'
-      } : { en: 'You preach tonight. Praying for you, kapatid.', tl: null }
+        en: 'You preach this ' + tonightOrMorning + '. Praying for you, kapatid.',
+        tl: 'Ikaw ang mangangaral ngayong ' + tonightOrMorningTL + '. Ipinagdarasal ka namin, kapatid.'
+      } : { en: 'You preach this ' + tonightOrMorning + '. Praying for you, kapatid.', tl: null }
     };
     const m = msgs[stage];
-    const titles = { '7d':'Upcoming · This Wednesday', '3d':'Reminder · 3 Days', '0d':'Tonight' };
+    const titles = {
+      '7d': 'Upcoming · This ' + dayWord,
+      '3d': 'Reminder · 3 Days',
+      '0d': isSunday ? 'This Morning' : 'Tonight'
+    };
 
     return (
       '<div style="background:' + c.bg + ';border:1px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px">' +
