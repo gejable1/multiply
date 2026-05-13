@@ -607,14 +607,25 @@
   //     opts.bilingual = true → emit en-text/tl-text spans (for MMT)
   // ═════════════════════════════════════════════════════════════
 
+  // ─── Timezone-safe local-date helper (see preaching_admin for rationale) ─
+  function _ymdLocal(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
   async function _preaching_getUpcomingForMember(memberId, daysAhead) {
     daysAhead = daysAhead || 7;
     const db = getDB();
     if (!db || !memberId) return null;
     const today = new Date(); today.setHours(0,0,0,0);
     const end = new Date(today); end.setDate(end.getDate() + daysAhead);
-    const todayStr = today.toISOString().slice(0,10);
-    const endStr = end.toISOString().slice(0,10);
+    // Use LOCAL-date helper. toISOString() shifts to UTC which off-by-ones
+    // every Wednesday in Manila (UTC+8). Critical: preach_date column is
+    // a Postgres DATE — no timezone — so we must send LOCAL Y-M-D.
+    const todayStr = _ymdLocal(today);
+    const endStr = _ymdLocal(end);
     const { data, error } = await db.from('wednesday_preaching')
       .select('*')
       .eq('preacher_member_id', memberId)

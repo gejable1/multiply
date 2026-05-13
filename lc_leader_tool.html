@@ -4071,17 +4071,21 @@ function openHeadsUpList(){
 // open the tool, and can accept/decline there.
 // ═══════════════════════════════════════════════════════════════
 async function openPreachingSwapRequest(myAssignmentId, myPreachDate){
-  // Fetch my assignment + all assignments within 6 weeks (forward and back)
+  // Fetch my assignment + all assignments within 6 weeks (forward and back).
+  // ─── TIMEZONE-SAFE LOCAL DATE ─────────────────────────────────────
+  // Use local-date components (getFullYear/getMonth/getDate). toISOString
+  // converts to UTC, which off-by-ones every Wednesday in Manila.
+  const _ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   const myDate = new Date(myPreachDate + 'T00:00:00');
   const winStart = new Date(myDate); winStart.setDate(winStart.getDate() - 42);
   const winEnd   = new Date(myDate); winEnd.setDate(winEnd.getDate()   + 42);
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = _ymd(new Date());
 
   const { data: assignments, error: aErr } = await db.from('wednesday_preaching')
     .select('*')
     .gte('preach_date', todayStr)            // must be in the future
-    .gte('preach_date', winStart.toISOString().slice(0,10))
-    .lte('preach_date', winEnd.toISOString().slice(0,10))
+    .gte('preach_date', _ymd(winStart))
+    .lte('preach_date', _ymd(winEnd))
     .neq('id', myAssignmentId)               // exclude my own
     .order('preach_date');
   if (aErr) { alert('Could not load swap candidates: ' + aErr.message); return; }

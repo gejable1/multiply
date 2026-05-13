@@ -311,7 +311,19 @@ let _reorderBusy = false;                   // race-guard for rapid reorder clic
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
 function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
-function ymd(d){ return d.toISOString().slice(0,10); }
+// ─── TIMEZONE-SAFE DATE HELPERS ──────────────────────────────
+// `ymd(d)` returns the date in the user's LOCAL timezone as 'YYYY-MM-DD'.
+// We do NOT use toISOString() here because it converts to UTC, which in
+// Manila (UTC+8) means midnight-of-Wednesday-local becomes 4PM-Tuesday-UTC,
+// causing every Wednesday to be stored as Tuesday. The local-component
+// approach is timezone-independent and works correctly worldwide.
+function ymd(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function todayYMD(){ return ymd(new Date()); }
 function parseDate(s){ return new Date(s + 'T00:00:00'); }
 function fmtDate(d){
   const opts = { weekday:'short', month:'short', day:'numeric', year:'numeric' };
@@ -751,7 +763,7 @@ function renderRoster(){
     wrap.innerHTML = '<div class="rr-empty">No preachers yet. Search a member above to add the first one.</div>';
     return;
   }
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = todayYMD();
   wrap.innerHTML = _preachers.map((p, idx) => {
     // Compute leave status — only "on leave" if date is today or future
     const isOnLeave = p.on_leave_until && p.on_leave_until >= todayStr;
@@ -972,7 +984,7 @@ function openPreacherNotes(preacherId){
   // input accepts directly. If past, clear it (UX: don't show stale dates).
   let leaveStr = p.on_leave_until || '';
   if (leaveStr) {
-    const todayStr = new Date().toISOString().slice(0,10);
+    const todayStr = todayYMD();
     if (leaveStr < todayStr) leaveStr = '';
   }
   document.getElementById('preacherOnLeaveUntil').value = leaveStr;
@@ -991,7 +1003,7 @@ async function savePreacherNotes(){
 
   // Guard: prevent setting a past date (would be a no-op anyway, but confusing)
   if (onLeaveUntil) {
-    const todayStr = new Date().toISOString().slice(0,10);
+    const todayStr = todayYMD();
     if (onLeaveUntil < todayStr) {
       if (!confirm('That leave date is in the past. Save anyway? (It will have no effect on auto-fill.)')) return;
     }
