@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wednesday Preaching Calendar · MULTIPLY</title>
+<title>Preaching Calendar · MULTIPLY</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzJhNWM0MCIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2I4ODgyYSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TTwvdGV4dD48L3N2Zz4=">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -12,10 +12,11 @@
 :root{
   --ink:#1a1612;--paper:#fefcf8;--bg:#f5f0e8;
   --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;
-  --green:#2a5c40;--green-bg:#eef6f1;--green-deep:#1f4530;
-  --muted:#6b5f4f;--lighter:#9a8f80;--border:#e2d8cc;
+  --green:#2a5c40;--green-bg:#eef6f1;--green-dim:#1a3a28;
+  --muted:#6b5f4f;--lighter:#9a8f80;--border:#e2d8cc;--border2:#ccc0b0;--surface2:#f9f4ec;
   --orange:#d4780a;--orange-bg:#fff3e0;
-  --red:#a8332a;
+  --red:#a8332a;--red-bg:#fbeae8;
+  --purple:#7a4e9f;--purple-bg:#efe7f6;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;}
@@ -26,37 +27,80 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .htitle{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:#f5edd8;}
 .hsub{font-size:11px;color:rgba(255,255,255,.55);margin-top:1px;}
 
-.page{max-width:900px;margin:0 auto;padding:1.5rem 1rem 5rem;}
-.intro{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;margin-bottom:1.25rem;}
-.intro h2{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:600;margin-bottom:.35rem;}
-.intro p{font-size:13px;color:var(--muted);line-height:1.55;}
+.page{max-width:900px;margin:0 auto;padding:1.25rem 1rem 5rem;}
+.intro{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:.9rem 1.1rem;margin-bottom:1rem;}
+.intro h2{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;margin-bottom:.3rem;}
+.intro p{font-size:12.5px;color:var(--muted);line-height:1.55;}
 
-.month-section{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;margin-bottom:1rem;}
-.month-h{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;color:var(--ink);margin-bottom:.85rem;padding-bottom:.65rem;border-bottom:1px solid var(--border);}
+.month-nav{display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:.65rem .85rem;margin-bottom:.85rem;}
+.month-title{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:600;color:var(--ink);}
+.nav-btn{background:var(--gold-bg);border:1px solid var(--gold);color:var(--gold-dim);font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;transition:background .12s;}
+.nav-btn:hover{background:var(--gold);color:white;}
 
-.entry{display:grid;grid-template-columns:60px 1fr auto;gap:12px;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--border);}
-.entry:last-child{border-bottom:none;}
-.entry.past{opacity:.5;}
-.entry.today{background:var(--gold-bg);margin:0 -.65rem;padding:.65rem;border-radius:7px;border-bottom:1px solid var(--border);}
-.e-date{text-align:center;}
-.e-day{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
-.e-num{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--gold);line-height:1;}
-.e-preacher{font-size:14.5px;font-weight:600;color:var(--ink);}
-.e-preacher .none{color:var(--lighter);font-style:italic;font-weight:400;font-size:13px;}
-.e-meta{font-size:11px;color:var(--muted);margin-top:2px;font-style:italic;}
-.e-badge{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:5px;}
-.badge-today{background:var(--red);color:white;}
-.badge-soon{background:var(--orange-bg);color:var(--orange);}
-.badge-next{background:var(--green-bg);color:var(--green);}
-.badge-swapped{background:var(--gold-bg);color:var(--gold-dim);}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:.85rem;font-size:11px;color:var(--muted);padding:0 .25rem;}
+.legend span{display:inline-flex;align-items:center;gap:5px;}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;}
+
+.cal-month{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:.85rem;margin-bottom:.85rem;}
+.cal-week-row{display:grid;grid-template-columns:54px 1fr 1fr;gap:7px;align-items:stretch;margin-bottom:7px;}
+.cal-week-row:last-child{margin-bottom:0;}
+.cal-week-label{display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:11.5px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.4rem .2rem;line-height:1.2;}
+.cal-week-label .cwl-w{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--lighter);font-weight:600;font-family:inherit;}
+.cal-week-label .cwl-n{font-size:16px;color:var(--gold-dim);}
+
+.cal-cell{background:var(--paper);border:1px solid var(--border);border-radius:7px;padding:.55rem .7rem;display:flex;flex-direction:column;min-height:68px;transition:border-color .12s;}
+.cal-cell.empty-slot{background:transparent;border:1px dashed var(--border);opacity:.45;}
+.cal-cell.assigned{border-left:4px solid var(--green);}
+.cal-cell.unassigned{border-left:4px solid var(--lighter);background:var(--surface2);}
+.cal-cell.past{opacity:.55;}
+.cal-cell.swapped{border-left:4px solid var(--gold);}
+.cal-cell.mainstay{border-left:4px solid var(--purple);background:#faf6fd;}
+.cal-cell.today{box-shadow:0 0 0 2px var(--gold);border-color:var(--gold);}
+.cal-cell.mine{border-left-width:4px;border-left-color:var(--green);background:#e9f5ee;}
+.cal-cell.mine.today{background:#dcefe3;}
+
+.cal-cell-top{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:3px;}
+.cal-date{font-family:'Playfair Display',serif;font-size:13.5px;font-weight:700;color:var(--ink);}
+.cal-svc{font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:1px 5px;border-radius:3px;}
+.cal-svc.svc-sun{background:var(--purple-bg);color:var(--purple);}
+.cal-svc.svc-wed{background:var(--green-bg);color:var(--green);}
+.cal-preacher{font-size:12.5px;color:var(--ink);font-weight:500;flex:1;line-height:1.4;}
+.cal-preacher .none{color:var(--lighter);font-style:italic;font-weight:400;}
+.cal-meta{font-size:10.5px;color:var(--muted);margin-top:3px;font-style:italic;}
+.cal-cell .badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.cal-cell .badge-swap{background:var(--gold-bg);color:var(--gold-dim);}
+.cal-cell .badge-mainstay{background:var(--purple-bg);color:var(--purple);}
+.cal-cell .badge-mine{background:var(--green);color:white;}
+
+.swap-btn-row{margin-top:6px;}
+.swap-btn{background:var(--gold);color:white;border:none;font-family:inherit;font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer;letter-spacing:.02em;}
+.swap-btn:hover{filter:brightness(1.05);}
 
 .empty{text-align:center;padding:2rem 1rem;color:var(--lighter);font-style:italic;}
 
-@media(max-width:520px){
-  .entry{grid-template-columns:52px 1fr auto;gap:8px;padding:.55rem 0;}
-  .e-num{font-size:19px;}
-  .e-preacher{font-size:13.5px;}
+@media(max-width:560px){
+  .cal-week-row{grid-template-columns:42px 1fr 1fr;gap:5px;}
+  .cal-week-label{padding:.3rem .1rem;}
+  .cal-week-label .cwl-n{font-size:14px;}
+  .cal-cell{padding:.45rem .55rem;min-height:60px;}
+  .cal-date{font-size:12.5px;}
+  .cal-preacher{font-size:12px;}
 }
+
+.modal-bg{position:fixed;inset:0;background:rgba(20,18,14,.55);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;}
+.modal-bg.open{display:flex;}
+.modal{background:var(--paper);border-radius:12px;max-width:440px;width:100%;padding:1.15rem;box-shadow:0 10px 40px rgba(0,0,0,.2);}
+.modal-h{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;margin-bottom:.55rem;}
+.modal-sub{font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:.85rem;}
+.modal label{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;margin-top:.85rem;}
+.modal label:first-of-type{margin-top:0;}
+.modal select,.modal textarea{width:100%;padding:8px 10px;font-family:inherit;font-size:13px;background:var(--paper);border:1.5px solid var(--border2);border-radius:6px;color:var(--ink);}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1.1rem;}
+.modal .btn{font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:6px;border:1px solid var(--border2);background:var(--paper);color:var(--ink);cursor:pointer;}
+.modal .btn-primary{background:var(--green);color:white;border-color:var(--green);}
+
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--ink);color:white;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;opacity:0;transition:opacity .25s;pointer-events:none;z-index:200;}
+.toast.show{opacity:1;}
 </style>
 </head>
 <body>
@@ -64,8 +108,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 <div class="header">
   <button class="back-btn" onclick="goBack()" title="Back">← Back</button>
   <div>
-    <div class="htitle">Wednesday Preaching Calendar</div>
-    <div class="hsub">Prayer Meeting · Rosehill Christian Church</div>
+    <div class="htitle">Preaching Calendar</div>
+    <div class="hsub">Sundays &amp; Wednesdays · Rosehill Christian Church</div>
   </div>
 </div>
 
@@ -73,130 +117,320 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 
   <div class="intro">
     <h2>Who's preaching when</h2>
-    <p>Pasubukan kung kailan ka mag-aaral, magpray, at magprepare. Ipinagdarasal ng buong simbahan ang bawat isa sa atin na nagsasalita ng Salita ng Diyos. 🙏</p>
+    <p>Tingnan kung kailan ka magpreach, kung sino ang ibang nakatakda, at humingi ng swap kung kailangan. Ipinagdarasal natin ang bawat isa. 🙏</p>
   </div>
 
-  <div id="monthsWrap">
-    <div class="empty">Loading…</div>
+  <div class="month-nav">
+    <button class="nav-btn" onclick="changeMonth(-1)">← Prev</button>
+    <div class="month-title" id="monthTitle">…</div>
+    <button class="nav-btn" onclick="changeMonth(1)">Next →</button>
   </div>
+
+  <div class="legend">
+    <span><i style="background:var(--green)"></i>Assigned</span>
+    <span><i style="background:var(--gold)"></i>Swapped</span>
+    <span><i style="background:var(--purple)"></i>Mainstay</span>
+    <span><i style="background:var(--lighter)"></i>Unassigned</span>
+    <span><i style="background:var(--green);box-shadow:0 0 0 2px var(--gold)"></i>You / Today</span>
+  </div>
+
+  <div id="calWrap"><div class="empty">Loading…</div></div>
 
 </div>
+
+<div class="modal-bg" id="swapModal">
+  <div class="modal">
+    <div class="modal-h">🔄 Request a Swap</div>
+    <div class="modal-sub" id="swapModalSub">—</div>
+    <label>Swap with</label>
+    <select id="swapTarget"><option value="">— Choose a date —</option></select>
+    <label>Reason (optional)</label>
+    <textarea id="swapReason" rows="2" placeholder="e.g., 'travel that night', 'family commitment'"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSwapModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSwap()">Send Request</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 const db = MultiplyShared.getDB();
 const esc = MultiplyShared.escapeHTML;
+
+function getCurrentMemberId(){
+  try {
+    const ls = localStorage.getItem('multiply_leader_session');
+    if (ls) { const o = JSON.parse(ls); if (o && o.leaderId) return o.leaderId; }
+  } catch(e){}
+  try {
+    const ms = localStorage.getItem('multiply_member_session');
+    if (ms) { const o = JSON.parse(ms); if (o && o.memberId) return o.memberId; }
+  } catch(e){}
+  return null;
+}
+
+let _viewMonth = new Date(); _viewMonth.setDate(1); _viewMonth.setHours(0,0,0,0);
+let _members = [];
+let _preachers = [];
+let _assignments = [];
+let _myMemberId = getCurrentMemberId();
+
+function ymd(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function todayYMD(){ return ymd(new Date()); }
+function parseDate(s){ return new Date(s + 'T00:00:00'); }
+function fmtMonth(d){ return d.toLocaleDateString('en-US', { month:'long', year:'numeric' }); }
+function fmtDateShort(d){ return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }); }
+function fmtDate(d){ return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }); }
+
+function toast(msg, icon){
+  const t = document.getElementById('toast');
+  t.textContent = (icon ? icon + '  ' : '') + msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
 
 function goBack(){
   try {
     window.close();
     setTimeout(() => {
       if (!window.closed) {
-        if (document.referrer && new URL(document.referrer).host === location.host) {
-          history.back();
-        } else {
-          location.href = 'multiply_dashboard.html';
-        }
+        if (document.referrer && new URL(document.referrer).host === location.host) history.back();
+        else location.href = 'multiply_dashboard.html';
       }
     }, 150);
   } catch(e) { location.href = 'multiply_dashboard.html'; }
 }
 
-function ymd(d){
-  // Timezone-safe local-date helper (see preaching_admin.html for full
-  // rationale). DO NOT use toISOString() — it converts to UTC and
-  // off-by-ones every Wednesday in Manila.
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+function sundaysInMonth(monthStart){
+  const out = [];
+  const y = monthStart.getFullYear();
+  const m = monthStart.getMonth();
+  const last = new Date(y, m+1, 0).getDate();
+  for (let day=1; day<=last; day++) { const d = new Date(y, m, day); if (d.getDay() === 0) out.push(d); }
+  return out;
 }
-function parseDate(s){ return new Date(s + 'T00:00:00'); }
+function wednesdaysInMonth(monthStart){
+  const out = [];
+  const y = monthStart.getFullYear();
+  const m = monthStart.getMonth();
+  const last = new Date(y, m+1, 0).getDate();
+  for (let day=1; day<=last; day++) { const d = new Date(y, m, day); if (d.getDay() === 3) out.push(d); }
+  return out;
+}
+function isLastSundayOfMonth(d){
+  if (d.getDay() !== 0) return false;
+  const ms = new Date(d.getFullYear(), d.getMonth(), 1);
+  const all = sundaysInMonth(ms);
+  return ymd(all[all.length - 1]) === ymd(d);
+}
 
-async function loadAndRender(){
-  const today = new Date(); today.setHours(0,0,0,0);
-  const start = new Date(today.getFullYear(), today.getMonth(), 1);
-  const end = new Date(today.getFullYear(), today.getMonth() + 3, 0);
+async function loadAll(){
+  const memRes = await db.from('members').select('id, name');
+  if (memRes.error) {
+    document.getElementById('calWrap').innerHTML = '<div class="empty">⚠️ Could not load. Please try again later.</div>';
+    return;
+  }
+  _members = memRes.data || [];
 
-  const [assignmentsRes, membersRes] = await Promise.all([
-    db.from('wednesday_preaching')
-      .select('*')
-      .gte('preach_date', ymd(start))
-      .lte('preach_date', ymd(end))
-      .order('preach_date'),
-    db.from('members').select('id, name')
+  const start = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth(), 1);
+  const end = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() + 1, 0);
+
+  const [aRes, pRes] = await Promise.all([
+    db.from('wednesday_preaching').select('*').gte('preach_date', ymd(start)).lte('preach_date', ymd(end)).order('preach_date'),
+    db.from('preachers').select('member_id, is_mainstay_preacher')
   ]);
 
-  if (assignmentsRes.error || membersRes.error) {
-    document.getElementById('monthsWrap').innerHTML = '<div class="empty">⚠️ Could not load. Please try again later.</div>';
+  if (aRes.error) {
+    document.getElementById('calWrap').innerHTML = '<div class="empty">⚠️ Could not load. Please try again later.</div>';
     return;
   }
-
-  const memberMap = new Map((membersRes.data || []).map(m => [m.id, m]));
-  const assignments = assignmentsRes.data || [];
-
-  // Group by month
-  const monthGroups = new Map();
-  for (const a of assignments) {
-    const d = parseDate(a.preach_date);
-    const monthKey = d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
-    if (!monthGroups.has(monthKey)) monthGroups.set(monthKey, []);
-    monthGroups.get(monthKey).push({ ...a, dateObj: d, member: memberMap.get(a.preacher_member_id) });
-  }
-
-  if (monthGroups.size === 0) {
-    document.getElementById('monthsWrap').innerHTML = '<div class="empty">No preaching schedule set up yet. Pastor needs to assign preachers from the admin tool.</div>';
-    return;
-  }
-
-  // Also include this month's Wednesdays that are unassigned, so the calendar is complete
-  // for at least the current month.
-  const html = Array.from(monthGroups.entries()).map(([monthLabel, entries]) => {
-    return `
-      <div class="month-section">
-        <div class="month-h">${esc(monthLabel)}</div>
-        ${entries.map(e => renderEntry(e, today)).join('')}
-      </div>
-    `;
-  }).join('');
-
-  document.getElementById('monthsWrap').innerHTML = html;
+  _assignments = aRes.data || [];
+  _preachers = pRes.data || [];
+  renderCalendar();
 }
 
-function renderEntry(a, today){
-  const d = a.dateObj;
-  const dayNum = d.getDate();
-  const dayName = d.toLocaleDateString('en-US', { weekday:'short' });
+function changeMonth(delta){
+  _viewMonth = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() + delta, 1);
+  document.getElementById('calWrap').innerHTML = '<div class="empty">Loading…</div>';
+  loadAll();
+}
+
+function renderCalendar(){
+  document.getElementById('monthTitle').textContent = fmtMonth(_viewMonth);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = ymd(today);
+  const sundays = sundaysInMonth(_viewMonth);
+  const weds = wednesdaysInMonth(_viewMonth);
+  if (sundays.length === 0 && weds.length === 0) {
+    document.getElementById('calWrap').innerHTML = '<div class="empty">No service days this month.</div>';
+    return;
+  }
+
+  const weekRows = [];
+  const remainingWeds = [...weds];
+
+  if (sundays.length > 0) {
+    const firstSundayStr = ymd(sundays[0]);
+    while (remainingWeds.length > 0 && ymd(remainingWeds[0]) < firstSundayStr) {
+      weekRows.push({ sun: null, wed: remainingWeds.shift(), weekNum: 0 });
+    }
+  } else {
+    remainingWeds.forEach((w, i) => weekRows.push({ sun: null, wed: w, weekNum: i + 1 }));
+    remainingWeds.length = 0;
+  }
+
+  sundays.forEach((sun, i) => {
+    const nextSunStr = sundays[i + 1] ? ymd(sundays[i + 1]) : '9999-12-31';
+    let pairedWed = null;
+    while (remainingWeds.length > 0 && ymd(remainingWeds[0]) < nextSunStr) {
+      if (!pairedWed) pairedWed = remainingWeds.shift();
+      else weekRows.push({ sun: null, wed: remainingWeds.shift(), weekNum: i + 1 });
+    }
+    weekRows.push({ sun, wed: pairedWed, weekNum: i + 1 });
+  });
+
+  const html = '<div class="cal-month">' + weekRows.map(row => {
+    const label = row.weekNum === 0
+      ? '<div class="cwl-w">Pre</div><div class="cwl-n">—</div>'
+      : '<div class="cwl-w">Week</div><div class="cwl-n">' + row.weekNum + '</div>';
+    return '<div class="cal-week-row">' +
+      '<div class="cal-week-label">' + label + '</div>' +
+      renderCell(row.sun, 'sunday', today, todayStr) +
+      renderCell(row.wed, 'wednesday', today, todayStr) +
+      '</div>';
+  }).join('') + '</div>';
+  document.getElementById('calWrap').innerHTML = html;
+
+  document.querySelectorAll('[data-swap-id]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openSwapModal(btn.dataset.swapId);
+    });
+  });
+}
+
+function renderCell(d, serviceType, today, todayStr){
+  if (!d) return '<div class="cal-cell empty-slot"></div>';
+  const dateStr = ymd(d);
+  const assignment = _assignments.find(a => a.preach_date === dateStr && (a.service_type || 'wednesday') === serviceType);
+  const member = assignment ? _members.find(m => m.id === assignment.preacher_member_id) : null;
   const isPast = d < today;
-  const isToday = d.getTime() === today.getTime();
-  const daysDiff = Math.round((d - today) / 86400000);
-  const isSwapped = a.original_preacher_member_id && a.original_preacher_member_id !== a.preacher_member_id;
+  const isToday = dateStr === todayStr;
+  const isSwapped = assignment && assignment.original_preacher_member_id && assignment.original_preacher_member_id !== assignment.preacher_member_id;
+  const isMine = !!(_myMemberId && assignment && assignment.preacher_member_id === _myMemberId);
+  const preacherRec = member ? _preachers.find(p => p.member_id === member.id) : null;
+  const isMainstaySlot = serviceType === 'sunday' && !isLastSundayOfMonth(d) && preacherRec && preacherRec.is_mainstay_preacher;
 
-  let badge = '';
-  if (isToday) badge = '<div class="e-badge badge-today">TODAY</div>';
-  else if (daysDiff > 0 && daysDiff <= 7) badge = '<div class="e-badge badge-soon">' + daysDiff + 'd</div>';
-  else if (daysDiff > 7 && daysDiff <= 14) badge = '<div class="e-badge badge-next">Next</div>';
-  else if (isSwapped) badge = '<div class="e-badge badge-swapped">Swapped</div>';
-
-  const classes = ['entry'];
-  if (isPast) classes.push('past');
+  const classes = ['cal-cell'];
+  if (assignment) classes.push('assigned'); else classes.push('unassigned');
+  if (isPast && !isToday) classes.push('past');
   if (isToday) classes.push('today');
+  if (isSwapped) classes.push('swapped');
+  if (isMainstaySlot) classes.push('mainstay');
+  if (isMine) classes.push('mine');
 
-  return `
-    <div class="${classes.join(' ')}">
-      <div class="e-date">
-        <div class="e-day">${esc(dayName)}</div>
-        <div class="e-num">${dayNum}</div>
-      </div>
-      <div>
-        <div class="e-preacher">${a.member ? esc(a.member.name) : '<span class="none">— Unassigned —</span>'}</div>
-        ${a.notes ? `<div class="e-meta">${esc(a.notes)}</div>` : ''}
-      </div>
-      ${badge}
-    </div>
-  `;
+  const svcLabel = serviceType === 'sunday' ? 'SUN' : 'WED';
+  const svcClass = serviceType === 'sunday' ? 'svc-sun' : 'svc-wed';
+
+  const nameHTML = member
+    ? esc(member.name)
+      + (isMine ? '<span class="badge badge-mine">You</span>' : '')
+      + (isSwapped ? '<span class="badge badge-swap">Swap</span>' : '')
+      + (isMainstaySlot ? '<span class="badge badge-mainstay">Mainstay</span>' : '')
+    : '<span class="none">— Unassigned —</span>';
+
+  const showSwapBtn = isMine && !isPast && assignment;
+  const swapBtnHTML = showSwapBtn
+    ? '<div class="swap-btn-row"><button class="swap-btn" data-swap-id="' + assignment.id + '">🔄 Request Swap</button></div>'
+    : '';
+
+  return '<div class="' + classes.join(' ') + '">' +
+    '<div class="cal-cell-top">' +
+      '<div class="cal-date">' + fmtDateShort(d) + '</div>' +
+      '<span class="cal-svc ' + svcClass + '">' + svcLabel + '</span>' +
+    '</div>' +
+    '<div class="cal-preacher">' + nameHTML + '</div>' +
+    (assignment && assignment.notes ? '<div class="cal-meta">' + esc(assignment.notes) + '</div>' : '') +
+    swapBtnHTML +
+    '</div>';
 }
 
-loadAndRender();
+let _swapMyAssignment = null;
+let _swapTargetOptions = [];
+
+async function openSwapModal(assignmentId){
+  const mine = _assignments.find(a => a.id == assignmentId);
+  if (!mine) { toast('Assignment not found', '⚠️'); return; }
+  _swapMyAssignment = mine;
+  const d = parseDate(mine.preach_date);
+  const svcLabel = (mine.service_type || 'wednesday') === 'sunday' ? 'Sunday' : 'Wednesday';
+  document.getElementById('swapModalSub').textContent =
+    "You're preaching on " + svcLabel + ", " + fmtDate(d) + ". Choose another preacher's date to swap with.";
+  document.getElementById('swapReason').value = '';
+  document.getElementById('swapTarget').innerHTML = '<option>Loading…</option>';
+  document.getElementById('swapModal').classList.add('open');
+
+  const todayStr = todayYMD();
+  const { data, error } = await db.from('wednesday_preaching')
+    .select('*')
+    .gte('preach_date', todayStr)
+    .neq('preacher_member_id', _myMemberId)
+    .order('preach_date')
+    .limit(30);
+  if (error) { toast('Could not load swap options', '⚠️'); return; }
+  _swapTargetOptions = data || [];
+
+  const sel = document.getElementById('swapTarget');
+  if (_swapTargetOptions.length === 0) {
+    sel.innerHTML = '<option value="">— No other future assignments to swap with —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Choose a date —</option>' +
+    _swapTargetOptions.map(a => {
+      const dt = parseDate(a.preach_date);
+      const svc = (a.service_type || 'wednesday') === 'sunday' ? 'Sun' : 'Wed';
+      const m = _members.find(mm => mm.id === a.preacher_member_id);
+      const nm = m ? m.name : '(unknown)';
+      return '<option value="' + a.id + '">' + svc + ' ' + fmtDate(dt) + ' — ' + esc(nm) + '</option>';
+    }).join('');
+}
+
+function closeSwapModal(){
+  document.getElementById('swapModal').classList.remove('open');
+  _swapMyAssignment = null;
+  _swapTargetOptions = [];
+}
+
+async function submitSwap(){
+  if (!_myMemberId) { toast('Please log in first', '⚠️'); return; }
+  if (!_swapMyAssignment) return;
+  const targetId = document.getElementById('swapTarget').value;
+  if (!targetId) { toast('Pick a date to swap with', '⚠️'); return; }
+  const target = _swapTargetOptions.find(a => a.id == targetId);
+  if (!target) { toast('Target not found', '⚠️'); return; }
+  const reason = document.getElementById('swapReason').value.trim() || null;
+
+  const { error } = await db.from('preaching_swap_requests').insert({
+    requester_member_id: _myMemberId,
+    requester_assignment_id: _swapMyAssignment.id,
+    target_member_id: target.preacher_member_id,
+    target_assignment_id: target.id,
+    reason,
+    status: 'pending'
+  });
+  if (error) { toast(error.message, '⚠️'); return; }
+  closeSwapModal();
+  toast('Swap request sent! The other preacher will be notified.', '✓');
+}
+
+loadAll();
 </script>
 </body>
 </html>

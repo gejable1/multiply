@@ -516,6 +516,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <!-- ════ END L5 SELF-ATTEST CARD ════ -->
 
+  <!-- ════ PREACHING CALENDAR CARD (visible only to preachers) ════ -->
+  <!-- Shown when the current user is in the `preachers` table. Gives
+       quick access to the Sunday + Wednesday preaching schedule.
+       Click takes them to preaching_calendar.html where they can also
+       request swaps on their own upcoming assignments.
+       Visibility decided by isPreacher() check on init. -->
+  <div id="preachingCalendarCard" style="display:none; margin-bottom:1rem; padding:.85rem 1rem;
+       background:linear-gradient(135deg, rgba(184,136,42,.10), rgba(184,136,42,.03));
+       border:1px solid rgba(184,136,42,.35); border-radius:var(--r);
+       display:none; align-items:center; gap:10px; cursor:pointer;"
+       onclick="window.open('preaching_calendar.html', '_blank')">
+    <div style="font-size:22px;flex-shrink:0;">📣</div>
+    <div style="flex:1;line-height:1.4;">
+      <div style="font-weight:700;font-size:13.5px;color:var(--text);">Preaching Calendar</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">See the Sun + Wed schedule · request swaps</div>
+    </div>
+    <div style="font-size:18px;color:var(--muted);">›</div>
+  </div>
+
   <!-- ════ PENDING CONFIRMATIONS CARD (LCL-side; visible if any pending) ════ -->
   <div id="pendingConfirmCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
        background:linear-gradient(135deg, #fff8e6, #fef0c7);
@@ -1275,6 +1294,23 @@ function renderHome(){
         openPreachingSwapRequest(assignmentId, preachDate);
       }
     });
+
+    // ─── Preaching Calendar nav card (May 2026 Phase 2) ───
+    // Visible only to members who are in the preachers table. Provides
+    // permanent access to the unified Sun + Wed calendar (vs. the
+    // banner which only shows 7 days out). Quick check — one row read.
+    (async () => {
+      try {
+        const { data, error } = await db.from('preachers')
+          .select('id')
+          .eq('member_id', LEADER.leaderId)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          const card = document.getElementById('preachingCalendarCard');
+          if (card) card.style.display = 'flex';
+        }
+      } catch(e) { /* silent — card stays hidden on error */ }
+    })();
   }
 }
 
