@@ -771,10 +771,14 @@
     const tonightOrMorning = isSunday ? 'morning' : 'tonight';
     const tonightOrMorningTL = isSunday ? 'umaga' : 'gabi';
 
+    // Mid-tone saturated backgrounds — must read well against BOTH dark MLT
+    // (#0f0f13) AND cream MMT (#f5f0e6) since this function is shared. Earlier
+    // attempts at near-pastel were too close to MMT's cream. These colors
+    // strike a balance: clearly visible on dark, clearly visible on cream.
     const colors = {
-      '7d': { bg:'linear-gradient(135deg,rgba(184,136,42,.12),rgba(184,136,42,.04))', border:'rgba(184,136,42,.4)', icon:'📅' },
-      '3d': { bg:'linear-gradient(135deg,rgba(212,120,10,.15),rgba(212,120,10,.05))', border:'rgba(212,120,10,.45)', icon:'⚠️' },
-      '0d': { bg:'linear-gradient(135deg,rgba(168,51,42,.15),rgba(168,51,42,.05))', border:'rgba(168,51,42,.5)', icon:'🎤' }
+      '7d': { bg:'linear-gradient(135deg,#f5d78e,#e8b84b)', border:'#8a6116', icon:'📅', textColor:'#1a1612' },
+      '3d': { bg:'linear-gradient(135deg,#fdba74,#fb923c)', border:'#a14a0a', icon:'⚠️', textColor:'#1a1612' },
+      '0d': { bg:'linear-gradient(135deg,#fca5a5,#f87171)', border:'#7f1d1d', icon:'🎤', textColor:'#1a1612' }
     };
     const c = colors[stage];
 
@@ -800,21 +804,21 @@
     };
 
     return (
-      '<div style="background:' + c.bg + ';border:1px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px">' +
+      '<div style="background:' + c.bg + ';border:1.5px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
         '<div style="font-size:22px;flex-shrink:0;line-height:1">' + c.icon + '</div>' +
         '<div style="flex:1;min-width:0;line-height:1.4">' +
-          '<div style="font-weight:700;font-size:13.5px;margin-bottom:2px">' + escapeHTML(titles[stage]) + '</div>' +
-          '<div style="font-size:12.5px;color:rgba(0,0,0,.7)">' +
+          '<div style="font-weight:700;font-size:13.5px;margin-bottom:2px;color:#1a1612">' + escapeHTML(titles[stage]) + '</div>' +
+          '<div style="font-size:12.5px;color:#1a1612">' +
             (bilingual && m.tl
               ? '<span class="en-text">' + escapeHTML(m.en) + '</span><span class="tl-text">' + escapeHTML(m.tl) + '</span>'
               : escapeHTML(m.en)) +
           '</div>' +
           '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
-            '<button type="button" data-preaching-action="request-swap" data-assignment-id="' + assignment.id + '" data-preach-date="' + assignment.preach_date + '" style="background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.15);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;font-weight:600;color:#1a1612">🔄 Request Swap</button>' +
-            '<button type="button" data-preaching-action="view-calendar" style="background:transparent;border:1px solid rgba(0,0,0,.15);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:rgba(0,0,0,.7)">📅 View Calendar</button>' +
+            '<button type="button" data-preaching-action="request-swap" data-assignment-id="' + assignment.id + '" data-preach-date="' + assignment.preach_date + '" style="background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;font-weight:600;color:#1a1612">🔄 Request Swap</button>' +
+            '<button type="button" data-preaching-action="view-calendar" style="background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:#1a1612;font-weight:500">📅 View Calendar</button>' +
           '</div>' +
         '</div>' +
-        '<button type="button" data-preaching-action="dismiss" data-preach-date="' + assignment.preach_date + '" data-stage="' + stage + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.4);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
+        '<button type="button" data-preaching-action="dismiss" data-preach-date="' + assignment.preach_date + '" data-stage="' + stage + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
       '</div>'
     );
   }
@@ -824,14 +828,14 @@
       ? '<span class="en-text">' + escapeHTML(requesterName) + ' is asking to swap their <strong>' + escapeHTML(requesterDate) + '</strong> preaching with your <strong>' + escapeHTML(targetDate) + '</strong>.</span>' +
         '<span class="tl-text">' + escapeHTML(requesterName) + ' ay humihiling makipag-swap ng kanyang <strong>' + escapeHTML(requesterDate) + '</strong> sa iyong <strong>' + escapeHTML(targetDate) + '</strong>.</span>'
       : escapeHTML(requesterName) + ' is asking to swap their <strong>' + escapeHTML(requesterDate) + '</strong> preaching with your <strong>' + escapeHTML(targetDate) + '</strong>.';
-    const reason = swap.reason ? '<div style="font-style:italic;font-size:11.5px;color:rgba(0,0,0,.6);margin-top:4px">"' + escapeHTML(swap.reason) + '"</div>' : '';
+    const reason = swap.reason ? '<div style="font-style:italic;font-size:11.5px;color:#5a4e3f;margin-top:4px">"' + escapeHTML(swap.reason) + '"</div>' : '';
 
     return (
-      '<div style="background:linear-gradient(135deg,rgba(184,136,42,.15),rgba(184,136,42,.04));border:1px solid rgba(184,136,42,.5);border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px">' +
+      '<div style="background:linear-gradient(135deg,#f5d78e,#e8b84b);border:1.5px solid #8a6116;border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
         '<div style="font-size:22px;flex-shrink:0">🔄</div>' +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Swap Request</div>' +
-          '<div style="font-size:12.5px;color:rgba(0,0,0,.75);line-height:1.45">' + msg + '</div>' +
+          '<div style="font-weight:700;font-size:13.5px;margin-bottom:3px;color:#1a1612">Swap Request</div>' +
+          '<div style="font-size:12.5px;color:#1a1612;line-height:1.45">' + msg + '</div>' +
           reason +
           '<div style="display:flex;gap:6px;margin-top:8px">' +
             '<button type="button" data-preaching-action="respond-swap" data-swap-id="' + swap.id + '" data-decision="accept" style="background:#2a5c40;color:white;border:none;font-family:inherit;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600">✓ Accept</button>' +
