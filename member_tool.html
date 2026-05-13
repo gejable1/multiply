@@ -2368,15 +2368,31 @@ async function initMMT(){
     await loadMember();
     window.__mmtPhase('Member loaded');
     clearTimeout(slowHintTimer);
-    // Each subsequent loader is wrapped — a single failure shouldn't kill init
-    try{ await loadDevoStreak(); }catch(e){ console.warn('streak failed:', e); }
-    try{ await loadWeeklyVerse(); }catch(e){ console.warn('verse failed:', e); }
-    try{ await loadTodaysDevo(); }catch(e){ console.warn('devo failed:', e); }
-    try{ await loadLcDetails(); }catch(e){ console.warn('lc details failed:', e); }
-    try{ await loadCelebrationFeed(); }catch(e){ console.warn('feed failed:', e); }
-    try{ await loadHeadsUpConfig(); }catch(e){ console.warn('headsup config failed:', e); }
-    try{ await loadMyRecentNotices(); }catch(e){ console.warn('my notices failed:', e); }
-    try{ await loadLibraryAndProgress(); }catch(e){ console.warn('library failed:', e); }
+    // PERF: These 8 loaders are INDEPENDENT — none depend on each
+    // other's data. Running them in parallel with Promise.allSettled
+    // cuts boot time from ~serial-sum to ~max-individual time. On a
+    // slow Philippine mobile connection that's the difference between
+    // 4-5s of waterfall waits and ~600ms of one parallel round.
+    //
+    // We use allSettled (not all) because each loader is independently
+    // resilient — one failure should not abort the rest. Errors are
+    // surfaced in console.warn just like the original sequential code.
+    const _loaders = [
+      ['streak', loadDevoStreak],
+      ['verse',  loadWeeklyVerse],
+      ['devo',   loadTodaysDevo],
+      ['lc details', loadLcDetails],
+      ['feed',   loadCelebrationFeed],
+      ['headsup config', loadHeadsUpConfig],
+      ['my notices', loadMyRecentNotices],
+      ['library', loadLibraryAndProgress]
+    ];
+    const _results = await Promise.allSettled(_loaders.map(([_, fn]) => fn()));
+    _results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.warn(_loaders[i][0] + ' failed:', r.reason);
+      }
+    });
     window.__mmtPhase('Data loaded');
     renderHome();
     renderPipeline();
