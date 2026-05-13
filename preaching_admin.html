@@ -375,8 +375,13 @@ function wednesdaysInMonth(monthStart){
 // DATA LOADING
 // ═══════════════════════════════════════════════════════════════
 async function loadAll(){
+  // Phase 1: Load members FIRST — preachers and swaps depend on the
+  // member map for name hydration. Loading these in parallel caused a
+  // race condition where _members was still [] when loadPreachers tried
+  // to hydrate names, leaving all rows as "(unknown)".
+  await loadMembers();
+  // Phase 2: Now safe to load everything that depends on _members
   await Promise.all([
-    loadMembers(),
     loadPreachers(),
     loadAssignments(),
     loadSwaps()
@@ -401,6 +406,12 @@ async function loadPreachers(){
     .order('sequence');
   if (error) { console.error(error); return; }
   _preachers = data || [];
+  // Defensive guard: warn if members haven't loaded yet — this would
+  // cause all preachers to render as "(unknown)". loadAll() now loads
+  // members first, but this guard catches future regressions.
+  if (_preachers.length > 0 && _members.length === 0) {
+    console.warn('[preaching_admin] loadPreachers ran before loadMembers — names will be "(unknown)". Check loadAll() sequence.');
+  }
   // Hydrate with member name
   const memberMap = new Map(_members.map(m => [m.id, m]));
   _preachers.forEach(p => { p.member = memberMap.get(p.member_id) || { name: '(unknown)' }; });
