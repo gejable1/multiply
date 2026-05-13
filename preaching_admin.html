@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wednesday Preaching · MULTIPLY Admin</title>
+<title>Sunday + Wednesday Preaching · MULTIPLY Admin</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzJhNWM0MCIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2I4ODgyYSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TTwvdGV4dD48L3N2Zz4=">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -79,20 +79,48 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .rr-actions{display:flex;gap:3px;align-items:center;flex-shrink:0;}
 .rr-empty{text-align:center;padding:1.5rem;color:var(--lighter);font-size:13px;font-style:italic;}
 
-/* ───── CALENDAR ───── */
+/* ───── CALENDAR (Sun + Wed week rows) ───── */
 .cal-month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem;}
 .cal-month-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;color:var(--ink);}
-.cal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
-.cal-cell{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:.7rem .85rem;cursor:pointer;transition:all .15s;}
+
+/* Month grid — one row per week, columns: week-label · Sun · Wed */
+.cal-grid-month{display:flex;flex-direction:column;gap:8px;}
+.cal-week-row{display:grid;grid-template-columns:64px 1fr 1fr;gap:8px;align-items:stretch;}
+.cal-week-label{display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:12px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.5rem .25rem;line-height:1.2;}
+.cal-week-label .cwl-w{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--lighter);font-weight:600;font-family:inherit;}
+.cal-week-label .cwl-n{font-size:18px;color:var(--gold-dim);}
+
+.cal-cell{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:.65rem .8rem;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;min-height:74px;}
 .cal-cell:hover{border-color:var(--gold);background:#faf6f0;}
+.cal-cell.empty-slot{background:transparent;border:1px dashed var(--border);cursor:default;opacity:.5;}
+.cal-cell.empty-slot:hover{border-color:var(--border);background:transparent;}
 .cal-cell.assigned{border-left:4px solid var(--green);}
 .cal-cell.unassigned{border-left:4px solid var(--lighter);background:var(--surface2);}
 .cal-cell.past{opacity:.6;}
 .cal-cell.swapped{border-left:4px solid var(--gold);}
-.cal-date{font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--ink);margin-bottom:3px;}
-.cal-preacher{font-size:13px;color:var(--ink);font-weight:500;}
+.cal-cell.mainstay{border-left:4px solid #9d76b8;background:#f7f3fb;}
+.cal-cell.today{box-shadow:0 0 0 2px var(--gold);border-color:var(--gold);}
+
+.cal-cell-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;}
+.cal-date{font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--ink);}
+.cal-svc{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:1px 6px;border-radius:3px;}
+.cal-svc.svc-sun{background:#efe7f6;color:#7a4e9f;}
+.cal-svc.svc-wed{background:var(--green-bg);color:var(--green);}
+.cal-preacher{font-size:13px;color:var(--ink);font-weight:500;flex:1;}
 .cal-preacher .none{color:var(--lighter);font-style:italic;font-weight:400;}
 .cal-meta{font-size:10.5px;color:var(--muted);margin-top:3px;}
+.cal-cell .badge{display:inline-block;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.cal-cell .badge-swapped{background:var(--gold-bg);color:var(--gold-dim);}
+.cal-cell .badge-mainstay{background:#efe7f6;color:#7a4e9f;}
+
+/* Mobile: stack week rows */
+@media (max-width:600px){
+  .cal-week-row{grid-template-columns:48px 1fr 1fr;gap:5px;}
+  .cal-week-label{padding:.4rem .15rem;}
+  .cal-week-label .cwl-n{font-size:16px;}
+  .cal-cell{padding:.55rem .65rem;min-height:64px;}
+  .cal-date{font-size:13px;}
+}
 
 /* ───── MODALS ───── */
 .modal-bg{position:fixed;inset:0;background:rgba(20,18,14,.55);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;}
@@ -146,8 +174,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 <div class="header">
   <button class="back-btn" onclick="goBack()" title="Back to dashboard">← Back</button>
   <div>
-    <div class="htitle">Wednesday Preaching</div>
-    <div class="hsub">Roster · Calendar · Swaps</div>
+    <div class="htitle">Preaching Schedule</div>
+    <div class="hsub">Sundays &amp; Wednesdays · Roster · Calendar · Swaps</div>
   </div>
 </div>
 
@@ -167,10 +195,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
         <div class="card-icon">📅</div>
         <div>
           <div class="card-title">Monthly Calendar</div>
-          <div class="card-sub">Click any Wednesday to assign or change preacher</div>
+          <div class="card-sub">Sundays &amp; Wednesdays · Click any cell to assign or change preacher</div>
         </div>
-        <div style="margin-left:auto;">
-          <button class="btn btn-gold btn-sm" onclick="autofillNext12()">⚡ Auto-fill Next 12 Wednesdays</button>
+        <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-gold btn-sm" onclick="autofillNext12()" title="Auto-fill upcoming Sun + Wed slots">⚡ Auto-fill</button>
+          <button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border-color:var(--red);" onclick="openClearModal()" title="Clear future assignments">🧹 Clear…</button>
         </div>
       </div>
 
@@ -180,7 +209,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
         <button class="btn btn-sm" onclick="changeMonth(1)">Next →</button>
       </div>
 
-      <div id="calGrid" class="cal-grid">
+      <!-- Legend -->
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:.9rem;font-size:11px;color:var(--muted);">
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green);"></span>Assigned</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--gold);"></span>Swapped</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--lighter);"></span>Unassigned</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#9d76b8;"></span>Mainstay</span>
+      </div>
+
+      <div id="calGrid" class="cal-grid-month">
         <div class="empty">Loading…</div>
       </div>
     </div>
@@ -193,7 +230,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
         <div class="card-icon">👥</div>
         <div>
           <div class="card-title">Preacher Roster</div>
-          <div class="card-sub">Order = rotation sequence. Use ↑↓ to reorder.</div>
+          <div class="card-sub">Single sequence drives both Wednesday rotation &amp; last-Sunday rotation. Use ↑↓ to reorder.</div>
         </div>
       </div>
 
@@ -254,7 +291,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
   <div class="modal">
     <div class="modal-h" id="preacherModalTitle">Preacher Settings</div>
 
-    <label class="first">🔁 Recurring Slot</label>
+    <label class="first" style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--ink);">
+      <input type="checkbox" id="preacherMainstay" style="width:auto;margin:0;cursor:pointer;">
+      <span>👤 Sunday Mainstay <span style="font-weight:400;color:var(--muted);font-size:11.5px">(serves Sundays 1 through second-to-last each month)</span></span>
+    </label>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45;padding-left:24px">
+      Mainstay preachers do NOT rotate through Wednesday slots and skip the last Sunday of each month (which goes to rotation). The single mainstay (or first-flagged if multiple) auto-fills Sundays 1 to (last - 1).
+    </div>
+
+    <label>🔁 Recurring Slot</label>
     <select id="preacherRecurrence">
       <option value="">None — normal rotation</option>
       <option value="every_3rd">Every 3rd Wednesday (e.g., Pastor's regular slot)</option>
@@ -275,6 +320,49 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
     <div class="modal-actions">
       <button class="btn" onclick="closePreacherModal()">Cancel</button>
       <button class="btn btn-primary" onclick="savePreacherNotes()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── CLEAR CALENDAR MODAL ───── -->
+<div class="modal-bg" id="clearModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-h">🧹 Clear Future Assignments</div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:.85rem">
+      Past assignments are always preserved as historical record. Only today's and future dates will be deleted.
+    </div>
+
+    <label class="first" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--ink)">Clear scope</label>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-top:6px">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--paper)">
+        <input type="radio" name="clearScope" value="month" style="width:auto;margin:3px 0 0 0;cursor:pointer;flex-shrink:0">
+        <div>
+          <div>Currently-displayed month</div>
+          <div id="clearScopeMonthCount" style="font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px">—</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--paper)">
+        <input type="radio" name="clearScope" value="next12" style="width:auto;margin:3px 0 0 0;cursor:pointer;flex-shrink:0">
+        <div>
+          <div>Next 12 weeks (Sun + Wed)</div>
+          <div id="clearScopeNext12Count" style="font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px">—</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--paper)">
+        <input type="radio" name="clearScope" value="all" style="width:auto;margin:3px 0 0 0;cursor:pointer;flex-shrink:0">
+        <div>
+          <div>All future assignments</div>
+          <div id="clearScopeAllCount" style="font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px">—</div>
+        </div>
+      </label>
+    </div>
+
+    <label style="text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:600;color:var(--ink);margin-top:1rem;">Type <code style="background:var(--red-bg);color:var(--red);padding:1px 6px;border-radius:3px;font-family:inherit;font-size:12px">CLEAR</code> to enable</label>
+    <input type="text" id="clearConfirmInput" placeholder="Type CLEAR (all caps)" oninput="updateClearButton()" autocomplete="off">
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeClearModal()">Cancel</button>
+      <button class="btn btn-danger" id="clearConfirmBtn" onclick="executeClear()" disabled>🗑 Delete Assignments</button>
     </div>
   </div>
 </div>
@@ -304,6 +392,7 @@ let _assignments = [];      // wednesday_preaching rows for current view window
 let _swaps = [];            // preaching_swap_requests rows (pending + recent)
 let _viewMonth = startOfMonth(new Date());  // first day of currently-viewed month
 let _editingAssignmentDate = null;          // ISO date string when assign modal open
+let _editingAssignmentService = 'wednesday'; // 'sunday' | 'wednesday' for current edit
 let _editingPreacherId = null;              // preachers.id when notes modal open
 let _reorderBusy = false;                   // race-guard for rapid reorder clicks
 
@@ -369,6 +458,50 @@ function wednesdaysInMonth(monthStart){
     if (d.getDay() === 3) out.push(d); // 3 = Wednesday
   }
   return out;
+}
+
+// Get all Sundays in a given month
+function sundaysInMonth(monthStart){
+  const out = [];
+  const y = monthStart.getFullYear();
+  const m = monthStart.getMonth();
+  const last = new Date(y, m+1, 0).getDate();
+  for (let day = 1; day <= last; day++) {
+    const d = new Date(y, m, day);
+    if (d.getDay() === 0) out.push(d); // 0 = Sunday
+  }
+  return out;
+}
+
+// Returns true if `d` is the last Sunday of its month.
+// "Last" = whichever Sunday is highest in the date — 4th in 4-Sun months,
+// 5th in 5-Sun months. This is the Sunday that goes to rotation.
+function isLastSundayOfMonth(d){
+  if (d.getDay() !== 0) return false;
+  const ms = new Date(d.getFullYear(), d.getMonth(), 1);
+  const all = sundaysInMonth(ms);
+  return ymd(all[all.length - 1]) === ymd(d);
+}
+
+// Returns the "service days" in chronological order for a given month:
+//   [{date, service_type}] — Sundays + Wednesdays, sorted by date.
+// Used by both renderCalendar and autofill.
+function serviceDaysInMonth(monthStart){
+  const out = [];
+  sundaysInMonth(monthStart).forEach(d => out.push({date: d, service_type: 'sunday'}));
+  wednesdaysInMonth(monthStart).forEach(d => out.push({date: d, service_type: 'wednesday'}));
+  out.sort((a, b) => a.date - b.date);
+  return out;
+}
+
+// Returns the Pastor mainstay preacher (lowest-sequence flagged preacher
+// among active, non-on-leave preachers). Returns null if none flagged.
+function getMainstayPreacher(dateStr){
+  const candidates = _preachers
+    .filter(p => p.is_active && p.is_mainstay_preacher)
+    .filter(p => !p.on_leave_until || (dateStr && dateStr > p.on_leave_until))
+    .sort((a, b) => a.sequence - b.sequence);
+  return candidates[0] || null;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -459,40 +592,122 @@ function changeMonth(delta){
 function renderCalendar(){
   document.getElementById('calMonthTitle').textContent = fmtMonth(_viewMonth);
   const grid = document.getElementById('calGrid');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = ymd(today);
+
+  // Build "weeks" = each Sunday of the month + the Wednesday that FOLLOWS it.
+  // We also handle the rare case where a month starts mid-week (e.g., the
+  // first Wednesday comes before the first Sunday — that Wed is shown in
+  // a "Week 0" row with no Sunday slot).
+  const sundays = sundaysInMonth(_viewMonth);
   const weds = wednesdaysInMonth(_viewMonth);
-  if (weds.length === 0) {
-    grid.innerHTML = '<div class="empty">No Wednesdays this month (impossible 😅)</div>';
+  if (sundays.length === 0 && weds.length === 0) {
+    grid.innerHTML = '<div class="empty">No service days this month.</div>';
     return;
   }
-  const today = new Date(); today.setHours(0,0,0,0);
-  const html = weds.map(d => {
+
+  // Build week rows. Strategy: for each Sunday, pair it with the next Wed
+  // (if that Wed is still in the same month). Wednesdays that come BEFORE
+  // the first Sunday get their own pre-week row.
+  const weekRows = [];
+  const remainingWeds = [...weds];
+
+  // Pre-week Wednesdays (before first Sunday of month)
+  if (sundays.length > 0) {
+    const firstSundayStr = ymd(sundays[0]);
+    while (remainingWeds.length > 0 && ymd(remainingWeds[0]) < firstSundayStr) {
+      weekRows.push({ sun: null, wed: remainingWeds.shift(), weekNum: 0 });
+    }
+  } else {
+    // No Sundays at all (impossible but defensive) — render all Weds in rows
+    remainingWeds.forEach((w, i) => weekRows.push({ sun: null, wed: w, weekNum: i + 1 }));
+    remainingWeds.length = 0;
+  }
+
+  // Pair each Sunday with following Wed (within month)
+  sundays.forEach((sun, i) => {
+    const sunStr = ymd(sun);
+    const nextSunStr = sundays[i + 1] ? ymd(sundays[i + 1]) : '9999-12-31';
+    // Take all Weds that fall after this Sunday but before the next one
+    let pairedWed = null;
+    while (remainingWeds.length > 0 && ymd(remainingWeds[0]) < nextSunStr) {
+      // Take the first one as the paired Wed; if there are extras, they'll
+      // need their own rows (rare — usually 1 Wed per week)
+      if (!pairedWed) pairedWed = remainingWeds.shift();
+      else { weekRows.push({ sun: null, wed: remainingWeds.shift(), weekNum: i + 1 }); }
+    }
+    weekRows.push({ sun, wed: pairedWed, weekNum: i + 1 });
+  });
+
+  // Render a single cell helper
+  const renderCell = (d, serviceType) => {
+    if (!d) return '<div class="cal-cell empty-slot"></div>';
     const dateStr = ymd(d);
-    const assignment = _assignments.find(a => a.preach_date === dateStr);
+    const assignment = _assignments.find(a => a.preach_date === dateStr && (a.service_type || 'wednesday') === serviceType);
     const member = assignment ? _members.find(m => m.id === assignment.preacher_member_id) : null;
     const isPast = d < today;
+    const isToday = dateStr === todayStr;
     const isSwapped = assignment && assignment.original_preacher_member_id && assignment.original_preacher_member_id !== assignment.preacher_member_id;
+    // Mainstay visual: Pastor-flagged preacher on a Sunday that is NOT the last Sunday
+    const isMainstaySlot = serviceType === 'sunday' && !isLastSundayOfMonth(d) && member && _preachers.find(p => p.member_id === member.id)?.is_mainstay_preacher;
+
     const classes = ['cal-cell'];
     if (assignment) classes.push('assigned'); else classes.push('unassigned');
-    if (isPast) classes.push('past');
+    if (isPast && !isToday) classes.push('past');
+    if (isToday) classes.push('today');
     if (isSwapped) classes.push('swapped');
+    if (isMainstaySlot) classes.push('mainstay');
+
+    const svcLabel = serviceType === 'sunday' ? 'SUN' : 'WED';
+    const svcClass = serviceType === 'sunday' ? 'svc-sun' : 'svc-wed';
+    const dateShort = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    const nameHTML = member
+      ? esc(member.name) + (isSwapped ? '<span class="badge badge-swapped">Swap</span>' : '') + (isMainstaySlot ? '<span class="badge badge-mainstay">Mainstay</span>' : '')
+      : '<span class="none">— Unassigned —</span>';
+
     return `
-      <div class="${classes.join(' ')}" onclick="openAssignModal('${dateStr}')">
-        <div class="cal-date">${fmtDate(d)}</div>
-        <div class="cal-preacher">${member ? esc(member.name) : '<span class="none">— Unassigned —</span>'}${isSwapped ? '<span class="badge badge-swapped">Swapped</span>' : ''}</div>
+      <div class="${classes.join(' ')}" onclick="openAssignModal('${dateStr}', '${serviceType}')">
+        <div class="cal-cell-top">
+          <div class="cal-date">${dateShort}</div>
+          <span class="cal-svc ${svcClass}">${svcLabel}</span>
+        </div>
+        <div class="cal-preacher">${nameHTML}</div>
         ${assignment && assignment.notes ? `<div class="cal-meta">${esc(assignment.notes)}</div>` : ''}
       </div>
     `;
+  };
+
+  // Render each week-row
+  const html = weekRows.map(row => {
+    const label = row.weekNum === 0
+      ? '<div class="cwl-w">Pre</div><div class="cwl-n">—</div>'
+      : `<div class="cwl-w">Week</div><div class="cwl-n">${row.weekNum}</div>`;
+    return `
+      <div class="cal-week-row">
+        <div class="cal-week-label">${label}</div>
+        ${renderCell(row.sun, 'sunday')}
+        ${renderCell(row.wed, 'wednesday')}
+      </div>
+    `;
   }).join('');
+
   grid.innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // ASSIGNMENT MODAL
 // ═══════════════════════════════════════════════════════════════
-function openAssignModal(dateStr){
+function openAssignModal(dateStr, serviceType){
+  serviceType = serviceType || 'wednesday';  // default for backwards-compat
   _editingAssignmentDate = dateStr;
+  _editingAssignmentService = serviceType;
   const d = parseDate(dateStr);
-  const assignment = _assignments.find(a => a.preach_date === dateStr);
+  const assignment = _assignments.find(a => a.preach_date === dateStr && (a.service_type || 'wednesday') === serviceType);
+
+  // Update modal title to reflect day type
+  const svcLabel = serviceType === 'sunday' ? 'Sunday' : 'Wednesday';
+  const titleEl = document.getElementById('assignModalTitle');
+  if (titleEl) titleEl.textContent = `Assign ${svcLabel} Preacher`;
 
   document.getElementById('assignDate').value = fmtDate(d);
   // Populate dropdown with active preachers. On-leave preachers stay in
@@ -527,11 +742,12 @@ function closeAssignModal(){
 
 async function saveAssignment(){
   const dateStr = _editingAssignmentDate;
+  const serviceType = _editingAssignmentService || 'wednesday';
   const preacherId = document.getElementById('assignPreacher').value;
   const notes = document.getElementById('assignNotes').value.trim() || null;
   if (!preacherId) { return deleteAssignment(); }
 
-  const existing = _assignments.find(a => a.preach_date === dateStr);
+  const existing = _assignments.find(a => a.preach_date === dateStr && (a.service_type || 'wednesday') === serviceType);
   if (existing) {
     // Update — but if preacher changes, treat this as a Pastor-override and
     // do NOT touch original_preacher_member_id (Pastor-side change isn't a
@@ -548,6 +764,7 @@ async function saveAssignment(){
     const { error } = await db.from('wednesday_preaching')
       .insert({
         preach_date: dateStr,
+        service_type: serviceType,
         preacher_member_id: preacherId,
         original_preacher_member_id: preacherId,  // first assignment = "original"
         notes
@@ -563,7 +780,8 @@ async function saveAssignment(){
 
 async function deleteAssignment(){
   const dateStr = _editingAssignmentDate;
-  const existing = _assignments.find(a => a.preach_date === dateStr);
+  const serviceType = _editingAssignmentService || 'wednesday';
+  const existing = _assignments.find(a => a.preach_date === dateStr && (a.service_type || 'wednesday') === serviceType);
   if (!existing) { closeAssignModal(); return; }
   if (!confirm('Unassign preacher for ' + fmtDate(parseDate(dateStr)) + '?')) return;
   const { error } = await db.from('wednesday_preaching')
@@ -577,50 +795,74 @@ async function deleteAssignment(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// AUTO-FILL NEXT 12 WEDNESDAYS
-// ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-// AUTO-FILL — recurrence + leave-aware (May 2026)
+// AUTO-FILL — Sun + Wed interleaved (May 2026)
 // ─────────────────────────────────────────────────────────────────
-// Logic:
-//   1. Build next 12 Wednesdays.
-//   2. Load any existing assignments in that window (preserve them).
-//   3. PASS 1 — Recurring claims:
-//      For each recurring preacher (e.g., 'every_3rd'), figure out
-//      which of the next 12 Wednesdays they claim (based on their
-//      pattern, re-anchored from their most recent past preaching
-//      date so swaps don't break the cycle). Skip dates where they
-//      are on leave. Skip dates that already have a manual assignment.
-//   4. PASS 2 — Fill remaining slots with NON-recurring preachers in
-//      sequence order, skipping anyone who is currently on leave at
-//      that date. Continue rotation from where last assignment left off.
+// Builds next ~12 weeks of service days (Sundays + Wednesdays) in
+// chronological order. Three categories of slot fill:
+//
+//   1. NON-LAST SUNDAYS  — Pastor mainstay (first is_mainstay_preacher
+//      not on leave). If none flagged or all on leave, slot is left
+//      unassigned and a toast warns the Pastor.
+//
+//   2. WEDNESDAYS (recurring) — preachers with recurrence_pattern claim
+//      their cycle slots first (anchored from most recent past Wed
+//      assignment). Recurrence is a Wed-only concept; Sundays ignore it.
+//
+//   3. WEDNESDAYS (rotation) + LAST SUNDAYS — single rotation pointer
+//      across NON-mainstay NON-recurring active preachers. Iterates
+//      strictly in roster sequence order. Last Sundays interleave with
+//      Wednesdays so the same person can take a Wed then a last-Sun.
 // ═══════════════════════════════════════════════════════════════
 async function autofillNext12(){
   const allActive = _preachers.filter(p => p.is_active);
   if (allActive.length === 0) { toast('No active preachers in roster', '⚠️'); return; }
 
-  const recurring   = allActive.filter(p => p.recurrence_pattern);
-  const normal      = allActive.filter(p => !p.recurrence_pattern);
+  const mainstays   = allActive.filter(p => p.is_mainstay_preacher);
+  const recurring   = allActive.filter(p => p.recurrence_pattern && !p.is_mainstay_preacher);
+  const rotation    = allActive.filter(p => !p.recurrence_pattern && !p.is_mainstay_preacher);
 
-  // Build list of next 12 Wednesdays starting from today (include today if Wed)
+  // Build list of next 12 weeks of service days (Sun + Wed) starting from today
   const today = new Date(); today.setHours(0,0,0,0);
-  let firstWed = new Date(today);
-  while (firstWed.getDay() !== 3) firstWed.setDate(firstWed.getDate() + 1);
+  const todayStr = ymd(today);
 
-  const next12 = [];
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(firstWed);
-    d.setDate(d.getDate() + (i * 7));
-    next12.push(d);
+  // Compute the date window: today → today + 12 weeks (84 days)
+  const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 84);
+
+  // Generate all Sundays and Wednesdays in [today, windowEnd]
+  const serviceDays = [];   // [{date, dateStr, service_type, isLastSunday}]
+  let cursor = new Date(today);
+  while (cursor <= windowEnd) {
+    const dow = cursor.getDay();
+    if (dow === 0 || dow === 3) {
+      const isLastSun = (dow === 0) && isLastSundayOfMonth(cursor);
+      serviceDays.push({
+        date: new Date(cursor),
+        dateStr: ymd(cursor),
+        service_type: dow === 0 ? 'sunday' : 'wednesday',
+        isLastSunday: isLastSun
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
   }
-  const next12Strs = next12.map(ymd);
+
+  if (serviceDays.length === 0) {
+    toast('No service days in next 12 weeks (impossible 😅)', '⚠️');
+    return;
+  }
 
   // Load existing assignments in window
-  await loadAssignmentsRange(next12Strs[0], next12Strs[11]);
+  const winStart = serviceDays[0].dateStr;
+  const winEnd = serviceDays[serviceDays.length - 1].dateStr;
+  await loadAssignmentsRange(winStart, winEnd);
 
-  const assignedByDate = new Map();
+  // Key by (date, service_type) so Sun and Wed on same date don't collide
+  const assignmentKey = (dateStr, svc) => `${dateStr}|${svc}`;
+  const assignedKeys = new Map();
   _assignments.forEach(a => {
-    if (next12Strs.includes(a.preach_date)) assignedByDate.set(a.preach_date, a);
+    const svc = a.service_type || 'wednesday';
+    if (a.preach_date >= winStart && a.preach_date <= winEnd) {
+      assignedKeys.set(assignmentKey(a.preach_date, svc), a);
+    }
   });
 
   // Helper: is preacher on leave on this date?
@@ -629,92 +871,115 @@ async function autofillNext12(){
     return dateStr <= preacher.on_leave_until;
   };
 
-  // ─── PASS 1: Recurring claims ───────────────────────────────
-  // For each recurring preacher, figure out their next cycle dates within
-  // the 12-Wed window. Strategy: compute the "anchor" — the most recent
-  // Wednesday they preached. Then their next claims are anchor + cycleLen,
-  // anchor + 2*cycleLen, etc. Soft re-anchoring means a swap last week
-  // doesn't displace the cycle — the next claim is just 3 weeks later.
   const inserts = [];
-  const claimedDates = new Set();  // dates claimed by recurring preachers this run
+  const claimedKeys = new Set();  // keys claimed by recurring/mainstay this run
 
+  // ─── PASS 1: Non-last Sundays → Mainstay ───
+  // Mainstay claims all non-last Sundays. If no mainstay or mainstay on
+  // leave that day, slot is left for rotation to potentially handle.
+  let mainstayMissingCount = 0;
+  for (const sd of serviceDays) {
+    if (sd.service_type !== 'sunday') continue;
+    if (sd.isLastSunday) continue;       // rotation handles last Sun
+    const k = assignmentKey(sd.dateStr, 'sunday');
+    if (assignedKeys.has(k)) continue;   // manual override wins
+
+    const mainstay = mainstays.find(m => !onLeave(m, sd.dateStr));
+    if (!mainstay) { mainstayMissingCount++; continue; }
+    inserts.push({
+      preach_date: sd.dateStr,
+      service_type: 'sunday',
+      preacher_member_id: mainstay.member_id,
+      original_preacher_member_id: mainstay.member_id
+    });
+    claimedKeys.add(k);
+  }
+
+  // ─── PASS 2: Wednesday recurring claims ───
+  // For each recurring preacher, find next cycle Wednesdays in window.
+  // Recurrence is anchored to most recent past Wed assignment.
+  const wedSlotsInWindow = serviceDays.filter(sd => sd.service_type === 'wednesday').map(sd => sd.dateStr);
   for (const rec of recurring) {
     const cycleLen = _recurrenceCycleLength(rec.recurrence_pattern);
     if (!cycleLen) continue;
 
-    // Find most recent past assignment for this preacher (any date before today)
-    const todayStr = ymd(today);
     const { data: pastA } = await db.from('wednesday_preaching')
       .select('preach_date')
       .eq('preacher_member_id', rec.member_id)
+      .eq('service_type', 'wednesday')
       .lt('preach_date', todayStr)
       .order('preach_date', { ascending: false })
       .limit(1);
     const lastDate = (pastA && pastA[0]) ? pastA[0].preach_date : null;
 
-    // Compute their target dates within the next-12-Wed window
     let targetDates = [];
     if (lastDate) {
-      // Next claim is lastDate + cycleLen weeks. Step forward until we're
-      // inside or past the window.
       let d = new Date(lastDate + 'T00:00:00');
       d.setDate(d.getDate() + cycleLen * 7);
-      while (ymd(d) <= next12Strs[11]) {
-        if (ymd(d) >= next12Strs[0]) targetDates.push(ymd(d));
+      while (wedSlotsInWindow.length > 0 && ymd(d) <= wedSlotsInWindow[wedSlotsInWindow.length - 1]) {
+        if (ymd(d) >= wedSlotsInWindow[0]) targetDates.push(ymd(d));
         d.setDate(d.getDate() + cycleLen * 7);
       }
     } else {
-      // No history — claim every Nth Wednesday starting from the cycleLen-th
-      // slot (so user "preaches every 3rd Wed" naturally falls in position 3,
-      // 6, 9, 12 of the window).
-      for (let i = cycleLen - 1; i < next12Strs.length; i += cycleLen) {
-        targetDates.push(next12Strs[i]);
+      for (let i = cycleLen - 1; i < wedSlotsInWindow.length; i += cycleLen) {
+        targetDates.push(wedSlotsInWindow[i]);
       }
     }
 
-    // Apply claims — skip if already assigned manually, skip if on leave,
-    // soft-skip to next slot if blocked
     for (const dateStr of targetDates) {
-      if (assignedByDate.has(dateStr)) continue;       // manual override wins
-      if (onLeave(rec, dateStr)) continue;             // they can't preach that day — drop the claim
-      if (claimedDates.has(dateStr)) continue;         // another recurring preacher already claimed
+      const k = assignmentKey(dateStr, 'wednesday');
+      if (assignedKeys.has(k)) continue;
+      if (claimedKeys.has(k)) continue;
+      if (onLeave(rec, dateStr)) continue;
       inserts.push({
         preach_date: dateStr,
+        service_type: 'wednesday',
         preacher_member_id: rec.member_id,
         original_preacher_member_id: rec.member_id
       });
-      claimedDates.add(dateStr);
+      claimedKeys.add(k);
     }
   }
 
-  // ─── PASS 2: Fill remaining slots with NORMAL preachers in rotation ───
-  if (normal.length > 0) {
-    // Find rotation pointer: look at most recent NORMAL preacher's assignment
-    // (within the window or just before), and continue from there.
+  // ─── PASS 3: Fill remaining slots with rotation ───
+  // Rotation covers BOTH Wednesdays and last Sundays in chronological order
+  // using a single pointer across the rotation list (non-mainstay non-recurring).
+  if (rotation.length > 0) {
+    // Find rotation pointer: most recent rotation preacher's assignment
+    // (Wed or last-Sun), and continue from there.
     let rotIdx = 0;
-    const normalMemberIds = new Set(normal.map(p => p.member_id));
-    const recentNormal = [..._assignments]
-      .filter(a => normalMemberIds.has(a.preacher_member_id))
-      .filter(a => a.preach_date <= next12Strs[11])
+    const rotMemberIds = new Set(rotation.map(p => p.member_id));
+    const recentRotation = [..._assignments]
+      .filter(a => rotMemberIds.has(a.preacher_member_id))
+      .filter(a => a.preach_date <= winEnd)
       .sort((a,b) => b.preach_date.localeCompare(a.preach_date));
-    if (recentNormal.length > 0) {
-      const lastIdx = normal.findIndex(p => p.member_id === recentNormal[0].preacher_member_id);
-      if (lastIdx >= 0) rotIdx = (lastIdx + 1) % normal.length;
+    if (recentRotation.length > 0) {
+      const lastIdx = rotation.findIndex(p => p.member_id === recentRotation[0].preacher_member_id);
+      if (lastIdx >= 0) rotIdx = (lastIdx + 1) % rotation.length;
     }
 
-    for (const dateStr of next12Strs) {
-      if (assignedByDate.has(dateStr)) continue;       // existing manual assignment
-      if (claimedDates.has(dateStr)) continue;         // recurring preacher's slot
-      // Find next normal preacher not on leave on this date. Safety cap
-      // to avoid infinite loop if everyone is on leave that day.
+    // Iterate chronologically — rotation handles Wed slots AND last-Sun slots
+    for (const sd of serviceDays) {
+      // Only Wednesdays and last Sundays go through rotation
+      if (sd.service_type === 'sunday' && !sd.isLastSunday) continue;
+      const k = assignmentKey(sd.dateStr, sd.service_type);
+      if (assignedKeys.has(k)) continue;
+      if (claimedKeys.has(k)) continue;
+
+      // Pick next rotation preacher not on leave
       let picked = null;
-      for (let attempt = 0; attempt < normal.length; attempt++) {
-        const candidate = normal[(rotIdx + attempt) % normal.length];
-        if (!onLeave(candidate, dateStr)) { picked = candidate; rotIdx = (rotIdx + attempt + 1) % normal.length; break; }
+      for (let attempt = 0; attempt < rotation.length; attempt++) {
+        const candidate = rotation[(rotIdx + attempt) % rotation.length];
+        if (!onLeave(candidate, sd.dateStr)) {
+          picked = candidate;
+          rotIdx = (rotIdx + attempt + 1) % rotation.length;
+          break;
+        }
       }
-      if (!picked) continue;  // everyone on leave — leave slot unassigned
+      if (!picked) continue;
       inserts.push({
-        preach_date: dateStr,
+        preach_date: sd.dateStr,
+        service_type: sd.service_type,
         preacher_member_id: picked.member_id,
         original_preacher_member_id: picked.member_id
       });
@@ -722,16 +987,17 @@ async function autofillNext12(){
   }
 
   if (inserts.length === 0) {
-    toast('Nothing to fill — all 12 Wednesdays already assigned (or all preachers on leave)', 'ℹ️');
+    toast('Nothing to fill — all upcoming service days already assigned (or all preachers on leave)', 'ℹ️');
     return;
   }
 
   // Show a summary in the confirm dialog
-  const recCount = inserts.filter(i => recurring.some(r => r.member_id === i.preacher_member_id)).length;
-  const normCount = inserts.length - recCount;
-  const msg = `Auto-fill ${inserts.length} unassigned Wednesday${inserts.length > 1 ? 's' : ''}?` +
-              (recCount > 0 ? `\n  • ${recCount} recurring slot${recCount > 1 ? 's' : ''}` : '') +
-              (normCount > 0 ? `\n  • ${normCount} rotation slot${normCount > 1 ? 's' : ''}` : '');
+  const sunCount = inserts.filter(i => i.service_type === 'sunday').length;
+  const wedCount = inserts.length - sunCount;
+  const msg = `Auto-fill ${inserts.length} unassigned slot${inserts.length > 1 ? 's' : ''}?` +
+              (sunCount > 0 ? `\n  • ${sunCount} Sunday slot${sunCount > 1 ? 's' : ''}` : '') +
+              (wedCount > 0 ? `\n  • ${wedCount} Wednesday slot${wedCount > 1 ? 's' : ''}` : '') +
+              (mainstayMissingCount > 0 ? `\n  ⚠️ ${mainstayMissingCount} non-last Sunday slot${mainstayMissingCount > 1 ? 's' : ''} skipped (no mainstay flagged or on leave)` : '');
   if (!confirm(msg)) return;
 
   const { error } = await db.from('wednesday_preaching').insert(inserts);
@@ -739,7 +1005,7 @@ async function autofillNext12(){
 
   await loadAssignments();
   renderCalendar();
-  toast(`Filled ${inserts.length} Wednesday${inserts.length > 1 ? 's' : ''}`, '✓');
+  toast(`Filled ${inserts.length} slot${inserts.length > 1 ? 's' : ''}`, '✓');
 }
 
 // Map recurrence_pattern to cycle length (in weeks). Extensible.
@@ -798,7 +1064,7 @@ function renderRoster(){
     <div class="${rowClasses.join(' ')}">
       <div class="rr-seq">${p.sequence}</div>
       <div>
-        <div class="rr-name">${esc(p.member.name)}${!p.is_active ? '<span class="badge badge-inactive">Inactive</span>' : ''}${isRecurring ? `<span class="badge badge-recurring" title="${esc(recurringLabel)}">🔁 ${esc(recurringLabel)}</span>` : ''}${isOnLeave ? `<span class="badge badge-leave" title="Returns ${esc(leaveLabel)}">🏥 On leave until ${esc(leaveLabel)}</span>` : ''}</div>
+        <div class="rr-name">${esc(p.member.name)}${p.is_mainstay_preacher ? '<span class="badge badge-mainstay" style="background:#efe7f6;color:#7a4e9f;font-size:9.5px;padding:1px 6px;border-radius:3px;margin-left:5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">👤 Sun Mainstay</span>' : ''}${!p.is_active ? '<span class="badge badge-inactive">Inactive</span>' : ''}${isRecurring ? `<span class="badge badge-recurring" title="${esc(recurringLabel)}">🔁 ${esc(recurringLabel)}</span>` : ''}${isOnLeave ? `<span class="badge badge-leave" title="Returns ${esc(leaveLabel)}">🏥 On leave until ${esc(leaveLabel)}</span>` : ''}</div>
         ${p.notes ? `<div class="rr-notes">${esc(p.notes)}</div>` : ''}
       </div>
       <div class="rr-actions">
@@ -991,6 +1257,7 @@ function openPreacherNotes(preacherId){
   document.getElementById('preacherModalTitle').textContent = 'Settings for ' + p.member.name;
   document.getElementById('preacherNotes').value = p.notes || '';
   document.getElementById('preacherRecurrence').value = p.recurrence_pattern || '';
+  document.getElementById('preacherMainstay').checked = !!p.is_mainstay_preacher;
   // on_leave_until is a DATE — Supabase returns 'YYYY-MM-DD' which the date
   // input accepts directly. If past, clear it (UX: don't show stale dates).
   let leaveStr = p.on_leave_until || '';
@@ -1009,6 +1276,7 @@ async function savePreacherNotes(){
   if (!_editingPreacherId) return;
   const notes = document.getElementById('preacherNotes').value.trim() || null;
   const recurrence = document.getElementById('preacherRecurrence').value || null;
+  const isMainstay = document.getElementById('preacherMainstay').checked;
   const onLeaveRaw = document.getElementById('preacherOnLeaveUntil').value;
   const onLeaveUntil = onLeaveRaw && /^\d{4}-\d{2}-\d{2}$/.test(onLeaveRaw) ? onLeaveRaw : null;
 
@@ -1024,6 +1292,7 @@ async function savePreacherNotes(){
     .update({
       notes,
       recurrence_pattern: recurrence,
+      is_mainstay_preacher: isMainstay,
       on_leave_until: onLeaveUntil,
       updated_at: new Date().toISOString()
     })
@@ -1128,6 +1397,124 @@ async function acceptSwapInternal(s){
     }).eq('id', s.id)
   ]);
   toast('Swap accepted', '✓');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CLEAR CALENDAR MODAL
+// ─────────────────────────────────────────────────────────────────
+// Three scopes:
+//   - month: assignments within the currently-viewed month (today+)
+//   - next12: assignments within next 12 weeks (today+)
+//   - all: all future assignments (today+)
+// Past dates are ALWAYS preserved. Swaps are deleted without special
+// handling (per Pastor decision: "clear means clear everything").
+//
+// Safety: a text input requiring "CLEAR" must be filled to enable
+// the delete button. Live count previews shown per scope option.
+// ═══════════════════════════════════════════════════════════════
+async function openClearModal(){
+  // Reset state
+  document.getElementById('clearConfirmInput').value = '';
+  document.getElementById('clearConfirmBtn').disabled = true;
+  document.querySelectorAll('input[name="clearScope"]').forEach(r => r.checked = false);
+
+  // Show loading hints
+  document.getElementById('clearScopeMonthCount').textContent = 'Counting…';
+  document.getElementById('clearScopeNext12Count').textContent = 'Counting…';
+  document.getElementById('clearScopeAllCount').textContent = 'Counting…';
+
+  document.getElementById('clearModal').classList.add('open');
+
+  // Compute counts for all three scopes in parallel
+  const todayStr = todayYMD();
+
+  // Scope: current month (today onward, within viewed month)
+  const monthStart = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth(), 1);
+  const monthEnd = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() + 1, 0);
+  const monthStartStr = ymd(monthStart) > todayStr ? ymd(monthStart) : todayStr;
+  const monthEndStr = ymd(monthEnd);
+
+  // Scope: next 12 weeks from today
+  const w12End = new Date(); w12End.setDate(w12End.getDate() + 84);
+  const w12EndStr = ymd(w12End);
+
+  try {
+    const [{ count: monthCount }, { count: w12Count }, { count: allCount }] = await Promise.all([
+      monthStartStr <= monthEndStr
+        ? db.from('wednesday_preaching').select('*', { count: 'exact', head: true })
+            .gte('preach_date', monthStartStr).lte('preach_date', monthEndStr)
+        : Promise.resolve({ count: 0 }),
+      db.from('wednesday_preaching').select('*', { count: 'exact', head: true })
+        .gte('preach_date', todayStr).lte('preach_date', w12EndStr),
+      db.from('wednesday_preaching').select('*', { count: 'exact', head: true })
+        .gte('preach_date', todayStr)
+    ]);
+
+    document.getElementById('clearScopeMonthCount').textContent =
+      monthCount === null ? 'Could not count' :
+      `${monthCount} assignment${monthCount === 1 ? '' : 's'} from today through ${monthEnd.toLocaleDateString('en-US', { month:'short', day:'numeric' })}`;
+    document.getElementById('clearScopeNext12Count').textContent =
+      w12Count === null ? 'Could not count' :
+      `${w12Count} assignment${w12Count === 1 ? '' : 's'} in next 12 weeks`;
+    document.getElementById('clearScopeAllCount').textContent =
+      allCount === null ? 'Could not count' :
+      `${allCount} total future assignment${allCount === 1 ? '' : 's'}`;
+  } catch(e) {
+    console.error('Count failed:', e);
+    document.getElementById('clearScopeMonthCount').textContent = 'Count failed';
+    document.getElementById('clearScopeNext12Count').textContent = 'Count failed';
+    document.getElementById('clearScopeAllCount').textContent = 'Count failed';
+  }
+}
+
+function closeClearModal(){
+  document.getElementById('clearModal').classList.remove('open');
+}
+
+function updateClearButton(){
+  const val = document.getElementById('clearConfirmInput').value.trim();
+  const scope = document.querySelector('input[name="clearScope"]:checked');
+  document.getElementById('clearConfirmBtn').disabled = !(val === 'CLEAR' && scope);
+}
+
+// Re-enable button check when radio changes
+document.addEventListener('change', e => {
+  if (e.target && e.target.name === 'clearScope') updateClearButton();
+});
+
+async function executeClear(){
+  const scope = document.querySelector('input[name="clearScope"]:checked');
+  if (!scope) return;
+  const confirmText = document.getElementById('clearConfirmInput').value.trim();
+  if (confirmText !== 'CLEAR') return;
+
+  const todayStr = todayYMD();
+  let q = db.from('wednesday_preaching').delete().gte('preach_date', todayStr);
+
+  if (scope.value === 'month') {
+    const monthStart = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth(), 1);
+    const monthEnd = new Date(_viewMonth.getFullYear(), _viewMonth.getMonth() + 1, 0);
+    const startStr = ymd(monthStart) > todayStr ? ymd(monthStart) : todayStr;
+    q = db.from('wednesday_preaching').delete()
+      .gte('preach_date', startStr)
+      .lte('preach_date', ymd(monthEnd));
+  } else if (scope.value === 'next12') {
+    const w12End = new Date(); w12End.setDate(w12End.getDate() + 84);
+    q = db.from('wednesday_preaching').delete()
+      .gte('preach_date', todayStr)
+      .lte('preach_date', ymd(w12End));
+  }
+  // scope.value === 'all' uses the default query above (today and later)
+
+  const { error, count } = await q;
+  if (error) {
+    toast(error.message, '⚠️');
+    return;
+  }
+  closeClearModal();
+  await loadAssignments();
+  renderCalendar();
+  toast(`Cleared assignments. Tap Auto-fill to repopulate.`, '✓');
 }
 
 // ═══════════════════════════════════════════════════════════════
