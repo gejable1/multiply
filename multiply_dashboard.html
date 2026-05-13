@@ -1446,7 +1446,7 @@ async function loadMembers(){
   // more efficiently, and the wire payload is smaller. Every column
   // listed here is consumed by r2l(); add columns here if r2l() adds
   // new fields. Approx 50-70% faster load on slow connections.
-  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_name,updated_at,created_at,leader_pin_hash,leader_pin_set_at').order('updated_at',{ascending:false});
+  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at').order('updated_at',{ascending:false});
   if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   sync('ok');
@@ -1510,11 +1510,11 @@ function r2l(r){
     diagnostic_zone:r.diagnostic_zone||null,diagnostic_date:r.diagnostic_date||'',
     intervention_track:r.intervention_track||'',intervention_status:r.intervention_status||'',
     facilitator_name:r.facilitator_name||'',updated:r.updated_at||r.created_at,
-    // Leader-access metadata (read-only here; written only by leader_login.html
-    // and the doResetPin function below). Used to decide whether the
-    // pastor's "Reset PIN" button should appear.
-    leader_pin_hash:r.leader_pin_hash||null,
-    leader_pin_set_at:r.leader_pin_set_at||null,
+    // PIN access metadata. As of May 14, 2026, MMT and MLT share a single
+    // PIN per user (member_pin_hash). Pastor's "Reset PIN" button clears
+    // this one column to invalidate the user wherever they may be logged in.
+    member_pin_hash:r.member_pin_hash||null,
+    member_pin_set_at:r.member_pin_set_at||null,
   };
 }
 
@@ -3073,7 +3073,10 @@ async function doResetPin(){
   const m = members.find(x => x.id === eid);
   if(!m) return;
 
-  const hadPin = !!m.leader_pin_hash; // for messaging only
+  // Single PIN per user (member_pin_hash) — same column for MMT and MLT.
+  // Clearing it invalidates the user on every device they may be logged in on.
+  const hadPin = !!m.member_pin_hash;
+
   const msg = hadPin
     ? `Reset PIN for ${m.name}?\n\n` +
       `• Their current PIN will stop working immediately.\n` +
@@ -3087,14 +3090,15 @@ async function doResetPin(){
   if(!hadPin){ return; } // nothing to do
 
   try {
-    // Clear the hash + timestamp
+    // Clear the single PIN column — covers MMT + MLT in one shot.
     const {error: upErr} = await db.from('members').update({
-      leader_pin_hash: null,
-      leader_pin_set_at: null,
+      member_pin_hash: null,
+      member_pin_set_at: null,
     }).eq('id', m.id);
     if(upErr) throw upErr;
 
-    // End any active sessions for this leader
+    // End any active leader (MLT) sessions for this user. Member (MMT)
+    // sessions are sessionStorage-only and don't need DB cleanup.
     try {
       await db.from('leader_sessions').update({
         ended_at: new Date().toISOString(),
@@ -3103,8 +3107,8 @@ async function doResetPin(){
     } catch(e) { console.warn('session end non-fatal:', e); }
 
     // Update local cache so the button vanishes on re-open
-    m.leader_pin_hash = null;
-    m.leader_pin_set_at = null;
+    m.member_pin_hash = null;
+    m.member_pin_set_at = null;
 
     toast(`PIN reset for ${m.name} ✓`, '🔑');
     closeMD();

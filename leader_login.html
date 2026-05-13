@@ -368,7 +368,7 @@ let mode = 'verify';      // 'verify' (existing PIN) or 'setup' (new PIN)
 async function loadLeaders(){
   try{
     const {data, error} = await db.from('members')
-      .select('id,name,pipeline_level,facilitator_role,lc_group,leader_pin_hash')
+      .select('id,name,pipeline_level,facilitator_role,lc_group,member_pin_hash')
       .gte('pipeline_level', 2)
       .order('name');
     if(error) throw error;
@@ -422,8 +422,8 @@ function pickLeader(id){
   document.getElementById('lRole').textContent = role;
   document.getElementById('lLc').textContent = selectedLeader.lc_group || '';
 
-  // Has a PIN already set?
-  if(selectedLeader.leader_pin_hash){
+  // Has a PIN already set? (single PIN per user — same column for MMT and MLT)
+  if(selectedLeader.member_pin_hash){
     mode = 'verify';
     document.getElementById('pinExisting').classList.remove('hidden');
     document.getElementById('pinNew').classList.add('hidden');
@@ -469,7 +469,7 @@ async function handlePinSubmit(){
     // Existing PIN — verify against hash
     showLoading('loadBar2', true);
     try{
-      const ok = await verifyPin(pinEntry, selectedLeader.leader_pin_hash);
+      const ok = await verifyPin(pinEntry, selectedLeader.member_pin_hash);
       if(!ok){
         showLoading('loadBar2', false);
         showError('err2', 'Incorrect PIN. Try again or ask Pastor Gerry to reset.');
@@ -532,11 +532,11 @@ async function handlePinConfirmSubmit(){
   try{
     const hash = await hashPin(pinFirstEntry);
     const {error} = await db.from('members').update({
-      leader_pin_hash: hash,
-      leader_pin_set_at: new Date().toISOString(),
+      member_pin_hash: hash,
+      member_pin_set_at: new Date().toISOString(),
     }).eq('id', selectedLeader.id);
     if(error) throw error;
-    selectedLeader.leader_pin_hash = hash;
+    selectedLeader.member_pin_hash = hash;
     pinEntry = pinFirstEntry; // for the loginSuccess path
     await loginSuccess();
   }catch(e){
