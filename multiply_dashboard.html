@@ -11221,9 +11221,15 @@ async function openAnnAckDetails(annId){
     const ackedAtMap = new Map((acks||[]).map(r => [r.member_id, r.acked_at]));
 
     // Step 2: who's in audience
+    // CRITICAL: must include discipler_id for virtual "lcl:<id>" group matching
+    // (_annAudienceMatchesMemberMD line ~11305 reads member.discipler_id). Also
+    // must exclude is_external_user to match _annComputeAudienceSizeMD's logic
+    // — otherwise summary and modal disagree on audience size. Fixed May 14, 2026
+    // after Pastor noticed "4 of 9" summary vs "0/0" in modal for a Kenneth-LCG-only announcement.
     const {data: allMembers, error: mErr} = await db.from('members')
-      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3')
+      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,is_external_user')
       .or('is_test_member.is.null,is_test_member.eq.false')
+      .or('is_external_user.is.null,is_external_user.eq.false')
       .order('name');
     if (mErr) throw mErr;
 
