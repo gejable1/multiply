@@ -2578,10 +2578,12 @@ function openEdit(id){
   document.getElementById('mti').textContent=m.name;
   document.getElementById('mme').textContent=`${LN[m.level||0]} · ${m.group||'No group'}${m.is_facilitator?' · ⭐ Facilitator':''}`;
   document.getElementById('delbtn').style.display='block';
-  // Reset PIN button — pastor-only, and only meaningful for leaders (Level 2+)
+  // Reset PIN button — pastor-only, available for any level (incl. L0 test
+  // members). Previously gated to level>=2 but Pastor needs to reset PINs
+  // for newly-set L0 members and test accounts too.
   const rpb = document.getElementById('resetPinBtn');
   if(rpb){
-    const showResetPin = LeaderScope.isPastor() && (m.level||0) >= 2;
+    const showResetPin = LeaderScope.isPastor();
     rpb.style.display = showResetPin ? 'block' : 'none';
   }
   // Self-edit link button — visible whenever a saved member is open,
@@ -2968,14 +2970,20 @@ async function saveMember(){
   const isExternal = _isPastor
     ? !!(document.getElementById('fIsExternal')?.checked)
     : _existingExt;
-  // ─── Enforce: test/external members are auto-assigned to Pastor's flock ───
-  // If either flag is ON, override the discipler fields so no LCL ever sees them.
+  // ─── Enforce: test/external members default to Pastor's flock ───
+  // Behavior (May 14, 2026): If Pastor explicitly picks a discipler from
+  // the dropdown, honor that pick — including for test/external records.
+  // Only auto-default to Pastor when the dropdown was left blank.
+  // This lets Pastor experiment with test records routed to specific LCLs
+  // (e.g. for piloting the disciple flow under a specific leader) while
+  // keeping the safety net for newly-flagged test records that haven't
+  // had a discipler chosen yet.
   let effDiscId = discId || null;
   let effDiscName = discName || null;
-  if((isTest || isExternal) && _isPastor){
+  if((isTest || isExternal) && _isPastor && !discId && !discName){
     const me = (typeof LEADER !== 'undefined' && LEADER) ? LEADER : {};
     effDiscId   = me.leaderId || null;
-    effDiscName = me.leaderName || discName || null;
+    effDiscName = me.leaderName || null;
   }
   const data={
     id:eid||undefined,name,
