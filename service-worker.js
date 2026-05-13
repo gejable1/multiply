@@ -19,7 +19,7 @@
 // That will unregister the SW and clear everything on next page load.
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mlt-v1-2026-05-05';
+const CACHE_VERSION = 'mlt-v2-2026-05-14-pin-consolidation';
 const SHELL_ASSETS = [
   './lc_leader_tool.html',
   './multiply_shared.js',
@@ -77,6 +77,16 @@ self.addEventListener('fetch', event => {
 
   // ── HTML: network-first (so new deploys are seen quickly) ──
   if (req.destination === 'document' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+
+  // ── multiply_shared.js: network-first too ──
+  // Carries auth/session logic that MUST match the deployed HTML. When this
+  // was cache-first, the May 14, 2026 PIN consolidation deploy bounced
+  // logged-in users because they ran stale shared.js paired with fresh HTML.
+  // Network-first costs ~50ms per page load and eliminates that mismatch class.
+  if (url.pathname.endsWith('/multiply_shared.js') || url.pathname.endsWith('multiply_shared.js')) {
     event.respondWith(networkFirst(req));
     return;
   }

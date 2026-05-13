@@ -10,7 +10,7 @@
 // different versions are deleted on activate, forcing a fresh fetch.
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mmt-v1-2026-05-05';
+const CACHE_VERSION = 'mmt-v2-2026-05-14-pin-consolidation';
 const SHELL_ASSETS = [
   './member_tool.html',
   './member_login.html',
@@ -55,6 +55,16 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
 
   if (req.destination === 'document' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+  // multiply_shared.js: network-first like HTML, since it carries auth/session
+  // logic that MUST match the deployed HTML version. May 14, 2026 lesson: when
+  // shared.js was cache-first, the PIN consolidation deploy caused logged-in
+  // users to bounce because they were running stale shared.js paired with
+  // fresh HTML. Network-first costs ~50ms per page load but eliminates the
+  // mismatch class of bugs entirely.
+  if (url.pathname.endsWith('/multiply_shared.js') || url.pathname.endsWith('multiply_shared.js')) {
     event.respondWith(networkFirst(req));
     return;
   }
