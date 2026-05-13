@@ -11171,12 +11171,24 @@ async function _annLoadAckRatesMD(){
   const published = _annAll.filter(a => a.status === 'published');
   for (const a of published) {
     try {
-      const {count: ackCount} = await db.from('announcement_acks').select('*', {count:'exact', head:true}).eq('announcement_id', a.id);
+      // Fetch acks JOINED with members so we can filter out test/external
+      // users. The summary count must match the modal's audience-filtered
+      // count, otherwise summary says "5 of 203" but modal lists only 4
+      // (because the 5th was a test member). Fixed May 14, 2026 after Pastor
+      // noticed the off-by-one between summary and modal.
+      const {data: ackRows, error: ackErr} = await db.from('announcement_acks')
+        .select('member_id, members!inner(is_test_member, is_external_user)')
+        .eq('announcement_id', a.id);
+      if (ackErr) throw ackErr;
+      const ackCount = (ackRows || []).filter(r => {
+        const m = r.members;
+        return m && !m.is_test_member && !m.is_external_user;
+      }).length;
       const audSize = await _annComputeAudienceSizeMD(a.audience_filter);
       const el = document.getElementById('annAckMD-' + a.id);
       if (el) {
-        const pct = audSize > 0 ? Math.round(((ackCount||0) / audSize) * 100) : 0;
-        el.innerHTML = `<button onclick="openAnnAckDetails('${a.id}')" style="background:transparent;border:none;color:#1f6b3a;font-weight:600;cursor:pointer;padding:0;font-size:11.5px;text-decoration:underline;">📊 <strong>${ackCount||0} of ${audSize}</strong> acknowledged (${pct}%)</button>`;
+        const pct = audSize > 0 ? Math.round((ackCount / audSize) * 100) : 0;
+        el.innerHTML = `<button onclick="openAnnAckDetails('${a.id}')" style="background:transparent;border:none;color:#1f6b3a;font-weight:600;cursor:pointer;padding:0;font-size:11.5px;text-decoration:underline;">📊 <strong>${ackCount} of ${audSize}</strong> acknowledged (${pct}%)</button>`;
       }
     } catch(e) {}
   }
