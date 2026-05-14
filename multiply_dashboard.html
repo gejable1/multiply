@@ -5016,6 +5016,15 @@ function _qrResolveQuizContext(quiz){
 
 function _qrFilteredAttempts(){
   const f = _quizReviewState.filters;
+  // If filtering by cooldown, pre-compute the set of (member, quiz) pairs in cooldown
+  let cooldownPairSet = null;
+  if(f.status === 'cooldown'){
+    cooldownPairSet = new Set();
+    const cooldowns = _qrAllActiveCooldowns();
+    cooldowns.forEach(cd => {
+      cd.attemptIds.forEach(id => cooldownPairSet.add(id));
+    });
+  }
   return _quizReviewState.attempts.filter(a => {
     if(!a.completed_at) return false;  // ignore in-progress
     if(f.memberId && a.member_id !== f.memberId) return false;
@@ -5027,6 +5036,9 @@ function _qrFilteredAttempts(){
     }
     if(f.status === 'passed' && !a.passed) return false;
     if(f.status === 'failed' && a.passed) return false;
+    if(f.status === 'cooldown'){
+      if(!cooldownPairSet.has(a.id)) return false;
+    }
     if(f.fromDate){
       const d = (a.completed_at || '').slice(0,10);
       if(d < f.fromDate) return false;
@@ -5139,6 +5151,7 @@ function _qrRender(){
           <option value="">All outcomes</option>
           <option value="passed" ${f.status==='passed'?'selected':''}>Passed only</option>
           <option value="failed" ${f.status==='failed'?'selected':''}>Did not pass</option>
+          <option value="cooldown" ${f.status==='cooldown'?'selected':''}>🚦 In cooldown</option>
         </select>
         <div style="display:flex;gap:.35rem;align-items:center">
           <input type="date" value="${f.fromDate}" onchange="_qrSetFilter('fromDate', this.value)" title="From"
@@ -5186,8 +5199,13 @@ function _qrRenderMemberCard(memId, attempts){
   const lastAt = attempts[0]?.completed_at;
   const lastLabel = lastAt ? new Date(lastAt).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '—';
 
+  // Cooldown info for this member (across ALL their attempts, not just filtered)
+  // — we want pastoral signal regardless of current filters.
+  const cooldowns = _qrCooldownsForMember(memId);
+  const hasCooldown = cooldowns.length > 0;
+
   return `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:.55rem;overflow:hidden">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:.55rem;overflow:hidden${hasCooldown ? ';box-shadow:inset 3px 0 0 #c97f4a' : ''}">
       <div onclick="_qrToggleMember('${memId}')"
         style="padding:.85rem 1rem;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:center"
         onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
@@ -5195,6 +5213,7 @@ function _qrRenderMemberCard(memId, attempts){
           <div style="font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.3">
             ${escapeHTMLNotif(name)}
             ${lc ? `<span style="font-size:10.5px;color:var(--muted);font-weight:500;margin-left:6px">· ${escapeHTMLNotif(lc)}</span>` : ''}
+            ${hasCooldown ? `<span style="font-size:9.5px;background:rgba(201,127,74,.18);color:#c97f4a;padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.04em;margin-left:6px;vertical-align:1px">🚦 ${cooldowns.length===1 ? 'IN COOLDOWN' : cooldowns.length + ' COOLDOWNS'}</span>` : ''}
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:3px">
             ${total} attempt${total===1?'':'s'} across ${uniqueResources} resource${uniqueResources===1?'':'s'} · ${rate}% pass · last ${lastLabel}
@@ -5203,6 +5222,25 @@ function _qrRenderMemberCard(memId, attempts){
         <div style="font-size:18px;color:var(--muted);transition:transform .15s;transform:rotate(${expanded?90:0}deg)">›</div>
       </div>
       ${expanded ? `
+        ${hasCooldown ? `
+          <div style="border-top:1px solid var(--border);background:rgba(201,127,74,.06);padding:.7rem 1rem;display:flex;flex-direction:column;gap:.45rem">
+            <div style="font-size:11.5px;color:var(--ink);line-height:1.5">
+              <span style="font-weight:700;color:#c97f4a">🚦 Cooldown active.</span>
+              ${cooldowns.map(cd => `
+                <div style="margin-top:4px;font-size:11px;color:var(--muted)">
+                  · <strong style="color:var(--ink)">${escapeHTMLNotif(cd.quizTitle)}</strong> — ${cd.hoursLeft} hour${cd.hoursLeft===1?'':'s'} remaining
+                </div>
+              `).join('')}
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:.5rem;margin-top:.3rem">
+              <span style="font-size:10.5px;color:var(--muted);font-style:italic">Reset clears the 3 most recent failed attempts so they can retry now.</span>
+              <button onclick="event.stopPropagation(); _qrOpenResetModal('${memId}')"
+                style="background:#c97f4a;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap">
+                🔄 Reset attempts
+              </button>
+            </div>
+          </div>
+        ` : ''}
         <div style="border-top:1px solid var(--border);background:var(--surface)">
           ${attempts.map(a => _qrRenderAttemptRow(a)).join('')}
         </div>
@@ -5425,6 +5463,7 @@ function _qrCloseDetail(){
 
 function _qrClose(){
   _qrCloseDetail();
+  _qrCloseResetModal();
   const m = document.getElementById('quizReviewModal');
   if(m){ m.remove(); }
   // Reset filters/expansion on close (fresh view next open)
@@ -5499,6 +5538,175 @@ function _qrExportCSV(){
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast(`Exported ${filtered.length} attempt${filtered.length===1?'':'s'}`, '📥');
+}
+
+// ───────────────────────────────────────────────────────────────────
+// COOLDOWN HELPERS (Option 2: Stuck Members + Reset Attempts)
+// ─────────────────────────────────────────────────────────────────
+// Mirrors MMT's _quizCheckCooldown algorithm exactly (member_tool.html ~3729):
+//   - Member is in cooldown for a quiz IF:
+//     · They have at least 3 completed attempts on that quiz
+//     · Their most recent 3 attempts are ALL failed (passed=false)
+//     · The most recent attempt's completed_at is within 24 hours of now
+//     · They have NEVER passed this quiz (a single pass dissolves cooldown forever)
+//   - If those conditions hold, cooldown ends 24h after the most recent attempt.
+// Any change to MMT's rule MUST be reflected here, or the filter lies.
+// ───────────────────────────────────────────────────────────────────
+
+const QR_QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN = 3;
+const QR_QUIZ_COOLDOWN_HOURS = 24;
+
+// Per-member cooldowns. Returns array: [{quizId, quizTitle, cooldownEndsAt, hoursLeft, attemptIds:[id,...]}]
+function _qrCooldownsForMember(memId){
+  // Group this member's completed attempts by quiz_id
+  const byQuiz = {};
+  _quizReviewState.attempts.forEach(a => {
+    if(a.member_id !== memId) return;
+    if(!a.completed_at) return;
+    if(!byQuiz[a.quiz_id]) byQuiz[a.quiz_id] = [];
+    byQuiz[a.quiz_id].push(a);
+  });
+
+  const now = Date.now();
+  const results = [];
+
+  Object.keys(byQuiz).forEach(quizId => {
+    const attempts = byQuiz[quizId];
+    // Has any attempt EVER passed? → no cooldown ever
+    if(attempts.some(a => a.passed)) return;
+    // Sort descending by completed_at (most recent first)
+    attempts.sort((x, y) => (y.completed_at || '').localeCompare(x.completed_at || ''));
+    if(attempts.length < QR_QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN) return;
+    const recent = attempts.slice(0, QR_QUIZ_MAX_ATTEMPTS_BEFORE_COOLDOWN);
+    // All 3 most recent are failed?
+    if(!recent.every(a => !a.passed)) return;
+    const lastFailedAt = new Date(recent[0].completed_at).getTime();
+    const cooldownEndsAt = lastFailedAt + (QR_QUIZ_COOLDOWN_HOURS * 60 * 60 * 1000);
+    if(now >= cooldownEndsAt) return;  // already expired
+
+    const qz = _quizReviewState.quizzes[quizId];
+    const ctx = qz ? _qrResolveQuizContext(qz) : { title: '(quiz not found)' };
+    const hoursLeft = Math.max(1, Math.ceil((cooldownEndsAt - now) / (60*60*1000)));
+
+    results.push({
+      quizId,
+      quizTitle: ctx.title || '(untitled)',
+      cooldownEndsAt,
+      hoursLeft,
+      attemptIds: recent.map(a => a.id)  // these are the 3 attempts a reset would clear
+    });
+  });
+
+  return results;
+}
+
+// Church-wide: every active cooldown across every member.
+// Used by the 'In cooldown' status filter to determine which attempt rows qualify.
+function _qrAllActiveCooldowns(){
+  const memIds = new Set(_quizReviewState.attempts.map(a => a.member_id));
+  const out = [];
+  memIds.forEach(memId => {
+    _qrCooldownsForMember(memId).forEach(cd => {
+      out.push({ memId, ...cd });
+    });
+  });
+  return out;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// RESET ATTEMPTS — confirmation modal + delete + reload
+// ─────────────────────────────────────────────────────────────────
+
+function _qrOpenResetModal(memId){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can reset attempts','🔒'); return; }
+  const m = _quizReviewState.members[memId];
+  const cooldowns = _qrCooldownsForMember(memId);
+  if(cooldowns.length === 0){
+    toast('No active cooldowns for this member','ℹ️');
+    return;
+  }
+
+  // Build modal
+  let modal = document.getElementById('qrResetModal');
+  if(modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'qrResetModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.7);z-index:9400;display:flex;align-items:center;justify-content:center;padding:1rem';
+
+  // Count attempts that will be cleared
+  const totalToClear = cooldowns.reduce((sum, cd) => sum + cd.attemptIds.length, 0);
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:480px;border:1px solid var(--border);overflow:hidden">
+      <div style="padding:1.1rem 1.25rem;border-bottom:1px solid var(--border)">
+        <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#c97f4a;font-weight:700">Reset Attempts</div>
+        <div style="font-size:17px;font-weight:700;color:var(--ink);margin-top:2px">${escapeHTMLNotif(m?.name || 'Member')}</div>
+      </div>
+
+      <div style="padding:1rem 1.25rem;font-size:12.5px;color:var(--ink);line-height:1.6">
+        <p style="margin:0 0 .8rem">This will permanently delete <strong>${totalToClear} failed attempt${totalToClear===1?'':'s'}</strong> across ${cooldowns.length} quiz${cooldowns.length===1?'':'zes'}. The member can immediately retry without waiting.</p>
+
+        <div style="background:var(--surface2);border-radius:8px;padding:.7rem .85rem;margin-bottom:.85rem">
+          ${cooldowns.map(cd => `
+            <div style="font-size:11.5px;color:var(--ink);padding:3px 0">
+              · <strong>${escapeHTMLNotif(cd.quizTitle)}</strong>
+              <span style="color:var(--muted);font-size:10.5px;margin-left:4px">(${cd.attemptIds.length} attempts · ${cd.hoursLeft}h left)</span>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="background:rgba(184,136,42,.1);border:1px solid rgba(184,136,42,.3);border-radius:7px;padding:.65rem .85rem;font-size:11px;color:var(--ink);line-height:1.55">
+          <strong style="color:var(--gold)">Pastoral note:</strong> The deleted attempts won't appear in the review screen anymore. Earlier passed attempts and reflection answers from OTHER quizzes are not affected. This action cannot be undone.
+        </div>
+      </div>
+
+      <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:.55rem">
+        <button onclick="_qrCloseResetModal()" class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted)">Cancel</button>
+        <button onclick="_qrDoReset('${memId}')" id="qrResetConfirmBtn" class="sbtn" style="margin-top:0;background:#c97f4a;color:#fff">🔄 Reset ${totalToClear} attempt${totalToClear===1?'':'s'}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function _qrCloseResetModal(){
+  const m = document.getElementById('qrResetModal');
+  if(m) m.remove();
+}
+
+async function _qrDoReset(memId){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can reset attempts','🔒'); return; }
+  const btn = document.getElementById('qrResetConfirmBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Resetting…'; }
+
+  const cooldowns = _qrCooldownsForMember(memId);
+  const idsToDelete = [];
+  cooldowns.forEach(cd => cd.attemptIds.forEach(id => idsToDelete.push(id)));
+
+  if(idsToDelete.length === 0){
+    toast('No attempts to reset','ℹ️');
+    _qrCloseResetModal();
+    return;
+  }
+
+  try {
+    const { error } = await db.from('library_quiz_attempts')
+      .delete()
+      .in('id', idsToDelete);
+    if(error) throw error;
+
+    // Remove from local state so we don't need a full reload
+    const cleared = new Set(idsToDelete);
+    _quizReviewState.attempts = _quizReviewState.attempts.filter(a => !cleared.has(a.id));
+
+    _qrCloseResetModal();
+    _qrRender();
+    const m = _quizReviewState.members[memId];
+    toast(`Cleared ${idsToDelete.length} attempts for ${m?.name || 'member'}`, '🔄');
+  } catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = '🔄 Reset attempts'; }
+    toast('Reset failed: ' + (e.message || e), '❌');
+  }
 }
 
 
