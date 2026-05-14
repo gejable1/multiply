@@ -829,6 +829,20 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div id="diagSettingsStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
   </div>
 
+  <!-- ─── ASSESSMENT INSTRUMENT VERSIONS (Pastor-configurable) ─── -->
+  <!-- Tracks when each personality/diagnostic instrument was redesigned.
+       Results dated BEFORE the cutoff get a soft "conversation-starter,
+       not verdict" banner on member and Pastor surfaces. Banner clears
+       automatically when a member retakes on the redesigned instrument.
+       See multiply_shared.js → shouldShowAssessmentCaveat. -->
+  <div class="ss" id="instrumentVersionsSection"><div class="st">🧪 Assessment Instrument Versions <span style="display:inline-flex;align-items:center;gap:3px;font-size:9.5px;background:var(--surface2);color:var(--muted);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:.5rem;vertical-align:middle"><span style="font-size:10px">🔒</span>Pastor only</span></div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin:.5rem 0 .85rem">
+      Mark when each instrument has been redesigned. Older results will show a soft "conversation-starter" caveat banner — both for you and for the member — until they retake on the new version. Leave blank for instruments that don't need a caveat.
+    </div>
+    <div id="instrumentVersionsRows" style="display:flex;flex-direction:column;gap:.55rem"></div>
+    <div id="instrumentVersionsStatus" style="font-size:11px;color:var(--muted);margin-top:.65rem;min-height:14px"></div>
+  </div>
+
   <!-- ─── HEADS-UP SETTINGS (Pastor-configurable events + reasons) ─── -->
   <div class="ss" id="headsUpSettingsSection"><div class="st">🙏 Heads-Up Settings</div>
     <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
@@ -8705,6 +8719,11 @@ async function rProfileTab(m) {
     const data = sec.key === 'gifts' ? sec.pullData : latest[sec.key];
     const taken = data?.date_taken || data?.created_at?.split('T')[0] || null;
     const rendered = data ? sec.render(data) : null;
+    // Caveat banner (May 2026): for instruments flagged as pre-redesign,
+    // surface a soft "conversation-starter" framing. Pastor-facing copy.
+    const caveat = data && typeof MultiplyShared !== 'undefined' && MultiplyShared.renderAssessmentCaveatBanner
+      ? MultiplyShared.renderAssessmentCaveatBanner(sec.key, taken, getSysSettings(), 'pastor')
+      : '';
 
     html += `<div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)">
       <div style="display:flex;align-items:center;gap:10px;padding:.75rem 1rem;border-bottom:1px solid ${data?'var(--border)':'transparent'}">
@@ -8714,7 +8733,7 @@ async function rProfileTab(m) {
         ${data ? `<button onclick="window.open(getResultsUrl('${sec.key}','${m.id}'),'_blank')" style="font-size:11px;padding:4px 10px;background:var(--green-bg);border:1.5px solid rgba(42,92,64,.3);border-radius:6px;cursor:pointer;color:var(--green);font-weight:600;font-family:'DM Sans',sans-serif">👁 View Results</button>` : ''}
         <button onclick="window.open(getProfileUrl('${sec.key}','${m.id}'),'_blank')" title="Retake assessment" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">${data ? '🔄 Retake' : '▶ Take'}</button>
       </div>
-      <div id="result-${sec.key}" style="display:none">${rendered ? `<div style="padding:.65rem 1rem;border-top:1px solid var(--border)">${rendered}</div>` : ''}</div>
+      <div id="result-${sec.key}" style="display:none">${rendered ? `<div style="padding:.65rem 1rem;border-top:1px solid var(--border)">${caveat}${rendered}</div>` : ''}</div>
     </div>`;
   });
 
@@ -8813,6 +8832,12 @@ async function rProfileTab(m) {
           <span style="color:var(--muted);font-size:11px;min-width:80px">${r.date_taken||'—'}</span>
           <span style="font-weight:700;color:${color};font-size:12.5px">${label}</span>
         </div>`;
+
+      // Caveat banner for pre-redesign instruments (May 2026)
+      if(typeof MultiplyShared !== 'undefined' && MultiplyShared.renderAssessmentCaveatBanner){
+        const cav = MultiplyShared.renderAssessmentCaveatBanner(type, r.date_taken, getSysSettings(), 'pastor');
+        if(cav) html += '<div style="margin-left:88px">' + cav + '</div>';
+      }
 
       if(fallback){
         html += `<div style="font-size:12px;color:var(--muted);padding-left:88px">${r.summary || r.top_result || '—'}</div>`;
@@ -10388,6 +10413,194 @@ async function saveDiagSettings(){
 
 // Boot the diagnostic settings loader (fire-and-forget)
 loadDiagSettings();
+
+// ═══════════════════════════════════════════════════════════════
+// ASSESSMENT INSTRUMENT VERSIONS — Pastor-configurable cutoff dates
+// ─────────────────────────────────────────────────────────────────
+// Stored in system_settings.meta.instrument_redesign_dates as
+// { enneagram: "YYYY-MM-DD", disc: "YYYY-MM-DD", ... }
+//
+// Old results (date_taken < cutoff) get a soft caveat banner via
+// MultiplyShared.renderAssessmentCaveatBanner(). Pattern: Pastor
+// taps "Mark redesigned today" → stamps today's date → old results
+// instantly carry the caveat → members retaking after that date
+// silently clear it.
+//
+// Why surface these four only: the May 14 empirical audit showed
+// Enneagram, DISC, Love Language, and Conflict Style all fail to
+// differentiate top vs second results. Strengths and Spiritual
+// Gifts pass the audit and don't need a caveat path.
+// ═══════════════════════════════════════════════════════════════
+const _INSTRUMENT_CAVEAT_TYPES = [
+  { key:'enneagram',      label:'Enneagram',      icon:'🌀', color:'#b8882a' },
+  { key:'disc',           label:'DISC',           icon:'🧭', color:'#1a4a6b' },
+  { key:'love_language',  label:'Love Language',  icon:'💝', color:'#8a2040' },
+  { key:'conflict_style', label:'Conflict Style', icon:'⚖️', color:'#7a4f9c' }
+];
+
+// In-memory cache of the latest system_settings row. Read by all the
+// per-section + history-feed render code so it doesn't fan out a fresh
+// DB call on every member-modal open. Refreshed when Pastor saves.
+let _sysSettings = null;
+
+// Cached for the lifetime of the page — same row drives diag settings
+// AND instrument versions AND heads-up. Pastor edits in any section
+// merge their patch onto this object before save.
+async function _refreshSysSettings(){
+  try{
+    const {data, error} = await db.from('system_settings')
+      .select('*').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    _sysSettings = data || { id: 1, meta: {} };
+  } catch(e){
+    console.warn('system_settings refresh failed:', e.message);
+    _sysSettings = { id: 1, meta: {} };
+  }
+  return _sysSettings;
+}
+
+// Public accessor for other render code in this file
+function getSysSettings(){ return _sysSettings; }
+
+function _ymdToday(){
+  // Manila-local YYYY-MM-DD (Invariant #12 — never use toISOString().slice(0,10))
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + day;
+}
+
+async function loadInstrumentVersions(){
+  await _refreshSysSettings();
+  renderInstrumentVersionsUI();
+}
+
+function renderInstrumentVersionsUI(){
+  const wrap = document.getElementById('instrumentVersionsRows');
+  if(!wrap) return;
+  const dates = (_sysSettings?.meta?.instrument_redesign_dates) || {};
+
+  wrap.innerHTML = _INSTRUMENT_CAVEAT_TYPES.map(t => {
+    const v = dates[t.key] || '';
+    const hasCutoff = !!v;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:.55rem .65rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+        <div style="font-size:16px;width:24px;text-align:center">${t.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600;color:${t.color}">${t.label}</div>
+          <div style="font-size:10.5px;color:var(--lighter);margin-top:1px">
+            ${hasCutoff
+              ? 'Caveat active — older results carry banner'
+              : 'No caveat — instrument treated as current'}
+          </div>
+        </div>
+        <input type="date" id="instVer_${t.key}" value="${v}"
+          style="background:white;border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11.5px;color:var(--ink);width:130px"
+          oninput="markInstrumentVersionsDirty()">
+        <button type="button" class="sbtn" style="margin-top:0;background:${t.color};padding:5px 10px;font-size:10.5px;white-space:nowrap"
+          onclick="markInstrumentRedesignedToday('${t.key}')" title="Stamp today's date as the redesign cutoff">
+          📌 Today
+        </button>
+        ${hasCutoff
+          ? `<button type="button" style="background:transparent;border:none;font-size:14px;cursor:pointer;color:var(--muted);padding:0 4px" onclick="clearInstrumentRedesignDate('${t.key}')" title="Clear cutoff (remove caveat)">✕</button>`
+          : `<span style="width:22px"></span>`
+        }
+      </div>`;
+  }).join('');
+
+  const status = document.getElementById('instrumentVersionsStatus');
+  if(status){
+    const activeCount = _INSTRUMENT_CAVEAT_TYPES.filter(t => dates[t.key]).length;
+    status.textContent = activeCount === 0
+      ? 'No caveats active.'
+      : activeCount + ' caveat' + (activeCount===1?'':'s') + ' active — older results show a conversation-starter banner.';
+    status.style.color = 'var(--muted)';
+  }
+
+  // Wire a single Save button at the bottom (added below the rows)
+  if(!document.getElementById('instrumentVersionsSaveBtn')){
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;justify-content:flex-end;margin-top:.65rem';
+    btnRow.innerHTML = `<button type="button" class="sbtn" id="instrumentVersionsSaveBtn"
+      style="margin-top:0;background:var(--green);padding:7px 16px;font-size:12px"
+      onclick="saveInstrumentVersions()">💾 Save Cutoff Dates</button>`;
+    wrap.parentNode.insertBefore(btnRow, document.getElementById('instrumentVersionsStatus'));
+  }
+}
+
+function markInstrumentVersionsDirty(){
+  const status = document.getElementById('instrumentVersionsStatus');
+  if(status){ status.textContent = 'Click Save to apply'; status.style.color = 'var(--gold)'; }
+}
+
+function markInstrumentRedesignedToday(key){
+  const inp = document.getElementById('instVer_'+key);
+  if(!inp) return;
+  inp.value = _ymdToday();
+  markInstrumentVersionsDirty();
+}
+
+function clearInstrumentRedesignDate(key){
+  const inp = document.getElementById('instVer_'+key);
+  if(inp) inp.value = '';
+  markInstrumentVersionsDirty();
+}
+
+async function saveInstrumentVersions(){
+  if(!LeaderScope.isPastor()){
+    toast('Only the Pastor can edit these settings','🔒');
+    return;
+  }
+  const btn = document.getElementById('instrumentVersionsSaveBtn');
+  const status = document.getElementById('instrumentVersionsStatus');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+  try{
+    // Read the current row fresh — another tab may have touched meta
+    const {data: cur, error: rErr} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(rErr) throw rErr;
+
+    // Build the patch — only the four instruments we surface
+    const newDates = {};
+    _INSTRUMENT_CAVEAT_TYPES.forEach(t => {
+      const inp = document.getElementById('instVer_'+t.key);
+      const v = (inp?.value || '').trim();
+      // Validate YYYY-MM-DD shape if non-empty
+      if(v){
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){
+          throw new Error(t.label + ': date must be YYYY-MM-DD');
+        }
+        newDates[t.key] = v;
+      }
+    });
+
+    const newMeta = {
+      ...(cur?.meta || {}),
+      instrument_redesign_dates: newDates,
+      instrument_versions_updated_at: new Date().toISOString(),
+      instrument_versions_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'
+    };
+    const {error: uErr} = await db.from('system_settings').update({meta: newMeta}).eq('id', 1);
+    if(uErr) throw uErr;
+
+    // Refresh local cache + re-render UI
+    await _refreshSysSettings();
+    renderInstrumentVersionsUI();
+    if(status){ status.textContent = '✓ Saved — banners refresh on next member-modal open'; status.style.color = 'var(--green)'; }
+    toast('Instrument cutoff dates saved ✓');
+  } catch(e){
+    if(status){ status.textContent = '⚠ ' + (e.message || 'Save failed'); status.style.color = 'var(--red)'; }
+    toast('Save failed: ' + e.message, '❌');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Save Cutoff Dates'; }
+  }
+}
+
+// Boot the instrument-versions loader (fire-and-forget — runs in parallel
+// with diag settings; both touch system_settings.meta but read-then-write
+// so concurrent loads are safe)
+loadInstrumentVersions();
 
 // ═══════════════════════════════════════════════════════════════
 // HEADS-UP SETTINGS (Pastor-configurable events + reasons)

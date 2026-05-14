@@ -2341,6 +2341,16 @@ let weeklyVerseConfig = null;
 let devoStreak = 0;
 let currentEditField = null;
 
+// Caveat-banner state (May 2026 — instrument redesign bridge):
+//   _assessmentDates  → { enneagram: '2026-04-22', disc: null, ... }
+//                       Latest date_taken per profile_type from member_profiles.
+//                       Populated by loadAssessmentCaveats() during boot.
+//   _sysSettingsMMT   → cached system_settings row (for instrument_redesign_dates).
+// Both default to safe empty objects so renderAssessments() can run
+// before the loader resolves; banner just won't show until then.
+let _assessmentDates = {};
+let _sysSettingsMMT = { meta: {} };
+
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
@@ -2385,7 +2395,8 @@ async function initMMT(){
       ['feed',   loadCelebrationFeed],
       ['headsup config', loadHeadsUpConfig],
       ['my notices', loadMyRecentNotices],
-      ['library', loadLibraryAndProgress]
+      ['library', loadLibraryAndProgress],
+      ['caveats', loadAssessmentCaveats]
     ];
     const _results = await Promise.allSettled(_loaders.map(([_, fn]) => fn()));
     _results.forEach((r, i) => {
@@ -4620,8 +4631,16 @@ function buildResultPanel(a){
   const summary = _summaryFor(a);
   const takeaway = RESULT_TAKEAWAYS[a.key] || { en:'', tl:'' };
 
+  // Caveat banner (May 2026): only shown for the 4 instruments under
+  // redesign, and only when the member's result predates the cutoff.
+  // Empty string for all other cases. Map MMT key → canonical DB
+  // profile_type so we line up with system_settings.meta.
+  const _profileTypeFor = { enneagram:'enneagram', disc:'disc', love_language:'love_language', conflict:'conflict_style' };
+  const caveatHTML = _mmtRenderCaveat(_profileTypeFor[a.key]);
+
   wrap.innerHTML = `
     <div class="ar-eyebrow"><span class="en-text">Your Result</span><span class="tl-text">Iyong Resulta</span></div>
+    ${caveatHTML}
     <div class="ar-top">${summary.topHtml}</div>
     ${summary.subHtml ? `<div class="ar-secondary">${summary.subHtml}</div>` : ''}
     ${summary.barsHtml || ''}
@@ -6272,6 +6291,102 @@ async function loadMyRecentNotices(){
     console.warn('My notices load failed:', e.message);
     myRecentNotices = [];
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ASSESSMENT CAVEAT LOADER (May 2026 — instrument redesign bridge)
+// ─────────────────────────────────────────────────────────────────
+// MMT normally renders assessment results from denormalized columns
+// on the members table (love_language_primary, disc_primary, etc.)
+// and does NOT touch member_profiles. The caveat banner system needs
+// the date each assessment was actually taken, which only lives in
+// member_profiles. So this loader does ONE small fetch:
+//
+//   1. Pull latest date_taken per profile_type from member_profiles
+//      for the 4 instruments under redesign.
+//   2. Pull system_settings.meta (for instrument_redesign_dates).
+//
+// Both go into module globals (_assessmentDates, _sysSettingsMMT).
+// buildResultPanel() then renders the banner inline if applicable.
+//
+// Fire-and-forget: failures default to empty objects, which produce
+// no banner — the rest of MMT keeps working without disruption.
+// Spiritual Gifts saves to its own table (gifts_diagnostic) and is
+// NOT in the redesign list, so we skip it.
+// ═══════════════════════════════════════════════════════════════
+async function loadAssessmentCaveats(){
+  try{
+    const CAVEAT_TYPES = ['enneagram','disc','love_language','conflict_style'];
+    // Settings fetch
+    const sysP = db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    // Dates fetch — only the types under redesign
+    const dtP  = db.from('member_profiles')
+      .select('profile_type,date_taken,created_at')
+      .eq('member_id', MEMBER.memberId)
+      .in('profile_type', CAVEAT_TYPES)
+      .order('date_taken', { ascending:false });
+
+    const [sysR, dtR] = await Promise.all([sysP, dtP]);
+    if(sysR.error) throw sysR.error;
+    if(dtR.error)  throw dtR.error;
+
+    _sysSettingsMMT = sysR.data || { meta: {} };
+
+    // Reduce to latest per type — query returned newest-first within type
+    const latest = {};
+    (dtR.data || []).forEach(r => {
+      if(!latest[r.profile_type]){
+        latest[r.profile_type] = r.date_taken || (r.created_at ? r.created_at.split('T')[0] : null);
+      }
+    });
+    _assessmentDates = latest;
+  }catch(e){
+    console.warn('Assessment caveat loader failed:', e.message);
+    _assessmentDates = {};
+    _sysSettingsMMT  = { meta: {} };
+  }
+}
+
+// Member-facing caveat banner renderer — used by buildResultPanel().
+// Returns empty string if the assessment isn't flagged as pre-redesign.
+// Inline minimal copy (shared.js has the full version, but inlining
+// here keeps the render path zero-dependency).
+function _mmtRenderCaveat(profileType){
+  if(!profileType) return '';
+  const dates = (_sysSettingsMMT && _sysSettingsMMT.meta && _sysSettingsMMT.meta.instrument_redesign_dates) || {};
+  const cutoff = dates[profileType];
+  if(!cutoff) return '';
+  const taken = _assessmentDates[profileType];
+  if(!taken) return '';
+  if(taken >= cutoff) return '';
+
+  const LABELS_EN = {
+    enneagram:'Enneagram', disc:'DISC',
+    love_language:'Love Language', conflict_style:'Conflict Style'
+  };
+  const LABELS_TL = {
+    enneagram:'Enneagram', disc:'DISC',
+    love_language:'Wika ng Pagmamahal', conflict_style:'Estilo sa Hidwaan'
+  };
+  const lblEn = MultiplyShared.escapeHTML(LABELS_EN[profileType] || profileType);
+  const lblTl = MultiplyShared.escapeHTML(LABELS_TL[profileType] || profileType);
+
+  return (
+    '<div style="background:#eef2f7;border-left:3px solid #5b6f8a;border-radius:8px;' +
+      'padding:.65rem .85rem;margin:.5rem 0 .75rem;display:flex;gap:10px;align-items:flex-start;' +
+      'font-size:11.5px;line-height:1.55;color:#2c3a4f">' +
+      '<div style="font-size:14px;flex-shrink:0;line-height:1.2">💬</div>' +
+      '<div style="flex:1">' +
+        '<span class="en-text">Your ' + lblEn + ' result is best understood through reflection ' +
+        'and conversation with a discipler — not as a final label. We are refining this ' +
+        'assessment, and you\'ll be invited to retake it when the improved version is ready.</span>' +
+        '<span class="tl-text">Ang resulta mo sa ' + lblTl + ' ay mas mauunawaan sa pamamagitan ' +
+        'ng pagninilay at usapan kasama ang iyong discipler — hindi bilang panghuling tatak. ' +
+        'Pinipino pa namin ang assessment na ito, at aanyayahan kang muling kumuha kapag ' +
+        'handa na ang pinabuting bersyon.</span>' +
+      '</div>' +
+    '</div>'
+  );
 }
 
 function renderMyHeadsUps(){

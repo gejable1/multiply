@@ -133,6 +133,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
     <button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
   </div>
 
+  <!-- Caveat banner (May 2026): populated by loadResults() if this
+       assessment was completed before its redesign cutoff. Inert
+       and empty for all other cases. -->
+  <div id="caveatWrap" style="max-width:720px;margin:0 auto;padding:0 1.25rem"></div>
+
   <div id="heroWrap"></div>
   <div class="section" id="scoresWrap"></div>
   <div class="section" id="cardsWrap"></div>
@@ -156,6 +161,69 @@ let _db=null;
 function getDB(){
   if(!_db){try{_db=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});}catch(e){}}
   return _db;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CAVEAT BANNER (May 2026 — instrument redesign bridge)
+// ─────────────────────────────────────────────────────────────────
+// This viewer is self-contained (does not load multiply_shared.js),
+// so we inline a minimal copy of the helper here. Source of truth:
+// multiply_shared.js → shouldShowAssessmentCaveat / renderAssessmentCaveatBanner.
+//
+// If you change copy or visual treatment, update BOTH locations
+// or keep them deliberately diverged — this page is member-facing
+// and uses the 'member' framing.
+// ═══════════════════════════════════════════════════════════════
+function _escHTML(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+const _CAVEAT_LABELS = {
+  love_language:  'Love Language',
+  disc:           'DISC',
+  enneagram:      'Enneagram',
+  conflict_style: 'Conflict Style',
+  strengths:      'Strengths',
+  gifts:          'Spiritual Gifts'
+};
+function _shouldShowCaveat(profileType, dateTaken, settings){
+  if(!profileType || !settings) return false;
+  const dates = (settings.meta && settings.meta.instrument_redesign_dates) || {};
+  const cutoff = dates[profileType];
+  if(!cutoff) return false;
+  if(!dateTaken) return false;
+  return dateTaken < cutoff;
+}
+function _renderCaveatBanner(profileType, dateTaken, settings){
+  if(!_shouldShowCaveat(profileType, dateTaken, settings)) return '';
+  const label = _CAVEAT_LABELS[profileType] || profileType;
+  return (
+    '<div style="background:#eef2f7;border-left:3px solid #5b6f8a;border-radius:8px;' +
+      'padding:.85rem 1rem;margin:1rem 0;display:flex;gap:12px;align-items:flex-start;' +
+      'font-size:12.5px;line-height:1.6;color:#2c3a4f;box-shadow:var(--shadow)">' +
+      '<div style="font-size:18px;flex-shrink:0;line-height:1.1">💬</div>' +
+      '<div style="flex:1">' +
+        '<div style="font-weight:700;margin-bottom:4px;color:#1a2940">' +
+          'A note about this result' +
+        '</div>' +
+        'Your ' + _escHTML(label) + ' result is best understood through reflection and ' +
+        'conversation with a discipler — not as a final label. We are refining this ' +
+        'assessment, and you\'ll be invited to retake it when the improved version is ready.' +
+      '</div>' +
+    '</div>'
+  );
+}
+async function _loadSysSettings(db){
+  try{
+    const {data, error} = await db.from('system_settings')
+      .select('meta').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    return data || { meta: {} };
+  } catch(e){
+    console.warn('system_settings fetch skipped:', e.message);
+    return { meta: {} };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -727,6 +795,17 @@ async function loadResults() {
     const d = rows[0];
     document.getElementById('loadingView').style.display = 'none';
     document.getElementById('mainView').style.display = 'block';
+
+    // Populate the caveat banner if this assessment was completed before
+    // its redesign cutoff. Banner stays empty otherwise. Fire-and-forget
+    // is safe — the render below doesn't depend on it.
+    (async () => {
+      try {
+        const settings = await _loadSysSettings(db);
+        const wrap = document.getElementById('caveatWrap');
+        if(wrap){ wrap.innerHTML = _renderCaveatBanner(type, d.date_taken, settings); }
+      } catch(e){ console.warn('Caveat banner skipped:', e.message); }
+    })();
 
     try {
       if(type==='love_language') renderLL(d, member);
