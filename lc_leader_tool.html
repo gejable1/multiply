@@ -589,7 +589,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="qa-btn" onclick="openAnnouncements()">
       <div class="qa-icon">📣</div>
       <div class="qa-label">Announcements</div>
-      <div class="qa-desc">Draft & track approvals</div>
+      <div class="qa-desc">Read · draft · track</div>
     </div>
     <div class="qa-btn" onclick="openMyLessons()">
       <div class="qa-icon">📖</div>
@@ -4496,7 +4496,7 @@ function emojiHint(targetId){
 //      ack rate for published, rejection note for rejected
 // ═══════════════════════════════════════════════════════════════════════
 
-let _annTab = 'new';                // 'new' | 'mine'
+let _annTab = 'new';                // 'new' | 'mine' | 'inbox'
 let _annDraft = {                   // current draft buffer
   title: '', body: '', priority: 'normal',
   audience: { all: true, lc_groups: [], levels: [], ministries: [], member_ids: [] },
@@ -4504,11 +4504,36 @@ let _annDraft = {                   // current draft buffer
 };
 let _myAnnouncements = [];
 
+// ── Inbox state (May 14, 2026) ───────────────────────────────────
+// MLT was originally announcements-author-only. Leaders are also
+// members of the church, so when Pastor publishes an announcement
+// to "All Members" or to a group the leader belongs to, they should
+// see it inside MLT — not have to switch to MMT. This block adds
+// receiver-side state mirroring what MMT already has.
+//
+// _annInbox            — published announcements matching this leader's audience
+// _annInboxAckedIds    — Set of ann ids the leader has already acked
+// _annInboxRetractions — retracted notices for things they acked previously
+// _leaderMemberRow     — cached full member row (audience matcher needs
+//                        ministry/2/3, discipler_id, is_preacher; the LEADER
+//                        session only has a subset — Invariant #21)
+let _annInbox = [];
+let _annInboxAckedIds = new Set();
+let _annInboxRetractions = [];
+let _leaderMemberRow = null;
+let _annInboxUnreadCount = 0;       // for the quick-action badge
+
 async function openAnnouncements(){
-  if (!LEADER || (LEADER.leaderLevel || 0) < 3) {
-    toast('Announcements are L3+ only', 'error');
+  if (!LEADER || (LEADER.leaderLevel || 0) < 2) {
+    toast('Announcements are L2+ only', 'error');
     return;
   }
+  // Authorship gate is L3+ — L2 leaders can READ their inbox but not
+  // draft. Reflected below by hiding the "New Draft" and "Mine" tabs
+  // when leaderLevel < 3, and by force-routing the default tab to Inbox.
+  const canAuthor = (LEADER.leaderLevel || 0) >= 3;
+  if (!canAuthor) _annTab = 'inbox';
+
   let modal = document.getElementById('annModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -4519,7 +4544,15 @@ async function openAnnouncements(){
     document.body.appendChild(modal);
   }
   modal.style.display = 'flex';
-  await _loadMyAnnouncements();
+  // Load Mine + Inbox in parallel — both touch the announcements table
+  // but with different filters, so they're safe to run concurrently.
+  await Promise.all([_loadMyAnnouncements(), _loadInbox()]);
+  // If there's something unread waiting, open on Inbox; otherwise keep
+  // whatever tab the user last had open (or the default 'new').
+  if ((_annInbox.length + _annInboxRetractions.length) > 0 && _annTab === 'new') {
+    _annTab = 'inbox';
+  }
+  _updateAnnQuickActionBadge();
   _renderAnnModal();
 }
 
@@ -4536,6 +4569,234 @@ async function _loadMyAnnouncements(){
     console.error('[announcements] load mine failed:', e);
     _myAnnouncements = [];
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INBOX (May 14, 2026) — leader receives announcements just like members
+// ─────────────────────────────────────────────────────────────────────
+// Mirrors MMT's announcement reception logic. Three concerns:
+//   1. Audience matching (port of _annAudienceMatchesMember from MMT)
+//   2. Acked-row filtering (so once leader taps ✓ Got it, the row hides)
+//   3. Retraction notices (when something they acked gets retracted)
+//
+// Why a separate matcher: per Invariant #21, the matcher reads
+// member fields the LEADER session doesn't carry (ministry/2/3,
+// discipler_id, is_preacher). We fetch a one-time _leaderMemberRow
+// when the modal opens, then run the matcher locally.
+// ═══════════════════════════════════════════════════════════════════════
+
+async function _loadLeaderMemberRow(){
+  if (_leaderMemberRow) return _leaderMemberRow;   // cached for session
+  if (!LEADER || !LEADER.leaderId) return null;
+  try {
+    const {data, error} = await db.from('members')
+      .select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,facilitator_role')
+      .eq('id', LEADER.leaderId)
+      .maybeSingle();
+    if (error) throw error;
+    _leaderMemberRow = data || null;
+    // Tag is_preacher if needed (deferred to load-time when matcher actually
+    // sees a roles=['preacher'] filter — same lazy pattern as MMT)
+    return _leaderMemberRow;
+  } catch(e) {
+    console.warn('[announcements] leader member row load failed:', e);
+    _leaderMemberRow = null;
+    return null;
+  }
+}
+
+// Mirror of MMT _annAudienceMatchesMember. Keep these two in sync —
+// if the audience filter shape evolves, both must update together.
+function _annAudienceMatchesLeader(filter, leaderRow){
+  if (!filter) return false;
+  if (filter.all === true) return true;
+  if (!leaderRow) return false;
+
+  // LC group match — mirrors MD/MMT logic, including virtual "lcl:<id>" key
+  if (filter.lc_groups?.length) {
+    const myGroup = (leaderRow.lc_group || '').trim();
+    if (myGroup) {
+      const wanted = filter.lc_groups.map(g => (typeof g === 'string' ? g.trim() : g));
+      if (wanted.includes(myGroup)) return true;
+    }
+    if (!myGroup && leaderRow.discipler_id) {
+      const virtKey = 'lcl:' + leaderRow.discipler_id;
+      if (filter.lc_groups.includes(virtKey)) return true;
+    }
+  }
+
+  if (filter.levels?.includes(leaderRow.pipeline_level)) return true;
+  if (filter.ministries?.some(m => [leaderRow.ministry, leaderRow.ministry2, leaderRow.ministry3].includes(m))) return true;
+  if (filter.member_ids?.includes(leaderRow.id)) return true;
+
+  // Roles quick-pick (May 14, 2026)
+  if (filter.roles?.length) {
+    if (filter.roles.includes('preacher') && leaderRow.is_preacher) return true;
+    if (filter.roles.includes('pastoral_staff') && leaderRow.facilitator_role === 'Pastoral Staff') return true;
+  }
+  return false;
+}
+
+// Fetch published, non-expired announcements; filter to those matching
+// this leader's audience and not yet acked. Same shape MMT uses so
+// the render functions stay simple.
+async function _loadInbox(){
+  try {
+    await _loadLeaderMemberRow();
+    if (!_leaderMemberRow) {
+      _annInbox = []; _annInboxAckedIds = new Set(); _annInboxRetractions = [];
+      _annInboxUnreadCount = 0;
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // 1) Published, non-expired
+    const {data: anns, error} = await db.from('announcements')
+      .select('id,title,body,priority,audience_filter,published_at,expires_at,author_name')
+      .eq('status', 'published')
+      .gt('expires_at', nowIso)
+      .order('published_at', {ascending: false})
+      .limit(50);
+    if (error) throw error;
+
+    // 2) My acks
+    const {data: acks} = await db.from('announcement_acks')
+      .select('announcement_id')
+      .eq('member_id', LEADER.leaderId);
+    _annInboxAckedIds = new Set((acks || []).map(a => a.announcement_id));
+
+    // 3) Lazy preacher-flag lookup (only if some incoming uses roles=['preacher'])
+    const needsPreacherFlag = (anns || []).some(a => a.audience_filter?.roles?.includes('preacher'));
+    if (needsPreacherFlag && _leaderMemberRow && !('is_preacher' in _leaderMemberRow)) {
+      try {
+        const {data: pRow} = await db.from('preachers')
+          .select('member_id').eq('member_id', LEADER.leaderId)
+          .eq('is_active', true).maybeSingle();
+        _leaderMemberRow.is_preacher = !!pRow;
+      } catch(e) {
+        console.warn('[announcements] preacher-flag lookup failed (non-fatal):', e);
+        _leaderMemberRow.is_preacher = false;
+      }
+    }
+
+    // 4) Match audience + not yet acked
+    _annInbox = (anns || []).filter(a => {
+      if (_annInboxAckedIds.has(a.id)) return false;
+      return _annAudienceMatchesLeader(a.audience_filter, _leaderMemberRow);
+    });
+
+    // 5) Retraction notices for things I acked previously
+    await _loadInboxRetractions();
+
+    _annInboxUnreadCount = _annInbox.length + _annInboxRetractions.length;
+  } catch(e) {
+    console.error('[announcements] inbox load failed:', e);
+    _annInbox = []; _annInboxRetractions = []; _annInboxUnreadCount = 0;
+  }
+}
+
+async function _loadInboxRetractions(){
+  try {
+    if (_annInboxAckedIds.size === 0) { _annInboxRetractions = []; return; }
+    const ackedArr = Array.from(_annInboxAckedIds);
+    const {data: retracted, error} = await db.from('announcements')
+      .select('id,title,retracted_at,retraction_reason,author_name')
+      .eq('status', 'retracted')
+      .in('id', ackedArr)
+      .order('retracted_at', {ascending: false})
+      .limit(20);
+    if (error) throw error;
+    if (!retracted || !retracted.length) { _annInboxRetractions = []; return; }
+
+    const retractedIds = retracted.map(r => r.id);
+    const {data: dismissals} = await db.from('announcement_retraction_dismissals')
+      .select('announcement_id')
+      .eq('member_id', LEADER.leaderId)
+      .in('announcement_id', retractedIds);
+    const dismissedIds = new Set((dismissals || []).map(d => d.announcement_id));
+    _annInboxRetractions = retracted.filter(r => !dismissedIds.has(r.id));
+  } catch(e) {
+    console.warn('[announcements] inbox retraction load failed:', e);
+    _annInboxRetractions = [];
+  }
+}
+
+// Ack an announcement from the leader's inbox. Same row shape MMT writes.
+async function _ackInboxAnnouncement(annId){
+  try {
+    const {error} = await db.from('announcement_acks').insert({
+      announcement_id: annId,
+      member_id: LEADER.leaderId
+    });
+    // duplicate is fine — leader may have already acked from MMT
+    if (error && !String(error.message).includes('duplicate')) throw error;
+    _annInboxAckedIds.add(annId);
+    _annInbox = _annInbox.filter(a => a.id !== annId);
+    _annInboxUnreadCount = _annInbox.length + _annInboxRetractions.length;
+    _renderAnnModal();
+    _updateAnnQuickActionBadge();
+  } catch(e) {
+    console.error('[announcements] ack failed:', e);
+    toast('Could not acknowledge. Try again.', 'error');
+  }
+}
+
+async function _dismissInboxRetraction(annId){
+  try {
+    const {error} = await db.from('announcement_retraction_dismissals').insert({
+      announcement_id: annId,
+      member_id: LEADER.leaderId
+    });
+    if (error && !String(error.message).includes('duplicate')) throw error;
+    _annInboxRetractions = _annInboxRetractions.filter(r => r.id !== annId);
+    _annInboxUnreadCount = _annInbox.length + _annInboxRetractions.length;
+    _renderAnnModal();
+    _updateAnnQuickActionBadge();
+  } catch(e) {
+    console.error('[announcements] dismiss retraction failed:', e);
+    toast('Could not dismiss. Try again.', 'error');
+  }
+}
+
+// Render the badge on the 📣 Announcements quick-action card.
+// Empty/zero hides the dot. Single source-of-truth = _annInboxUnreadCount.
+function _updateAnnQuickActionBadge(){
+  // The quick-action card is wrapped on its outer div by onclick="openAnnouncements()"
+  const cards = document.querySelectorAll('.qa-btn');
+  let target = null;
+  cards.forEach(c => {
+    if (c.getAttribute('onclick') === 'openAnnouncements()') target = c;
+  });
+  if (!target) return;
+  let badge = target.querySelector('.qa-badge-inbox');
+  if (_annInboxUnreadCount > 0) {
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'qa-badge-inbox';
+      badge.style.cssText = 'position:absolute;top:6px;right:8px;background:#9a2727;color:#fff;font-size:10.5px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 1px 3px rgba(0,0,0,.25);line-height:1';
+      // The qa-btn doesn't have position:relative by default; set inline so the
+      // badge anchors correctly without touching the shared CSS class.
+      if (getComputedStyle(target).position === 'static') {
+        target.style.position = 'relative';
+      }
+      target.appendChild(badge);
+    }
+    badge.textContent = _annInboxUnreadCount > 9 ? '9+' : String(_annInboxUnreadCount);
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+// Prefetch the inbox count once on page load so the badge is correct
+// before the leader opens the modal. Fire-and-forget; failures are
+// silent (badge just won't appear).
+async function prefetchAnnInboxCount(){
+  if (!LEADER || (LEADER.leaderLevel || 0) < 2) return;
+  try {
+    await _loadInbox();
+    _updateAnnQuickActionBadge();
+  } catch(e) { /* silent */ }
 }
 
 function _annSetTab(t){ _annTab = t; _renderAnnModal(); }
@@ -4564,22 +4825,45 @@ function _renderAnnModal(){
   const body = document.getElementById('annModalBody');
   if (!body) return;
 
+  const canAuthor = (LEADER && (LEADER.leaderLevel || 0) >= 3);
+  // Safety: if a non-author somehow lands on 'new' or 'mine', bounce to inbox
+  if (!canAuthor && _annTab !== 'inbox') _annTab = 'inbox';
+
+  const inboxCount = _annInbox.length + _annInboxRetractions.length;
+  const inboxBadge = inboxCount > 0
+    ? ` <span style="background:#9a2727;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:9px;margin-left:3px;vertical-align:1px">${inboxCount > 9 ? '9+' : inboxCount}</span>`
+    : '';
+
+  const inboxTabBtn = `
+    <button onclick="_annSetTab('inbox')"
+      style="flex:1;min-width:0;padding:.55rem .35rem;background:${_annTab==='inbox'?'var(--gold)':'transparent'};
+             color:${_annTab==='inbox'?'#fff':'#1a1612'};
+             border:1px solid ${_annTab==='inbox'?'var(--gold)':'#e2d8cc'};border-radius:999px;
+             font-weight:${_annTab==='inbox'?'700':'500'};font-size:12.5px;cursor:pointer;white-space:nowrap;">
+      📥 Inbox${inboxBadge}
+    </button>`;
+
+  const newTabBtn = canAuthor ? `
+    <button onclick="_annSetTab('new')"
+      style="flex:1;min-width:0;padding:.55rem .35rem;background:${_annTab==='new'?'var(--gold)':'transparent'};
+             color:${_annTab==='new'?'#fff':'#1a1612'};
+             border:1px solid ${_annTab==='new'?'var(--gold)':'#e2d8cc'};border-radius:999px;
+             font-weight:${_annTab==='new'?'700':'500'};font-size:12.5px;cursor:pointer;white-space:nowrap;">
+      ✏️ New Draft
+    </button>` : '';
+
+  const mineTabBtn = canAuthor ? `
+    <button onclick="_annSetTab('mine')"
+      style="flex:1;min-width:0;padding:.55rem .35rem;background:${_annTab==='mine'?'var(--gold)':'transparent'};
+             color:${_annTab==='mine'?'#fff':'#1a1612'};
+             border:1px solid ${_annTab==='mine'?'var(--gold)':'#e2d8cc'};border-radius:999px;
+             font-weight:${_annTab==='mine'?'700':'500'};font-size:12.5px;cursor:pointer;white-space:nowrap;">
+      📋 Mine (${_myAnnouncements.length})
+    </button>` : '';
+
   const tabsHtml = `
-    <div style="display:flex;gap:.4rem;margin-bottom:1rem;">
-      <button onclick="_annSetTab('new')"
-        style="flex:1;padding:.55rem;background:${_annTab==='new'?'var(--gold)':'transparent'};
-               color:${_annTab==='new'?'#fff':'#1a1612'};
-               border:1px solid ${_annTab==='new'?'var(--gold)':'#e2d8cc'};border-radius:999px;
-               font-weight:${_annTab==='new'?'700':'500'};font-size:12.5px;cursor:pointer;">
-        ✏️ New Draft
-      </button>
-      <button onclick="_annSetTab('mine')"
-        style="flex:1;padding:.55rem;background:${_annTab==='mine'?'var(--gold)':'transparent'};
-               color:${_annTab==='mine'?'#fff':'#1a1612'};
-               border:1px solid ${_annTab==='mine'?'var(--gold)':'#e2d8cc'};border-radius:999px;
-               font-weight:${_annTab==='mine'?'700':'500'};font-size:12.5px;cursor:pointer;">
-        📋 Mine (${_myAnnouncements.length})
-      </button>
+    <div style="display:flex;gap:.35rem;margin-bottom:1rem;flex-wrap:wrap;">
+      ${inboxTabBtn}${newTabBtn}${mineTabBtn}
     </div>`;
 
   const headerHtml = `
@@ -4589,9 +4873,12 @@ function _renderAnnModal(){
         style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b5f4f;">×</button>
     </div>`;
 
-  body.innerHTML = headerHtml + tabsHtml + (
-    _annTab === 'new' ? _renderAnnDraftForm() : _renderAnnMineList()
-  );
+  let content = '';
+  if (_annTab === 'new')        content = _renderAnnDraftForm();
+  else if (_annTab === 'mine')  content = _renderAnnMineList();
+  else if (_annTab === 'inbox') content = _renderAnnInboxList();
+
+  body.innerHTML = headerHtml + tabsHtml + content;
   if (_annTab === 'mine') _annAfterRenderMine();
 }
 
@@ -4808,6 +5095,92 @@ async function _authorRetract(annId){
 // After rendering, kick off ack-rate loads (avoids embedding closing-script-tag in a string)
 function _annAfterRenderMine(){
   setTimeout(_annLoadAckRates, 50);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INBOX RENDER (May 14, 2026)
+// Mirrors the visual logic of MMT's pinned announcement cards, but
+// adapted to fit the modal context (no sound, no quiet-hours, no
+// home-screen pin — just an inline list with ack buttons).
+// ─────────────────────────────────────────────────────────────────
+function _renderAnnInboxList(){
+  if (_annInbox.length === 0 && _annInboxRetractions.length === 0) {
+    return `
+      <div style="text-align:center;padding:2.5rem 1rem;color:#6b5f4f;">
+        <div style="font-size:36px;margin-bottom:.5rem;">📭</div>
+        <div style="font-size:13.5px;font-weight:600;color:#1a1612;margin-bottom:.3rem;">All caught up</div>
+        <div style="font-size:12px;line-height:1.55;max-width:280px;margin:0 auto;">
+          No new announcements for you right now. Anything Pastor sends to your audience will appear here.
+        </div>
+      </div>`;
+  }
+
+  // Retraction notices first — older information to clear before reading the new
+  const retractionsHtml = _annInboxRetractions.map(r => `
+    <div style="background:linear-gradient(135deg,#f5e8e8,#ecd6d6);border:1.5px solid #b04545;border-radius:12px;padding:.85rem 1rem;margin-bottom:.6rem;">
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem;">
+        <span style="background:#9a2727;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px;">🚫 RETRACTED</span>
+        <span style="font-size:10.5px;color:#666;margin-left:auto;">${_annEscapeHTML(r.author_name || '')}</span>
+      </div>
+      <div style="font-size:12.5px;color:#3a3028;line-height:1.55;margin-bottom:.35rem;">
+        The announcement <strong>"${_annEscapeHTML(r.title)}"</strong> was retracted.
+      </div>
+      ${r.retraction_reason ? `
+        <div style="font-size:11.5px;color:#7a3030;margin-bottom:.55rem;font-style:italic;">
+          Reason: ${_annEscapeHTML(r.retraction_reason)}
+        </div>` : ''}
+      <button onclick="_dismissInboxRetraction('${r.id}')"
+        style="background:#9a2727;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;">
+        ✓ Got it
+      </button>
+    </div>
+  `).join('');
+
+  // Inbox announcements — pinned-style cards, priority-aware
+  const annsHtml = _annInbox.map(a => {
+    const isUrgent      = a.priority === 'urgent';
+    const isCelebration = a.priority === 'celebration';
+    const bg = isUrgent
+      ? 'linear-gradient(135deg,#fde8e8,#fad4d4)'
+      : isCelebration
+        ? 'linear-gradient(135deg,#fff3d6,#ffe4a0)'
+        : '#fff';
+    const border = isUrgent ? '1.5px solid #c04848'
+      : isCelebration ? '1.5px solid #c89a2a'
+      : '1px solid #e2d8cc';
+    const priorityLabel = isUrgent
+      ? '<span style="background:#9a2727;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px;">🔥 URGENT</span>'
+      : isCelebration
+        ? '<span style="background:#7a5800;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px;">🎉 CELEBRATE</span>'
+        : '';
+    return `
+      <div style="background:${bg};border:${border};border-radius:12px;padding:.95rem 1rem;margin-bottom:.65rem;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+        <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;flex-wrap:wrap;">
+          ${priorityLabel}
+          <span style="font-size:10.5px;color:#6b5f4f;margin-left:auto;">${_annEscapeHTML(a.author_name || '')} · ${_annFmt(a.published_at)}</span>
+        </div>
+        <div style="font-weight:700;font-size:14px;color:#1a1612;margin-bottom:.35rem;line-height:1.35;">
+          ${_annEscapeHTML(a.title)}
+        </div>
+        <div style="font-size:12.5px;color:#3a3028;line-height:1.6;margin-bottom:.7rem;white-space:pre-wrap;">${_annEscapeHTML(a.body)}</div>
+        <button onclick="_ackInboxAnnouncement('${a.id}')"
+          style="background:var(--gold);color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+          ✓ Got it
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  return retractionsHtml + annsHtml;
+}
+
+// Local HTML escaper — MultiplyShared.escapeHTML works, but we keep a
+// local helper so this inbox block is self-contained and survives any
+// future hot-swap of the shared module.
+function _annEscapeHTML(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
 }
 
 async function _annLoadAckRates(){
@@ -5590,6 +5963,11 @@ function _closeLessonViewer(){
 
 // Show install banner on first visit (auto-skips if already installed)
 setTimeout(() => { try { _maybeShowInstallBanner('mlt'); } catch(e){} }, 1500);
+
+// Prefetch announcement-inbox count so the badge on the 📣 quick-action
+// card is accurate without the leader having to open the modal.
+// Fire-and-forget; the badge updates whenever this resolves.
+setTimeout(() => { try { prefetchAnnInboxCount(); } catch(e){} }, 2000);
 </script>
 </body>
 </html>
