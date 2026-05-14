@@ -8449,6 +8449,16 @@ async function rProfileTab(m) {
   logView(m.id, 'profile_view');
   wrap.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px">⏳ Loading profile data...</div>';
 
+  // Caveat banner system: make sure _sysSettings is loaded before we render.
+  // The Settings page boots this via loadInstrumentVersions(), but Pastor may
+  // open a member modal BEFORE that async boot resolves — in which case
+  // getSysSettings() returns null and banners silently skip. This guard
+  // closes the race: if the cache is empty, refresh now (one DB hit per
+  // session, idempotent).
+  if (!getSysSettings()) {
+    try { await _refreshSysSettings(); } catch(e) { /* non-fatal */ }
+  }
+
   // Load assessments from BOTH tables.
   // member_profiles  → love_language, disc, enneagram, strengths, conflict_style
   // gifts_diagnostic → spiritual gifts (separate dedicated table, different schema)
