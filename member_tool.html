@@ -7336,6 +7336,25 @@ async function loadPinnedAnnouncements(){
       .eq('member_id', MEMBER.memberId);
     const ackedIds = new Set((acks || []).map(a => a.announcement_id));
 
+    // Step 2b (May 14, 2026): if any incoming announcement targets the "preacher"
+    // role audience, we need to know whether THIS member is in the preachers
+    // table so the matcher can resolve member.is_preacher. We only fetch if
+    // needed — saves a query for the common case.
+    const needsPreacherFlag = (anns || []).some(a => a.audience_filter?.roles?.includes('preacher'));
+    if (needsPreacherFlag && memberRow && !('is_preacher' in memberRow)) {
+      try {
+        const {data: pRow} = await db.from('preachers')
+          .select('member_id')
+          .eq('member_id', MEMBER.memberId)
+          .eq('is_active', true)
+          .maybeSingle();
+        memberRow.is_preacher = !!pRow;
+      } catch(e) {
+        console.warn('[announcements] preacher-flag lookup failed (non-fatal):', e);
+        memberRow.is_preacher = false;
+      }
+    }
+
     // Step 3: filter by audience match + not-yet-acked
     _myAnnouncementsForHome = (anns || []).filter(a => {
       if (ackedIds.has(a.id)) return false;
@@ -7432,6 +7451,12 @@ function _annAudienceMatchesMember(filter, member){
   if (filter.levels?.includes(member.pipeline_level)) return true;
   if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
   if (filter.member_ids?.includes(member.id)) return true;
+  // Roles quick-pick (May 14, 2026). Caller must populate member.is_preacher
+  // by checking the preachers table when loading announcements.
+  if (filter.roles?.length) {
+    if (filter.roles.includes('preacher') && member.is_preacher) return true;
+    if (filter.roles.includes('pastoral_staff') && member.facilitator_role === 'Pastoral Staff') return true;
+  }
   return false;
 }
 

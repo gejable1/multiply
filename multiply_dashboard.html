@@ -11048,6 +11048,14 @@ function _annAudienceText(filter){
   if (filter.levels?.length) parts.push(`Lvl: ${filter.levels.join(', ')}`);
   if (filter.ministries?.length) parts.push(`Min: ${filter.ministries.join(', ')}`);
   if (filter.member_ids?.length) parts.push(`${filter.member_ids.length} specific member(s)`);
+  if (filter.roles?.length) {
+    const labels = filter.roles.map(r => {
+      if (r === 'preacher') return '📣 Preachers';
+      if (r === 'pastoral_staff') return '⛪ Pastoral Staff';
+      return r;
+    });
+    parts.push(labels.join(', '));
+  }
   return parts.join(' · ') || '(no filter)';
 }
 
@@ -11238,12 +11246,21 @@ async function openAnnAckDetails(annId){
     // must exclude is_external_user to match _annComputeAudienceSizeMD's logic
     // — otherwise summary and modal disagree on audience size. Fixed May 14, 2026
     // after Pastor noticed "4 of 9" summary vs "0/0" in modal for a Kenneth-LCG-only announcement.
+    // Also fetches facilitator_role + tags is_preacher for role-based audiences.
     const {data: allMembers, error: mErr} = await db.from('members')
-      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,is_external_user')
+      .select('id,name,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,is_external_user,facilitator_role')
       .or('is_test_member.is.null,is_test_member.eq.false')
       .or('is_external_user.is.null,is_external_user.eq.false')
       .order('name');
     if (mErr) throw mErr;
+
+    // If filter targets preachers, fetch + tag for matching
+    let preacherIds = new Set();
+    if (a.audience_filter?.roles?.includes('preacher')) {
+      const {data: pData} = await db.from('preachers').select('member_id').eq('is_active', true);
+      preacherIds = new Set((pData || []).map(p => p.member_id));
+    }
+    (allMembers||[]).forEach(m => { m.is_preacher = preacherIds.has(m.id); });
 
     const audience = (allMembers||[]).filter(m => _annAudienceMatchesMemberMD(a.audience_filter, m));
     const acked = audience.filter(m => ackedIds.has(m.id));
@@ -11328,6 +11345,15 @@ function _annAudienceMatchesMemberMD(filter, member){
   if (filter.levels?.includes(member.pipeline_level)) return true;
   if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
   if (filter.member_ids?.includes(member.id)) return true;
+  // Roles (May 14, 2026): quick-pick audience for "Preachers" and "Pastoral Staff".
+  //   • 'preacher'        → caller must set member.is_preacher=true if in preachers table
+  //   • 'pastoral_staff'  → member.facilitator_role === 'Pastoral Staff'
+  // Caller responsibility: when computing audience, fetch the preachers table
+  // and flag matched members with is_preacher before passing to this function.
+  if (filter.roles?.length) {
+    if (filter.roles.includes('preacher') && member.is_preacher) return true;
+    if (filter.roles.includes('pastoral_staff') && member.facilitator_role === 'Pastoral Staff') return true;
+  }
   return false;
 }
 
@@ -11340,11 +11366,19 @@ async function _annComputeAudienceSizeMD(filter){
         .or('is_external_user.is.null,is_external_user.eq.false');
       return count || 0;
     }
-    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,is_external_user')
+    // Fetch members + their facilitator_role for role-based filters
+    const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,is_external_user,facilitator_role')
       .or('is_test_member.is.null,is_test_member.eq.false')
       .or('is_external_user.is.null,is_external_user.eq.false');
+    // If filter targets preachers, fetch the preachers table once and tag members
+    let preacherIds = new Set();
+    if (filter.roles?.includes('preacher')) {
+      const {data: pData} = await db.from('preachers').select('member_id').eq('is_active', true);
+      preacherIds = new Set((pData || []).map(p => p.member_id));
+    }
     let n = 0;
     (all||[]).forEach(m => {
+      m.is_preacher = preacherIds.has(m.id);
       if (_annAudienceMatchesMemberMD(filter, m)) n++;
     });
     return n;
@@ -11456,7 +11490,7 @@ function openPastorAnnComposer(existing){
       }
     : {
         id: null, title:'', body:'', priority:'normal',
-        audience:{all:true, lc_groups:[], levels:[], ministries:[], member_ids:[]},
+        audience:{all:true, lc_groups:[], levels:[], ministries:[], member_ids:[], roles:[]},
         expiresAtDays: 7
       };
 
@@ -11565,6 +11599,25 @@ function _renderPastorAnnComposer(){
             </div>
           </div>
 
+          <div style="margin-bottom:.7rem;">
+            <div style="margin-bottom:.3rem;"><strong>🎯 Roles</strong> <span style="font-size:10.5px;color:var(--muted);font-weight:400">(quick-pick)</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+              ${[
+                {key:'preacher',       label:'📣 Preachers'},
+                {key:'pastoral_staff', label:'⛪ Pastoral Staff'}
+              ].map(r => {
+                const on = (d.audience.roles||[]).includes(r.key);
+                return `<button type="button" onclick="_pAnnToggleRole('${r.key}')"
+                  style="padding:.4rem .8rem;border-radius:18px;font-size:11.5px;font-weight:600;cursor:pointer;
+                    background:${on ? 'var(--gold)' : 'var(--surface)'};
+                    color:${on ? '#fff' : 'var(--text)'};
+                    border:1px solid ${on ? 'var(--gold)' : 'var(--border)'};">
+                  ${on ? '✓ ' : ''}${r.label}
+                </button>`;
+              }).join('')}
+            </div>
+          </div>
+
           <div>
             <strong>📊 Pipeline Levels</strong> (0-5, comma-separated):<br>
             <input type="text" value="${(d.audience.levels||[]).join(', ')}"
@@ -11637,6 +11690,17 @@ function _removeAudChip(kind, id){
   if (!_pastorAnnDraft) return;
   const arr = _pastorAnnDraft.audience[kind] || [];
   _pastorAnnDraft.audience[kind] = arr.filter(x => String(x) !== String(id));
+  _renderPastorAnnComposer();
+}
+
+// Toggle a role chip (preacher / pastoral_staff). Roles are an or-of-flags
+// quick-pick filter: tap once to include, tap again to remove.
+function _pAnnToggleRole(role){
+  if (!_pastorAnnDraft) return;
+  if (!Array.isArray(_pastorAnnDraft.audience.roles)) _pastorAnnDraft.audience.roles = [];
+  const i = _pastorAnnDraft.audience.roles.indexOf(role);
+  if (i >= 0) _pastorAnnDraft.audience.roles.splice(i, 1);
+  else _pastorAnnDraft.audience.roles.push(role);
   _renderPastorAnnComposer();
 }
 
