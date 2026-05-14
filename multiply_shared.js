@@ -805,7 +805,7 @@
 
     return (
       '<div style="background:' + c.bg + ';border:1.5px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
-        '<div style="font-size:22px;flex-shrink:0;line-height:1">' + c.icon + '</div>' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.18)">' + c.icon + '</div>' +
         '<div style="flex:1;min-width:0;line-height:1.4">' +
           '<div style="font-weight:700;font-size:13.5px;margin-bottom:2px;color:#1a1612">' + escapeHTML(titles[stage]) + '</div>' +
           '<div style="font-size:12.5px;color:#1a1612">' +
@@ -832,7 +832,7 @@
 
     return (
       '<div style="background:linear-gradient(135deg,#f5d78e,#e8b84b);border:1.5px solid #8a6116;border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
-        '<div style="font-size:22px;flex-shrink:0">🔄</div>' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.18)">🔄</div>' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-weight:700;font-size:13.5px;margin-bottom:3px;color:#1a1612">Swap Request</div>' +
           '<div style="font-size:12.5px;color:#1a1612;line-height:1.45">' + msg + '</div>' +
