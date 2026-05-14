@@ -439,7 +439,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 <!-- ══════════════════ SCREEN: HOME ══════════════════ -->
 <div class="screen active" id="screenHome">
   <!-- ─── PWA install banner (auto-shown when installable) ─── -->
-  <div id="pwaInstallBanner" style="display:none;background:linear-gradient(135deg,rgba(251,191,36,.12),rgba(251,191,36,.04));border-bottom:1px solid rgba(251,191,36,.3);padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:13px">
+  <div id="pwaInstallBanner" style="display:none;background:linear-gradient(135deg,rgba(251,191,36,.12),rgba(251,191,36,.04));border-bottom:1px solid rgba(251,191,36,.3);padding:10px 14px;align-items:center;gap:10px;font-size:13px">
     <div style="font-size:20px;flex-shrink:0">📱</div>
     <div style="flex:1;line-height:1.35">
       <div style="font-weight:700;color:var(--text);margin-bottom:2px">Install MLT as an app</div>
@@ -3990,21 +3990,38 @@ function _pwaMaybeShowBanner(){
   if (_pwaIsStandalone()) { banner.style.display = 'none'; return; }
   // Don't show if user recently dismissed
   if (_pwaWasDismissed()) { banner.style.display = 'none'; return; }
-  // Show with appropriate message
+  // Configure messaging based on what install path is available
+  // (May 14, 2026 — defensive fix). Three states:
+  //   1. iOS Safari    → no programmatic install; show "How?" instructions
+  //   2. Android prompt captured → show "Install" (real native prompt)
+  //   3. Android no prompt yet  → show "How?" (instructions modal fallback)
+  //      Used to return silently here. That hid the banner entirely for any
+  //      Android user whose browser hadn't fired beforeinstallprompt yet,
+  //      which was every first-time visit — making the banner near-useless.
+  const subtext = document.getElementById('pwaInstallSubtext');
+  const btn     = document.getElementById('pwaInstallBtn');
   if (_pwaIsIOS()) {
-    document.getElementById('pwaInstallSubtext').textContent =
-      'Tap Share, then "Add to Home Screen"';
-    document.getElementById('pwaInstallBtn').textContent = 'How?';
-  } else if (!_pwaDeferredPrompt) {
-    // Android Chrome but prompt hasn't fired yet — wait silently
-    return;
+    if (subtext) subtext.textContent = 'Tap Share, then "Add to Home Screen"';
+    if (btn)     btn.textContent     = 'How?';
+  } else if (_pwaDeferredPrompt) {
+    if (subtext) subtext.textContent = 'Adds icon to your home screen — opens like a real app';
+    if (btn)     btn.textContent     = 'Install';
+  } else {
+    // Android Chrome but no captured prompt — still useful to show "How?"
+    // so the leader can install manually via the 3-dot menu.
+    if (subtext) subtext.textContent = 'Tap "How?" to see install steps for your phone';
+    if (btn)     btn.textContent     = 'How?';
   }
   banner.style.display = 'flex';
 }
 
 function pwaInstall(){
+  // (May 14, 2026 — defensive fix) Three branches to cover all phones.
+  // Native prompt is only available on Android Chromium after the browser
+  // has fired beforeinstallprompt. iOS and "prompt didn't fire" cases need
+  // a graceful fallback to manual instructions instead of silent no-op.
   if (_pwaIsIOS()) {
-    // iOS: there's no programmatic install, so show step-by-step
+    if (typeof openInstallGuide === 'function') { openInstallGuide(); return; }
     alert(
       'To install MLT on iPhone:\n\n' +
       '1. Tap the Share button (square with arrow up) at the bottom of Safari\n' +
@@ -4023,6 +4040,22 @@ function pwaInstall(){
       }
       _pwaDeferredPrompt = null;
     });
+    return;
+  }
+  // No native prompt captured — open the manual install instructions
+  // modal. This is the common case on first visit (Chrome hasn't yet
+  // decided we're "installable") and on browsers that don't support
+  // beforeinstallprompt at all (Samsung Internet older versions, etc.)
+  if (typeof openInstallGuide === 'function') {
+    openInstallGuide();
+  } else {
+    alert(
+      'To install:\n\n' +
+      '1. Tap the Chrome menu (⋮ at top right)\n' +
+      '2. Choose "Add to Home screen" or "Install app"\n' +
+      '3. Confirm\n\n' +
+      'If the option is missing, the browser may need a few visits to recognize this site as installable. Try again later or use a different browser.'
+    );
   }
 }
 
