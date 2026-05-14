@@ -10,7 +10,7 @@
 // different versions are deleted on activate, forcing a fresh fetch.
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mmt-v2-2026-05-14-pin-consolidation';
+const CACHE_VERSION = 'mmt-v3-2026-05-14-pwa-scope-fix';
 const SHELL_ASSETS = [
   './member_tool.html',
   './member_login.html',

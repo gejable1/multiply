@@ -886,6 +886,102 @@
   }
 
 
+  // ═════════════════════════════════════════════════════════════
+  // ASSESSMENT CAVEAT BANNERS (May 2026)
+  // ─────────────────────────────────────────────────────────────
+  // Bridges a measurement-quality gap: four diagnostic instruments
+  // (Enneagram, DISC, Love Language, Conflict Style) were empirically
+  // audited and found NOT to differentiate well — top-vs-second spreads
+  // are within noise for the majority of members. The instruments are
+  // being redesigned, but until then, results already on file should
+  // carry a soft caveat so members and Pastor don't over-trust noise.
+  //
+  // Config (in system_settings.meta.instrument_redesign_dates):
+  //   {
+  //     "enneagram":      "2026-08-15",
+  //     "disc":           "2026-09-01",
+  //     "love_language":  "2026-09-15",
+  //     "conflict_style": "2026-10-01"
+  //   }
+  //
+  // Auto-clear semantic: any result with date_taken >= cutoff is
+  // assumed to be from the redesigned instrument and gets no caveat.
+  // Older results get the caveat. Pastor sets one date per instrument
+  // when its redesign deploys; no schema migration, no per-result
+  // flagging needed.
+  //
+  // Pastoral framing (Invariant #16): caveat is a conversation starter,
+  // NOT a triage alert. Visual treatment is a soft pastel banner inline
+  // with the assessment — never a popup, never a notification.
+  // ═════════════════════════════════════════════════════════════
+
+  // Returns true if a caveat banner should be displayed for this
+  // assessment result. `profileType` is the canonical DB profile_type
+  // ('enneagram', 'disc', 'love_language', 'conflict_style', etc.).
+  // `dateTaken` is a YYYY-MM-DD string or null. `settings` is the full
+  // system_settings row (we read .meta.instrument_redesign_dates).
+  //
+  // Returns false if:
+  //   • Pastor has not set a redesign date for this instrument
+  //   • dateTaken is missing (we can't confidently say it's old)
+  //   • dateTaken >= cutoff (already from the redesigned instrument)
+  function shouldShowAssessmentCaveat(profileType, dateTaken, settings) {
+    if (!profileType || !settings) return false;
+    const meta = settings.meta || {};
+    const dates = meta.instrument_redesign_dates || {};
+    const cutoff = dates[profileType];
+    if (!cutoff) return false;
+    if (!dateTaken) return false;
+    // String compare on YYYY-MM-DD is lexicographically correct
+    return dateTaken < cutoff;
+  }
+
+  // Returns the canonical pretty label for an instrument. Used by
+  // banner copy so the surrounding sentence reads naturally.
+  function assessmentLabelFor(profileType) {
+    const LABELS = {
+      love_language:  'Love Language',
+      disc:           'DISC',
+      enneagram:      'Enneagram',
+      conflict_style: 'Conflict Style',
+      strengths:      'Strengths',
+      gifts:          'Spiritual Gifts'
+    };
+    return LABELS[profileType] || profileType;
+  }
+
+  // Renders the HTML for a caveat banner. `audience` is either
+  // 'pastor' (amber, more direct) or 'member' (slate-blue, gentler).
+  // Returns empty string if shouldShowAssessmentCaveat returns false,
+  // so callers can drop it inline without an if-guard.
+  //
+  //   const banner = renderAssessmentCaveatBanner('enneagram',
+  //     row.date_taken, sysSettings, 'pastor');
+  //   html += banner;  // empty string if no caveat needed
+  function renderAssessmentCaveatBanner(profileType, dateTaken, settings, audience) {
+    if (!shouldShowAssessmentCaveat(profileType, dateTaken, settings)) return '';
+    const label = assessmentLabelFor(profileType);
+    const isPastor = audience === 'pastor';
+
+    const bg     = isPastor ? '#fdf6e8' : '#eef2f7';
+    const border = isPastor ? '#b8882a' : '#5b6f8a';
+    const ink    = isPastor ? '#5c3f0a' : '#2c3a4f';
+    const icon   = isPastor ? '⚠️'      : '💬';
+
+    const msg = isPastor
+      ? 'This ' + escapeHTML(label) + ' result was produced by an earlier version of the assessment which our analysis showed has weak differentiation. Treat as conversation-starter for discipleship, not as a verdict. The instrument is being redesigned; re-administering will refresh this result.'
+      : 'Your ' + escapeHTML(label) + ' result is best understood through reflection and conversation with a discipler — not as a final label. We are refining this assessment, and you\'ll be invited to retake it when the improved version is ready.';
+
+    return (
+      '<div style="background:' + bg + ';border-left:3px solid ' + border + ';border-radius:8px;' +
+        'padding:.65rem .85rem;margin:.5rem 0;display:flex;gap:10px;align-items:flex-start;font-size:11.5px;line-height:1.55;color:' + ink + '">' +
+        '<div style="font-size:14px;flex-shrink:0;line-height:1.2">' + icon + '</div>' +
+        '<div style="flex:1">' + msg + '</div>' +
+      '</div>'
+    );
+  }
+
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -903,6 +999,10 @@
     logView,
     tierLockCard,
     escapeHTML,
+    // Assessment caveat banners (May 2026 — instrument redesign bridge)
+    shouldShowAssessmentCaveat,
+    renderAssessmentCaveatBanner,
+    assessmentLabelFor,
     // Lesson access predicate (Phase 3)
     lessons: {
       fetchVisibleLessons

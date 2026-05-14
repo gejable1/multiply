@@ -19,7 +19,7 @@
 // That will unregister the SW and clear everything on next page load.
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mlt-v2-2026-05-14-pin-consolidation';
+const CACHE_VERSION = 'mlt-v3-2026-05-14-pwa-scope-fix';
 const SHELL_ASSETS = [
   './lc_leader_tool.html',
   './multiply_shared.js',
