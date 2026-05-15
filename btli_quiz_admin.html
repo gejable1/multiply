@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTLI Quiz Admin · MULTIPLY</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231e3a5f'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='54' font-weight='700' text-anchor='middle' fill='%23d4a93f'%3EA%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+<style>
+:root{
+  --navy:#1e3a5f;--navy-bg:#eef2f7;--navy-light:#f5f8fb;
+  --gold:#b8882a;--gold2:#d4a93f;--gold-bg:#fdf6e8;
+  --green:#2a5c40;--green-bg:#eef6f1;
+  --red:#a8322f;--red-bg:#fdf0ee;
+  --ink:#1a1612;--muted:#5a6655;--border:#cdd6e0;--paper:white;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{font-family:'DM Sans',sans-serif;background:var(--navy-bg);color:var(--ink);font-size:14px;line-height:1.55;}
+
+.header{background:var(--navy);padding:1rem 1.2rem;}
+.h-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+.h-back{background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+.h-back:hover{background:rgba(255,255,255,.22);}
+.h-title{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:700;color:#fff;flex:1;}
+.h-pastor{background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;letter-spacing:.05em;text-transform:uppercase;}
+
+.wrap{max-width:1100px;margin:0 auto;padding:1.2rem;}
+
+/* Tabs */
+.tabs{display:flex;gap:.4rem;border-bottom:2px solid var(--border);margin-bottom:1rem;flex-wrap:wrap;}
+.tab{background:transparent;border:none;padding:.75rem 1.1rem;font-family:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tab.active{color:var(--navy);border-bottom-color:var(--gold);}
+
+/* Sections */
+.section{display:none;}
+.section.active{display:block;}
+
+.card{background:var(--paper);border:1px solid var(--border);border-radius:11px;padding:1.1rem;margin-bottom:.85rem;box-shadow:0 1px 2px rgba(30,58,95,.04);}
+.card-title{font-size:14.5px;font-weight:700;color:var(--navy);margin-bottom:.65rem;display:flex;align-items:center;gap:.4rem;}
+.card-sub{font-size:12px;color:var(--muted);margin-bottom:.6rem;line-height:1.6;}
+
+.btn{display:inline-block;background:var(--navy);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.02em;}
+.btn:hover{filter:brightness(1.15);}
+.btn:disabled{background:#aab0bc;cursor:not-allowed;}
+.btn.gold{background:var(--gold);}
+.btn.outline{background:transparent;color:var(--navy);border:1.5px solid var(--navy);}
+.btn.danger{background:var(--red);}
+.btn.small{padding:6px 10px;font-size:11.5px;}
+
+label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.04em;}
+input[type=text],input[type=number],textarea,select{width:100%;border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:inherit;font-size:13.5px;background:var(--navy-light);color:var(--ink);}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--navy);}
+textarea{resize:vertical;min-height:90px;}
+textarea.mono{font-family:'Fira Code',monospace;font-size:12px;line-height:1.5;min-height:280px;background:#0e1c2f;color:#dce4ee;border-color:#0e1c2f;}
+
+.field{margin-bottom:.65rem;}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+@media(max-width:600px){.row{grid-template-columns:1fr;}}
+
+/* Quiz list */
+.qz-row{display:grid;grid-template-columns:auto 1fr auto auto;gap:.8rem;align-items:center;padding:.7rem;background:var(--navy-light);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;}
+.qz-tag{font-size:10.5px;font-weight:700;color:var(--gold);background:var(--gold-bg);padding:3px 8px;border-radius:5px;letter-spacing:.05em;}
+.qz-title{font-size:14px;font-weight:600;color:var(--ink);}
+.qz-meta{font-size:11px;color:var(--muted);margin-top:.1rem;}
+.qz-actions{display:flex;gap:.35rem;}
+
+/* Attempts table */
+table.attempts{width:100%;border-collapse:collapse;font-size:12.5px;}
+table.attempts th,table.attempts td{padding:.55rem .6rem;text-align:left;border-bottom:1px solid var(--border);}
+table.attempts th{background:var(--navy-light);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+table.attempts tr:hover{background:var(--navy-light);}
+.score-pill{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:5px;}
+.score-pill.pass{background:var(--green-bg);color:var(--green);}
+.score-pill.fail{background:var(--red-bg);color:var(--red);}
+.score-pill.practice{background:#f0f0f0;color:#666;}
+
+.msg{padding:.65rem .85rem;border-radius:8px;margin-bottom:.7rem;font-size:13px;line-height:1.55;}
+.msg.success{background:#dcf5e3;border:1px solid #a0d8b0;color:#1a5a30;}
+.msg.error{background:var(--red-bg);border:1px solid #e6b8b5;color:#7a2624;}
+.msg.info{background:var(--navy-light);border:1px solid var(--border);color:var(--navy);}
+
+/* Question editor */
+.q-edit{background:var(--navy-light);border:1px solid var(--border);border-radius:8px;padding:.85rem;margin-bottom:.55rem;}
+.q-edit-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;}
+.q-edit-num{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--gold);text-transform:uppercase;}
+
+.spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(30,58,95,.2);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.empty{text-align:center;padding:2rem;color:var(--muted);font-size:13.5px;font-style:italic;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="h-inner">
+    <button class="h-back" onclick="goBack()">← Dashboard</button>
+    <div class="h-title">BTLI Quiz Admin</div>
+    <div class="h-pastor">🔒 Pastor Only</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div id="globalMsg"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="quizzes" onclick="setTab('quizzes')">📋 Quizzes</button>
+    <button class="tab" data-tab="bulk" onclick="setTab('bulk')">📥 Bulk Import</button>
+    <button class="tab" data-tab="attempts" onclick="setTab('attempts')">📊 Attempts</button>
+    <button class="tab" data-tab="grades" onclick="setTab('grades')">🎓 Course Grades</button>
+  </div>
+
+  <!-- QUIZZES TAB -->
+  <section class="section active" id="sec_quizzes">
+    <div class="card">
+      <div class="card-title">📚 Active BTLI Quizzes</div>
+      <div class="card-sub">All quizzes published across all BTLI courses. Click "Edit" to modify questions or settings.</div>
+      <div id="quizzesList">
+        <div class="empty">Loading...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BULK IMPORT TAB -->
+  <section class="section" id="sec_bulk">
+    <div class="card">
+      <div class="card-title">📥 Bulk Import (Plain Text Format)</div>
+      <div class="card-sub">Paste quiz content in the format below. The parser supports the same syntax used elsewhere in MULTIPLY (Invariant #26). One quiz per import. Settings at top, then questions.</div>
+
+      <div class="row">
+        <div class="field">
+          <label>Course Code</label>
+          <input type="text" id="bulkCourse" value="BTLI1" placeholder="BTLI1">
+        </div>
+        <div class="field">
+          <label>Lesson Number</label>
+          <input type="number" id="bulkLesson" value="1" min="1">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Lesson Title</label>
+        <input type="text" id="bulkTitle" placeholder="Pananalangin">
+      </div>
+
+      <div class="field">
+        <label>Attendance Event Pattern (for LCG soft-gate; can leave blank)</label>
+        <input type="text" id="bulkAttPattern" placeholder="BTLI 1 · L1 · Pananalangin">
+      </div>
+
+      <div class="field">
+        <label>Quiz Content (Plain Text)</label>
+        <textarea id="bulkContent" class="mono" placeholder="SCORE: 70
+INTRO_EN: Welcome message in English.
+INTRO_TL: Welcome message in Tagalog.
+OUTRO_PASS_EN: Congrats message in English.
+OUTRO_PASS_TL: Congrats message in Tagalog.
+OUTRO_FAIL_EN: Encouragement to try again, EN.
+OUTRO_FAIL_TL: Encouragement to try again, TL.
+
+# Multiple choice — * marks correct
+MC EN: Question text in English?
+MC TL: Question text in Tagalog?
+* EN: Correct answer
+  TL: Tamang sagot
+- EN: Wrong answer 1
+  TL: Maling sagot 1
+- EN: Wrong answer 2
+  TL: Maling sagot 2
+- EN: Wrong answer 3
+  TL: Maling sagot 3
+
+# True/false
+TF EN: True/false statement in English.
+TF TL: True/false statement in Tagalog.
+A: True
+
+# (Repeat for 10 questions total — mix MC and TF freely)"></textarea>
+      </div>
+
+      <button class="btn gold" onclick="bulkImport()">📥 Parse & Save Quiz</button>
+      <button class="btn outline" onclick="loadL1Sample()">📄 Load L1 Sample</button>
+    </div>
+  </section>
+
+  <!-- ATTEMPTS TAB -->
+  <section class="section" id="sec_attempts">
+    <div class="card">
+      <div class="card-title">📊 Quiz Attempts</div>
+      <div class="card-sub">View all attempts across all members. Filter by quiz to drill down.</div>
+      <div class="field">
+        <label>Filter by Quiz</label>
+        <select id="attemptsFilter" onchange="loadAttempts()">
+          <option value="">All quizzes</option>
+        </select>
+      </div>
+      <div id="attemptsList">
+        <div class="empty">Select a quiz or "All quizzes"</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GRADES TAB -->
+  <section class="section" id="sec_grades">
+    <div class="card">
+      <div class="card-title">🎓 Course Grades</div>
+      <div class="card-sub">Aggregate grade per member: average of best-of-3 scores across all active quizzes in a course. Members with missing attempts get 0 for that lesson.</div>
+      <div class="field">
+        <label>Course</label>
+        <select id="gradesCourse" onchange="loadGrades()">
+          <option value="BTLI1">BTLI 1</option>
+          <option value="BTLI2">BTLI 2</option>
+        </select>
+      </div>
+      <div id="gradesList">
+        <div class="empty">Loading grades...</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- EDIT MODAL -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;align-items:center;justify-content:center;padding:1rem;">
+  <div style="background:#fff;border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow:auto;padding:1.2rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+      <div style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;color:var(--navy);">Edit Quiz</div>
+      <button class="btn outline small" onclick="closeEdit()">✕ Close</button>
+    </div>
+    <div id="editBody"></div>
+  </div>
+</div>
+
+<script>
+// SESSION
+let db = null;
+let LEADER = null;
+
+(function bootstrap(){
+  if (typeof MultiplyShared === 'undefined') {
+    alert('multiply_shared.js not loaded.');
+    return;
+  }
+  if (!MultiplyShared.gateOrRedirect('login.html')) return;
+  LEADER = window.LEADER || MultiplyShared.LEADER;
+  db = MultiplyShared.db || window.db;
+  if (!LEADER || LEADER.role !== 'pastor') {
+    showMsg('Pastor access only. Redirecting...', 'error');
+    setTimeout(() => goBack(), 1500);
+    return;
+  }
+  loadQuizzes();
+})();
+
+function goBack(){
+  // Per Invariant #15
+  try { window.close(); } catch(e){}
+  setTimeout(() => {
+    if (document.referrer && document.referrer.includes(window.location.hostname)) {
+      history.back();
+    } else {
+      window.location.href = 'multiply_dashboard.html';
+    }
+  }, 150);
+}
+
+function showMsg(text, kind){
+  const div = document.getElementById('globalMsg');
+  div.innerHTML = `<div class="msg ${kind}">${esc(text)}</div>`;
+  setTimeout(() => { div.innerHTML = ''; }, 5000);
+}
+
+function esc(s){
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function setTab(name){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'sec_' + name));
+  if (name === 'attempts') populateAttemptsFilter();
+  if (name === 'grades') loadGrades();
+}
+
+// ═══════════════════════════════════════════════════════════
+// QUIZZES TAB
+// ═══════════════════════════════════════════════════════════
+async function loadQuizzes(){
+  try {
+    const { data, error } = await db
+      .from('btli_quizzes')
+      .select('*')
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+    if (error) throw error;
+    const list = document.getElementById('quizzesList');
+    if (!data || data.length === 0) {
+      list.innerHTML = '<div class="empty">No quizzes yet. Use Bulk Import to create your first.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.forEach(q => {
+      const qCount = Array.isArray(q.questions) ? q.questions.length : 0;
+      const row = document.createElement('div');
+      row.className = 'qz-row';
+      row.innerHTML = `
+        <div class="qz-tag">${esc(q.course_code)} · L${q.lesson_number}</div>
+        <div>
+          <div class="qz-title">${esc(q.lesson_title)}</div>
+          <div class="qz-meta">${qCount} questions · ${q.passing_score}% to pass · ${q.is_active ? 'active' : 'inactive'}</div>
+        </div>
+        <div class="qz-actions">
+          <button class="btn small" onclick="openEdit('${q.id}')">✏️ Edit</button>
+          <button class="btn outline small" onclick="toggleActive('${q.id}',${!q.is_active})">${q.is_active ? 'Deactivate' : 'Activate'}</button>
+        </div>
+        <div class="qz-actions">
+          <button class="btn danger small" onclick="deleteQuiz('${q.id}','${esc(q.lesson_title)}')">🗑</button>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  } catch (e) {
+    console.error(e);
+    showMsg('Failed to load: ' + (e.message || e), 'error');
+  }
+}
+
+async function toggleActive(id, newActive){
+  try {
+    const { error } = await db.from('btli_quizzes').update({ is_active: newActive, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+    showMsg('Status updated.', 'success');
+    loadQuizzes();
+  } catch (e) { showMsg('Update failed: ' + e.message, 'error'); }
+}
+
+async function deleteQuiz(id, title){
+  if (!confirm('Delete quiz "' + title + '"?\n\nThis will also delete ALL attempts. This cannot be undone.')) return;
+  try {
+    const { error } = await db.from('btli_quizzes').delete().eq('id', id);
+    if (error) throw error;
+    showMsg('Deleted.', 'success');
+    loadQuizzes();
+  } catch (e) { showMsg('Delete failed: ' + e.message, 'error'); }
+}
+
+// EDIT MODAL — simplified: edit JSON questions directly for now
+async function openEdit(id){
+  try {
+    const { data, error } = await db.from('btli_quizzes').select('*').eq('id', id).single();
+    if (error) throw error;
+    const m = document.getElementById('editModal');
+    m.style.display = 'flex';
+    document.getElementById('editBody').innerHTML = `
+      <div class="row">
+        <div class="field"><label>Course</label><input type="text" id="ed_course" value="${esc(data.course_code)}"></div>
+        <div class="field"><label>Lesson #</label><input type="number" id="ed_lesson" value="${data.lesson_number}"></div>
+      </div>
+      <div class="field"><label>Title</label><input type="text" id="ed_title" value="${esc(data.lesson_title)}"></div>
+      <div class="row">
+        <div class="field"><label>Passing %</label><input type="number" id="ed_passing" value="${data.passing_score}" min="0" max="100"></div>
+        <div class="field"><label>Attendance Pattern</label><input type="text" id="ed_attpat" value="${esc(data.attendance_event_name_pattern || '')}"></div>
+      </div>
+      <div class="field"><label>Intro</label><textarea id="ed_intro">${esc(data.intro_text || '')}</textarea></div>
+      <div class="field"><label>Outro (Pass)</label><textarea id="ed_outrop">${esc(data.outro_pass_text || '')}</textarea></div>
+      <div class="field"><label>Outro (Fail)</label><textarea id="ed_outrof">${esc(data.outro_fail_text || '')}</textarea></div>
+      <div class="field"><label>Questions (JSON — edit carefully)</label><textarea class="mono" id="ed_questions" style="min-height:300px;">${esc(JSON.stringify(data.questions, null, 2))}</textarea></div>
+      <button class="btn gold" onclick="saveEdit('${id}')">💾 Save</button>
+    `;
+  } catch (e) { showMsg('Load failed: ' + e.message, 'error'); }
+}
+
+function closeEdit(){ document.getElementById('editModal').style.display = 'none'; }
+
+async function saveEdit(id){
+  try {
+    let questions;
+    try {
+      questions = JSON.parse(document.getElementById('ed_questions').value);
+    } catch (e) {
+      showMsg('Questions JSON is invalid: ' + e.message, 'error');
+      return;
+    }
+    const patch = {
+      course_code: document.getElementById('ed_course').value.trim().toUpperCase(),
+      lesson_number: parseInt(document.getElementById('ed_lesson').value, 10),
+      lesson_title: document.getElementById('ed_title').value.trim(),
+      passing_score: parseInt(document.getElementById('ed_passing').value, 10),
+      attendance_event_name_pattern: document.getElementById('ed_attpat').value.trim() || null,
+      intro_text: document.getElementById('ed_intro').value,
+      outro_pass_text: document.getElementById('ed_outrop').value,
+      outro_fail_text: document.getElementById('ed_outrof').value,
+      questions: questions,
+      updated_at: new Date().toISOString(),
+      updated_by: LEADER.id
+    };
+    const { error } = await db.from('btli_quizzes').update(patch).eq('id', id);
+    if (error) throw error;
+    showMsg('Saved.', 'success');
+    closeEdit();
+    loadQuizzes();
+  } catch (e) { showMsg('Save failed: ' + e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// BULK IMPORT — plain text parser
+// ═══════════════════════════════════════════════════════════
+function parseQuizText(raw){
+  const settings = {
+    score: 70,
+    intro_en: '',
+    intro_tl: '',
+    outro_pass_en: '',
+    outro_pass_tl: '',
+    outro_fail_en: '',
+    outro_fail_tl: ''
+  };
+  const questions = [];
+
+  const lines = raw.split(/\r?\n/);
+  let i = 0;
+
+  // Parse settings header
+  while (i < lines.length) {
+    const ln = lines[i].trim();
+    if (!ln || ln.startsWith('#')) { i++; continue; }
+    if (/^SCORE:/i.test(ln)) { settings.score = parseInt(ln.split(':')[1].trim(), 10); i++; continue; }
+    if (/^INTRO_EN:/i.test(ln)) { settings.intro_en = ln.split(':').slice(1).join(':').trim(); i++; continue; }
+    if (/^INTRO_TL:/i.test(ln)) { settings.intro_tl = ln.split(':').slice(1).join(':').trim(); i++; continue; }
+    if (/^OUTRO_PASS_EN:/i.test(ln)) { settings.outro_pass_en = ln.split(':').slice(1).join(':').trim(); i++; continue; }
+    if (/^OUTRO_PASS_TL:/i.test(ln)) { settings.outro_pass_tl = ln.split(':').slice(1).join(':').trim(); i++; continue; }
+    if (/^OUTRO_FAIL_EN:/i.test(ln)) { settings.outro_fail_en = ln.split(':').slice(1).join(':').trim(); i++; continue; }
+    if (/^OUTRO_FAIL_TL:/i.test(ln)) { settings.outro_fail_tl = ln.split(':').slice(1).join(':').trim(); i++; continue; }
+    break; // entered question territory
+  }
+
+  // Parse questions
+  while (i < lines.length) {
+    const ln = lines[i].trim();
+    if (!ln || ln.startsWith('#')) { i++; continue; }
+
+    if (/^MC EN:/i.test(ln)) {
+      const q = { type: 'mc', question_en: ln.split(':').slice(1).join(':').trim(), question_tl: '', options: [], points: 1 };
+      i++;
+      // MC TL must follow
+      if (i < lines.length && /^MC TL:/i.test(lines[i].trim())) {
+        q.question_tl = lines[i].trim().split(':').slice(1).join(':').trim();
+        i++;
+      }
+      // Now collect options until next question header or blank or end
+      while (i < lines.length) {
+        const opt = lines[i].trim();
+        if (!opt) { i++; continue; } // skip blanks within option block
+        if (/^(MC EN:|TF EN:|R EN:)/i.test(opt)) break;
+        // Option marker: * EN: or - EN:
+        const m = opt.match(/^([\*\-])\s*EN:\s*(.*)$/i);
+        if (m) {
+          const optObj = { en: m[2], tl: '', correct: m[1] === '*' };
+          i++;
+          // Look for indented TL line
+          if (i < lines.length) {
+            const tl = lines[i];
+            const tlMatch = tl.match(/^\s+TL:\s*(.*)$/i);
+            if (tlMatch) { optObj.tl = tlMatch[1]; i++; }
+          }
+          q.options.push(optObj);
+        } else {
+          i++; // unknown line in options block, skip
+        }
+      }
+      // Validate MC: exactly 4 options, exactly one correct
+      if (q.options.length !== 4) throw new Error('MC question must have exactly 4 options: ' + q.question_en);
+      if (q.options.filter(o => o.correct).length !== 1) throw new Error('MC question must have exactly one * (correct): ' + q.question_en);
+      questions.push(q);
+      continue;
+    }
+
+    if (/^TF EN:/i.test(ln)) {
+      const q = { type: 'tf', question_en: ln.split(':').slice(1).join(':').trim(), question_tl: '', correct: null, points: 1 };
+      i++;
+      if (i < lines.length && /^TF TL:/i.test(lines[i].trim())) {
+        q.question_tl = lines[i].trim().split(':').slice(1).join(':').trim();
+        i++;
+      }
+      // Expect A: True/False
+      if (i < lines.length) {
+        const a = lines[i].trim();
+        const am = a.match(/^A:\s*(True|False)\s*$/i);
+        if (am) {
+          q.correct = (am[1].toLowerCase() === 'true');
+          i++;
+        } else {
+          throw new Error('TF question missing "A: True" or "A: False" line for: ' + q.question_en);
+        }
+      }
+      questions.push(q);
+      continue;
+    }
+
+    i++;
+  }
+
+  return { settings, questions };
+}
+
+async function bulkImport(){
+  try {
+    const course = document.getElementById('bulkCourse').value.trim().toUpperCase();
+    const lesson = parseInt(document.getElementById('bulkLesson').value, 10);
+    const title = document.getElementById('bulkTitle').value.trim();
+    const attPattern = document.getElementById('bulkAttPattern').value.trim() || null;
+    const content = document.getElementById('bulkContent').value;
+
+    if (!course || !lesson || !title) {
+      showMsg('Course, Lesson, and Title required.', 'error');
+      return;
+    }
+    if (!content.trim()) {
+      showMsg('Quiz content is empty.', 'error');
+      return;
+    }
+
+    const parsed = parseQuizText(content);
+    if (parsed.questions.length === 0) {
+      showMsg('No questions parsed. Check format.', 'error');
+      return;
+    }
+
+    const payload = {
+      course_code: course,
+      lesson_number: lesson,
+      lesson_title: title,
+      passing_score: parsed.settings.score,
+      intro_text: parsed.settings.intro_en || parsed.settings.intro_tl || '',
+      outro_pass_text: parsed.settings.outro_pass_en || parsed.settings.outro_pass_tl || '',
+      outro_fail_text: parsed.settings.outro_fail_en || parsed.settings.outro_fail_tl || '',
+      attendance_event_name_pattern: attPattern,
+      questions: parsed.questions,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+      updated_by: LEADER.id
+    };
+
+    // Upsert
+    const { error } = await db
+      .from('btli_quizzes')
+      .upsert(payload, { onConflict: 'course_code,lesson_number' });
+
+    if (error) throw error;
+    showMsg(`✓ Saved quiz with ${parsed.questions.length} questions.`, 'success');
+    loadQuizzes();
+    setTab('quizzes');
+
+  } catch (e) {
+    console.error(e);
+    showMsg('Import failed: ' + (e.message || e), 'error');
+  }
+}
+
+function loadL1Sample(){
+  document.getElementById('bulkCourse').value = 'BTLI1';
+  document.getElementById('bulkLesson').value = '1';
+  document.getElementById('bulkTitle').value = 'Pananalangin';
+  document.getElementById('bulkAttPattern').value = 'BTLI 1 · L1 · Pananalangin';
+  document.getElementById('bulkContent').value = `SCORE: 70
+INTRO_EN: Welcome! This is a 10-question comprehension check for Lesson 1 — Pananalangin. You have 3 attempts that count for your grade. Best score wins.
+INTRO_TL: Maligayang pagdating! Ito ay isang 10-question comprehension check para sa Lesson 1 — Pananalangin. May 3 attempts kang counted-for-grade. Best score wins.
+OUTRO_PASS_EN: Great work! A heart that grasps the value of prayer grows into deep relationship with the Father.
+OUTRO_PASS_TL: Salamat sa pagiging tapat sa pag-aaral, kapatid!
+OUTRO_FAIL_EN: No shame, kapatid. Review the lesson and try again.
+OUTRO_FAIL_TL: Walang shame, kapatid. Balikan ang lesson at subukan ulit.
+
+MC EN: What does the ACTS prayer rhythm stand for?
+MC TL: Ano ang ibig sabihin ng ACTS prayer rhythm?
+* EN: Adoration, Confession, Thanksgiving, Supplication
+  TL: Pagsamba, Pagtatapat, Pasasalamat, Pakiusap
+- EN: Ask, Confess, Trust, Submit
+  TL: Magtanong, Magtapat, Magtiwala, Magpasakop
+- EN: Adoration, Communion, Trust, Sanctification
+  TL: Pagsamba, Pakikipag-isa, Pagtitiwala, Pagpapabanal
+- EN: Awe, Cry, Thank, Surrender
+  TL: Pagkamangha, Pag-iyak, Pasasalamat, Pagsuko
+
+TF EN: 1 Thessalonians 5:17 says "pray without ceasing." This means we should pray with eyes closed and on our knees for 24 hours every day.
+TF TL: Sinasabi sa 1 Thessalonians 5:17, "Magsipanalangin kayong walang patid." Ang ibig sabihin nito ay dapat tayong manalangin nang nakapikit at nakaluhod nang 24 na oras bawat araw.
+A: False
+
+# (Add 8 more questions to make 10 total — this is just a starter sample)
+`;
+  setTab('bulk');
+  showMsg('Sample loaded. Edit as needed, then click "Parse & Save Quiz".', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ATTEMPTS TAB
+// ═══════════════════════════════════════════════════════════
+async function populateAttemptsFilter(){
+  const sel = document.getElementById('attemptsFilter');
+  if (sel.options.length > 1) return; // already populated
+  try {
+    const { data } = await db.from('btli_quizzes').select('id,course_code,lesson_number,lesson_title').order('course_code').order('lesson_number');
+    (data || []).forEach(q => {
+      const opt = document.createElement('option');
+      opt.value = q.id;
+      opt.textContent = `${q.course_code} L${q.lesson_number} — ${q.lesson_title}`;
+      sel.appendChild(opt);
+    });
+  } catch(e) { console.error(e); }
+}
+
+async function loadAttempts(){
+  const quizId = document.getElementById('attemptsFilter').value;
+  const list = document.getElementById('attemptsList');
+  list.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    let q = db.from('btli_quiz_attempts').select('*').order('submitted_at', { ascending: false }).limit(500);
+    if (quizId) q = q.eq('quiz_id', quizId);
+    const { data: attempts, error } = await q;
+    if (error) throw error;
+    if (!attempts || attempts.length === 0) {
+      list.innerHTML = '<div class="empty">No attempts yet.</div>';
+      return;
+    }
+    // Resolve member names + quiz titles
+    const memberIds = [...new Set(attempts.map(a => a.member_id))];
+    const quizIds = [...new Set(attempts.map(a => a.quiz_id))];
+    const [{ data: members }, { data: quizzes }] = await Promise.all([
+      db.from('members').select('id,name,lc_group').in('id', memberIds),
+      db.from('btli_quizzes').select('id,course_code,lesson_number,lesson_title').in('id', quizIds)
+    ]);
+    const mById = Object.fromEntries((members || []).map(m => [m.id, m]));
+    const qById = Object.fromEntries((quizzes || []).map(q => [q.id, q]));
+
+    let html = '<table class="attempts"><thead><tr><th>Member</th><th>Quiz</th><th>Attempt</th><th>Score</th><th>Status</th><th>When</th></tr></thead><tbody>';
+    attempts.forEach(a => {
+      const m = mById[a.member_id] || {};
+      const q = qById[a.quiz_id] || {};
+      const pillCls = !a.counts_for_grade ? 'practice' : (a.passed ? 'pass' : 'fail');
+      const pillTxt = !a.counts_for_grade ? 'practice' : (a.passed ? 'passed' : 'failed');
+      const when = new Date(a.submitted_at).toLocaleString('en-PH', { dateStyle:'short', timeStyle:'short' });
+      html += `<tr>
+        <td>${esc(m.name || 'Unknown')}<br><span style="font-size:10px;color:var(--muted);">${esc(m.lc_group || '')}</span></td>
+        <td>${esc(q.course_code || '')} L${q.lesson_number || '?'} — ${esc(q.lesson_title || '')}</td>
+        <td>#${a.attempt_number}${a.counts_for_grade ? '' : ' <span style="color:#888;font-size:10px;">(practice)</span>'}</td>
+        <td><span class="score-pill ${pillCls}">${a.score}%</span> · ${a.raw_score}/${a.total_questions}</td>
+        <td>${pillTxt}</td>
+        <td>${when}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    list.innerHTML = html;
+  } catch (e) {
+    console.error(e);
+    list.innerHTML = '<div class="msg error">Failed: ' + esc(e.message || e) + '</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// GRADES TAB
+// ═══════════════════════════════════════════════════════════
+async function loadGrades(){
+  const course = document.getElementById('gradesCourse').value;
+  const list = document.getElementById('gradesList');
+  list.innerHTML = '<div class="empty">Loading grades...</div>';
+  try {
+    const { data, error } = await db
+      .from('v_btli_course_grade')
+      .select('*')
+      .eq('course_code', course)
+      .order('course_grade', { ascending: false });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      list.innerHTML = '<div class="empty">No grades yet. Members need at least one quiz attempt.</div>';
+      return;
+    }
+    // Fetch member names
+    const memberIds = data.map(r => r.member_id);
+    const { data: members } = await db.from('members').select('id,name,lc_group,pipeline_level').in('id', memberIds);
+    const mById = Object.fromEntries((members || []).map(m => [m.id, m]));
+
+    let html = '<table class="attempts"><thead><tr><th>Rank</th><th>Member</th><th>LC Group</th><th>Attempted</th><th>Grade</th></tr></thead><tbody>';
+    data.forEach((r, idx) => {
+      const m = mById[r.member_id] || {};
+      const pillCls = r.course_grade >= 70 ? 'pass' : (r.course_grade > 0 ? 'fail' : 'practice');
+      html += `<tr>
+        <td><strong>#${idx+1}</strong></td>
+        <td>${esc(m.name || 'Unknown')}</td>
+        <td>${esc(m.lc_group || '—')}</td>
+        <td>${r.attempted_lessons} / ${r.total_lessons}</td>
+        <td><span class="score-pill ${pillCls}">${r.course_grade}%</span></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    // Filter members where attempted=0
+    const dataAttempted = data.filter(r => r.attempted_lessons > 0);
+    if (dataAttempted.length < data.length) {
+      html += `<div class="msg info" style="margin-top:.6rem;">Showing all ${data.length} members; ${data.length - dataAttempted.length} have not attempted any quiz yet (showing as 0%).</div>`;
+    }
+    list.innerHTML = html;
+  } catch (e) {
+    console.error(e);
+    list.innerHTML = '<div class="msg error">Failed: ' + esc(e.message || e) + '</div>';
+  }
+}
+</script>
+</body>
+</html>

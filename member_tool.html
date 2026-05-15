@@ -1734,6 +1734,12 @@ body.lang-tl .tl-text{display:inline;}
            Populated by renderLibrary() on page-pipeline activation. -->
       <div id="librarySection" style="margin-top:1.5rem"></div>
 
+      <!-- ═══════ BTLI COMPREHENSION QUIZZES ═══════
+           Per-lesson 10-question quizzes. Soft-gated by LCG attendance.
+           Best-of-first-3 attempts count for course-end grade.
+           Populated by renderBtliQuizzes() on page-pipeline activation. -->
+      <div id="btliQuizzesSection" style="margin-top:1.5rem"></div>
+
     </div>
   </div>
 
@@ -2923,6 +2929,7 @@ function renderPipeline(){
   // Reading list refreshes alongside the pipeline view (so language and
   // progress changes flow through together)
   if (typeof renderLibrary === 'function') renderLibrary();
+  if (typeof renderBtliQuizzes === 'function') renderBtliQuizzes();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -8623,6 +8630,180 @@ function _mmtOpenLessonViewerModal(url, label){
 function _mmtCloseLessonViewer(){
   const m = document.getElementById('mmtLessonViewerModal');
   if (m) m.remove();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BTLI COMPREHENSION QUIZZES — per-lesson 10-question quizzes
+// ─────────────────────────────────────────────────────────────
+// Soft-gated by LCG attendance (verified server-side in player).
+// Best of first 3 attempts counts for course-end grade.
+// Quiz player opens in new tab via btli_quiz_player.html
+// ═══════════════════════════════════════════════════════════════
+
+async function renderBtliQuizzes(){
+  const wrap = document.getElementById('btliQuizzesSection');
+  if (!wrap) return;
+  if (!MEMBER || !MEMBER.id) return;
+
+  wrap.innerHTML = `
+    <div style="background:linear-gradient(135deg,#1e3a5f,#2d5380);color:#fff;border-radius:12px;padding:1rem 1.1rem;margin-bottom:.8rem;">
+      <div style="font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#d4a93f;font-weight:700;margin-bottom:.3rem;">
+        <span class="en-text">BTLI Comprehension Quizzes</span>
+        <span class="tl-text">BTLI Comprehension Quizzes</span>
+      </div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;margin-bottom:.25rem;line-height:1.35;">
+        <span class="en-text">Test what stuck. Earn your grade.</span>
+        <span class="tl-text">Subukin ang natutunan. Kunin ang grado.</span>
+      </div>
+      <div style="font-size:12.5px;opacity:.85;font-style:italic;line-height:1.55;">
+        <span class="en-text">10 questions per lesson · Best of 3 attempts counts · Unlocks after LCG attendance.</span>
+        <span class="tl-text">10 tanong bawat aralin · Best of 3 ang bibilang · Bubukas pagkatapos ng LCG attendance.</span>
+      </div>
+    </div>
+    <div id="btliQuizzesList" style="display:flex;flex-direction:column;gap:.55rem;">
+      <div style="text-align:center;padding:1.2rem;color:var(--muted);font-size:13px;">
+        <span class="en-text">Loading quizzes...</span>
+        <span class="tl-text">Naglo-load...</span>
+      </div>
+    </div>
+  `;
+
+  try {
+    // Fetch all active BTLI quizzes
+    const { data: quizzes, error: qErr } = await db
+      .from('btli_quizzes')
+      .select('id,course_code,lesson_number,lesson_title,passing_score,attendance_event_name_pattern')
+      .eq('is_active', true)
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+
+    if (qErr) throw qErr;
+    if (!quizzes || quizzes.length === 0) {
+      document.getElementById('btliQuizzesList').innerHTML = `
+        <div style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:1.2rem;text-align:center;color:var(--muted,#5a6655);font-size:13px;line-height:1.55;">
+          <span class="en-text">No quizzes published yet. Your facilitator will share quizzes as you progress through BTLI lessons.</span>
+          <span class="tl-text">Wala pang naka-publish na quiz. Ipapaalam ng facilitator mo habang lumalago ka sa BTLI.</span>
+        </div>
+      `;
+      return;
+    }
+
+    // Fetch member's attempts for all quizzes in one query
+    const quizIds = quizzes.map(q => q.id);
+    const { data: attempts } = await db
+      .from('btli_quiz_attempts')
+      .select('quiz_id,attempt_number,score,passed,counts_for_grade')
+      .eq('member_id', MEMBER.id)
+      .in('quiz_id', quizIds);
+
+    // Group attempts by quiz_id
+    const byQuiz = {};
+    (attempts || []).forEach(a => {
+      if (!byQuiz[a.quiz_id]) byQuiz[a.quiz_id] = [];
+      byQuiz[a.quiz_id].push(a);
+    });
+
+    // Fetch attendance — get all present=true LCG attendance for this member
+    // We match on event_name pattern client-side for simplicity
+    const { data: attRecords } = await db
+      .from('attendance')
+      .select('event_name')
+      .eq('member_id', MEMBER.id)
+      .eq('present', true);
+
+    const attendedNames = new Set((attRecords || []).map(r => (r.event_name || '').toLowerCase()));
+
+    // Render each quiz card
+    const list = document.getElementById('btliQuizzesList');
+    list.innerHTML = '';
+    quizzes.forEach(q => {
+      const att = byQuiz[q.id] || [];
+      const counted = att.filter(a => a.counts_for_grade);
+      const bestScore = counted.reduce((m, a) => Math.max(m, a.score || 0), 0);
+      const passed = counted.some(a => a.passed);
+      const attemptCount = att.length;
+
+      // Check LCG attendance soft-gate
+      const pattern = (q.attendance_event_name_pattern || '').toLowerCase();
+      let unlocked = !pattern; // no pattern = always unlocked
+      if (pattern) {
+        for (const n of attendedNames) {
+          if (n.includes(pattern)) { unlocked = true; break; }
+        }
+      }
+
+      let badgeHtml = '';
+      let actionHtml = '';
+      let cardBg = '#fff';
+      let leftBar = '#cdd6e0';
+
+      if (!unlocked) {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#f0f0f0;color:#888;letter-spacing:.04em;">🔒 LOCKED</span>`;
+        actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
+          <span class="en-text">Attend the LCG session to unlock.</span>
+          <span class="tl-text">Mag-attend ng LCG session para mabuksan.</span>
+        </div>`;
+        cardBg = '#f8f9fb';
+      } else if (passed) {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#dcf5e3;color:#1a5a30;letter-spacing:.04em;">✓ PASSED · ${bestScore}%</span>`;
+        leftBar = '#2a5c40';
+        actionHtml = `<button onclick="_openBtliQuiz('${q.course_code}',${q.lesson_number})" style="padding:.55rem 1rem;background:transparent;color:#1e3a5f;border:1.5px solid #1e3a5f;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+          <span class="en-text">${attemptCount < 3 ? 'Improve Score' : 'Practice Again'}</span>
+          <span class="tl-text">${attemptCount < 3 ? 'Itaas ang Score' : 'Practice ulit'}</span>
+        </button>`;
+      } else if (attemptCount > 0) {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#fdf6e8;color:#b8882a;letter-spacing:.04em;">${attemptCount}/3 ATTEMPTS · BEST ${bestScore}%</span>`;
+        leftBar = '#b8882a';
+        const labelEn = attemptCount < 3 ? 'Try Again' : 'Practice (no grade change)';
+        const labelTl = attemptCount < 3 ? 'Subukan ulit' : 'Practice (walang epekto)';
+        actionHtml = `<button onclick="_openBtliQuiz('${q.course_code}',${q.lesson_number})" style="padding:.55rem 1rem;background:#b8882a;color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+          <span class="en-text">${labelEn}</span>
+          <span class="tl-text">${labelTl}</span>
+        </button>`;
+      } else {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#eef2f7;color:#1e3a5f;letter-spacing:.04em;">📝 NOT YET TAKEN</span>`;
+        leftBar = '#1e3a5f';
+        actionHtml = `<button onclick="_openBtliQuiz('${q.course_code}',${q.lesson_number})" style="padding:.55rem 1rem;background:#1e3a5f;color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+          <span class="en-text">Take Quiz</span>
+          <span class="tl-text">Kunin ang Quiz</span>
+        </button>`;
+      }
+
+      const card = document.createElement('div');
+      card.style.cssText = `background:${cardBg};border:1px solid var(--border,#cdd6e0);border-left:4px solid ${leftBar};border-radius:9px;padding:.85rem 1rem;`;
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;">
+          <div style="flex:1;">
+            <div style="font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:#b8882a;margin-bottom:.15rem;">
+              ${q.course_code} · Lesson ${q.lesson_number}
+            </div>
+            <div style="font-size:14.5px;font-weight:600;color:#1a1612;line-height:1.3;">${_esc(q.lesson_title)}</div>
+          </div>
+          <div>${badgeHtml}</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;">${actionHtml}</div>
+      `;
+      list.appendChild(card);
+    });
+
+  } catch (e) {
+    console.error('renderBtliQuizzes failed', e);
+    document.getElementById('btliQuizzesList').innerHTML = `
+      <div style="background:#fdf0ee;border:1px solid #e6b8b5;color:#7a2624;border-radius:9px;padding:.85rem;font-size:13px;line-height:1.55;">
+        <span class="en-text">Couldn't load quizzes. Please refresh.</span>
+        <span class="tl-text">Hindi mai-load ang quizzes. Pakirefresh.</span>
+      </div>
+    `;
+  }
+}
+
+function _openBtliQuiz(course, lesson){
+  window.open(`btli_quiz_player.html?course=${encodeURIComponent(course)}&lesson=${encodeURIComponent(lesson)}`, '_blank');
+}
+
+function _esc(s){
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 </script>
