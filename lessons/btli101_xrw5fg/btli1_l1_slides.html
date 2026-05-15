@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BTLI 1 · Lesson 1 — Buhay May Misyon · Projection Slides</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,700&family=DM+Sans:wght@300;400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  background:#0a1424;color:#fff;
+  font-family:'DM Sans',sans-serif;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  overflow:hidden;height:100vh;
+}
+
+:root{
+  --navy:#0a1424;
+  --navy2:#1b2a4a;
+  --navy3:#2a3e6b;
+  --gold:#d4a84a;
+  --gold2:#f0c870;
+  --gold-dim:#8a6a28;
+  --cream:#f5edd8;
+  --ink-soft:rgba(245,237,216,.85);
+  --muted:rgba(245,237,216,.55);
+  --line:rgba(212,168,74,.25);
+}
+
+/* ─────────── STAGE (16:9) ─────────── */
+.stage{
+  position:relative;width:100vw;height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:5vh 8vw;
+  opacity:0;visibility:hidden;
+  transition:opacity .6s ease, visibility .6s;
+  text-align:center;
+}
+.slide.active{opacity:1;visibility:visible;}
+
+/* ─────────── CONTROLS (only visible on hover) ─────────── */
+.controls{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  display:flex;gap:10px;align-items:center;
+  background:rgba(10,20,36,.7);backdrop-filter:blur(10px);
+  padding:10px 16px;border-radius:999px;
+  opacity:0;transition:opacity .3s;z-index:100;
+  border:1px solid rgba(212,168,74,.18);
+}
+body:hover .controls{opacity:1;}
+.ctrl-btn{
+  background:none;border:none;color:var(--cream);cursor:pointer;
+  width:36px;height:36px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;transition:background .15s;
+}
+.ctrl-btn:hover{background:rgba(212,168,74,.15);}
+.ctrl-info{
+  font-family:'DM Sans',sans-serif;font-size:12px;
+  color:var(--muted);padding:0 12px;font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.dot-row{display:flex;gap:5px;align-items:center;padding:0 8px;}
+.dot{
+  width:7px;height:7px;border-radius:50%;
+  background:rgba(245,237,216,.2);cursor:pointer;
+  transition:all .2s;
+}
+.dot.active{background:var(--gold);width:24px;border-radius:4px;}
+
+/* ─────────── FACILITATOR NOTES OVERLAY ─────────── */
+.notes-overlay{
+  position:fixed;left:24px;bottom:24px;
+  max-width:32vw;min-width:280px;
+  background:rgba(10,20,36,.92);
+  backdrop-filter:blur(12px);
+  border:1px solid rgba(212,168,74,.3);
+  border-radius:10px;padding:14px 16px;
+  font-size:12.5px;line-height:1.6;color:var(--ink-soft);
+  display:none;z-index:90;
+}
+.notes-overlay.show{display:block;}
+.notes-lbl{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:6px;}
+.notes-txt{color:rgba(255,255,255,.85);}
+
+/* ═══════════════════════════════════════════════════════
+   SHARED SLIDE ELEMENTS
+   ═══════════════════════════════════════════════════════ */
+
+.eyebrow{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(13px,1.4vw,20px);letter-spacing:.4em;
+  color:var(--gold);margin-bottom:3vh;font-weight:400;
+}
+.title-xl{
+  font-family:'Playfair Display',serif;font-weight:900;
+  font-size:clamp(48px,8vw,128px);line-height:.95;
+  letter-spacing:-.015em;color:var(--cream);
+}
+.title-lg{
+  font-family:'Playfair Display',serif;font-weight:700;
+  font-size:clamp(36px,5.5vw,80px);line-height:1.05;
+  letter-spacing:-.01em;color:var(--cream);
+}
+.title-md{
+  font-family:'Playfair Display',serif;font-weight:600;
+  font-size:clamp(28px,3.8vw,52px);line-height:1.15;
+  color:var(--cream);
+}
+.kicker{
+  font-family:'DM Sans',sans-serif;font-size:clamp(14px,1.5vw,20px);
+  font-weight:500;color:var(--gold2);margin-top:2.5vh;letter-spacing:.04em;
+}
+.subtitle{
+  font-family:'DM Sans',sans-serif;font-size:clamp(15px,1.6vw,22px);
+  font-weight:400;color:var(--ink-soft);margin-top:2.5vh;line-height:1.5;
+  max-width:48vw;
+}
+
+.verse-block{
+  max-width:60vw;padding:4vh 5vw;
+  border:1px solid var(--line);border-radius:14px;
+  background:rgba(212,168,74,.04);
+}
+.verse-ref{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(13px,1.4vw,20px);letter-spacing:.3em;
+  color:var(--gold);margin-bottom:2.5vh;
+}
+.verse-text{
+  font-family:'Playfair Display',serif;font-style:italic;
+  font-size:clamp(20px,2.6vw,38px);line-height:1.45;
+  color:var(--cream);
+}
+.verse-en{
+  font-family:'Playfair Display',serif;font-style:italic;
+  font-size:clamp(14px,1.4vw,20px);line-height:1.5;
+  color:var(--muted);margin-top:1.5vh;
+}
+
+.q-stack{display:flex;flex-direction:column;gap:2vh;max-width:62vw;text-align:left;}
+.q-item{
+  padding:1.3vh 2vw;border-left:3px solid var(--gold);
+  background:rgba(212,168,74,.04);
+  border-radius:0 8px 8px 0;
+}
+.q-lbl{font-family:'Bebas Neue',sans-serif;letter-spacing:.2em;color:var(--gold);font-size:clamp(11px,1.1vw,15px);margin-bottom:.5vh;}
+.q-txt{font-family:'Playfair Display',serif;font-size:clamp(16px,1.9vw,26px);font-style:italic;color:var(--cream);line-height:1.4;}
+
+.framework-grid{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:2vw;
+  max-width:78vw;margin-top:3vh;
+}
+.fw-cell{
+  background:rgba(212,168,74,.05);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:3vh 1.5vw;text-align:center;
+}
+.fw-num{font-family:'Playfair Display',serif;font-size:clamp(32px,4vw,56px);font-weight:700;color:var(--gold);line-height:1;margin-bottom:1.5vh;}
+.fw-ttl{font-family:'Playfair Display',serif;font-size:clamp(20px,2.2vw,32px);font-weight:600;color:var(--cream);margin-bottom:1.5vh;}
+.fw-txt{font-family:'DM Sans',sans-serif;font-size:clamp(13px,1.3vw,17px);color:var(--ink-soft);line-height:1.55;}
+
+.template-card{
+  max-width:75vw;padding:4vh 4vw;
+  border:1.5px solid var(--gold);border-radius:16px;
+  background:rgba(212,168,74,.06);
+}
+.template-label{
+  font-family:'Bebas Neue',sans-serif;letter-spacing:.3em;
+  color:var(--gold);font-size:clamp(12px,1.3vw,17px);margin-bottom:2.5vh;
+}
+.template-text{
+  font-family:'Playfair Display',serif;font-size:clamp(22px,2.6vw,38px);
+  font-style:italic;line-height:1.5;color:var(--cream);
+}
+.template-blank{
+  display:inline-block;background:rgba(212,168,74,.15);
+  padding:0 .4em;border-bottom:2px solid var(--gold);
+  color:var(--gold2);font-style:normal;font-family:'DM Sans',sans-serif;
+  font-weight:500;font-size:.85em;letter-spacing:.04em;
+  min-width:2em;text-align:center;
+}
+
+/* ─── S1: Hero ─── */
+.hero-bg{
+  background:
+    radial-gradient(circle at 25% 30%, rgba(212,168,74,.18), transparent 55%),
+    radial-gradient(circle at 75% 70%, rgba(42,62,107,.4), transparent 55%),
+    linear-gradient(135deg, #0a1424 0%, #1b2a4a 100%);
+}
+
+/* ─── Whitney slide (special) ─── */
+.whitney-bg{
+  background:
+    radial-gradient(circle at 50% 30%, rgba(212,168,74,.12), transparent 55%),
+    linear-gradient(180deg, #1b2a4a 0%, #0a1424 100%);
+}
+.whitney-name{
+  font-family:'Playfair Display',serif;font-style:italic;
+  font-size:clamp(28px,3.6vw,52px);color:var(--gold2);margin-top:3vh;
+}
+.whitney-trio{
+  display:flex;gap:2.5vw;margin-top:4vh;align-items:center;justify-content:center;
+}
+.wh-tag{
+  padding:1.5vh 2.5vw;border:1px solid var(--line);border-radius:999px;
+  font-family:'DM Sans',sans-serif;font-weight:500;
+  font-size:clamp(14px,1.5vw,20px);color:var(--cream);
+}
+.wh-tag.yes{border-color:var(--gold);background:rgba(212,168,74,.1);color:var(--gold2);}
+.wh-tag.no{border-color:rgba(255,255,255,.15);color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(255,100,100,.5);}
+
+/* ─── Closing slide (different palette) ─── */
+.closing-bg{
+  background:
+    radial-gradient(circle at 50% 50%, rgba(212,168,74,.22), transparent 55%),
+    linear-gradient(135deg, #0a1424 0%, #2a3e6b 100%);
+}
+
+.big-stmt{
+  font-family:'Playfair Display',serif;font-weight:700;
+  font-size:clamp(40px,5.5vw,84px);line-height:1.1;
+  color:var(--cream);max-width:80vw;
+}
+.big-stmt em{font-style:italic;color:var(--gold2);font-weight:600;}
+
+.assignment-list{
+  display:flex;flex-direction:column;gap:2.5vh;max-width:62vw;text-align:left;margin-top:3vh;
+}
+.al-item{
+  display:flex;gap:2vw;align-items:flex-start;
+}
+.al-num{
+  font-family:'Playfair Display',serif;font-size:clamp(28px,3vw,42px);font-weight:700;
+  color:var(--gold);line-height:1;flex-shrink:0;min-width:1.5em;
+}
+.al-body{flex:1;}
+.al-h{font-family:'Playfair Display',serif;font-size:clamp(20px,2vw,28px);font-weight:600;color:var(--cream);margin-bottom:.4vh;}
+.al-d{font-family:'DM Sans',sans-serif;font-size:clamp(14px,1.4vw,19px);color:var(--ink-soft);line-height:1.5;}
+
+.brand-footer{
+  position:absolute;bottom:3vh;left:0;right:0;
+  text-align:center;
+  font-family:'Bebas Neue',sans-serif;letter-spacing:.4em;
+  font-size:clamp(10px,1vw,13px);color:rgba(245,237,216,.25);
+}
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage"></div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="prev" title="Previous (←)">◂</button>
+  <span class="ctrl-info"><span id="curr">1</span> / <span id="total">18</span></span>
+  <button class="ctrl-btn" id="next" title="Next (→)">▸</button>
+  <div class="dot-row" id="dots"></div>
+  <button class="ctrl-btn" id="notesBtn" title="Toggle notes (N)">📝</button>
+  <button class="ctrl-btn" id="fs" title="Fullscreen (F)">⛶</button>
+</div>
+
+<div class="notes-overlay" id="notesOverlay">
+  <div class="notes-lbl">🎯 Facilitator Notes</div>
+  <div class="notes-txt" id="notesTxt"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  SLIDES — Source of truth for content + speaker notes
+//  Each slide: { html, notes }
+//  PPTX deck mirrors this content + notes 1:1
+// ═══════════════════════════════════════════════════════════
+
+const SLIDES = [
+  // ─── 1. HERO ───
+  {
+    html: `<div class="slide active hero-bg" id="s1">
+      <div class="eyebrow">MULTIPLY · BTLI 1 · LESSON 1</div>
+      <div class="title-xl">Buhay<br>May Misyon</div>
+      <div class="kicker">Living on God's Purpose</div>
+      <div class="subtitle">A disciple becomes a multiplier when their strengths, passions, and calling align with God's purpose — sustained by joy rooted in faith.</div>
+      <div class="brand-footer">MULTIPLY LEADERSHIP PIPELINE · LESSON 1 OF 6</div>
+    </div>`,
+    notes: `OPENING — 30 seconds. Welcome the room. Project this while participants find their seats. Don't speak over it. Let it land. When ready, transition: "Magandang gabi, kapatid. Magsisimula tayo." Move to slide 2.`
+  },
+
+  // ─── 2. PUKAW HOOK — Lungfish ───
+  {
+    html: `<div class="slide hero-bg" id="s2">
+      <div class="eyebrow">⚡ PUKAW · 12 MIN</div>
+      <div class="title-lg">Anong Akala Mo<br>Walang Silbi?</div>
+      <div class="kicker">The African Lungfish · NatGeo UK</div>
+      <div class="subtitle">It looks useless. It lives in mud. It breathes air. It survives droughts for up to four years.<br>It is one of God's most surprising engineering feats.</div>
+      <div class="brand-footer">PUKAW · ENGAGE — CREATE FELT NEED</div>
+    </div>`,
+    notes: `Play the lungfish video here (~2 min). After the video, DON'T explain it. Let the image carry the work. Move to slide 3 for the activity setup.`
+  },
+
+  // ─── 3. PUKAW ACTIVITY — Akala Ko vs Tunay Pala ───
+  {
+    html: `<div class="slide hero-bg" id="s3">
+      <div class="eyebrow">⚡ PUKAW · MANILA PAPER · 10 MIN</div>
+      <div class="title-lg">Akala Ko vs<br>Tunay Pala</div>
+      <div class="framework-grid" style="grid-template-columns:1fr 1fr;max-width:68vw;margin-top:5vh">
+        <div class="fw-cell">
+          <div class="fw-num">?</div>
+          <div class="fw-ttl">Akala Ko</div>
+          <div class="fw-txt">Anong akala ng marami ang gamit ng bagay na ito?</div>
+        </div>
+        <div class="fw-cell" style="border-color:var(--gold);background:rgba(212,168,74,.1)">
+          <div class="fw-num" style="color:var(--gold2)">!</div>
+          <div class="fw-ttl">Tunay Pala</div>
+          <div class="fw-txt">Ano talaga ang tunay nitong purpose?</div>
+        </div>
+      </div>
+      <div class="subtitle" style="margin-top:4vh">Bottle-cap ridges · Jeans coin-pocket · Pen-cap holes · USB tabs · Plastic milk-jug indents</div>
+      <div class="brand-footer">EACH TABLE PICKS 3 ITEMS · GALLERY WALK AFTER</div>
+    </div>`,
+    notes: `COHORT: 5 tables, Manila paper folded in 2 columns. Each table picks 3 items, fills both columns (4 min). Then gallery walk (3 min). Then the pivot — transition to slide 4. SMALL GROUP: same 2-column on shared Manila paper, round-robin. 1-on-1: skip this slide, use dialogue from facilitator file.`
+  },
+
+  // ─── 4. THE PIVOT ───
+  {
+    html: `<div class="slide hero-bg" id="s4">
+      <div class="eyebrow">⚡ THE PIVOT</div>
+      <div class="big-stmt">Kung ang simpleng bagay<br>may layunin<br><em>na hindi natin alam</em>—</div>
+      <div class="kicker" style="margin-top:6vh;font-size:clamp(20px,2.2vw,32px)">paano pa kaya ang buhay mo?</div>
+      <div class="brand-footer">BRIDGE TO TUKLAS · SCRIPTURE</div>
+    </div>`,
+    notes: `Read the pivot question slowly. Pause after it. Let it hang in the air. Then the bridge: "Hindi ka aksidente. Hindi ka spare part. May ginawa ang Diyos sa iyo bago ka pa ipinanganak. Ang tanong: alam mo na ba kung ano iyon? At kung alam mo na — pinamumuhay mo ba?" Transition to TUKLAS.`
+  },
+
+  // ─── 5. TUKLAS Scripture 1 — Acts 13:36 ───
+  {
+    html: `<div class="slide hero-bg" id="s5">
+      <div class="eyebrow">📖 TUKLAS · SCRIPTURE 1 OF 3</div>
+      <div class="verse-block">
+        <div class="verse-ref">Acts 13:36</div>
+        <div class="verse-text">"Sapagkat si David, matapos niyang paglingkuran ang layunin ng Diyos sa kanyang sariling henerasyon, ay natulog..."</div>
+        <div class="verse-en">"For David, after he had served the purpose of God in his own generation, fell asleep..." (ESV)</div>
+      </div>
+      <div class="brand-footer">PRIMARY ANCHOR · MEMORY VERSE</div>
+    </div>`,
+    notes: `You read in Tagalog, one participant reads in English. Slowly. The whole life of David — summarized in ONE sentence. "Pinaglingkuran ang layunin ng Diyos sa kanyang sariling henerasyon." Don't preach yet — the question comes on slide 8.`
+  },
+
+  // ─── 6. TUKLAS Scripture 2 — Eph 2:10 ───
+  {
+    html: `<div class="slide hero-bg" id="s6">
+      <div class="eyebrow">📖 TUKLAS · SCRIPTURE 2 OF 3</div>
+      <div class="verse-block">
+        <div class="verse-ref">Ephesians 2:10 · The Poiema Verse</div>
+        <div class="verse-text">"Sapagkat tayo ay Kanyang gawa, nilikha kay Cristo Jesus para sa mabubuting gawa, na inihanda ng Diyos noon pa man upang sundin natin."</div>
+        <div class="verse-en">"For we are his workmanship, created in Christ Jesus for good works, which God prepared beforehand, that we should walk in them." (ESV)</div>
+      </div>
+      <div class="brand-footer">POIEMA = MASTERPIECE · CUSTOM-DESIGNED · PRE-PREPARED WORKS</div>
+    </div>`,
+    notes: `Read together aloud, both languages back-to-back. EMPHASIZE: the word "workmanship" is the Greek "poiema" — root of "poem." Masterpiece. Custom-designed. AND the good works were prepared BEFOREHAND, not improvised. Hindi spare part. Hindi sketch. Masterpiece na may inihandang gawa.`
+  },
+
+  // ─── 7. TUKLAS Scripture 3 — John 15:11 ───
+  {
+    html: `<div class="slide hero-bg" id="s7">
+      <div class="eyebrow">📖 TUKLAS · SCRIPTURE 3 OF 3</div>
+      <div class="verse-block">
+        <div class="verse-ref">John 15:11 · The Joy Anchor</div>
+        <div class="verse-text">"Ang mga bagay na ito ay sinabi Ko sa inyo, upang ang Aking kagalakan ay sumainyo, at ang inyong kagalakan ay maging ganap."</div>
+        <div class="verse-en">"These things I have spoken to you, that my joy may be in you, and that your joy may be full." (ESV)</div>
+      </div>
+      <div class="brand-footer">JOY HINDI HAPPINESS · GANAP NA KAGALAKAN</div>
+    </div>`,
+    notes: `One volunteer reads aloud, then everyone reads silently. The KEY: this is Jesus mid-Vine-and-Branches teaching (John 15:1-11). The "things I have told you" = abiding in the vine. JOY made full = abiding in mission. Joy and mission are designed to feed each other.`
+  },
+
+  // ─── 8. TUKLAS Discovery Questions ───
+  {
+    html: `<div class="slide hero-bg" id="s8">
+      <div class="eyebrow">📖 TUKLAS · 3 QUESTIONS · 12 MIN</div>
+      <div class="title-md" style="margin-bottom:4vh">Diskubre — Mga Tanong</div>
+      <div class="q-stack">
+        <div class="q-item">
+          <div class="q-lbl">👁 OBSERVATION · ACTS 13:36</div>
+          <div class="q-txt">Sa isang pangungusap lang, paano ibinuod ng Bibliya ang buong buhay ni David?</div>
+        </div>
+        <div class="q-item">
+          <div class="q-lbl">💡 INTERPRETATION · EPH 2:10</div>
+          <div class="q-txt">Kung tayo ay poiema — masterpiece — ano ang ipinapahiwatig nito tungkol sa kung paano ka tiningnan ng Diyos noong ginawa Niya?</div>
+        </div>
+        <div class="q-item">
+          <div class="q-lbl">🙌 APPLICATION · JOHN 15:11</div>
+          <div class="q-txt">Ano ang kaugnayan ng misyon at kagalakan? Bakit hindi sapat ang isa nang wala ang isa?</div>
+        </div>
+      </div>
+      <div class="brand-footer">TABLE DISCUSSION · GALLERY WALL AFTER</div>
+    </div>`,
+    notes: `COHORT: 12 min table discussion of all 3 questions. SMALL GROUP: round-robin one question each, then open discussion. 1-on-1: slow walk through all three. Each table writes their best answer to "Ang Misyon ng Diyos sa Akin ay ___" on Manila paper and posts on gallery wall.`
+  },
+
+  // ─── 9. TALAKAY — Mac Lake Framework ───
+  {
+    html: `<div class="slide hero-bg" id="s9">
+      <div class="eyebrow">💡 TALAKAY · THE FRAMEWORK · 6 MIN</div>
+      <div class="title-md">Living on Mission</div>
+      <div class="subtitle" style="margin-top:2vh;font-style:italic;color:var(--gold2)">Strengths + Passion + Calling = Mission Zone</div>
+      <div class="framework-grid">
+        <div class="fw-cell">
+          <div class="fw-num">1</div>
+          <div class="fw-ttl">Strengths</div>
+          <div class="fw-txt">Nakakapagod ang ibang gawain — pero dito ikaw ay nag-i-energize.</div>
+        </div>
+        <div class="fw-cell">
+          <div class="fw-num">2</div>
+          <div class="fw-ttl">Passion</div>
+          <div class="fw-txt">Anong sumusunog sa puso mo? Anong hindi mo maiwasang pansinin?</div>
+        </div>
+        <div class="fw-cell">
+          <div class="fw-num">3</div>
+          <div class="fw-ttl">Calling</div>
+          <div class="fw-txt">Tinawag ka ng Diyos para sa iyong sariling henerasyon.</div>
+        </div>
+      </div>
+      <div class="brand-footer">MAC LAKE · LEADING YOURSELF · MODULE 1</div>
+    </div>`,
+    notes: `6 MIN ONLY. Don't over-teach. Project the framework, say each piece once with ONE personal example for each (brief!), then move on. The framework is a launching pad for the Mission Statement Sketch in GAWIN — not a sermon.`
+  },
+
+  // ─── 10. TALAKAY — Whitney Contrast ───
+  {
+    html: `<div class="slide whitney-bg" id="s10">
+      <div class="eyebrow">💡 THE CAUTIONARY CONTRAST · 6 MIN</div>
+      <div class="title-md">Honor the Gift.<br>Name the Cost.</div>
+      <div class="whitney-name">Whitney Houston</div>
+      <div class="whitney-trio">
+        <div class="wh-tag yes">✓ Strength</div>
+        <div class="wh-tag yes">✓ Passion</div>
+        <div class="wh-tag no">Calling Drift</div>
+      </div>
+      <div class="subtitle" style="margin-top:5vh;max-width:60vw">Dalawa sa tatlo ay hindi sapat. Strengths + passion na walang calling ay maaaring maging tanyag — ngunit hindi maaaring maging <em style="color:var(--gold2);font-style:italic">tapos</em> tulad ni David.</div>
+      <div class="brand-footer">PASTORAL TONE · HINDI KINOKONDENA · IGINAGALANG ANG REGALO</div>
+    </div>`,
+    notes: `CRITICAL PASTORAL TONE. Some participants will love her music. Some saw her live. DO NOT CONDEMN. Speak with gravity and gentleness. Three paragraphs from facilitator file: (1) Her extraordinary voice — true strength. (2) Her gospel roots — true passion. (3) The drift — calling napalitan ng career, industry, addiction. The point: ANY OF US can have 2 of 3 and miss the 3rd without noticing. Including the people in this room. Including you.`
+  },
+
+  // ─── 11. TALAKAY — Reflection Questions ───
+  {
+    html: `<div class="slide hero-bg" id="s11">
+      <div class="eyebrow">💡 SILENT REFLECTION · 4 MIN</div>
+      <div class="title-md" style="margin-bottom:4vh">Saan Ako Ngayon?</div>
+      <div class="q-stack">
+        <div class="q-item">
+          <div class="q-lbl">STRENGTHS</div>
+          <div class="q-txt">Anong gawain ang nag-e-energize sa iyo? Anong nag-d-drain?</div>
+        </div>
+        <div class="q-item">
+          <div class="q-lbl">PASSION</div>
+          <div class="q-txt">Anong isyu, pangangailangan, o grupo ng tao ang lagi mong iniisip?</div>
+        </div>
+        <div class="q-item">
+          <div class="q-lbl">CALLING</div>
+          <div class="q-txt">Para sa iyong sariling henerasyon — anong ginawa ng Diyos sa iyo?</div>
+        </div>
+      </div>
+      <div class="brand-footer">4 MINUTES OF REAL SILENCE · DO NOT BREAK IT</div>
+    </div>`,
+    notes: `COHORT: 4 minutes of REAL silence. No music. No facilitator filler. Walk slowly, calm presence. Then optional voluntary share (4 min, 2-3 honest shares). SMALL GROUP: 3 min silent writing + 4 min pair share with "Sabihin mo pa" listening rule. 1-on-1: slow walk through all three with reflect-back. The Spirit works in this silence. Trust it.`
+  },
+
+  // ─── 12. GAWIN — Rear View Mirror Mini ───
+  {
+    html: `<div class="slide hero-bg" id="s12">
+      <div class="eyebrow">🙌 GAWIN · PART A · 5 MIN</div>
+      <div class="title-md">Rear View Mirror<br><span style="font-size:.6em;color:var(--gold2);font-style:italic;font-weight:400">7-Day Edition</span></div>
+      <div class="framework-grid" style="grid-template-columns:1fr 1fr;max-width:60vw;margin-top:5vh">
+        <div class="fw-cell" style="border-color:rgba(96,192,128,.4);background:rgba(96,192,128,.06)">
+          <div class="fw-num" style="color:#60c080">🔋</div>
+          <div class="fw-ttl" style="color:#a0e8b8">Nag-Energize</div>
+          <div class="fw-txt">Top 3 mula sa nakaraang 7 araw — anong nagbigay sa iyo ng energy?</div>
+        </div>
+        <div class="fw-cell" style="border-color:rgba(224,144,144,.4);background:rgba(224,144,144,.06)">
+          <div class="fw-num" style="color:#e09090">🪫</div>
+          <div class="fw-ttl" style="color:#f0b0b0">Nag-Drain</div>
+          <div class="fw-txt">Top 3 mula sa nakaraang 7 araw — anong nag-drain sa iyo?</div>
+        </div>
+      </div>
+      <div class="subtitle" style="margin-top:4vh">Sa Energize column — anong tema ang nakikita mo? Iyon ang clue sa iyong top 2-3 strengths.</div>
+      <div class="brand-footer">ADAPTED FROM MAC LAKE · FULL WORKSHEET AT MULTIPLYGROUP.ORG</div>
+    </div>`,
+    notes: `Participants open participant page → TALAKAY section. Top 3 each column. 5 minutes only. Forces clarity. Encourage them to do the full 2-week version at home from multiplygroup.org/leadingyourself.`
+  },
+
+  // ─── 13. GAWIN — Mission Statement Template ───
+  {
+    html: `<div class="slide hero-bg" id="s13">
+      <div class="eyebrow">🙌 GAWIN · PART B · 10 MIN · THE ARTIFACT</div>
+      <div class="template-card">
+        <div class="template-label">FIRST DRAFT · ANG AKING MISYON</div>
+        <div class="template-text">"Ang aking misyon ay <span class="template-blank">strengths</span><br>na ibinigay sa akin ng Diyos<br>para sa <span class="template-blank">tao / passion</span><br>sa pamamagitan ng <span class="template-blank">paraan</span><br>— para sa Kanyang kaluwalhatian."</div>
+      </div>
+      <div class="subtitle" style="margin-top:4vh;max-width:55vw">Tatlong patlang. Tatlong minuto bawat patlang. Hindi perpekto. <em style="color:var(--gold2);font-style:italic">Unang burador lang.</em></div>
+      <div class="brand-footer">THE ARTIFACT THIS LESSON PRODUCES</div>
+    </div>`,
+    notes: `THIS IS THE LESSON'S ARTIFACT. Every participant must leave with a first-draft mission statement filled in on the participant page. The participant page has live preview that assembles the full sentence as they type. 10 minutes — 3 minutes per blank, 1 minute review.`
+  },
+
+  // ─── 14. GAWIN — EOLO Bridge ───
+  {
+    html: `<div class="slide hero-bg" id="s14">
+      <div class="eyebrow">🌏 EOLO · EACH ONE LOVE ONE</div>
+      <div class="title-md">Mission + Tao</div>
+      <div class="big-stmt" style="margin-top:5vh;font-size:clamp(24px,3vw,42px);font-weight:600;max-width:70vw">Paano kaya magagamit<br>ang iyong bagong mission statement<br><em>para mahalin ang isang specific na tao</em><br>papunta kay Cristo?</div>
+      <div class="brand-footer">MISSION STATEMENT MEETS REAL PERSON · TABLE PRAYER FOLLOWS</div>
+    </div>`,
+    notes: `Participants write the EOLO person's name + the specific way to live out their mission statement toward them. Then COHORT: table coach leads 60-second specific prayer per table. SMALL GROUP: group prays together by name. 1-on-1: mentor prays for both mentee and EOLO person.`
+  },
+
+  // ─── 15. DALHIN — 10-Day Assignment ───
+  {
+    html: `<div class="slide hero-bg" id="s15">
+      <div class="eyebrow">🏠 DALHIN SA BAHAY · 10 ARAW</div>
+      <div class="title-md" style="margin-bottom:4vh">Buhay May Misyon · Daily Journal</div>
+      <div class="template-card" style="max-width:65vw">
+        <div class="template-label">BAWAT GABI · ISANG PANGUNGUSAP</div>
+        <div class="template-text" style="font-size:clamp(20px,2.4vw,32px)">"Ngayon, naglingkod ako<br>sa layunin ng Diyos<br>sa pamamagitan ng <span class="template-blank">isang bagay</span>."</div>
+      </div>
+      <div class="subtitle" style="margin-top:4vh">Kahit maliit. <em style="color:var(--gold2);font-style:italic">Lalo na maliit.</em> Hindi mo kailangan ng dramatic na ministry moment.</div>
+      <div class="brand-footer">SA SUSUNOD NA LESSON · "ILANG ARAW KA NAKAPAGSULAT?"</div>
+    </div>`,
+    notes: `Participants track this on participant page (10-day grid). Even small. Especially small. Pwedeng natulungan lang ang katabi sa MRT. Pwedeng nakinig sa kapatid. Sa next lesson, first question: "Ilang araw ka nakapagsulat?" Walang shame — datos lang.`
+  },
+
+  // ─── 16. DALHIN — Memory Verse ───
+  {
+    html: `<div class="slide hero-bg" id="s16">
+      <div class="eyebrow">📝 TALATA NG MEMORYA · LESSON 1</div>
+      <div class="verse-block">
+        <div class="verse-ref">Acts 13:36 · ESV</div>
+        <div class="verse-text" style="font-size:clamp(22px,2.8vw,40px)">"For David, after he had served the purpose of God in his own generation, fell asleep..."</div>
+        <div class="verse-en">"Sapagkat si David, matapos niyang paglingkuran ang layunin ng Diyos sa kanyang sariling henerasyon, ay natulog..."</div>
+      </div>
+      <div class="brand-footer">LOOK · SAY · COVER · CHECK</div>
+    </div>`,
+    notes: `Look-Say-Cover-Check drill: (1) Everyone reads from screen twice together. (2) Screen goes blank, say from memory together. (3) Pairs say it to each other without looking. (4) Screenshot or distribute physical cards. The verse will be tested in opening of Lesson 2.`
+  },
+
+  // ─── 17. DALHIN — Pangako Ko ───
+  {
+    html: `<div class="slide hero-bg" id="s17">
+      <div class="eyebrow">🏠 PANGAKO KO · MY COMMITMENT</div>
+      <div class="template-card" style="max-width:75vw">
+        <div class="template-label">SA SUSUNOD NA DALAWANG LINGGO</div>
+        <div class="template-text">"Isasabuhay ko ang aking misyon<br>sa pamamagitan ng <span class="template-blank">isang bagay na specific</span>."</div>
+      </div>
+      <div class="subtitle" style="margin-top:4vh;max-width:60vw">Isang bagay. Specific. Magagawa mo talaga. Hindi para impressed ang ibang tao — para totoo ka sa iyong sarili at sa Diyos.</div>
+      <div class="brand-footer">PARTICIPANT PAGE · PANGAKO KO SECTION</div>
+    </div>`,
+    notes: `Write it on participant page. Specific is the only rule. Not vague ("magiging mas mabuting Kristiyano"). Specific ("magse-set ako ng 6am daily devotional time for 2 weeks"). Hold the room here — no rushing.`
+  },
+
+  // ─── 18. CLOSING ───
+  {
+    html: `<div class="slide closing-bg" id="s18">
+      <div class="eyebrow">🕊 CLOSING RITUAL</div>
+      <div class="title-xl" style="font-size:clamp(40px,7vw,108px)">Disciples<br>who make<br><em style="color:var(--gold2);font-style:italic">disciples.</em></div>
+      <div class="brand-footer">MULTIPLY · ROSEHILL CHRISTIAN CHURCH · LESSON 1 COMPLETE</div>
+    </div>`,
+    notes: `SACRED — DO NOT REDESIGN. Everyone stands. Memory verse together from memory — final time. You pray specifically — name 2-3 participants and their EOLO person and their first-draft mission. Then together, hands raised: "Disciples who make disciples." Dismissal by table.`
+  },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  NOTES[] export — for facilitator hint extraction + PPTX
+// ═══════════════════════════════════════════════════════════
+const NOTES = SLIDES.map((s, i) => ({ slide: i+1, notes: s.notes }));
+window.NOTES = NOTES;
+
+// ═══════════════════════════════════════════════════════════
+//  RENDERER
+// ═══════════════════════════════════════════════════════════
+const stage = document.getElementById('stage');
+const dots  = document.getElementById('dots');
+const currEl= document.getElementById('curr');
+const totalEl=document.getElementById('total');
+const notesOverlay = document.getElementById('notesOverlay');
+const notesTxt = document.getElementById('notesTxt');
+
+// Inject slides
+stage.innerHTML = SLIDES.map(s => s.html).join('\n');
+totalEl.textContent = SLIDES.length;
+
+// Build dot row
+SLIDES.forEach((_, i) => {
+  const d = document.createElement('span');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.addEventListener('click', () => goTo(i));
+  dots.appendChild(d);
+});
+
+let idx = 0;
+const slides = document.querySelectorAll('.slide');
+const dotEls = document.querySelectorAll('.dot');
+
+function goTo(i){
+  if (i < 0 || i >= SLIDES.length) return;
+  slides[idx].classList.remove('active');
+  dotEls[idx].classList.remove('active');
+  idx = i;
+  slides[idx].classList.add('active');
+  dotEls[idx].classList.add('active');
+  currEl.textContent = idx + 1;
+  notesTxt.textContent = SLIDES[idx].notes;
+}
+
+document.getElementById('prev').onclick = () => goTo(idx - 1);
+document.getElementById('next').onclick = () => goTo(idx + 1);
+
+document.getElementById('notesBtn').onclick = () => {
+  notesOverlay.classList.toggle('show');
+};
+
+document.getElementById('fs').onclick = () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+};
+
+// Keyboard nav
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); goTo(idx + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goTo(idx - 1); }
+  else if (e.key === 'Home') goTo(0);
+  else if (e.key === 'End') goTo(SLIDES.length - 1);
+  else if (e.key === 'f' || e.key === 'F') document.getElementById('fs').click();
+  else if (e.key === 'n' || e.key === 'N') notesOverlay.classList.toggle('show');
+});
+
+// Initialize notes
+notesTxt.textContent = SLIDES[0].notes;
+</script>
+</body>
+</html>
