@@ -795,41 +795,56 @@ async function deleteAssignment(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// AUTO-FILL — Sun + Wed interleaved (May 2026)
-// ─────────────────────────────────────────────────────────────────
-// Builds next ~12 weeks of service days (Sundays + Wednesdays) in
-// chronological order. Three categories of slot fill:
+// AUTO-FILL — DUAL-POINTER ROTATION (May 15, 2026 redesign)
+// ─────────────────────────────────────────────────────────────
+// Replaces the old single-pointer rotation that gave some non-mainstay
+// preachers no Sunday slots. Per Pastor's spec:
 //
-//   1. NON-LAST SUNDAYS  — Pastor mainstay (first is_mainstay_preacher
-//      not on leave). If none flagged or all on leave, slot is left
-//      unassigned and a toast warns the Pastor.
+//   WEDNESDAY rotation: "2 non-mainstays, then mainstay" — repeating
+//     forever, independent of month boundaries.
+//     Example with 5 rotation preachers: P1, P2, me, P3, P4, me, P5,
+//                                        P1, me, P2, P3, me, P4, P5, ...
 //
-//   2. WEDNESDAYS (recurring) — preachers with recurrence_pattern claim
-//      their cycle slots first (anchored from most recent past Wed
-//      assignment). Recurrence is a Wed-only concept; Sundays ignore it.
+//   SUNDAY rotation: ALL Sundays = mainstay, EXCEPT the LAST Sunday
+//     of each calendar month, which goes to the next non-mainstay
+//     in the rotation. The Sunday rotation pointer advances ONLY on
+//     last-Sunday assignments. Independent of Wednesday pointer.
+//     Example: 4-Sun month: me, me, me, P1
+//              Next month:  me, me, me, P2
+//              Next month:  me, me, me, P3 ... etc.
 //
-//   3. WEDNESDAYS (rotation) + LAST SUNDAYS — single rotation pointer
-//      across NON-mainstay NON-recurring active preachers. Iterates
-//      strictly in roster sequence order. Last Sundays interleave with
-//      Wednesdays so the same person can take a Wed then a last-Sun.
+//   POINTERS are derived from DB (count of historical non-mainstay
+//   Wed assignments mod rotation_count = next Wed rotation idx; count
+//   of historical last-Sun rotation assignments mod rotation_count =
+//   next Sun rotation idx). Self-healing when Pastor edits manually.
+//
+//   Recurrence-pattern preachers (Pass 1) preserved from prior design;
+//   they claim their Wed slots before rotation fills the rest.
+//
+//   On-leave handling: skip preacher in rotation but DO NOT advance
+//   the pointer — they get the slot when they return.
 // ═══════════════════════════════════════════════════════════════
 async function autofillNext12(){
   const allActive = _preachers.filter(p => p.is_active);
   if (allActive.length === 0) { toast('No active preachers in roster', '⚠️'); return; }
 
-  const mainstays   = allActive.filter(p => p.is_mainstay_preacher);
+  const mainstays   = allActive.filter(p => p.is_mainstay_preacher).sort((a,b) => a.sequence - b.sequence);
   const recurring   = allActive.filter(p => p.recurrence_pattern && !p.is_mainstay_preacher);
-  const rotation    = allActive.filter(p => !p.recurrence_pattern && !p.is_mainstay_preacher);
+  const rotation    = allActive.filter(p => !p.recurrence_pattern && !p.is_mainstay_preacher).sort((a,b) => a.sequence - b.sequence);
 
-  // Build list of next 12 weeks of service days (Sun + Wed) starting from today
+  if (mainstays.length === 0) {
+    toast('No mainstay preacher flagged — set is_mainstay_preacher on at least one preacher first.', '⚠️');
+    return;
+  }
+  const mainstay = mainstays[0];
+
+  // Compute date window: today → today + 12 weeks (84 days)
   const today = new Date(); today.setHours(0,0,0,0);
   const todayStr = ymd(today);
-
-  // Compute the date window: today → today + 12 weeks (84 days)
   const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 84);
 
-  // Generate all Sundays and Wednesdays in [today, windowEnd]
-  const serviceDays = [];   // [{date, dateStr, service_type, isLastSunday}]
+  // Generate all Sundays and Wednesdays in window
+  const serviceDays = [];
   let cursor = new Date(today);
   while (cursor <= windowEnd) {
     const dow = cursor.getDay();
@@ -850,12 +865,10 @@ async function autofillNext12(){
     return;
   }
 
-  // Load existing assignments in window
   const winStart = serviceDays[0].dateStr;
   const winEnd = serviceDays[serviceDays.length - 1].dateStr;
   await loadAssignmentsRange(winStart, winEnd);
 
-  // Key by (date, service_type) so Sun and Wed on same date don't collide
   const assignmentKey = (dateStr, svc) => `${dateStr}|${svc}`;
   const assignedKeys = new Map();
   _assignments.forEach(a => {
@@ -865,39 +878,15 @@ async function autofillNext12(){
     }
   });
 
-  // Helper: is preacher on leave on this date?
   const onLeave = (preacher, dateStr) => {
     if (!preacher.on_leave_until) return false;
     return dateStr <= preacher.on_leave_until;
   };
 
   const inserts = [];
-  const claimedKeys = new Set();  // keys claimed by recurring/mainstay this run
+  const claimedKeys = new Set();
 
-  // ─── PASS 1: Non-last Sundays → Mainstay ───
-  // Mainstay claims all non-last Sundays. If no mainstay or mainstay on
-  // leave that day, slot is left for rotation to potentially handle.
-  let mainstayMissingCount = 0;
-  for (const sd of serviceDays) {
-    if (sd.service_type !== 'sunday') continue;
-    if (sd.isLastSunday) continue;       // rotation handles last Sun
-    const k = assignmentKey(sd.dateStr, 'sunday');
-    if (assignedKeys.has(k)) continue;   // manual override wins
-
-    const mainstay = mainstays.find(m => !onLeave(m, sd.dateStr));
-    if (!mainstay) { mainstayMissingCount++; continue; }
-    inserts.push({
-      preach_date: sd.dateStr,
-      service_type: 'sunday',
-      preacher_member_id: mainstay.member_id,
-      original_preacher_member_id: mainstay.member_id
-    });
-    claimedKeys.add(k);
-  }
-
-  // ─── PASS 2: Wednesday recurring claims ───
-  // For each recurring preacher, find next cycle Wednesdays in window.
-  // Recurrence is anchored to most recent past Wed assignment.
+  // ─── PASS 1: Recurring-pattern preachers claim Wed slots first ───
   const wedSlotsInWindow = serviceDays.filter(sd => sd.service_type === 'wednesday').map(sd => sd.dateStr);
   for (const rec of recurring) {
     const cycleLen = _recurrenceCycleLength(rec.recurrence_pattern);
@@ -941,48 +930,158 @@ async function autofillNext12(){
     }
   }
 
-  // ─── PASS 3: Fill remaining slots with rotation ───
-  // Rotation covers BOTH Wednesdays and last Sundays in chronological order
-  // using a single pointer across the rotation list (non-mainstay non-recurring).
-  if (rotation.length > 0) {
-    // Find rotation pointer: most recent rotation preacher's assignment
-    // (Wed or last-Sun), and continue from there.
-    let rotIdx = 0;
-    const rotMemberIds = new Set(rotation.map(p => p.member_id));
-    const recentRotation = [..._assignments]
-      .filter(a => rotMemberIds.has(a.preacher_member_id))
-      .filter(a => a.preach_date <= winEnd)
-      .sort((a,b) => b.preach_date.localeCompare(a.preach_date));
-    if (recentRotation.length > 0) {
-      const lastIdx = rotation.findIndex(p => p.member_id === recentRotation[0].preacher_member_id);
-      if (lastIdx >= 0) rotIdx = (lastIdx + 1) % rotation.length;
+  // ─── PASS 2: Compute pointers from DB history ───
+  const recMemberIds = new Set(recurring.map(p => p.member_id));
+  const rotationMemberIds = new Set(rotation.map(p => p.member_id));
+
+  const { data: histAll } = await db.from('wednesday_preaching')
+    .select('preach_date,service_type,preacher_member_id')
+    .lt('preach_date', winStart)
+    .order('preach_date', { ascending: true });
+  const history = histAll || [];
+
+  let histWedSlotsInCycle = 0;
+  let histRotationWedCount = 0;
+  for (const a of history) {
+    if (a.service_type !== 'wednesday') continue;
+    if (recMemberIds.has(a.preacher_member_id)) continue;
+    histWedSlotsInCycle++;
+    if (rotationMemberIds.has(a.preacher_member_id)) {
+      histRotationWedCount++;
     }
+  }
 
-    // Iterate chronologically — rotation handles Wed slots AND last-Sun slots
-    for (const sd of serviceDays) {
-      // Only Wednesdays and last Sundays go through rotation
-      if (sd.service_type === 'sunday' && !sd.isLastSunday) continue;
-      const k = assignmentKey(sd.dateStr, sd.service_type);
-      if (assignedKeys.has(k)) continue;
-      if (claimedKeys.has(k)) continue;
+  let histLastSunRotationCount = 0;
+  for (const a of history) {
+    if (a.service_type !== 'sunday') continue;
+    if (!rotationMemberIds.has(a.preacher_member_id)) continue;
+    const d = new Date(a.preach_date + 'T00:00:00');
+    if (!isLastSundayOfMonth(d)) continue;
+    histLastSunRotationCount++;
+  }
 
-      // Pick next rotation preacher not on leave
-      let picked = null;
-      for (let attempt = 0; attempt < rotation.length; attempt++) {
-        const candidate = rotation[(rotIdx + attempt) % rotation.length];
-        if (!onLeave(candidate, sd.dateStr)) {
-          picked = candidate;
-          rotIdx = (rotIdx + attempt + 1) % rotation.length;
-          break;
+  let wedCyclePos      = histWedSlotsInCycle % 3;
+  let wedRotationIdx   = rotation.length > 0 ? (histRotationWedCount % rotation.length) : 0;
+  let sunRotationIdx   = rotation.length > 0 ? (histLastSunRotationCount % rotation.length) : 0;
+
+  // ─── PASS 3: Walk chronologically, fill slots, advance pointers ───
+  for (const sd of serviceDays) {
+    if (sd.service_type === 'wednesday') {
+      const k = assignmentKey(sd.dateStr, 'wednesday');
+      const existing = assignedKeys.get(k);
+      const recurringClaimed = claimedKeys.has(k);
+      if (existing || recurringClaimed) {
+        // Slot is already filled; advance the cycle position appropriately
+        const isRecurringSlot = existing
+          ? recMemberIds.has(existing.preacher_member_id)
+          : recurringClaimed;
+        if (!isRecurringSlot) {
+          if (existing && rotationMemberIds.has(existing.preacher_member_id)) {
+            wedRotationIdx = (wedRotationIdx + 1) % Math.max(rotation.length, 1);
+          }
+          wedCyclePos = (wedCyclePos + 1) % 3;
+        }
+        continue;
+      }
+      // Unassigned — generate
+      if (wedCyclePos === 2) {
+        // Mainstay slot
+        if (!onLeave(mainstay, sd.dateStr)) {
+          inserts.push({
+            preach_date: sd.dateStr,
+            service_type: 'wednesday',
+            preacher_member_id: mainstay.member_id,
+            original_preacher_member_id: mainstay.member_id
+          });
+          claimedKeys.add(k);
+        }
+        wedCyclePos = (wedCyclePos + 1) % 3;
+      } else {
+        // Rotation slot
+        if (rotation.length > 0) {
+          let picked = null;
+          for (let attempt = 0; attempt < rotation.length; attempt++) {
+            const cand = rotation[(wedRotationIdx + attempt) % rotation.length];
+            if (!onLeave(cand, sd.dateStr)) {
+              picked = cand;
+              wedRotationIdx = (wedRotationIdx + attempt + 1) % rotation.length;
+              break;
+            }
+          }
+          if (picked) {
+            inserts.push({
+              preach_date: sd.dateStr,
+              service_type: 'wednesday',
+              preacher_member_id: picked.member_id,
+              original_preacher_member_id: picked.member_id
+            });
+            claimedKeys.add(k);
+          }
+        }
+        wedCyclePos = (wedCyclePos + 1) % 3;
+      }
+    } else {
+      // Sunday slot
+      const k = assignmentKey(sd.dateStr, 'sunday');
+      const existing = assignedKeys.get(k);
+      if (existing) {
+        if (sd.isLastSunday && rotationMemberIds.has(existing.preacher_member_id)) {
+          sunRotationIdx = (sunRotationIdx + 1) % Math.max(rotation.length, 1);
+        }
+        continue;
+      }
+      if (sd.isLastSunday) {
+        // Rotation Sunday
+        if (rotation.length > 0) {
+          let picked = null;
+          for (let attempt = 0; attempt < rotation.length; attempt++) {
+            const cand = rotation[(sunRotationIdx + attempt) % rotation.length];
+            if (!onLeave(cand, sd.dateStr)) {
+              picked = cand;
+              sunRotationIdx = (sunRotationIdx + attempt + 1) % rotation.length;
+              break;
+            }
+          }
+          if (picked) {
+            inserts.push({
+              preach_date: sd.dateStr,
+              service_type: 'sunday',
+              preacher_member_id: picked.member_id,
+              original_preacher_member_id: picked.member_id
+            });
+            claimedKeys.add(k);
+          } else if (!onLeave(mainstay, sd.dateStr)) {
+            // All rotation on leave — fallback to mainstay
+            inserts.push({
+              preach_date: sd.dateStr,
+              service_type: 'sunday',
+              preacher_member_id: mainstay.member_id,
+              original_preacher_member_id: mainstay.member_id
+            });
+            claimedKeys.add(k);
+          }
+        } else if (!onLeave(mainstay, sd.dateStr)) {
+          // No rotation preachers — mainstay takes it
+          inserts.push({
+            preach_date: sd.dateStr,
+            service_type: 'sunday',
+            preacher_member_id: mainstay.member_id,
+            original_preacher_member_id: mainstay.member_id
+          });
+          claimedKeys.add(k);
+        }
+      } else {
+        // Non-last Sunday → mainstay
+        if (!onLeave(mainstay, sd.dateStr)) {
+          inserts.push({
+            preach_date: sd.dateStr,
+            service_type: 'sunday',
+            preacher_member_id: mainstay.member_id,
+            original_preacher_member_id: mainstay.member_id
+          });
+          claimedKeys.add(k);
         }
       }
-      if (!picked) continue;
-      inserts.push({
-        preach_date: sd.dateStr,
-        service_type: sd.service_type,
-        preacher_member_id: picked.member_id,
-        original_preacher_member_id: picked.member_id
-      });
     }
   }
 
@@ -991,13 +1090,13 @@ async function autofillNext12(){
     return;
   }
 
-  // Show a summary in the confirm dialog
   const sunCount = inserts.filter(i => i.service_type === 'sunday').length;
   const wedCount = inserts.length - sunCount;
-  const msg = `Auto-fill ${inserts.length} unassigned slot${inserts.length > 1 ? 's' : ''}?` +
-              (sunCount > 0 ? `\n  • ${sunCount} Sunday slot${sunCount > 1 ? 's' : ''}` : '') +
-              (wedCount > 0 ? `\n  • ${wedCount} Wednesday slot${wedCount > 1 ? 's' : ''}` : '') +
-              (mainstayMissingCount > 0 ? `\n  ⚠️ ${mainstayMissingCount} non-last Sunday slot${mainstayMissingCount > 1 ? 's' : ''} skipped (no mainstay flagged or on leave)` : '');
+  const msg = `Auto-fill ${inserts.length} unassigned slot${inserts.length > 1 ? 's' : ''}?\n\n` +
+              `  • ${wedCount} Wednesday slot${wedCount !== 1 ? 's' : ''}\n` +
+              `  • ${sunCount} Sunday slot${sunCount !== 1 ? 's' : ''}\n\n` +
+              `Rotation: ${rotation.length} non-mainstay preacher${rotation.length !== 1 ? 's' : ''}\n` +
+              `Pattern: Wed "2 then mainstay" · Sun "last-of-month rotates"`;
   if (!confirm(msg)) return;
 
   const { error } = await db.from('wednesday_preaching').insert(inserts);
