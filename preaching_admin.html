@@ -355,6 +355,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
           <div id="clearScopeAllCount" style="font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px">—</div>
         </div>
       </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--paper)">
+        <input type="radio" name="clearScope" value="afterDate" style="width:auto;margin:3px 0 0 0;cursor:pointer;flex-shrink:0">
+        <div style="flex:1">
+          <div>After a specific date (exclusive)</div>
+          <div style="font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px;line-height:1.5">
+            Keeps the picked date and everything before. Deletes everything after. Useful when freezing the schedule up to a known good Sunday or Wednesday, then regenerating from there.
+          </div>
+          <div style="margin-top:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <input type="date" id="clearAfterDate" onchange="onClearAfterDateChange()" onclick="document.querySelector('input[name=clearScope][value=afterDate]').checked=true;updateClearButton();" style="width:auto;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:var(--paper);font-family:inherit;color:var(--ink)">
+            <span id="clearAfterDateCount" style="font-size:11.5px;color:var(--muted);font-weight:400">Pick a date</span>
+          </div>
+        </div>
+      </label>
     </div>
 
     <label style="text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:600;color:var(--ink);margin-top:1rem;">Type <code style="background:var(--red-bg);color:var(--red);padding:1px 6px;border-radius:3px;font-family:inherit;font-size:12px">CLEAR</code> to enable</label>
@@ -1517,6 +1530,12 @@ async function openClearModal(){
   document.getElementById('clearConfirmBtn').disabled = true;
   document.querySelectorAll('input[name="clearScope"]').forEach(r => r.checked = false);
 
+  // Reset the "after date" picker state
+  const afterDateInput = document.getElementById('clearAfterDate');
+  if (afterDateInput) afterDateInput.value = '';
+  const afterDateCount = document.getElementById('clearAfterDateCount');
+  if (afterDateCount) afterDateCount.textContent = 'Pick a date';
+
   // Show loading hints
   document.getElementById('clearScopeMonthCount').textContent = 'Counting…';
   document.getElementById('clearScopeNext12Count').textContent = 'Counting…';
@@ -1573,7 +1592,65 @@ function closeClearModal(){
 function updateClearButton(){
   const val = document.getElementById('clearConfirmInput').value.trim();
   const scope = document.querySelector('input[name="clearScope"]:checked');
-  document.getElementById('clearConfirmBtn').disabled = !(val === 'CLEAR' && scope);
+  let valid = (val === 'CLEAR' && scope);
+  // When "afterDate" is picked, also require a date value
+  if (valid && scope.value === 'afterDate') {
+    const dateVal = (document.getElementById('clearAfterDate').value || '').trim();
+    valid = !!dateVal;
+  }
+  document.getElementById('clearConfirmBtn').disabled = !valid;
+}
+
+// Called from the date picker: live-count how many assignments would
+// be deleted with the chosen date as the EXCLUSIVE cutoff (date kept,
+// everything after deleted), bounded below by today (past is preserved).
+async function onClearAfterDateChange(){
+  const picked = (document.getElementById('clearAfterDate').value || '').trim();
+  const countEl = document.getElementById('clearAfterDateCount');
+  // Auto-select the radio so user doesn't need a second tap
+  const radio = document.querySelector('input[name="clearScope"][value="afterDate"]');
+  if (radio) radio.checked = true;
+  if (!picked) {
+    countEl.textContent = 'Pick a date';
+    updateClearButton();
+    return;
+  }
+  const todayStr = todayYMD();
+  // The cutoff for delete is the day AFTER picked (exclusive of picked).
+  // We also never delete past assignments — clamp lower bound to today.
+  const afterPicked = _ymdNextDay(picked);
+  const startStr = afterPicked > todayStr ? afterPicked : todayStr;
+  try {
+    countEl.textContent = 'Counting…';
+    const { count, error } = await db.from('wednesday_preaching')
+      .select('*', { count: 'exact', head: true })
+      .gte('preach_date', startStr);
+    if (error) throw error;
+    if (startStr > afterPicked) {
+      // Picked date is in the past — nothing meaningful to delete
+      countEl.textContent = `Picked date is in the past — ${count || 0} future assignment${count === 1 ? '' : 's'} would be deleted (same as "all future")`;
+    } else {
+      countEl.textContent = `${count || 0} assignment${count === 1 ? '' : 's'} after ${_fmtDateShort(picked)} would be deleted`;
+    }
+  } catch(e) {
+    console.error('After-date count failed:', e);
+    countEl.textContent = 'Could not count';
+  }
+  updateClearButton();
+}
+
+// Helpers for after-date scope
+function _ymdNextDay(ymdStr){
+  // YYYY-MM-DD → next day in YYYY-MM-DD, timezone-safe (Invariant #12)
+  const d = new Date(ymdStr + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  return ymd(d);
+}
+function _fmtDateShort(ymdStr){
+  try {
+    const d = new Date(ymdStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  } catch(e) { return ymdStr; }
 }
 
 // Re-enable button check when radio changes
@@ -1602,6 +1679,16 @@ async function executeClear(){
     q = db.from('wednesday_preaching').delete()
       .gte('preach_date', todayStr)
       .lte('preach_date', ymd(w12End));
+  } else if (scope.value === 'afterDate') {
+    const picked = (document.getElementById('clearAfterDate').value || '').trim();
+    if (!picked) {
+      toast('Please pick a date', '⚠️');
+      return;
+    }
+    const afterPicked = _ymdNextDay(picked);
+    const startStr = afterPicked > todayStr ? afterPicked : todayStr;
+    q = db.from('wednesday_preaching').delete()
+      .gte('preach_date', startStr);
   }
   // scope.value === 'all' uses the default query above (today and later)
 
