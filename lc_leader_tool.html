@@ -1166,9 +1166,32 @@ async function loadMyMembers(){
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Test-member visibility rule (added May 16, 2026 — kapatid C):
+//
+// LeaderScope.apply() by default strips is_test_member and is_external_user
+// records, which is the right behavior for real LC leaders viewing real
+// members. But when Pastor logs into MLT as a TEST LCL (himself flagged
+// is_test_member=true) to dogfood the flow, his test disciples disappear
+// and he sees "No members found" — breaking smoke tests.
+//
+// Containment rule: a logged-in leader who is themselves a test member
+// can see other test members in their tree. Real LCLs are unaffected —
+// they can't trigger this branch because they aren't test members.
+//
+// We read is_test_member from the leader's own record in allMembers
+// (loaded above) rather than from window.LEADER, because the leader
+// session payload does not currently carry that flag and we don't want
+// to touch leader_login.html for one boolean.
+// ─────────────────────────────────────────────────────────────
+function _isTestLeader(){
+  const me = (allMembers || []).find(m => m.id === (window.LEADER && window.LEADER.leaderId));
+  return !!(me && me.is_test_member);
+}
+
 // Apply current scope and refresh derived state.
 function refreshScopedMembers(){
-  myMembers = LeaderScope.apply(allMembers);
+  myMembers = LeaderScope.apply(allMembers, { includeTest: _isTestLeader() });
 }
 
 // Mobile scope tab handler — switches view and re-renders.
@@ -1187,9 +1210,13 @@ function setMobileScope(view, btn){
 // Update the count badges + reveal pastor's All tab if applicable.
 function updateScopeCountsMobile(){
   const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
-  set('msCountDisciples', LeaderScope.getDirect().filter(m=>!m.is_test_member).length);
-  set('msCountTree',      LeaderScope.getTree().filter(m=>!m.is_test_member).length);
-  set('msCountMinistry',  LeaderScope.getMinistry().filter(m=>!m.is_test_member).length);
+  // Counts mirror refreshScopedMembers' inclusion policy: a test leader
+  // sees their test disciples in the counts; a real LCL doesn't.
+  const includeTest = _isTestLeader();
+  const stripIfNeeded = arr => includeTest ? arr : arr.filter(m => !m.is_test_member);
+  set('msCountDisciples', stripIfNeeded(LeaderScope.getDirect()).length);
+  set('msCountTree',      stripIfNeeded(LeaderScope.getTree()).length);
+  set('msCountMinistry',  stripIfNeeded(LeaderScope.getMinistry()).length);
   if(LeaderScope.isPastor()){
     set('msCountAll', allMembers.length);
     const b = document.getElementById('msScopeAllBtn');
