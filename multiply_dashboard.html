@@ -5831,6 +5831,8 @@ let _cohortState = {
   lessons: [],           // all published pipeline_lessons (light fetch)
   lessonGrants: [],      // all pipeline_lesson_grants
   unlocks: {},           // cohort_id → [cohort_lesson_unlocks rows]
+  // BTLI cohort link (Priority C · May 16, 2026):
+  btliCourseCodes: [],   // distinct sorted btli_quizzes.course_code (active)
   selectedProgramId: null,
   editingProgram: null,  // program being edited in sub-modal
   editingCohort: null,   // cohort being edited in sub-modal
@@ -5850,7 +5852,7 @@ async function openCohorts(){
 }
 
 async function _coLoadData(){
-  const [pRes, cRes, mRes, lRes, lgRes] = await Promise.all([
+  const [pRes, cRes, mRes, lRes, lgRes, bqRes] = await Promise.all([
     db.from('cohort_programs').select('*').order('sort_order', { ascending: true }).order('name', { ascending: true }),
     db.from('cohorts').select('*').order('start_date', { ascending: false, nullsFirst: false }),
     db.from('members').select('id, name, lc_group, pipeline_level').order('name', { ascending: true }),
@@ -5858,19 +5860,28 @@ async function _coLoadData(){
     // granted to each cohort). Light fetch — just enough for the picker.
     db.from('pipeline_lessons').select('id, level, track, lesson_number, title_en, audience, attachments').eq('published', true),
     // All lesson grants — used to compute which lessons each cohort can see.
-    db.from('pipeline_lesson_grants').select('*')
+    db.from('pipeline_lesson_grants').select('*'),
+    // Active BTLI course codes — feeds the program editor dropdown so
+    // Pastor can link a program to a BTLI course for cohort-based quiz
+    // eligibility (Priority C · May 16, 2026).
+    db.from('btli_quizzes').select('course_code').eq('is_active', true)
   ]);
   if(pRes.error) throw pRes.error;
   if(cRes.error) throw cRes.error;
   if(mRes.error) throw mRes.error;
   if(lRes.error) throw lRes.error;
   if(lgRes.error) throw lgRes.error;
+  if(bqRes.error) throw bqRes.error;
 
   _cohortState.programs = pRes.data || [];
   _cohortState.cohorts = cRes.data || [];
   _cohortState.members = mRes.data || [];
   _cohortState.lessons = lRes.data || [];
   _cohortState.lessonGrants = lgRes.data || [];
+  // Distinct sorted list of BTLI course codes
+  _cohortState.btliCourseCodes = Array.from(new Set(
+    (bqRes.data || []).map(r => r.course_code).filter(Boolean)
+  )).sort();
 
   // Load cohort members for ALL cohorts in one query, then group locally.
   // Cheaper than N queries even at 50+ cohorts (still small data).
@@ -6021,6 +6032,7 @@ function _coRender(){
                 <div style="font-size:10.5px;color:var(--muted);margin-top:5px">
                   ${selectedProgram.category ? `<span>${escapeHTMLNotif(selectedProgram.category)}</span>` : ''}
                   ${selectedProgram.pipeline_level ? ` · <span>Pipeline L${selectedProgram.pipeline_level}</span>` : ''}
+                  ${selectedProgram.btli_course_code ? ` · <span style="color:#b8882a;font-weight:600">🎓 ${escapeHTMLNotif(selectedProgram.btli_course_code)}</span>` : ''}
                 </div>
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0">
@@ -6133,7 +6145,8 @@ function _coOpenProgramEditor(programId){
       category: 'BTLI',
       pipeline_level: null,
       is_active: true,
-      sort_order: 0
+      sort_order: 0,
+      btli_course_code: null
     };
   }
   _coRenderProgramEditor();
@@ -6175,7 +6188,7 @@ function _coRenderProgramEditor(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.7rem">
           <div>
             <label style="font-size:11.5px;font-weight:700;color:var(--ink)">Category</label>
-            <select id="cpCategory" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+            <select id="cpCategory" onchange="_coToggleBtliCourseRow()" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
               <option ${p.category==='BTLI'?'selected':''}>BTLI</option>
               <option ${p.category==='Evangelism'?'selected':''}>Evangelism</option>
               <option ${p.category==='Leadership'?'selected':''}>Leadership</option>
@@ -6194,6 +6207,18 @@ function _coRenderProgramEditor(){
               <option value="4" ${p.pipeline_level===4?'selected':''}>L4 — Lead Department</option>
               <option value="5" ${p.pipeline_level===5?'selected':''}>L5 — Lead Organization</option>
             </select>
+          </div>
+        </div>
+        <div id="cpBtliCourseRow" style="margin-top:.7rem;display:${p.category==='BTLI'?'block':'none'}">
+          <label style="font-size:11.5px;font-weight:700;color:var(--ink)">BTLI Course <span style="font-weight:400;color:var(--muted);font-size:10.5px">(links this program to a quiz course)</span></label>
+          <select id="cpBtliCourseCode" style="width:100%;padding:.55rem .7rem;margin-top:.25rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:13px">
+            <option value="">(not linked)</option>
+            ${(_cohortState.btliCourseCodes||[]).map(cc =>
+              `<option value="${escapeHTMLNotif(cc)}" ${p.btli_course_code===cc?'selected':''}>${escapeHTMLNotif(cc)}</option>`
+            ).join('')}
+          </select>
+          <div style="margin-top:.4rem;font-size:11px;color:var(--muted);line-height:1.5">
+            When set, members enrolled in cohorts of this program can take quizzes for this BTLI course. Per Invariant #30: course codes are <code>BTLI N</code> (e.g. <code>BTLI 1</code>) — single space, no hyphen.
           </div>
         </div>
         <div style="margin-top:1rem;padding:.65rem .85rem;background:var(--surface2);border-radius:8px;display:flex;align-items:center;gap:.6rem">
@@ -6218,17 +6243,35 @@ function _coCloseProgramEditor(){
   _cohortState.editingProgram = null;
 }
 
+// Show/hide the BTLI Course Code row based on Category dropdown.
+// Hiding alone is safe: when category != 'BTLI' the save payload
+// forces btli_course_code = null regardless of any stale value.
+function _coToggleBtliCourseRow(){
+  const cat = (document.getElementById('cpCategory') || {}).value;
+  const row = document.getElementById('cpBtliCourseRow');
+  if(row) row.style.display = (cat === 'BTLI') ? 'block' : 'none';
+}
+
 async function _coSaveProgram(){
   const name = document.getElementById('cpName').value.trim();
   if(!name){ toast('Program name required', '⚠️'); return; }
 
   const levelRaw = document.getElementById('cpLevel').value;
+  const category = document.getElementById('cpCategory').value || null;
+  // BTLI course code is only meaningful when category=BTLI. Force null
+  // otherwise to keep the cohort_programs row honest.
+  const btliCcEl = document.getElementById('cpBtliCourseCode');
+  const btliCourseCode = (category === 'BTLI' && btliCcEl)
+    ? (btliCcEl.value.trim() || null)
+    : null;
+
   const payload = {
     name,
     description: document.getElementById('cpDescription').value.trim() || null,
-    category: document.getElementById('cpCategory').value || null,
+    category,
     pipeline_level: levelRaw === '' ? null : parseInt(levelRaw, 10),
     is_active: document.getElementById('cpActive').checked,
+    btli_course_code: btliCourseCode,
     updated_at: new Date().toISOString()
   };
 
@@ -6398,10 +6441,15 @@ async function _coSaveCohort(){
 
   try {
     if(c.id){
+      // Existing cohort — never overwrite owner_id on update (preserves
+      // LCL ownership when Pastor edits an LCL-created cohort).
       const { error } = await db.from('cohorts').update(payload).eq('id', c.id);
       if(error) throw error;
       toast('✓ Batch updated', 'success');
     } else {
+      // New cohort — set owner_id to the Pastor creating it.
+      // (Priority C2 · May 16, 2026 — cohorts.owner_id is NOT NULL.)
+      payload.owner_id = LEADER.leaderId;
       const { error } = await db.from('cohorts').insert(payload);
       if(error) throw error;
       toast('✓ Batch created', 'success');

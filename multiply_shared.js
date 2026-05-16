@@ -1176,6 +1176,204 @@
     };
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // COHORT PERMISSIONS + MLT HELPERS (Priority C2 · May 16, 2026)
+  // ─────────────────────────────────────────────────────────────────
+  // Ownership-based authorization for MLT enrollment self-service.
+  //
+  // Ownership rules (Pastor Gerry, May 16, 2026):
+  //   • Pastor-owned cohort  → any LCL can enroll their LeaderScope-
+  //                            visible members of matching pipeline_level.
+  //   • LCL-owned cohort     → only the owner LCL can enroll, and only
+  //                            their own scoped members of matching level.
+  //
+  // Level match (hard rule, no override):
+  //   member.pipeline_level === program.pipeline_level
+  //   Exception: program.pipeline_level IS NULL → any level OK.
+  //
+  // Status transitions in MLT:
+  //   • Withdraw: LCL may withdraw enrollees from cohorts they have
+  //     edit rights on.
+  //   • Graduate: Pastor-owned programs → Pastor only.
+  //                LCL-owned cohorts → owner LCL may graduate.
+  //
+  // These rules are enforced HERE in shared code so MLT and any future
+  // surface (e.g. a Pastor dashboard for the same flow) agree.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // canEnroll(actor, cohort, program, candidate) — can `actor` enroll
+  // `candidate` into `cohort` (which belongs to `program`)?
+  //
+  // actor:     { memberId: uuid, isPastor: bool }   (from session payload)
+  // cohort:    { owner_id, status, ... }            (cohorts row)
+  // program:   { pipeline_level, is_active, ... }   (cohort_programs row)
+  // candidate: { id, pipeline_level }               (members row)
+  //
+  // Returns { ok: bool, reason: string }
+  function _cohortsCanEnroll(actor, cohort, program, candidate) {
+    if (!actor || !cohort || !program || !candidate) {
+      return { ok: false, reason: 'Missing inputs' };
+    }
+    if (program.is_active === false) {
+      return { ok: false, reason: 'Program is inactive' };
+    }
+    if (cohort.status !== 'active' && cohort.status !== 'forming') {
+      return { ok: false, reason: 'Cohort is ' + cohort.status };
+    }
+    // Hard level match (program-level === member-level), nullable program-level escapes
+    if (program.pipeline_level != null) {
+      const memLvl = candidate.pipeline_level;
+      if (memLvl == null) {
+        return { ok: false, reason: 'Member has no pipeline level yet' };
+      }
+      if (parseInt(memLvl, 10) !== parseInt(program.pipeline_level, 10)) {
+        return { ok: false, reason: 'Level mismatch (member L' + memLvl + ' vs program L' + program.pipeline_level + ')' };
+      }
+    }
+    // Ownership check
+    if (actor.isPastor) return { ok: true, reason: 'pastor' };
+    const isOwner = cohort.owner_id && actor.memberId && cohort.owner_id === actor.memberId;
+    if (isOwner) return { ok: true, reason: 'owner' };
+    // Non-owner LCLs can enroll only into Pastor-owned cohorts. We can't
+    // know "is the owner the Pastor?" from just IDs without a roundtrip,
+    // so the caller passes `cohort._ownerIsPastor` when known. If absent
+    // we default to denying (safe).
+    if (cohort._ownerIsPastor === true) return { ok: true, reason: 'pastor_owned' };
+    return { ok: false, reason: 'Not your cohort' };
+  }
+
+  // canEditCohort(actor, cohort) — can `actor` edit this cohort's
+  // metadata (name, dates, status — but not enroll/withdraw, which uses
+  // canEnroll)? Mirrors ownership.
+  function _cohortsCanEdit(actor, cohort) {
+    if (!actor || !cohort) return { ok: false, reason: 'Missing inputs' };
+    if (actor.isPastor) return { ok: true, reason: 'pastor' };
+    if (cohort.owner_id && cohort.owner_id === actor.memberId) {
+      return { ok: true, reason: 'owner' };
+    }
+    return { ok: false, reason: 'Not your cohort' };
+  }
+
+  // canGraduate(actor, cohort) — graduation is a celebratory act with
+  // pastoral weight. Pastor-owned cohorts: Pastor only. LCL-owned
+  // cohorts: owner LCL may graduate (it's their training group).
+  function _cohortsCanGraduate(actor, cohort) {
+    if (!actor || !cohort) return { ok: false, reason: 'Missing inputs' };
+    if (actor.isPastor) return { ok: true, reason: 'pastor' };
+    // Owner of own cohort can graduate; cannot graduate Pastor-owned ones.
+    if (cohort._ownerIsPastor === true) {
+      return { ok: false, reason: 'Pastor-owned program — Pastor graduates' };
+    }
+    if (cohort.owner_id && cohort.owner_id === actor.memberId) {
+      return { ok: true, reason: 'owner' };
+    }
+    return { ok: false, reason: 'Not your cohort' };
+  }
+
+  // Fetch all cohorts visible to an LCL in MLT:
+  //   • Cohorts the LCL owns (any status except archived)
+  //   • Active/forming Pastor-owned cohorts (so LCL can enroll their members)
+  //
+  // Returns each row with:
+  //   • cohort fields
+  //   • _ownerIsPastor: bool (resolved by checking owner.pipeline_level)
+  //   • program: embedded cohort_programs row
+  //   • members: array of cohort_members rows (with embedded member name/level)
+  //
+  // Caller-supplied: actor = { memberId, isPastor }.
+  async function _cohortsListVisibleToLeader(actor) {
+    if (!actor || !actor.memberId) return [];
+    const db = getDB();
+    if (!db) return [];
+
+    // 1) Fetch all relevant cohorts. We over-fetch slightly (Pastor-owned
+    //    of any program) and trim client-side, because:
+    //    - The cohorts table is small (dozens, not thousands)
+    //    - The owner-level check needs a members lookup we'd do anyway
+    const cohRes = await db
+      .from('cohorts')
+      .select('id, name, start_date, end_date, status, notes, program_id, owner_id, created_at, cohort_programs!inner(id, name, category, pipeline_level, btli_course_code, is_active)')
+      .in('status', ['active', 'forming']);
+    if (cohRes.error) {
+      console.warn('_cohortsListVisibleToLeader: cohorts query failed', cohRes.error);
+      return [];
+    }
+    let cohorts = cohRes.data || [];
+
+    // 2) Find which owners are Pastor (pipeline_level >= PASTOR_LEVEL).
+    //    Single batch query for all distinct owners.
+    const ownerIds = Array.from(new Set(cohorts.map(c => c.owner_id).filter(Boolean)));
+    let pastorOwnerSet = new Set();
+    if (ownerIds.length > 0) {
+      const oRes = await db
+        .from('members')
+        .select('id, pipeline_level')
+        .in('id', ownerIds);
+      if (!oRes.error) {
+        (oRes.data || []).forEach(m => {
+          if ((m.pipeline_level || 0) >= PASTOR_LEVEL) pastorOwnerSet.add(m.id);
+        });
+      }
+    }
+    cohorts.forEach(c => { c._ownerIsPastor = pastorOwnerSet.has(c.owner_id); });
+
+    // 3) Trim by visibility rule. (Pastor sees all; LCL sees Pastor-owned + own.)
+    if (!actor.isPastor) {
+      cohorts = cohorts.filter(c =>
+        c._ownerIsPastor === true || c.owner_id === actor.memberId
+      );
+    }
+
+    // 4) Load cohort_members for each visible cohort (one batched query).
+    const cohortIds = cohorts.map(c => c.id);
+    let membersByCohort = {};
+    if (cohortIds.length > 0) {
+      const cmRes = await db
+        .from('cohort_members')
+        .select('id, cohort_id, member_id, role, status, joined_at, exited_at, members!inner(id, name, pipeline_level, lc_group)')
+        .in('cohort_id', cohortIds);
+      if (!cmRes.error) {
+        (cmRes.data || []).forEach(cm => {
+          if (!membersByCohort[cm.cohort_id]) membersByCohort[cm.cohort_id] = [];
+          membersByCohort[cm.cohort_id].push(cm);
+        });
+      }
+    }
+    cohorts.forEach(c => { c._members = membersByCohort[c.id] || []; });
+
+    return cohorts;
+  }
+
+  // For the "Add member" picker inside a cohort:
+  // returns the LCL's scoped members who are eligible to be enrolled
+  // (correct pipeline level, not already in another active cohort of
+  // the same program).
+  //
+  // actor:      { memberId, isPastor }
+  // cohort:     full cohort row (with _ownerIsPastor and cohort_programs)
+  // scoped:     array of member rows the LCL has LeaderScope on
+  //             (from LeaderScope.getTree() in MLT)
+  // sameProgramEnrolledIds: Set<uuid> of member_ids already enrolled
+  //             in ANY active cohort of the same program (caller computes
+  //             from listVisibleToLeader's output)
+  function _cohortsEligibleCandidates(actor, cohort, program, scoped, sameProgramEnrolledIds) {
+    if (!Array.isArray(scoped)) return [];
+    const targetLevel = (program && program.pipeline_level != null)
+      ? parseInt(program.pipeline_level, 10)
+      : null;
+    return scoped.filter(m => {
+      if (!m || !m.id) return false;
+      // Already enrolled in same program? Skip.
+      if (sameProgramEnrolledIds.has(m.id)) return false;
+      // Level match
+      if (targetLevel != null) {
+        if (m.pipeline_level == null) return false;
+        if (parseInt(m.pipeline_level, 10) !== targetLevel) return false;
+      }
+      return true;
+    });
+  }
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -1205,6 +1403,14 @@
     btli: {
       eligibilityFor: btliEligibilityFor,
       eligibilityForMany: btliEligibilityForMany
+    },
+    // Cohort permissions + MLT helpers (Priority C2 · May 16, 2026)
+    cohorts: {
+      canEnroll:           _cohortsCanEnroll,
+      canEdit:             _cohortsCanEdit,
+      canGraduate:         _cohortsCanGraduate,
+      listVisibleToLeader: _cohortsListVisibleToLeader,
+      eligibleCandidates:  _cohortsEligibleCandidates
     },
     // Wednesday Preaching (May 2026)
     preaching: {

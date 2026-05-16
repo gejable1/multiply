@@ -596,6 +596,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-label">My Lessons</div>
       <div class="qa-desc">Pipeline lessons available to you</div>
     </div>
+    <div class="qa-btn" onclick="openMyBatches()">
+      <div class="qa-icon">🎓</div>
+      <div class="qa-label">My Batches</div>
+      <div class="qa-desc">Enroll disciples · manage rosters</div>
+    </div>
     <div class="qa-btn" onclick="openInstallGuide()">
       <div class="qa-icon">📱</div>
       <div class="qa-label">How to install</div>
@@ -6163,9 +6168,568 @@ function _closeLessonViewer(){
   if (m) m.remove();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// MY BATCHES — Priority C2 · May 16, 2026
+// ─────────────────────────────────────────────────────────────────
+// Modal-based flow following the openMyLessons() pattern. Three
+// surfaces:
+//   1. List: combined "Available batches" (Pastor-owned) + "My batches"
+//      (LCL-owned).
+//   2. Roster: per-cohort enrolled list with Withdraw / Add member.
+//   3. Add Member picker: filtered to LeaderScope + level-match +
+//      not-already-enrolled-in-same-program.
+//
+// Permission helper lives in multiply_shared.js:MultiplyShared.cohorts.
+// We never duplicate the predicate; both the button-disabled state and
+// the on-click validation route through canEnroll / canEdit / canGraduate.
+// ═══════════════════════════════════════════════════════════════════
 
-// Show install banner on first visit (auto-skips if already installed)
-setTimeout(() => { try { _maybeShowInstallBanner('mlt'); } catch(e){} }, 1500);
+let _batchesState = {
+  loaded: false,
+  cohorts: [],         // visible cohorts from listVisibleToLeader (each with _members, _ownerIsPastor, cohort_programs)
+  programs: [],        // active programs (for "Create new batch" picker)
+  error: null,
+  selectedCohortId: null,  // when roster modal is open
+  // Add Member picker temporary state:
+  addingTo: null,      // cohort row being added to
+  addPickerQuery: ''   // search filter in picker
+};
+
+async function openMyBatches(){
+  let modal = document.getElementById('myBatchesModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'myBatchesModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-start;justify-content:center;z-index:9000;padding:0;overflow-y:auto';
+    document.body.appendChild(modal);
+  }
+  _renderBatchesShell('loading');
+
+  try {
+    const L = LEADER || {};
+    const actor = {
+      memberId: L.leaderId,
+      isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
+    };
+
+    // Load visible cohorts (with their members) + active programs in parallel.
+    const [cohorts, progRes] = await Promise.all([
+      MultiplyShared.cohorts.listVisibleToLeader(actor),
+      db.from('cohort_programs').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('name', { ascending: true })
+    ]);
+    if (progRes.error) throw progRes.error;
+
+    _batchesState.cohorts = cohorts || [];
+    _batchesState.programs = progRes.data || [];
+    _batchesState.loaded = true;
+    _batchesState.error = null;
+    _renderBatchesList();
+  } catch(e) {
+    console.error('openMyBatches failed:', e);
+    _batchesState.error = e.message || String(e);
+    _renderBatchesShell('error');
+  }
+}
+
+function closeMyBatches(){
+  const m = document.getElementById('myBatchesModal');
+  if (m) m.remove();
+  _batchesState = {
+    loaded: false, cohorts: [], programs: [], error: null,
+    selectedCohortId: null, addingTo: null, addPickerQuery: ''
+  };
+}
+
+function _renderBatchesShell(state){
+  const modal = document.getElementById('myBatchesModal');
+  if (!modal) return;
+  const body = (state === 'loading')
+    ? `<div style="font-size:30px;margin-bottom:.5rem">🎓</div>
+       <div style="font-size:13.5px;color:var(--muted)">Loading your batches…</div>`
+    : `<div style="font-size:30px;margin-bottom:.5rem">⚠️</div>
+       <div style="font-size:13.5px;color:var(--red);margin-bottom:.5rem">Could not load batches</div>
+       <div style="font-size:11.5px;color:var(--muted);max-width:300px;line-height:1.5">${MultiplyShared.escapeHTML(_batchesState.error || '')}</div>
+       <button onclick="closeMyBatches()" style="margin-top:1.25rem;padding:.55rem 1.25rem;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer">Close</button>`;
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:560px;min-height:60vh;border-radius:14px;padding:2.5rem 1.5rem;text-align:center;margin-top:1rem;color:var(--text)">
+      ${body}
+    </div>
+  `;
+}
+
+function _renderBatchesList(){
+  const modal = document.getElementById('myBatchesModal');
+  if (!modal) return;
+  const L = LEADER || {};
+  const myId = L.leaderId;
+  const isPastor = (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+
+  // Partition visible cohorts: mine vs pastor-owned (or any non-mine for Pastor)
+  const cohorts = _batchesState.cohorts || [];
+  const mine = cohorts.filter(c => c.owner_id === myId);
+  const others = cohorts.filter(c => c.owner_id !== myId);
+
+  const renderCohortCard = (c) => {
+    const prog = c.cohort_programs || {};
+    const enrolledActive = (c._members || []).filter(cm => cm.status === 'active');
+    const myEnrolledCount = enrolledActive.filter(cm => {
+      // "Mine" = members I have LeaderScope on. We approximate using
+      // myMembers since LeaderScope.getTree() is the standard scope.
+      const treeIds = new Set((LeaderScope.getTree() || []).map(m => m.id));
+      return treeIds.has(cm.member_id);
+    }).length;
+    const isMine = c.owner_id === myId;
+    const isPastorOwned = !!c._ownerIsPastor;
+    const ownerPill = isMine
+      ? '<span style="display:inline-block;padding:2px 7px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(184,136,42,.18);color:var(--gold,#b8882a);border:1px solid rgba(184,136,42,.4);border-radius:999px;margin-left:6px;vertical-align:1px">My Batch</span>'
+      : (isPastorOwned ? '<span style="display:inline-block;padding:2px 7px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(94,125,82,.18);color:var(--green,#5e7d52);border:1px solid rgba(94,125,82,.4);border-radius:999px;margin-left:6px;vertical-align:1px">Pastor</span>' : '');
+    const levelText = prog.pipeline_level != null ? ('L' + prog.pipeline_level) : 'cross-level';
+    return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:.85rem 1rem;margin-bottom:.6rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:700;color:var(--text);line-height:1.3">
+              ${MultiplyShared.escapeHTML(c.name || '(unnamed batch)')}${ownerPill}
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4">
+              ${MultiplyShared.escapeHTML(prog.name || '(no program)')} · ${levelText}
+              ${prog.btli_course_code ? ' · <span style="color:var(--gold,#b8882a);font-weight:600">'+MultiplyShared.escapeHTML(prog.btli_course_code)+'</span>' : ''}
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+              ${enrolledActive.length} enrolled${(!isPastor && myEnrolledCount !== enrolledActive.length) ? ' · ' + myEnrolledCount + ' mine' : ''}
+              · status: ${c.status}
+            </div>
+          </div>
+          <button onclick="_batchesOpenRoster('${c.id}')"
+            style="background:var(--gold,#b8882a);color:#fff;border:none;border-radius:7px;padding:7px 11px;font-size:11.5px;font-weight:700;cursor:pointer;flex-shrink:0">
+            Manage
+          </button>
+        </div>
+      </div>
+    `;
+  };
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:680px;min-height:80vh;border-radius:14px;display:flex;flex-direction:column;margin-top:1rem;margin-bottom:2rem;color:var(--text);overflow:hidden">
+      <div style="padding:1rem 1.15rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Cohorts you can manage</div>
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-top:2px">🎓 My Batches</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+            ${cohorts.length} batch${cohorts.length===1?'':'es'} visible · ${mine.length} owned by you
+          </div>
+        </div>
+        <button onclick="closeMyBatches()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px;line-height:1">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.15rem">
+        ${cohorts.length === 0 ? `
+          <div style="text-align:center;padding:2rem 1rem;color:var(--muted);font-size:13px;line-height:1.55">
+            No batches visible to you yet.<br>
+            <span style="font-size:11.5px">Pastor creates batches in the Dashboard, or you can create your own below for your training group.</span>
+          </div>
+        ` : `
+          ${others.length > 0 ? `
+            <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:.4rem 0 .6rem">Available Batches</div>
+            ${others.map(renderCohortCard).join('')}
+          ` : ''}
+          ${mine.length > 0 ? `
+            <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:1rem 0 .6rem">My Batches</div>
+            ${mine.map(renderCohortCard).join('')}
+          ` : ''}
+        `}
+        <div style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <button onclick="_batchesOpenCreate()" style="width:100%;padding:.75rem;background:var(--surface2);color:var(--text);border:1.5px dashed var(--border);border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer">
+            + Create my own batch
+          </button>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:.4rem;line-height:1.5;text-align:center">
+            For your own training group. You own and manage it. Use existing programs only.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CREATE COHORT (LCL-owned)
+// ─────────────────────────────────────────────────────────────────
+function _batchesOpenCreate(){
+  const progs = _batchesState.programs || [];
+  if (progs.length === 0) {
+    toast('No active programs available. Ask Pastor to create one first.', '⚠️');
+    return;
+  }
+  const modal = document.getElementById('myBatchesModal');
+  if (!modal) return;
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:540px;min-height:50vh;border-radius:14px;display:flex;flex-direction:column;margin-top:1rem;color:var(--text);overflow:hidden">
+      <div style="padding:1rem 1.15rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">New Batch</div>
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-top:2px">📚 Create your own</div>
+        </div>
+        <button onclick="_renderBatchesList()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px;line-height:1">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.15rem">
+        <div style="margin-bottom:.85rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--text);display:block;margin-bottom:.3rem">Batch name *</label>
+          <input type="text" id="newBatchName" placeholder="e.g. Saturdays 7am Group"
+            style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;box-sizing:border-box">
+        </div>
+        <div style="margin-bottom:.85rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--text);display:block;margin-bottom:.3rem">Program *</label>
+          <select id="newBatchProgram"
+            style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;box-sizing:border-box">
+            <option value="">— pick a program —</option>
+            ${progs.map(p => {
+              const lvl = p.pipeline_level != null ? ' · L'+p.pipeline_level : '';
+              return `<option value="${p.id}">${MultiplyShared.escapeHTML(p.name)}${lvl}</option>`;
+            }).join('')}
+          </select>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:.3rem;line-height:1.5">
+            Only members matching this program's pipeline level can be enrolled.
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:.85rem">
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--text);display:block;margin-bottom:.3rem">Start date</label>
+            <input type="date" id="newBatchStart"
+              style="width:100%;padding:.55rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:11.5px;font-weight:700;color:var(--text);display:block;margin-bottom:.3rem">End date</label>
+            <input type="date" id="newBatchEnd"
+              style="width:100%;padding:.55rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-bottom:.85rem">
+          <label style="font-size:11.5px;font-weight:700;color:var(--text);display:block;margin-bottom:.3rem">Notes (optional)</label>
+          <textarea id="newBatchNotes" rows="2" placeholder="When you meet, special context, etc."
+            style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.55;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+      </div>
+      <div style="padding:1rem 1.15rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="_renderBatchesList()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer">Cancel</button>
+        <button onclick="_batchesSaveCreate()" style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer">💾 Create</button>
+      </div>
+    </div>
+  `;
+}
+
+async function _batchesSaveCreate(){
+  const name = (document.getElementById('newBatchName').value || '').trim();
+  const programId = document.getElementById('newBatchProgram').value;
+  const startD = document.getElementById('newBatchStart').value || null;
+  const endD = document.getElementById('newBatchEnd').value || null;
+  const notes = (document.getElementById('newBatchNotes').value || '').trim() || null;
+  if (!name) { toast('Batch name required', '⚠️'); return; }
+  if (!programId) { toast('Pick a program', '⚠️'); return; }
+
+  const L = LEADER || {};
+  try {
+    const { data, error } = await db.from('cohorts').insert({
+      program_id: programId,
+      name,
+      start_date: startD,
+      end_date: endD,
+      status: 'forming',
+      notes,
+      owner_id: L.leaderId
+    }).select().single();
+    if (error) throw error;
+    toast('✓ Batch created', 'success');
+    // Reload everything and reopen the list
+    await openMyBatches();
+  } catch(e) {
+    toast('Could not create batch: ' + (e.message || e), '❌');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ROSTER (per-cohort enrolled list + actions)
+// ─────────────────────────────────────────────────────────────────
+function _batchesOpenRoster(cohortId){
+  const c = (_batchesState.cohorts || []).find(x => x.id === cohortId);
+  if (!c) { toast('Batch not found', '❌'); return; }
+  _batchesState.selectedCohortId = cohortId;
+  _renderBatchesRoster();
+}
+
+function _renderBatchesRoster(){
+  const modal = document.getElementById('myBatchesModal');
+  if (!modal) return;
+  const c = (_batchesState.cohorts || []).find(x => x.id === _batchesState.selectedCohortId);
+  if (!c) { _renderBatchesList(); return; }
+  const prog = c.cohort_programs || {};
+  const L = LEADER || {};
+  const actor = { memberId: L.leaderId, isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL };
+  const editPerm = MultiplyShared.cohorts.canEdit(actor, c);
+  const gradPerm = MultiplyShared.cohorts.canGraduate(actor, c);
+
+  const enrolledActive = (c._members || []).filter(cm => cm.status === 'active');
+  const enrolledOther  = (c._members || []).filter(cm => cm.status !== 'active');
+  const levelText = prog.pipeline_level != null ? ('L' + prog.pipeline_level) : 'cross-level';
+  const isMine = c.owner_id === L.leaderId;
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:680px;min-height:80vh;border-radius:14px;display:flex;flex-direction:column;margin-top:1rem;margin-bottom:2rem;color:var(--text);overflow:hidden">
+      <div style="padding:1rem 1.15rem;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+          <button onclick="_renderBatchesList()" style="background:transparent;border:none;font-size:18px;cursor:pointer;color:var(--muted);padding:0;line-height:1">← Back</button>
+          <button onclick="closeMyBatches()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px;line-height:1">×</button>
+        </div>
+        <div style="margin-top:.3rem">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Roster</div>
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-top:2px">${MultiplyShared.escapeHTML(c.name || '(unnamed)')}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:3px">
+            ${MultiplyShared.escapeHTML(prog.name || '')} · ${levelText} · ${enrolledActive.length} active · status: ${c.status}
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:1rem 1.15rem">
+        <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:.2rem 0 .55rem">
+          Enrolled (${enrolledActive.length})
+        </div>
+        ${enrolledActive.length === 0 ? `
+          <div style="text-align:center;padding:1.5rem 1rem;color:var(--muted);font-size:12.5px;line-height:1.55;background:var(--surface2);border-radius:9px">
+            Nobody enrolled yet.<br>
+            <span style="font-size:11px">Tap <strong>+ Add member</strong> below to enroll.</span>
+          </div>
+        ` : enrolledActive.map(cm => {
+          const m = cm.members || {};
+          const lvl = m.pipeline_level != null ? ('L' + m.pipeline_level) : 'L?';
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:.65rem .8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;gap:.5rem">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3">${MultiplyShared.escapeHTML(m.name || '(no name)')}</div>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:2px">
+                  ${lvl} · ${MultiplyShared.escapeHTML(m.lc_group || '(no LCG)')} · role: ${MultiplyShared.escapeHTML(cm.role)}
+                </div>
+              </div>
+              ${editPerm.ok ? `
+                <button onclick="_batchesWithdraw('${cm.id}', '${MultiplyShared.escapeHTML(m.name || '').replace(/'/g, "&#39;")}')"
+                  style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">
+                  Withdraw
+                </button>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+
+        ${enrolledOther.length > 0 ? `
+          <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:1.2rem 0 .55rem">
+            History (${enrolledOther.length})
+          </div>
+          ${enrolledOther.map(cm => {
+            const m = cm.members || {};
+            return `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:.55rem .8rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:.35rem;opacity:.65">
+                <div style="flex:1">
+                  <div style="font-size:12.5px;color:var(--text)">${MultiplyShared.escapeHTML(m.name || '')}</div>
+                  <div style="font-size:10px;color:var(--muted);margin-top:1px">${cm.status}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        ` : ''}
+
+        ${(!editPerm.ok && !isMine) ? `
+          <div style="margin-top:1.2rem;padding:.7rem .85rem;background:var(--surface2);border-radius:8px;font-size:11.5px;color:var(--muted);line-height:1.55">
+            ℹ️ This batch is owned by ${c._ownerIsPastor ? 'Pastor' : 'another leader'}. You can enroll your scoped members into it, but can't change its metadata.
+          </div>
+        ` : ''}
+      </div>
+      <div style="padding:1rem 1.15rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        ${gradPerm.ok && enrolledActive.length > 0 ? `
+          <button onclick="_batchesGraduateAll()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer">🎓 Graduate all</button>
+        ` : ''}
+        <button onclick="_batchesOpenAddMember()" style="background:var(--gold,#b8882a);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer">+ Add member</button>
+      </div>
+    </div>
+  `;
+}
+
+async function _batchesWithdraw(cmId, memberName){
+  if (!confirm('Withdraw ' + memberName + ' from this batch?\n\nThey will keep their attendance history. This sets their status to "withdrew".')) return;
+  try {
+    const { error } = await db.from('cohort_members').update({
+      status: 'withdrew',
+      exited_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq('id', cmId);
+    if (error) throw error;
+    toast('✓ Withdrawn', 'success');
+    await openMyBatches();
+    // Re-open the roster after reload
+    _batchesOpenRoster(_batchesState.selectedCohortId);
+  } catch(e) {
+    toast('Could not withdraw: ' + (e.message || e), '❌');
+  }
+}
+
+async function _batchesGraduateAll(){
+  const c = (_batchesState.cohorts || []).find(x => x.id === _batchesState.selectedCohortId);
+  if (!c) return;
+  const active = (c._members || []).filter(cm => cm.status === 'active');
+  if (active.length === 0) { toast('Nobody to graduate', 'ℹ️'); return; }
+  if (!confirm('Graduate all ' + active.length + ' active member(s) of "' + c.name + '"?\n\nThis is a one-way celebration step.')) return;
+  try {
+    const ids = active.map(cm => cm.id);
+    const { error } = await db.from('cohort_members').update({
+      status: 'graduated',
+      exited_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).in('id', ids);
+    if (error) throw error;
+    // Also mark cohort as graduated
+    await db.from('cohorts').update({
+      status: 'graduated',
+      updated_at: new Date().toISOString()
+    }).eq('id', c.id);
+    toast('🎓 Batch graduated. Congratulations!', 'success');
+    await openMyBatches();
+  } catch(e) {
+    toast('Could not graduate: ' + (e.message || e), '❌');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ADD MEMBER PICKER (filtered to LeaderScope · level-match · not double-enrolled)
+// ─────────────────────────────────────────────────────────────────
+function _batchesOpenAddMember(){
+  _batchesState.addingTo = _batchesState.selectedCohortId;
+  _batchesState.addPickerQuery = '';
+  _renderBatchesAddMember();
+}
+
+function _renderBatchesAddMember(){
+  const modal = document.getElementById('myBatchesModal');
+  if (!modal) return;
+  const c = (_batchesState.cohorts || []).find(x => x.id === _batchesState.addingTo);
+  if (!c) { _renderBatchesList(); return; }
+  const prog = c.cohort_programs || {};
+  const L = LEADER || {};
+  const actor = { memberId: L.leaderId, isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL };
+
+  // Scoped members: LeaderScope tree (LCL's downline). Pastor gets all
+  // members (since LeaderScope.getTree on Pastor is broad).
+  const scoped = (LeaderScope.getTree && LeaderScope.getTree()) || [];
+
+  // Compute "already enrolled in same program" globally — look at every
+  // cohort with the same program_id and collect active member_ids.
+  const sameProgramEnrolled = new Set();
+  (_batchesState.cohorts || []).forEach(other => {
+    if (other.program_id !== c.program_id) return;
+    (other._members || []).forEach(cm => {
+      if (cm.status === 'active') sameProgramEnrolled.add(cm.member_id);
+    });
+  });
+
+  // Eligible candidates from shared helper
+  let eligible = MultiplyShared.cohorts.eligibleCandidates(
+    actor, c, prog, scoped, sameProgramEnrolled
+  );
+
+  // Apply search filter
+  const q = (_batchesState.addPickerQuery || '').toLowerCase().trim();
+  if (q) {
+    eligible = eligible.filter(m => (m.name || '').toLowerCase().includes(q));
+  }
+  // Stable sort by name
+  eligible.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  const levelText = prog.pipeline_level != null ? ('L' + prog.pipeline_level) : 'cross-level';
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);width:100%;max-width:680px;min-height:80vh;border-radius:14px;display:flex;flex-direction:column;margin-top:1rem;margin-bottom:2rem;color:var(--text);overflow:hidden">
+      <div style="padding:1rem 1.15rem;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+          <button onclick="_renderBatchesRoster()" style="background:transparent;border:none;font-size:18px;cursor:pointer;color:var(--muted);padding:0;line-height:1">← Back</button>
+          <button onclick="closeMyBatches()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 6px;line-height:1">×</button>
+        </div>
+        <div style="margin-top:.3rem">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Enroll into</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:2px">${MultiplyShared.escapeHTML(c.name || '(unnamed)')}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:3px">
+            ${MultiplyShared.escapeHTML(prog.name || '')} · ${levelText}
+          </div>
+        </div>
+        <input type="text" placeholder="Search your members…" value="${MultiplyShared.escapeHTML(_batchesState.addPickerQuery || '')}"
+          oninput="_batchesState.addPickerQuery = this.value; _renderBatchesAddMember(); setTimeout(()=>{ const i=document.querySelector('#myBatchesModal input[type=text]'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length);} },0);"
+          style="width:100%;margin-top:.7rem;padding:.55rem .75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:.7rem 1.15rem">
+        ${eligible.length === 0 ? `
+          <div style="text-align:center;padding:2rem 1rem;color:var(--muted);font-size:12.5px;line-height:1.6">
+            ${q ? `No matches for "<em>${MultiplyShared.escapeHTML(q)}</em>".` : `
+              No eligible members.<br>
+              <span style="font-size:11px">Members need to be at <strong>${levelText}</strong> and not already in another active batch of this program.</span>
+            `}
+          </div>
+        ` : eligible.map(m => {
+          const lvl = m.pipeline_level != null ? ('L' + m.pipeline_level) : 'L?';
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:.65rem .8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;gap:.5rem">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3">${MultiplyShared.escapeHTML(m.name || '(no name)')}</div>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:2px">
+                  ${lvl} · ${MultiplyShared.escapeHTML(m.lc_group || '(no LCG)')}
+                </div>
+              </div>
+              <button onclick="_batchesEnrollOne('${m.id}', '${MultiplyShared.escapeHTML(m.name || '').replace(/'/g, "&#39;")}')"
+                style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11.5px;font-weight:700;cursor:pointer;flex-shrink:0">
+                + Enroll
+              </button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function _batchesEnrollOne(memberId, memberName){
+  const c = (_batchesState.cohorts || []).find(x => x.id === _batchesState.addingTo);
+  if (!c) return;
+  const L = LEADER || {};
+  const actor = { memberId: L.leaderId, isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL };
+
+  // Re-check permission with shared helper before the write. (Defensive:
+  // the picker already filtered, but a stale state could let through.)
+  const scoped = (LeaderScope.getTree && LeaderScope.getTree()) || [];
+  const candidate = scoped.find(m => m.id === memberId);
+  if (!candidate) { toast('Member not in your scope', '❌'); return; }
+  const perm = MultiplyShared.cohorts.canEnroll(actor, c, c.cohort_programs || {}, candidate);
+  if (!perm.ok) { toast('Cannot enroll: ' + perm.reason, '❌'); return; }
+
+  try {
+    const { error } = await db.from('cohort_members').insert({
+      cohort_id: c.id,
+      member_id: memberId,
+      role: 'apprentice',
+      status: 'active'
+    });
+    if (error) {
+      // Unique-constraint collision = already enrolled (race condition)
+      if ((error.message || '').toLowerCase().includes('cohort_members_unique')) {
+        toast(memberName + ' is already enrolled in this batch', '⚠️');
+      } else {
+        throw error;
+      }
+      return;
+    }
+    toast('✓ ' + memberName + ' enrolled', 'success');
+    // Refresh the state silently then re-render the picker so the
+    // newly-enrolled member drops out without losing the search query.
+    const refreshed = await MultiplyShared.cohorts.listVisibleToLeader(actor);
+    _batchesState.cohorts = refreshed || [];
+    _renderBatchesAddMember();
+  } catch(e) {
+    toast('Could not enroll: ' + (e.message || e), '❌');
+  }
+}
+
+
 
 // Prefetch announcement-inbox count so the badge on the 📣 quick-action
 // card is accurate without the leader having to open the modal.
