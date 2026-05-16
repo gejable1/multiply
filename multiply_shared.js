@@ -982,6 +982,200 @@
   }
 
 
+  // ═══════════════════════════════════════════════════════════════════
+  // BTLI ELIGIBILITY (Priority C · May 16, 2026)
+  // ─────────────────────────────────────────────────────────────────
+  // Decides whether a given member can take a given BTLI quiz, and how
+  // they got there. Single source of truth used by both:
+  //   • member_tool.html → renderBtliQuizzes (cards on Journey page)
+  //   • btli_quiz_player.html → loadQuiz (gate before showing intro)
+  //
+  // The gate is HYBRID per Pastor Gerry's May 16 decision:
+  //
+  //   eligible = enrolled OR attendance_pattern_matches
+  //   drop_in  = eligible AND NOT enrolled
+  //
+  // "Enrolled" means the member has an active cohort_members row in an
+  // active cohort whose program.btli_course_code matches the quiz's
+  // course_code. (Schema added by btli_cohort_link_migration.sql.)
+  //
+  // "Attendance pattern matches" preserves the v1 behavior so nobody who
+  // currently uses BTLI quizzes breaks the day this ships. Drop-in mode
+  // is the UI signal that drives the back-fill conversation.
+  //
+  // Returns ONE object per (member, quiz) pair:
+  //   {
+  //     eligible: bool,
+  //     reason: 'pastor' | 'enrolled' | 'attendance' | 'no_gate' | 'blocked',
+  //     enrolled: bool,
+  //     dropIn: bool,           // eligible by attendance only
+  //     cohortIds: string[],    // active cohorts that enrolled them
+  //     programNames: string[]  // human-readable for UI hints
+  //   }
+  //
+  // Designed for two call patterns:
+  //   (A) Single-quiz check (player) — use btliEligibilityFor(...)
+  //   (B) Many quizzes for one member (MMT card list) — use
+  //       btliEligibilityForMany(...) to amortize 4 queries into 1 batch.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Internal: fetch a member's active BTLI program enrollments.
+  // Returns array of { program_id, program_name, btli_course_code, cohort_id, cohort_name, role }
+  async function _btliFetchEnrollments(memberId) {
+    if (!memberId) return [];
+    const db = getDB();
+    if (!db) return [];
+    // One JOIN-shaped query via PostgREST embedding.
+    // cohort_members → cohorts → cohort_programs (filtered to BTLI programs).
+    const { data, error } = await db
+      .from('cohort_members')
+      .select('cohort_id, role, status, cohorts!inner(id, name, status, program_id, cohort_programs!inner(id, name, btli_course_code, is_active))')
+      .eq('member_id', memberId)
+      .eq('status', 'active')
+      .eq('cohorts.status', 'active')
+      .eq('cohorts.cohort_programs.is_active', true)
+      .not('cohorts.cohort_programs.btli_course_code', 'is', null);
+    if (error) {
+      console.warn('_btliFetchEnrollments failed (failing open to no-enrollment):', error);
+      return [];
+    }
+    return (data || []).map(row => ({
+      cohort_id: row.cohort_id,
+      cohort_name: row.cohorts?.name || '',
+      role: row.role,
+      program_id: row.cohorts?.cohort_programs?.id || null,
+      program_name: row.cohorts?.cohort_programs?.name || '',
+      btli_course_code: row.cohorts?.cohort_programs?.btli_course_code || null
+    })).filter(r => !!r.btli_course_code);
+  }
+
+  // Internal: fetch all present=true attendance event_names for a member.
+  // Lowercased Set for substring matching against quiz patterns.
+  async function _btliFetchAttendedNames(memberId) {
+    if (!memberId) return new Set();
+    const db = getDB();
+    if (!db) return new Set();
+    const { data, error } = await db
+      .from('attendance')
+      .select('event_name')
+      .eq('member_id', memberId)
+      .eq('present', true);
+    if (error) {
+      console.warn('_btliFetchAttendedNames failed (failing open):', error);
+      return new Set();  // empty set = no attendance match; enrollment still works
+    }
+    return new Set((data || []).map(r => (r.event_name || '').toLowerCase()).filter(Boolean));
+  }
+
+  // Public: eligibility for a single quiz.
+  // `quiz` must include: course_code, attendance_event_name_pattern.
+  // `opts` may include: isPastor (skips all checks).
+  async function btliEligibilityFor(memberId, quiz, opts) {
+    opts = opts || {};
+    const isPastor = !!opts.isPastor;
+    if (isPastor) {
+      return { eligible: true, reason: 'pastor', enrolled: false, dropIn: false, cohortIds: [], programNames: [] };
+    }
+    if (!memberId || !quiz || !quiz.course_code) {
+      return { eligible: false, reason: 'blocked', enrolled: false, dropIn: false, cohortIds: [], programNames: [] };
+    }
+    const [enrollments, attendedNames] = await Promise.all([
+      _btliFetchEnrollments(memberId),
+      _btliFetchAttendedNames(memberId)
+    ]);
+    return _btliComputeOne(quiz, enrollments, attendedNames);
+  }
+
+  // Public: eligibility for many quizzes at once (single batch fetch).
+  // Returns Map<quizId, eligibilityObject>. Quizzes must have an `id` plus the
+  // same fields as the single-quiz variant.
+  async function btliEligibilityForMany(memberId, quizzes, opts) {
+    opts = opts || {};
+    const isPastor = !!opts.isPastor;
+    const out = new Map();
+    if (!Array.isArray(quizzes) || quizzes.length === 0) return out;
+    if (isPastor) {
+      quizzes.forEach(q => out.set(q.id, {
+        eligible: true, reason: 'pastor', enrolled: false, dropIn: false, cohortIds: [], programNames: []
+      }));
+      return out;
+    }
+    if (!memberId) {
+      quizzes.forEach(q => out.set(q.id, {
+        eligible: false, reason: 'blocked', enrolled: false, dropIn: false, cohortIds: [], programNames: []
+      }));
+      return out;
+    }
+    const [enrollments, attendedNames] = await Promise.all([
+      _btliFetchEnrollments(memberId),
+      _btliFetchAttendedNames(memberId)
+    ]);
+    quizzes.forEach(q => {
+      out.set(q.id, _btliComputeOne(q, enrollments, attendedNames));
+    });
+    return out;
+  }
+
+  // Pure: given pre-fetched enrollments + attendance, decide for one quiz.
+  function _btliComputeOne(quiz, enrollments, attendedNames) {
+    const courseCode = quiz.course_code || '';
+    // Enrollment match: any enrollment whose program teaches this course_code
+    const matchingEnrollments = enrollments.filter(e => e.btli_course_code === courseCode);
+    const enrolled = matchingEnrollments.length > 0;
+
+    // Attendance match
+    const pattern = (quiz.attendance_event_name_pattern || '').toLowerCase();
+    let attendanceMatch = false;
+    if (pattern) {
+      for (const n of attendedNames) {
+        if (n.includes(pattern)) { attendanceMatch = true; break; }
+      }
+    }
+    const noGate = !pattern && !enrolled;  // quiz has no gate AND member is not enrolled
+
+    if (enrolled) {
+      return {
+        eligible: true,
+        reason: 'enrolled',
+        enrolled: true,
+        dropIn: false,
+        cohortIds: matchingEnrollments.map(e => e.cohort_id),
+        programNames: Array.from(new Set(matchingEnrollments.map(e => e.program_name).filter(Boolean)))
+      };
+    }
+    if (attendanceMatch) {
+      return {
+        eligible: true,
+        reason: 'attendance',
+        enrolled: false,
+        dropIn: true,
+        cohortIds: [],
+        programNames: []
+      };
+    }
+    if (!pattern) {
+      // Quiz has no attendance gate at all — historically "always unlocked".
+      // We honor that to preserve the v1 escape hatch, but flag as drop-in
+      // so Pastor still sees who's taking ungated quizzes without enrollment.
+      return {
+        eligible: true,
+        reason: 'no_gate',
+        enrolled: false,
+        dropIn: true,
+        cohortIds: [],
+        programNames: []
+      };
+    }
+    return {
+      eligible: false,
+      reason: 'blocked',
+      enrolled: false,
+      dropIn: false,
+      cohortIds: [],
+      programNames: []
+    };
+  }
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -1006,6 +1200,11 @@
     // Lesson access predicate (Phase 3)
     lessons: {
       fetchVisibleLessons
+    },
+    // BTLI Quiz eligibility (Priority C · May 16, 2026 — hybrid gate)
+    btli: {
+      eligibilityFor: btliEligibilityFor,
+      eligibilityForMany: btliEligibilityForMany
     },
     // Wednesday Preaching (May 2026)
     preaching: {

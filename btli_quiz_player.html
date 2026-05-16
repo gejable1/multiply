@@ -193,7 +193,7 @@ body.lang-tl .tl-text{display:inline;}
     </button>
   </div>
 
-  <!-- BLOCKED (no LCG attendance) -->
+  <!-- BLOCKED (not enrolled and no LCG attendance — hybrid gate) -->
   <div id="state_blocked" class="state">
     <div class="blocker">
       <div class="blocker-icon">🔒</div>
@@ -202,9 +202,10 @@ body.lang-tl .tl-text{display:inline;}
         <span class="tl-text">Naka-lock pa ang Quiz</span>
       </div>
       <div class="blocker-text">
-        <span class="en-text">You'll be able to take this quiz once your LC Leader marks you present in the BTLI session. Wait for your facilitator to log attendance, then come back here.</span>
-        <span class="tl-text">Magbubukas ang quiz na ito kapag na-mark ka nang present ng iyong LC Leader sa BTLI session. Hintayin lang ang facilitator mong mag-log ng attendance, tapos balik ka rito.</span>
+        <span class="en-text">You're not yet enrolled in this BTLI cohort, and we don't see attendance for this lesson under your name yet. Talk to your LC Leader to be enrolled in the batch, or have your facilitator mark your attendance, then come back here.</span>
+        <span class="tl-text">Hindi ka pa naka-enroll sa BTLI batch na ito, at wala pang naka-record na attendance mo para sa aralin na ito. Makipag-usap sa LC Leader mo para ma-enroll sa batch, o pa-mark ng attendance sa facilitator mo, tapos balik ka rito.</span>
       </div>
+      <div class="blocker-detail" id="blockedDetail" style="margin-top:.6rem;font-size:12.5px;color:rgba(255,255,255,.7);font-style:italic;line-height:1.55;"></div>
     </div>
     <button class="btn outline" onclick="window.close()">
       <span class="en-text">Back to Member Tool</span>
@@ -218,6 +219,10 @@ body.lang-tl .tl-text{display:inline;}
       <div class="ic-icon">📝</div>
       <div class="ic-title" id="introTitle">Lesson Title</div>
       <div class="ic-lesson" id="introLesson">BTLI 1 · Lesson 1</div>
+      <div id="dropInBadge" style="display:none;margin:.4rem auto .2rem;padding:4px 11px;background:rgba(184,136,42,.15);border:1px solid rgba(184,136,42,.45);color:#b8882a;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;width:fit-content;">
+        <span class="en-text">Drop-in Mode</span>
+        <span class="tl-text">Drop-in Mode</span>
+      </div>
       <div class="ic-text" id="introText"></div>
 
       <div class="facts-grid">
@@ -391,6 +396,8 @@ let COUNTS_FOR_GRADE = true;
 let START_TIME = null;
 let PRIOR_ATTEMPTS = [];   // existing attempts for retake/cooldown logic
 let LANG = 'en';
+let ELIGIBILITY = null;    // { eligible, reason, enrolled, dropIn, cohortIds, programNames }
+                           //   Populated by loadQuiz() via MultiplyShared.btli.eligibilityFor.
 
 // ═══════════════════════════════════════════════════════════════════
 // LANG TOGGLE
@@ -455,9 +462,29 @@ async function loadQuiz(course, lesson){
       '<span class="hc">' + (quiz.questions.length || 10) + ' questions</span>';
     document.getElementById('footerPath').textContent = course + ' · L' + lesson + ' · ' + quiz.lesson_title;
 
-    // Check LCG attendance soft-gate
-    const attended = await checkAttendance(quiz);
-    if (!attended) {
+    // ───── Hybrid eligibility gate (Priority C · May 16, 2026) ─────
+    // Cohort enrollment OR attendance fallback. Drop-in mode flagged
+    // in the intro so Pastor can see who's taking without enrollment.
+    // Delegates to MultiplyShared.btli.eligibilityFor to keep the gate
+    // identical with MMT's card list.
+    try {
+      ELIGIBILITY = await MultiplyShared.btli.eligibilityFor(MEMBER.memberId, quiz, {});
+    } catch(eEli){
+      // Fail open per Invariant philosophy: don't block on infra error.
+      console.warn('btli eligibility check threw, failing open:', eEli);
+      ELIGIBILITY = { eligible: true, reason: 'no_gate', enrolled: false, dropIn: true, cohortIds: [], programNames: [] };
+    }
+    if (!ELIGIBILITY.eligible) {
+      // Surface a quiet detail line so members + facilitators know which
+      // path is missing without us being preachy about it.
+      const detail = document.getElementById('blockedDetail');
+      if (detail) {
+        const enText = `Looking for: enrollment in a ${quiz.course_code} cohort, or attendance for "${quiz.course_code} · L${quiz.lesson_number}".`;
+        const tlText = `Hinahanap: enrollment sa ${quiz.course_code} cohort, o attendance para sa "${quiz.course_code} · L${quiz.lesson_number}".`;
+        detail.innerHTML =
+          '<span class="en-text">' + enText.replace(/</g,'&lt;') + '</span>' +
+          '<span class="tl-text">' + tlText.replace(/</g,'&lt;') + '</span>';
+      }
       showState('blocked');
       return;
     }
@@ -484,28 +511,24 @@ async function loadQuiz(course, lesson){
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ATTENDANCE SOFT-GATE
+// HYBRID ELIGIBILITY (Priority C · May 16, 2026)
+// ─────────────────────────────────────────────────────────────────
+// The gate is now: cohort enrollment OR attendance fallback. See
+// multiply_shared.js → MultiplyShared.btli.eligibilityFor for the
+// canonical predicate. loadQuiz() calls that helper directly and
+// stores the result in the ELIGIBILITY global.
+//
+// `checkAttendance(quiz)` is preserved as a thin shim returning a
+// boolean for any external caller, but no internal code path uses
+// it anymore. Safe to delete in a future cleanup pass.
 // ═══════════════════════════════════════════════════════════════════
-// Member must have a `present=true` attendance record matching the
-// quiz's attendance_event_name_pattern (or with event_name LIKE pattern).
-// If quiz.attendance_event_name_pattern is null/empty, we skip the gate.
 async function checkAttendance(quiz){
-  if (!quiz.attendance_event_name_pattern) return true;
+  // Deprecated shim — delegates to the hybrid eligibility helper.
   try {
-    const { data, error } = await db
-      .from('attendance')
-      .select('id,event_name,present,event_date')
-      .eq('member_id', MEMBER.memberId)
-      .eq('present', true)
-      .ilike('event_name', '%' + quiz.attendance_event_name_pattern + '%')
-      .limit(1);
-    if (error) {
-      console.warn('Attendance check error (failing open):', error);
-      return true; // fail open — don't block on infra error
-    }
-    return (data || []).length > 0;
-  } catch(e) {
-    console.warn('Attendance check threw (failing open):', e);
+    const e = await MultiplyShared.btli.eligibilityFor(MEMBER.memberId, quiz, {});
+    return !!(e && e.eligible);
+  } catch(err) {
+    console.warn('checkAttendance shim threw (failing open):', err);
     return true;
   }
 }
@@ -517,6 +540,13 @@ function renderIntro(){
   document.getElementById('introTitle').textContent = QUIZ.lesson_title;
   document.getElementById('introLesson').textContent = QUIZ.course_code + ' · Lesson ' + QUIZ.lesson_number;
   document.getElementById('introText').textContent = QUIZ.intro_text || '';
+
+  // Drop-in mode pill — shown when member is eligible but not enrolled in
+  // a cohort that teaches this course. Subtle gold badge.
+  const dropInBadge = document.getElementById('dropInBadge');
+  if (dropInBadge) {
+    dropInBadge.style.display = (ELIGIBILITY && ELIGIBILITY.dropIn) ? '' : 'none';
+  }
   document.getElementById('factQuestions').textContent = (QUIZ.questions || []).length || 10;
   document.getElementById('factPassing').textContent = QUIZ.passing_score + '%';
   document.getElementById('factAttempt').textContent = '#' + ATTEMPT_NUMBER;

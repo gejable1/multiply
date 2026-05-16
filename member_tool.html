@@ -8775,8 +8775,8 @@ async function renderBtliQuizzes(){
         <span class="tl-text">Subukin ang natutunan. Kunin ang grado.</span>
       </div>
       <div style="font-size:12.5px;opacity:.85;font-style:italic;line-height:1.55;">
-        <span class="en-text">10 questions per lesson · Best of 3 attempts counts · Unlocks after LCG attendance.</span>
-        <span class="tl-text">10 tanong bawat aralin · Best of 3 ang bibilang · Bubukas pagkatapos ng LCG attendance.</span>
+        <span class="en-text">10 questions per lesson · Best of 3 attempts counts · Unlocks via cohort enrollment or LCG attendance.</span>
+        <span class="tl-text">10 tanong bawat aralin · Best of 3 ang bibilang · Bubukas via cohort enrollment o LCG attendance.</span>
       </div>
     </div>
     <div id="btliQuizzesList" style="display:flex;flex-direction:column;gap:.55rem;">
@@ -8822,15 +8822,22 @@ async function renderBtliQuizzes(){
       byQuiz[a.quiz_id].push(a);
     });
 
-    // Fetch attendance — get all present=true LCG attendance for this member
-    // We match on event_name pattern client-side for simplicity
-    const { data: attRecords } = await db
-      .from('attendance')
-      .select('event_name')
-      .eq('member_id', MEMBER.memberId)
-      .eq('present', true);
-
-    const attendedNames = new Set((attRecords || []).map(r => (r.event_name || '').toLowerCase()));
+    // ───── Hybrid eligibility (Priority C · May 16, 2026) ─────
+    // Single batch call computes eligibility for all visible quizzes at once.
+    // Returns Map<quiz.id, { eligible, reason, enrolled, dropIn, … }>.
+    // The cohort path checks enrollment in an active cohort whose program
+    // teaches this BTLI course_code. The attendance path is preserved as
+    // a fallback so nobody currently using BTLI quizzes breaks today.
+    let eligMap;
+    try {
+      eligMap = await MultiplyShared.btli.eligibilityForMany(MEMBER.memberId, quizzes, {});
+    } catch(eEli){
+      console.warn('eligibilityForMany threw, falling open:', eEli);
+      eligMap = new Map();
+      quizzes.forEach(q => eligMap.set(q.id, {
+        eligible: true, reason: 'no_gate', enrolled: false, dropIn: true, cohortIds: [], programNames: []
+      }));
+    }
 
     // Render each quiz card
     const list = document.getElementById('btliQuizzesList');
@@ -8842,25 +8849,28 @@ async function renderBtliQuizzes(){
       const passed = counted.some(a => a.passed);
       const attemptCount = att.length;
 
-      // Check LCG attendance soft-gate
-      const pattern = (q.attendance_event_name_pattern || '').toLowerCase();
-      let unlocked = !pattern; // no pattern = always unlocked
-      if (pattern) {
-        for (const n of attendedNames) {
-          if (n.includes(pattern)) { unlocked = true; break; }
-        }
-      }
+      const elig = eligMap.get(q.id) || { eligible: false, reason: 'blocked', enrolled: false, dropIn: false };
+      const unlocked = !!elig.eligible;
+      const dropIn = !!elig.dropIn;
 
       let badgeHtml = '';
       let actionHtml = '';
       let cardBg = '#fff';
       let leftBar = '#cdd6e0';
+      let dropInPill = '';
+
+      // Drop-in pill: shown for any eligible card where the path was NOT
+      // cohort enrollment. Small gold pill near the title — quiet signal
+      // for Pastor + facilitator to back-fill enrollment when convenient.
+      if (unlocked && dropIn) {
+        dropInPill = `<span title="Not enrolled in a cohort for this course — using attendance fallback." style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(184,136,42,.12);color:#b8882a;border:1px solid rgba(184,136,42,.35);letter-spacing:.04em;text-transform:uppercase;margin-left:6px;vertical-align:1.5px;">Drop-in</span>`;
+      }
 
       if (!unlocked) {
         badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#f0f0f0;color:#888;letter-spacing:.04em;">🔒 LOCKED</span>`;
         actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
-          <span class="en-text">Attend the LCG session to unlock.</span>
-          <span class="tl-text">Mag-attend ng LCG session para mabuksan.</span>
+          <span class="en-text">Get enrolled or have attendance logged to unlock.</span>
+          <span class="tl-text">Mag-enroll o pa-log ng attendance para mabuksan.</span>
         </div>`;
         cardBg = '#f8f9fb';
       } else if (passed) {
@@ -8894,7 +8904,7 @@ async function renderBtliQuizzes(){
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;">
           <div style="flex:1;">
             <div style="font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:#b8882a;margin-bottom:.15rem;">
-              ${q.course_code} · Lesson ${q.lesson_number}
+              ${q.course_code} · Lesson ${q.lesson_number}${dropInPill}
             </div>
             <div style="font-size:14.5px;font-weight:600;color:#1a1612;line-height:1.3;">${_esc(q.lesson_title)}</div>
           </div>
