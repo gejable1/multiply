@@ -8657,7 +8657,12 @@ function _mmtCloseLessonViewer(){
 async function renderBtliQuizzes(){
   const wrap = document.getElementById('btliQuizzesSection');
   if (!wrap) return;
-  if (!MEMBER || !MEMBER.id) return;
+  // Invariant #29: the published member session payload uses `memberId`,
+  // not `id` (see multiply_shared.js line 112). The three lines below
+  // were originally written as MEMBER.id which silently returned undefined,
+  // causing the function to bail at this guard and the queries below to
+  // match no rows. May 16 2026 fix.
+  if (!MEMBER || !MEMBER.memberId) return;
 
   wrap.innerHTML = `
     <div style="background:linear-gradient(135deg,#1e3a5f,#2d5380);color:#fff;border-radius:12px;padding:1rem 1.1rem;margin-bottom:.8rem;">
@@ -8707,7 +8712,7 @@ async function renderBtliQuizzes(){
     const { data: attempts } = await db
       .from('btli_quiz_attempts')
       .select('quiz_id,attempt_number,score,passed,counts_for_grade')
-      .eq('member_id', MEMBER.id)
+      .eq('member_id', MEMBER.memberId)
       .in('quiz_id', quizIds);
 
     // Group attempts by quiz_id
@@ -8722,7 +8727,7 @@ async function renderBtliQuizzes(){
     const { data: attRecords } = await db
       .from('attendance')
       .select('event_name')
-      .eq('member_id', MEMBER.id)
+      .eq('member_id', MEMBER.memberId)
       .eq('present', true);
 
     const attendedNames = new Set((attRecords || []).map(r => (r.event_name || '').toLowerCase()));
