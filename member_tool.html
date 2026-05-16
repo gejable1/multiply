@@ -1660,22 +1660,14 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
-      <!-- 📖 My Lessons — pipeline lessons available to this member.
-           Backed by MultiplyShared.lessons.fetchVisibleLessons() — same predicate
-           used by MLT. Audience + per-attachment role gating is enforced there. -->
-      <button class="headsup-btn" onclick="openLessonsScreen()" style="margin-top:.5rem">
-        <div class="hu-icon">📖</div>
-        <div class="hu-body">
-          <div class="hu-title">
-            <span class="en-text">My lessons</span>
-            <span class="tl-text">Mga aralin ko</span>
-          </div>
-          <div class="hu-meta">
-            <span class="en-text">Pipeline lessons available to you</span>
-            <span class="tl-text">Mga aralin para sa iyo</span>
-          </div>
-        </div>
-        <div style="color:var(--muted);font-size:18px">›</div>
+      <!-- 📖 My Lessons moved to the Journey tab (May 2026).
+           A small inline hint nudges members who reach for the old
+           Home placement. Tap goes straight to Journey, where the
+           lessons teaser sits above quizzes and library. -->
+      <button onclick="goTo('pipeline')"
+        style="margin:.6rem auto 0;padding:.45rem .85rem;background:transparent;border:1px dashed var(--line);border-radius:999px;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;display:block">
+        <span class="en-text">📖 Looking for lessons? They live on Journey →</span>
+        <span class="tl-text">📖 Hinahanap ang mga aralin? Nasa Journey na →</span>
       </button>
 
       <!-- My recent heads-ups (only shown if any) -->
@@ -1727,18 +1719,26 @@ body.lang-tl .tl-text{display:inline;}
         <!-- Populated dynamically -->
       </div>
 
-      <!-- ═══════ LIBRARY / READING LIST ═══════
-           Level-gated reading materials. Current level shown prominently;
-           future levels appear as locked previews so members can see
-           what's ahead. Past levels are collapsed (expandable) for revisits.
-           Populated by renderLibrary() on page-pipeline activation. -->
-      <div id="librarySection" style="margin-top:1.5rem"></div>
+      <!-- ═══════ MY LESSONS (teaser card) ═══════
+           Pipeline lessons available to this member. The full list lives
+           on the separate lessons screen (openLessonsScreen). On Journey
+           we show a compact preview card that summarizes how many active
+           lessons the member has, and opens the full screen on tap.
+           Populated by renderJourneyLessonsTeaser() on page-pipeline activation. -->
+      <div id="journeyLessonsTeaser" style="margin-top:1.5rem"></div>
 
       <!-- ═══════ BTLI COMPREHENSION QUIZZES ═══════
            Per-lesson 10-question quizzes. Soft-gated by LCG attendance.
            Best-of-first-3 attempts count for course-end grade.
            Populated by renderBtliQuizzes() on page-pipeline activation. -->
       <div id="btliQuizzesSection" style="margin-top:1.5rem"></div>
+
+      <!-- ═══════ LIBRARY / READING LIST ═══════
+           Level-gated reading materials. Current level shown prominently;
+           future levels appear as locked previews so members can see
+           what's ahead. Past levels are collapsed (expandable) for revisits.
+           Populated by renderLibrary() on page-pipeline activation. -->
+      <div id="librarySection" style="margin-top:1.5rem"></div>
 
     </div>
   </div>
@@ -2942,6 +2942,7 @@ function renderPipeline(){
   }
   // Reading list refreshes alongside the pipeline view (so language and
   // progress changes flow through together)
+  if (typeof renderJourneyLessonsTeaser === 'function') renderJourneyLessonsTeaser();
   if (typeof renderLibrary === 'function') renderLibrary();
   if (typeof renderBtliQuizzes === 'function') renderBtliQuizzes();
 }
@@ -8423,6 +8424,105 @@ let _mmtLessonsState = {
   rows: [],
   error: null
 };
+
+// ═══════════════════════════════════════════════════════════════
+// JOURNEY LESSONS TEASER
+// ─────────────────────────────────────────────────────────────
+// Compact preview card on the Journey page. Shows how many lessons
+// the member has available and a "View all" CTA that opens the full
+// lessons screen (openLessonsScreen) — same screen that used to be
+// reached from the Home tab.
+//
+// Caches the lesson count for the session: first render does the
+// fetch, subsequent renders (language toggle, level update) reuse
+// the count without re-fetching. The full screen still does its
+// own fetch on open, so the data there is always fresh.
+// ═══════════════════════════════════════════════════════════════
+let _journeyLessonsTeaserCache = { loaded: false, count: 0, error: null };
+
+async function renderJourneyLessonsTeaser(){
+  const c = document.getElementById('journeyLessonsTeaser');
+  if (!c) return;
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+
+  // Skeleton on first render
+  if (!_journeyLessonsTeaserCache.loaded) {
+    c.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem;display:flex;align-items:center;gap:.85rem">
+        <div style="font-size:24px;opacity:.5">📖</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--muted)">
+            <span class="en-text">Loading your lessons…</span>
+            <span class="tl-text">Naglo-load ng mga aralin…</span>
+          </div>
+        </div>
+      </div>
+    `;
+    // Fire fetch
+    try {
+      const M = MEMBER || {};
+      const isPastor = (M.memberLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+      const isLeader = (M.memberLevel || 0) >= 2;
+      const rows = await MultiplyShared.lessons.fetchVisibleLessons({
+        memberId: M.memberId,
+        isPastor,
+        isLeader
+      });
+      _journeyLessonsTeaserCache.count = (rows || []).length;
+      _journeyLessonsTeaserCache.loaded = true;
+      _journeyLessonsTeaserCache.error = null;
+    } catch (e) {
+      console.warn('[journey-lessons-teaser] fetch failed:', e);
+      _journeyLessonsTeaserCache.loaded = true;
+      _journeyLessonsTeaserCache.error = e.message || String(e);
+    }
+  }
+
+  // Build the rendered card
+  const count = _journeyLessonsTeaserCache.count;
+  const err = _journeyLessonsTeaserCache.error;
+  let titleEn, titleTl, metaEn, metaTl;
+
+  if (err) {
+    titleEn = 'My lessons';
+    titleTl = 'Mga aralin ko';
+    metaEn = 'Tap to load your lessons';
+    metaTl = 'I-tap para makita';
+  } else if (count === 0) {
+    titleEn = 'My lessons';
+    titleTl = 'Mga aralin ko';
+    metaEn = 'No lessons assigned yet — tap to check';
+    metaTl = 'Wala pang aralin — i-tap para tingnan';
+  } else if (count === 1) {
+    titleEn = '1 lesson available';
+    titleTl = '1 aralin para sa iyo';
+    metaEn = 'Tap to open';
+    metaTl = 'I-tap para buksan';
+  } else {
+    titleEn = `${count} lessons available`;
+    titleTl = `${count} aralin para sa iyo`;
+    metaEn = 'Tap to view all';
+    metaTl = 'I-tap para makita lahat';
+  }
+
+  c.innerHTML = `
+    <button onclick="openLessonsScreen()"
+      style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem;display:flex;align-items:center;gap:.85rem;cursor:pointer;font-family:inherit;text-align:left;transition:background .15s">
+      <div style="font-size:26px;flex-shrink:0">📖</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14.5px;font-weight:700;color:var(--ink);margin-bottom:.15rem">
+          <span class="en-text">${MultiplyShared.escapeHTML(titleEn)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(titleTl)}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.4">
+          <span class="en-text">${MultiplyShared.escapeHTML(metaEn)}</span>
+          <span class="tl-text">${MultiplyShared.escapeHTML(metaTl)}</span>
+        </div>
+      </div>
+      <div style="color:var(--muted);font-size:20px;flex-shrink:0">›</div>
+    </button>
+  `;
+}
 
 async function openLessonsScreen(){
   goTo('lessons');
