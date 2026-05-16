@@ -308,6 +308,8 @@ body.lang-tl .tl-text{display:inline;}
       <div id="reviewList"></div>
     </div>
 
+    <div id="perfectNote" style="display:none;margin:14px 0;padding:14px 16px;background:linear-gradient(135deg,rgba(45,160,80,.18),rgba(45,160,80,.08));border:1.5px solid rgba(45,160,80,.55);border-radius:12px;color:#1a4a2c;font-size:14px;line-height:1.5;text-align:center;font-weight:500;"></div>
+
     <div class="actions-row">
       <button class="btn gold" id="retakeBtn" onclick="retakeQuiz()" style="display:none;">
         <span class="en-text">🔁 Try Again</span>
@@ -366,8 +368,13 @@ let db = null;
     return;
   }
   // Read course + lesson from URL
+  // Per Invariant #30: BTLI course codes use single-space form (e.g. "BTLI 1").
+  // Defensive: if a stale bookmark passes "BTLI1" (no space), repair it.
   const params = new URLSearchParams(window.location.search);
-  const course = params.get('course') || 'BTLI1';
+  let course = params.get('course') || 'BTLI 1';
+  if (/^BTLI\d+$/i.test(course)) {
+    course = course.replace(/^(BTLI)(\d+)$/i, '$1 $2');
+  }
   const lesson = parseInt(params.get('lesson') || '1', 10);
   loadQuiz(course, lesson);
 })();
@@ -770,12 +777,24 @@ async function renderResults(score, raw, total, passed, timeTaken){
 
   // Retake logic
   const retakeBtn = document.getElementById('retakeBtn');
-  if (PRIOR_ATTEMPTS.length < 3) {
+  const perfectNote = document.getElementById('perfectNote');
+  if (score >= 100) {
+    // Perfect score — no need to retake. Pastor's call May 16, 2026.
+    retakeBtn.style.display = 'none';
+    if (perfectNote) {
+      perfectNote.style.display = 'block';
+      perfectNote.innerHTML =
+        '<span class="en-text">🎯 <b>Sakto!</b> You hit 100% — no need to retake. This is your highest possible score.</span>' +
+        '<span class="tl-text">🎯 <b>Sakto!</b> Perpekto ang sagot mo — hindi mo na kailangang ulitin. Ito na ang pinakamataas mong score.</span>';
+    }
+  } else if (PRIOR_ATTEMPTS.length < 3) {
+    if (perfectNote) perfectNote.style.display = 'none';
     retakeBtn.style.display = 'block';
     retakeBtn.innerHTML =
       '<span class="en-text">🔁 Try Again — Attempt #' + (PRIOR_ATTEMPTS.length + 1) + ' (counts for grade)</span>' +
       '<span class="tl-text">🔁 Subukan ulit — Pagsubok #' + (PRIOR_ATTEMPTS.length + 1) + ' (bibilang sa grado)</span>';
   } else {
+    if (perfectNote) perfectNote.style.display = 'none';
     retakeBtn.style.display = 'block';
     retakeBtn.innerHTML =
       '<span class="en-text">🔁 Practice Again (no grade change)</span>' +

@@ -766,6 +766,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
       <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
     </div>
+    <!-- BTLI lesson picker — shown only when event_type === 'BTLI'.
+         Per Invariant #30, event_name is constructed as:
+           "${course_code} · L${lesson_number} · ${lesson_title}"  (U+00B7 middle dot)
+         Required-on-save when BTLI is selected. -->
+    <div id="attBtliLessonRow" style="display:none;margin-top:10px;padding:12px 14px;background:rgba(184,136,42,.10);border:1.5px solid rgba(184,136,42,.45);border-radius:10px;">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">📚 Which BTLI Lesson?</div>
+      <select id="attBtliLessonSelect" onchange="onBtliLessonChange()" style="width:100%;padding:11px 12px;font-size:14px;font-weight:600;background:#fff;border:1.5px solid rgba(184,136,42,.55);border-radius:8px;font-family:inherit;color:var(--text);">
+        <option value="">— Pick the lesson —</option>
+      </select>
+      <div id="attBtliLessonHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Pick the specific lesson this BTLI session covers. This unlocks the comprehension quiz for everyone marked present.</div>
+    </div>
   </div>
   <!-- "Already saved" banner — populated by loadExistingAttendance(); hidden when nothing on file -->
   <div id="attLoadedBanner" style="display:none;margin:0 14px 8px;padding:10px 12px;background:rgba(52,211,153,.18);border:1.5px solid rgba(52,211,153,.55);border-radius:10px;font-size:12px;color:var(--text);line-height:1.45"></div>
@@ -945,6 +956,14 @@ let attendanceState = {};
 let currentFilter = 'all';
 let currentMember = null;
 let selectedAttType = 'Sunday Service';
+// BTLI lesson picker state (Priority B, May 16 → next session)
+// When selectedAttType === 'BTLI', the leader must pick a specific lesson.
+// The chosen quiz row is held in _btliQuizzes (lazy-loaded once per session),
+// and the lesson's event_name is constructed per Invariant #30 for save.
+let _btliQuizzes = null;        // cached fetch of active btli_quizzes rows
+let _btliQuizzesLoading = false;
+let selectedBtliQuizId = null;  // id of chosen btli_quizzes row
+let selectedBtliEventName = ''; // computed "BTLI 1 · L1 · Pananalangin" string
 let filterStr = '';
 let allSelected = false;
 
@@ -2080,7 +2099,20 @@ async function logQuickAttendance(){
 // ATTENDANCE
 // ═══════════════════════════════════════════════════════
 function showAttendance(){
-  document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
+  // Invariant #12: use local-component date, not toISOString().slice(0,10).
+  // After 4PM Manila, toISOString() returns tomorrow's date in UTC.
+  const _now = new Date();
+  const _ymd = _now.getFullYear() + '-' +
+               String(_now.getMonth()+1).padStart(2,'0') + '-' +
+               String(_now.getDate()).padStart(2,'0');
+  document.getElementById('attDate').value = _ymd;
+  // Reset BTLI lesson picker — never carry forward a stale lesson selection
+  selectedBtliQuizId = null;
+  selectedBtliEventName = '';
+  const _btliSel = document.getElementById('attBtliLessonSelect');
+  if (_btliSel) _btliSel.value = '';
+  const _btliRow = document.getElementById('attBtliLessonRow');
+  if (_btliRow) _btliRow.style.display = (selectedAttType === 'BTLI') ? 'block' : 'none';
   attendanceState = {};
   myMembers.forEach(m=>{ attendanceState[m.id]=false; });
   allSelected = false;
@@ -2189,6 +2221,72 @@ function selectAttType(el){
   document.querySelectorAll('.att-type-pill').forEach(p=>p.classList.remove('selected'));
   el.classList.add('selected');
   selectedAttType = el.dataset.type;
+  // Show/hide BTLI lesson picker
+  const btliRow = document.getElementById('attBtliLessonRow');
+  if (btliRow) {
+    if (selectedAttType === 'BTLI') {
+      btliRow.style.display = 'block';
+      ensureBtliQuizzesLoaded();
+    } else {
+      btliRow.style.display = 'none';
+      selectedBtliQuizId = null;
+      selectedBtliEventName = '';
+      const sel = document.getElementById('attBtliLessonSelect');
+      if (sel) sel.value = '';
+    }
+  }
+  onAttContextChange();
+}
+
+// Lazy-load active BTLI quizzes into the lesson picker.
+// Cached for the lifetime of the page; refresh on page reload.
+async function ensureBtliQuizzesLoaded(){
+  const sel = document.getElementById('attBtliLessonSelect');
+  if (!sel) return;
+  if (_btliQuizzesLoading) return;
+  if (_btliQuizzes !== null) return; // already loaded
+
+  _btliQuizzesLoading = true;
+  try {
+    const { data, error } = await db
+      .from('btli_quizzes')
+      .select('id,course_code,lesson_number,lesson_title')
+      .eq('is_active', true)
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+    if (error) throw error;
+    _btliQuizzes = data || [];
+    // Populate select
+    sel.innerHTML = '<option value="">— Pick the lesson —</option>';
+    _btliQuizzes.forEach(q => {
+      // event_name per Invariant #30: middle-dot U+00B7, single spaces
+      const eventName = `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`;
+      const opt = document.createElement('option');
+      opt.value = q.id;
+      opt.textContent = eventName;
+      opt.dataset.eventName = eventName;
+      sel.appendChild(opt);
+    });
+    if (!_btliQuizzes.length) {
+      sel.innerHTML = '<option value="">⚠ No active BTLI lessons in the system</option>';
+    }
+  } catch (e) {
+    console.error('[btli-lesson-load]', e);
+    sel.innerHTML = '<option value="">⚠ Could not load BTLI lessons — try again</option>';
+    _btliQuizzes = null; // allow retry
+  } finally {
+    _btliQuizzesLoading = false;
+  }
+}
+
+function onBtliLessonChange(){
+  const sel = document.getElementById('attBtliLessonSelect');
+  if (!sel) return;
+  selectedBtliQuizId = sel.value || null;
+  const chosen = sel.options[sel.selectedIndex];
+  selectedBtliEventName = (chosen && chosen.dataset && chosen.dataset.eventName) || '';
+  // If BTLI lesson changes mid-form, reload existing attendance so we
+  // see the right set (different lesson on same day = different event_name).
   onAttContextChange();
 }
 
@@ -2219,9 +2317,16 @@ async function loadExistingAttendance(){
   const date = document.getElementById('attDate').value;
   const type = selectedAttType;
   const banner = document.getElementById('attLoadedBanner');
-  console.log('[attendance-load] called', {date, type, scope: LeaderScope.getCurrent ? LeaderScope.getCurrent() : '?', myMembersCount: (myMembers||[]).length});
+  console.log('[attendance-load] called', {date, type, btliEventName: selectedBtliEventName, scope: LeaderScope.getCurrent ? LeaderScope.getCurrent() : '?', myMembersCount: (myMembers||[]).length});
   if(!date || !type){
     console.log('[attendance-load] missing date or type — abort');
+    if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+    return;
+  }
+  // For BTLI, also require a lesson before fetching; otherwise we'd pull a
+  // mishmash of different lessons' rows and the banner/state would lie.
+  if (type === 'BTLI' && !selectedBtliEventName){
+    console.log('[attendance-load] BTLI selected but no lesson picked yet — abort');
     if(banner){ banner.style.display='none'; banner.innerHTML=''; }
     return;
   }
@@ -2236,11 +2341,15 @@ async function loadExistingAttendance(){
       if(banner){ banner.style.display='none'; banner.innerHTML=''; }
       return;
     }
-    const { data, error } = await db.from('attendance')
+    let q = db.from('attendance')
       .select('member_id, present, logged_by, updated_at, created_at')
       .eq('event_date', date)
       .eq('event_type', type)
       .in('member_id', memberIds);
+    if (type === 'BTLI' && selectedBtliEventName) {
+      q = q.eq('event_name', selectedBtliEventName);
+    }
+    const { data, error } = await q;
 
     // Stale response — a newer fetch already started, so ignore this one
     if(myToken !== _attLoadToken){
@@ -2378,16 +2487,31 @@ async function saveAttendance(){
   const date = document.getElementById('attDate').value;
   if(!date){ toast('Please select a date','error'); return; }
 
+  // Priority B (May 16+): when event_type is BTLI, a specific lesson is required.
+  // Without it, attendance rows save with event_name=null and the BTLI Quiz
+  // attendance gate (ILIKE '%pattern%') cannot unlock for the member.
+  if (selectedAttType === 'BTLI') {
+    if (!selectedBtliQuizId || !selectedBtliEventName) {
+      toast('Please pick the specific BTLI lesson before saving.','error');
+      // Focus the select to make the next action obvious
+      const sel = document.getElementById('attBtliLessonSelect');
+      if (sel) sel.focus();
+      return;
+    }
+  }
+
   const leader        = currentLeader;
   const eventLcGroup  = leader?.lc_group || '';
   const loggedById    = leader?.id || null;
   const loggedBy      = leader?.name || 'Unknown';
+  const eventName     = (selectedAttType === 'BTLI') ? selectedBtliEventName : null;
 
   const rows = myMembers.map(m => ({
     member_id:       m.id,
     member_name:     m.name,
     event_date:      date,
     event_type:      selectedAttType,
+    event_name:      eventName,
     present:         !!attendanceState[m.id],
     // ── enriched columns ──────────────────────────────
     member_lc_group: m.lc_group || '',
@@ -2403,14 +2527,19 @@ async function saveAttendance(){
   let okCount = 0, failCount = 0, lastErr = null;
 
   for (const row of rows) {
-    // Check if a row already exists for this member + date + type
-    const { data: existing, error: selErr } = await db
+    // Check if a row already exists for this member + date + type.
+    // For BTLI, we also match on event_name so different lessons on the same
+    // day produce separate rows (rare, but supported).
+    let q = db
       .from('attendance')
       .select('id')
       .eq('member_id', row.member_id)
       .eq('event_date', row.event_date)
-      .eq('event_type', row.event_type)
-      .maybeSingle();
+      .eq('event_type', row.event_type);
+    if (row.event_type === 'BTLI' && row.event_name) {
+      q = q.eq('event_name', row.event_name);
+    }
+    const { data: existing, error: selErr } = await q.maybeSingle();
 
     if (selErr) {
       console.error('SELECT failed for', row.member_name, selErr);
