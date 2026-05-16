@@ -353,9 +353,13 @@ let db = null;
     return;
   }
   MEMBER = window.MEMBER;
-  db = MultiplyShared.db || window.db;
+  // Invariant #29: use the published API — getDB() is a function, not a property.
+  // Earlier code referenced MultiplyShared.db (does not exist) and window.db
+  // (never set), causing every page load to error out with "Supabase client
+  // not available" before the URL params were even read.
+  db = MultiplyShared.getDB();
   if (!db) {
-    showError('Supabase client not available.');
+    showError('Supabase client not available. Please refresh the page.');
     return;
   }
   // Read course + lesson from URL
