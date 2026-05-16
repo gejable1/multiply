@@ -353,10 +353,13 @@ let db = null;
     return;
   }
   MEMBER = window.MEMBER;
-  // Invariant #29: use the published API — getDB() is a function, not a property.
-  // Earlier code referenced MultiplyShared.db (does not exist) and window.db
-  // (never set), causing every page load to error out with "Supabase client
-  // not available" before the URL params were even read.
+  // Invariant #29 fixes (May 16, 2026):
+  //   1. Supabase client must come from getDB() — there is no MultiplyShared.db
+  //      property nor a window.db. The old code silently undefined-ed.
+  //   2. Member session payload uses MEMBER.memberId, not MEMBER.id. Five
+  //      query sites below were updated to match the published session shape
+  //      (see multiply_shared.js line 112). Querying with MEMBER.id caused
+  //      Postgres to throw `invalid input syntax for type uuid: "undefined"`.
   db = MultiplyShared.getDB();
   if (!db) {
     showError('Supabase client not available. Please refresh the page.');
@@ -457,7 +460,7 @@ async function loadQuiz(course, lesson){
       .from('btli_quiz_attempts')
       .select('*')
       .eq('quiz_id', quiz.id)
-      .eq('member_id', MEMBER.id)
+      .eq('member_id', MEMBER.memberId)
       .order('attempt_number', { ascending: true });
 
     if (aErr) throw aErr;
@@ -485,7 +488,7 @@ async function checkAttendance(quiz){
     const { data, error } = await db
       .from('attendance')
       .select('id,event_name,present,event_date')
-      .eq('member_id', MEMBER.id)
+      .eq('member_id', MEMBER.memberId)
       .eq('present', true)
       .ilike('event_name', '%' + quiz.attendance_event_name_pattern + '%')
       .limit(1);
@@ -700,7 +703,7 @@ async function submitQuiz(){
       .from('btli_quiz_attempts')
       .insert({
         quiz_id: QUIZ.id,
-        member_id: MEMBER.id,
+        member_id: MEMBER.memberId,
         attempt_number: ATTEMPT_NUMBER,
         counts_for_grade: COUNTS_FOR_GRADE,
         score: score,
@@ -800,7 +803,7 @@ async function maybeShowRank(currentScore){
     const { data: myAttempts } = await db
       .from('btli_quiz_attempts')
       .select('quiz_id')
-      .eq('member_id', MEMBER.id);
+      .eq('member_id', MEMBER.memberId);
 
     const attemptedQuizIds = new Set((myAttempts || []).map(a => a.quiz_id));
     const allDone = (allQuizzes || []).every(q => attemptedQuizIds.has(q.id));
@@ -819,7 +822,7 @@ async function maybeShowRank(currentScore){
       .order('best_score', { ascending: false });
 
     if (!lb || lb.length === 0) return;
-    const myIdx = lb.findIndex(r => r.member_id === MEMBER.id);
+    const myIdx = lb.findIndex(r => r.member_id === MEMBER.memberId);
     if (myIdx < 0) return;
 
     const myRank = myIdx + 1;
