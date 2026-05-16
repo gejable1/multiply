@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="icon_dashboard.svg?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icon_dashboard_192.png?v=2">
+<link rel="shortcut icon" href="icon_dashboard_192.png?v=2">
+<link rel="apple-touch-icon" href="icon_dashboard_192.png?v=2">
+<title>LC Member Report — MULTIPLY</title>
+<!-- Non-blocking font load — protects against slow PH networks. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"></noscript>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js?v=1"></script>
+<style>
+:root{
+  --bg:#f5f0e8;--surface:#ffffff;--surface2:#faf6ef;--surface3:#f0ebe0;
+  --border:#e2d8cc;--border2:#ccc0b0;
+  --ink:#1a1612;--ink2:#2a2218;--muted:#6b5f4f;--lighter:#9a8f80;--text:#3a3028;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;--gold-light:#fef9f0;
+  --navy:#1b2a4a;--navy2:#243560;
+  --green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;--green-light:#f5fbf7;--green-dim:#1a3a28;
+  --blue:#1a4a6b;--blue-bg:#e8f0f8;
+  --purple:#4a2a6b;--purple-bg:#f0eaf8;
+  --teal:#1a5a60;--teal-bg:#e8f5f5;
+  --red:#7a2020;--red-bg:#fdecea;--red-light:#fff5f5;
+  --orange:#7a4a10;--orange-bg:#fef3e8;
+  /* Zone palette — matches MD's ZONE_COLORS_CSS */
+  --z1:#2a5c40;--z1-bg:#eef6f1;
+  --z2:#d4a010;--z2-bg:#fff8e8;
+  --z3:#7a4a10;--z3-bg:#fef3e8;
+  --z4:#7a2020;--z4-bg:#fdecea;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --shadow2:0 4px 12px rgba(0,0,0,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:13px;}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--surface);border-bottom:2px solid var(--border);padding:0 1.25rem;display:flex;align-items:center;gap:1rem;height:54px;position:sticky;top:0;z-index:200;box-shadow:var(--shadow);}
+.brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.brand-logo{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--green);white-space:nowrap;}
+.brand-sub{font-size:11px;color:var(--muted);border-left:1px solid var(--border);padding-left:8px;white-space:nowrap;}
+.spacer{flex:1;}
+.btn-back{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:6px 14px;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s;}
+.btn-back:hover{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+
+/* ── PAGE LAYOUT ── */
+.wrap{max-width:1200px;margin:0 auto;padding:1.25rem 1rem 3rem;}
+.page-h{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--ink);margin-bottom:.25rem;letter-spacing:-.01em;}
+.page-sub{font-size:12.5px;color:var(--muted);margin-bottom:1.5rem;}
+
+/* ── HERO STATS ── */
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;margin-bottom:1.5rem;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;}
+.stat-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.45rem;}
+.stat-val{font-family:'Playfair Display',serif;font-size:1.75rem;font-weight:700;color:var(--ink);line-height:1;}
+.stat-foot{font-size:11px;color:var(--muted);margin-top:.4rem;}
+
+/* ── LEGEND + CAVEAT ── */
+.legend{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;margin-bottom:1.5rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center;font-size:11.5px;color:var(--text);}
+.legend-item{display:inline-flex;align-items:center;gap:5px;}
+.legend-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.caveat-bar{background:var(--gold-bg);border-left:3px solid var(--gold);border-radius:8px;padding:.65rem .9rem;margin-bottom:1.5rem;display:flex;gap:10px;align-items:flex-start;font-size:11.5px;line-height:1.55;color:var(--gold-dim);}
+
+/* ── LCG SECTION ── */
+.lcg-sec{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden;}
+.lcg-head{padding:.85rem 1.15rem;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:.85rem;user-select:none;}
+.lcg-head:hover{background:var(--surface3);}
+.lcg-chev{font-size:13px;color:var(--muted);transition:transform .15s;flex-shrink:0;}
+.lcg-sec.collapsed .lcg-chev{transform:rotate(-90deg);}
+.lcg-sec.collapsed .lcg-body{display:none;}
+.lcg-title{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;color:var(--ink);flex:1;}
+.lcg-title .lcg-count{font-family:'DM Sans',sans-serif;font-size:11px;color:var(--muted);font-weight:400;margin-left:.45rem;}
+.lcg-rollup{display:flex;gap:.85rem;flex-shrink:0;flex-wrap:wrap;}
+.rollup-chip{font-size:10.5px;color:var(--muted);background:white;border:1px solid var(--border);border-radius:6px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;}
+.rollup-chip b{color:var(--ink);font-weight:600;}
+
+/* ── MEMBER CARD ── */
+.lcg-body{padding:.65rem;}
+.mcard{background:white;border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;margin-bottom:.55rem;transition:border-color .15s;}
+.mcard:last-child{margin-bottom:0;}
+.mcard:hover{border-color:var(--border2);}
+.mcard-head{display:flex;align-items:center;gap:.65rem;margin-bottom:.5rem;}
+.mc-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:white;flex-shrink:0;}
+.mc-name-wrap{flex:1;min-width:0;}
+.mc-name{font-size:13.5px;font-weight:600;color:var(--ink);}
+.mc-name .mc-badge{font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.3);margin-left:.35rem;vertical-align:middle;font-weight:600;}
+.mc-name .mc-badge.test{background:rgba(167,139,250,.18);color:#7c3aed;border-color:rgba(167,139,250,.4);}
+.mc-name .mc-badge.guest{background:rgba(74,144,226,.16);color:#3a7bd1;border-color:rgba(74,144,226,.35);}
+.mc-meta{font-size:11px;color:var(--muted);margin-top:1px;display:flex;flex-wrap:wrap;gap:.5rem .85rem;}
+.mc-meta span{display:inline-flex;align-items:center;gap:3px;}
+
+/* ── PILLS ── */
+.pill-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.35rem;}
+.pill{font-size:10.5px;font-weight:500;padding:3px 9px;border-radius:10px;border:1px solid;display:inline-flex;align-items:center;gap:4px;line-height:1.45;}
+.pill b{font-weight:700;}
+.pill .pill-sub{opacity:.78;font-weight:400;margin-left:3px;}
+.pill.none{background:var(--surface2);color:var(--lighter);border-color:var(--border);font-style:italic;}
+/* Salvation pill — composite 3-piece pill */
+.pill-salv{display:inline-flex;align-items:stretch;gap:0;border-radius:10px;overflow:hidden;border:1px solid;font-size:10.5px;font-weight:500;line-height:1.45;}
+.pill-salv .ps-seg{padding:3px 8px;display:inline-flex;align-items:center;gap:3px;}
+.pill-salv .ps-divider{width:1px;background:currentColor;opacity:.18;}
+/* Zone pills */
+.pill.z1{background:var(--z1-bg);color:var(--z1);border-color:rgba(42,92,64,.3);}
+.pill.z2{background:var(--z2-bg);color:#8a6010;border-color:rgba(212,160,16,.45);}
+.pill.z3{background:var(--z3-bg);color:var(--z3);border-color:rgba(122,74,16,.4);}
+.pill.z4{background:var(--z4-bg);color:var(--z4);border-color:rgba(122,32,32,.4);}
+.pill-salv.z1{background:var(--z1-bg);color:var(--z1);border-color:rgba(42,92,64,.3);}
+.pill-salv.z2{background:var(--z2-bg);color:#8a6010;border-color:rgba(212,160,16,.45);}
+.pill-salv.z3{background:var(--z3-bg);color:var(--z3);border-color:rgba(122,74,16,.4);}
+.pill-salv.z4{background:var(--z4-bg);color:var(--z4);border-color:rgba(122,32,32,.4);}
+/* Assessment pills — neutral coloring with subtle differentiation */
+.pill.gifts{background:var(--green-bg);color:var(--green);border-color:rgba(42,92,64,.25);}
+.pill.disc{background:var(--blue-bg);color:var(--blue);border-color:rgba(26,74,107,.25);}
+.pill.enneagram{background:var(--gold-bg);color:var(--gold-dim);border-color:rgba(184,136,42,.3);}
+.pill.love_language{background:#fdebee;color:#8a2040;border-color:rgba(138,32,64,.25);}
+.pill.strengths{background:var(--teal-bg);color:var(--teal);border-color:rgba(26,90,96,.25);}
+.pill.conflict_style{background:var(--purple-bg);color:var(--purple);border-color:rgba(74,42,107,.25);}
+.pill.has-caveat{position:relative;}
+.pill.has-caveat::after{content:'⚠';font-size:9px;margin-left:3px;opacity:.85;}
+
+/* ── EMPTY/LOAD STATES ── */
+.empty-card{background:var(--surface);border:1.5px dashed var(--border);border-radius:12px;padding:2rem 1rem;text-align:center;color:var(--muted);font-size:13px;}
+.empty-card .emoji{font-size:1.75rem;margin-bottom:.4rem;}
+.spin-wrap{display:flex;flex-direction:column;align-items:center;gap:.85rem;padding:3rem 1rem;color:var(--muted);font-size:13px;}
+.spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.9s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PRINT ── */
+@media print{
+  body{background:white;}
+  .topbar,.btn-back,.lcg-head{cursor:default;}
+  .lcg-sec.collapsed .lcg-body{display:block !important;}
+  .lcg-chev{display:none;}
+  .lcg-sec{break-inside:avoid;}
+  .mcard{break-inside:avoid;}
+}
+
+/* ── MOBILE ── */
+@media (max-width:640px){
+  .wrap{padding:1rem .6rem 2rem;}
+  .page-h{font-size:1.35rem;}
+  .lcg-head{flex-wrap:wrap;}
+  .lcg-rollup{width:100%;margin-top:.35rem;}
+  .hero{grid-template-columns:1fr 1fr;}
+  .stat{padding:.85rem .9rem;}
+  .stat-val{font-size:1.4rem;}
+  .mc-meta{font-size:10.5px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═════════════════════════════════════════════════════════════
+     TOPBAR
+═══════════════════════════════════════════════════════════════ -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">MULTIPLY</div>
+    <div class="brand-sub">LC Member Report</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn-back" onclick="goBack()" title="Close or go back">← Back</button>
+</div>
+
+<!-- ═════════════════════════════════════════════════════════════
+     MAIN CONTENT
+═══════════════════════════════════════════════════════════════ -->
+<div class="wrap">
+  <div class="page-h">LC Member Report</div>
+  <div class="page-sub" id="pageSub">Loading…</div>
+
+  <div id="content">
+    <div class="spin-wrap">
+      <div class="spinner"></div>
+      <div>Loading members and assessments…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════════════════════════════════════════════════════
+     SCRIPT
+═══════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─── Invariant #29: leader-session gate via the published API. ───
+// Do NOT rebuild from memory. gateOrRedirect() sets window.LEADER and
+// returns true on success, redirects + returns false otherwise.
+if (!MultiplyShared.gateOrRedirect('leader_login.html')) {
+  // gate already redirected; halt all further execution
+  throw new Error('No valid leader session');
+}
+
+const db = MultiplyShared.getDB();
+const LEADER = window.LEADER || {};
+const _esc = MultiplyShared.escapeHTML;
+
+// ─── State ───
+let members = [];
+let profileRows = [];      // member_profiles + normalized gifts_diagnostic
+let latestByMember = {};   // memberId → {profile_type → row}
+let sysSettings = null;
+let LeaderScope = null;
+
+// ─── Back button — standing rule pattern ───
+function goBack(){
+  // Try to close the tab first (works only if we were opened via window.open)
+  let closed = false;
+  try { window.close(); closed = true; } catch(e){}
+  setTimeout(() => {
+    if (!window.closed) {
+      // Couldn't close. Fall back to history.back() if same-host referrer,
+      // else navigate to MD.
+      if (document.referrer && document.referrer.indexOf(location.host) !== -1) {
+        history.back();
+      } else {
+        location.href = 'multiply_dashboard.html';
+      }
+    }
+  }, 150);
+}
+
+// ─── Load everything in parallel ───
+async function loadAll(){
+  try {
+    const [
+      membersRes,
+      profilesRes,
+      giftsRes,
+      settingsRes
+    ] = await Promise.all([
+      db.from('members').select(
+        'id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,diagnostic_zone,diagnostic_score,diagnostic_date,intervention_status,pipeline_level,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,is_facilitator,facilitator_role,is_test_member,is_external_user,updated_at,facilitator_name'
+      ).order('name', { ascending: true }),
+      db.from('member_profiles').select('*').order('date_taken', { ascending: false }),
+      db.from('gifts_diagnostic').select('*').order('date_taken', { ascending: false }),
+      db.from('system_settings').select('*').limit(1).maybeSingle()
+    ]);
+
+    if (membersRes.error) throw membersRes.error;
+    members = membersRes.data || [];
+    sysSettings = settingsRes.data || null;
+
+    // ── Build merged profileRows per Invariant #11 ──
+    // member_profiles → love_language, disc, enneagram, strengths, conflict_style
+    // gifts_diagnostic → spiritual gifts (different schema, normalize to common shape)
+    const pr = profilesRes.data || [];
+    const gd = giftsRes.data || [];
+    const gdNorm = gd.map(g => ({
+      id: g.id,
+      member_id: g.member_id,
+      profile_type: 'gifts',
+      top_result: g.primary_gift || null,
+      second_result: g.secondary_gift || null,
+      third_result: g.supporting_gift || null,
+      summary: [g.primary_gift, g.secondary_gift, g.supporting_gift].filter(Boolean).join(' · '),
+      date_taken: g.date_taken,
+      created_at: g.created_at
+    }));
+    profileRows = [...pr, ...gdNorm];
+
+    // Build memberId → {profile_type → latest row}. Sort already-desc-by-date,
+    // but mixed sources may have null date_taken; tie-break on created_at.
+    profileRows.sort((a, b) => {
+      const da = a.date_taken || a.created_at || '';
+      const dbb = b.date_taken || b.created_at || '';
+      return dbb.localeCompare(da);
+    });
+    latestByMember = {};
+    profileRows.forEach(r => {
+      if (!r.member_id || !r.profile_type) return;
+      if (!latestByMember[r.member_id]) latestByMember[r.member_id] = {};
+      if (!latestByMember[r.member_id][r.profile_type]) {
+        latestByMember[r.member_id][r.profile_type] = r;
+      }
+    });
+
+    // ── LeaderScope ──
+    // Default view: 'tree' for any leader; Pastor can see 'all'.
+    LeaderScope = MultiplyShared.makeLeaderScope(() => members);
+    LeaderScope.setView(LeaderScope.isPastor() ? 'all' : 'tree');
+
+    render();
+  } catch(err) {
+    handleLoadError(err);
+  }
+}
+
+function handleLoadError(err){
+  console.error('Load error:', err);
+  document.getElementById('content').innerHTML =
+    `<div class="empty-card"><div class="emoji">⚠️</div>
+      <div style="font-weight:600;color:var(--ink);margin-bottom:.35rem;">Could not load report</div>
+      <div style="font-size:12px;">${_esc(err.message || String(err))}</div>
+    </div>`;
+  document.getElementById('pageSub').textContent = 'Error.';
+}
+
+// ─── Inject logged-in leader into the scoped pool ───
+// LeaderScope.apply() returns descendants only — it excludes the logged-in
+// leader themselves. But for the report to render the leader's own LCG as a
+// top-level group, the leader's own record must be present in the pool.
+// Pastor's 'all' view already includes themselves.
+function getReportPool(){
+  const scoped = LeaderScope.apply();
+  if (LeaderScope.isPastor()) return scoped;
+  const me = members.find(m => m.id === LEADER.leaderId);
+  if (!me) return scoped;
+  if (scoped.some(m => m.id === me.id)) return scoped;
+  return [me, ...scoped];
+}
+
+// ─── Group helpers (Invariant #1 — key off LC Leaders, not lc_group text) ───
+function getFacilitators(memberPool){
+  // From the visible pool, find members flagged as facilitators/LC leaders.
+  return memberPool.filter(m => m.is_facilitator || m.facilitator_role);
+}
+
+function groupMembersByLcLeader(visibleMembers){
+  // Derive group identity from LC Leader records via the discipler graph.
+  // A member "belongs" to a leader's group if:
+  //   • the leader is their direct discipler, OR
+  //   • they are a transitive descendant of that leader in the discipler graph
+  // We use a "primary leader" = the nearest ancestor who is a facilitator.
+  //
+  // Returns: { leaderId → { leader, members: [...] }, _unassigned: { members: [...] } }
+  const byId = new Map(visibleMembers.map(m => [m.id, m]));
+  const isFac = m => !!(m && (m.is_facilitator || m.facilitator_role));
+
+  function findNearestLeaderAncestor(member, depth){
+    if (!member || depth > 12) return null;  // cycle/over-deep safety
+    if (isFac(member) && depth > 0) return member;  // skip self if member IS a leader
+    const did = member.discipler_id;
+    if (!did) return null;
+    const parent = byId.get(did);
+    if (!parent) return null;
+    return findNearestLeaderAncestor(parent, depth + 1);
+  }
+
+  const groups = {};
+  const unassigned = [];
+
+  // Seed groups for every facilitator in scope (so leader-only groups show).
+  getFacilitators(visibleMembers).forEach(leader => {
+    groups[leader.id] = { leader, members: [] };
+  });
+
+  visibleMembers.forEach(m => {
+    // Skip listing the LC leader themself inside their own member list —
+    // they're shown in the header.
+    if (isFac(m)) return;
+    const leader = findNearestLeaderAncestor(m, 0);
+    if (leader && groups[leader.id]) {
+      groups[leader.id].members.push(m);
+    } else {
+      unassigned.push(m);
+    }
+  });
+
+  return { groups, unassigned };
+}
+
+// ─── Avatar color (same family as MD pipeline-level palette) ───
+const LC_COLORS = ['#9a8f80','#2a5c40','#1a4a6b','#b8882a','#4a2a6b','#7a2020'];
+function avatarFor(m){
+  const lvl = m.pipeline_level || 0;
+  const initials = (m.name || '?').trim().split(/\s+/).slice(0,2).map(s => s[0]||'').join('').toUpperCase() || '?';
+  return `<div class="mc-av" style="background:${LC_COLORS[Math.min(lvl,5)]}">${_esc(initials)}</div>`;
+}
+
+// ─── Salvation pill — 3-piece composite per locked spec ───
+// Piece 1: Taken? (binary)
+// Piece 2: Zone (1-4, color)
+// Piece 3: Intervention status (only when zone ≥ 2)
+function renderSalvationPill(m){
+  if (!m.diagnostic_zone) {
+    return `<span class="pill none" title="Salvation Assurance Diagnostic not yet taken">Salv —</span>`;
+  }
+  const z = m.diagnostic_zone;
+  const zLabel = { 1:'Z1', 2:'Z2', 3:'Z3', 4:'Z4' }[z] || `Z${z}`;
+  const zEmoji = { 1:'🟢', 2:'🟡', 3:'🟠', 4:'🔴' }[z] || '';
+  const zDesc  = { 1:'Clear Assurance', 2:'Uncertain', 3:'Formation Gap', 4:'Unresolved' }[z] || '';
+
+  // Build composite. Show intervention only when zone ≥ 2 (Invariant per locked spec).
+  let middle = `<span class="ps-seg" title="${_esc(zDesc)}"><b>Salv ✓</b></span>` +
+               `<span class="ps-divider"></span>` +
+               `<span class="ps-seg" title="${_esc(zDesc)}">${zEmoji} ${zLabel}</span>`;
+
+  if (z >= 2) {
+    const st = m.intervention_status || 'not_started';
+    const stMap = {
+      not_started: { icon: '⏸', label: 'Not started' },
+      in_progress: { icon: '🔄', label: 'In progress' },
+      completed:   { icon: '✓',  label: 'Done' },
+      extended:    { icon: '⏱', label: 'Extended' }
+    };
+    const s = stMap[st] || stMap.not_started;
+    middle += `<span class="ps-divider"></span>` +
+              `<span class="ps-seg" title="Intervention: ${_esc(s.label)}">${s.icon} ${_esc(s.label)}</span>`;
+  }
+
+  return `<span class="pill-salv z${z}">${middle}</span>`;
+}
+
+// ─── Single assessment pill (one of: gifts, disc, enneagram, love_language, strengths, conflict_style) ───
+function renderAssessmentPill(memberId, profileType, prettyShort){
+  const latest = (latestByMember[memberId] || {})[profileType];
+  if (!latest) {
+    return `<span class="pill none" title="${_esc(prettyShort)} not taken">${_esc(prettyShort)} —</span>`;
+  }
+  const top = latest.top_result;
+  if (!top) {
+    return `<span class="pill ${profileType}" title="${_esc(prettyShort)} taken but no top result">${_esc(prettyShort)} ✓</span>`;
+  }
+  // Check if a caveat should fire (Invariants #16 + caveat system from MD)
+  const hasCaveat = MultiplyShared.shouldShowAssessmentCaveat(profileType, latest.date_taken, sysSettings);
+  const caveatTitle = hasCaveat
+    ? ` · ⚠ This result is from an older instrument version; treat as conversation starter.`
+    : '';
+
+  // Display top result, compact. For DISC and Enneagram which use 1-char or '1'-'9' codes,
+  // surface the summary if available since it carries more context.
+  let label;
+  if (profileType === 'disc') {
+    label = latest.summary || top;
+  } else if (profileType === 'enneagram') {
+    label = `Type ${top}`;
+  } else {
+    label = top;
+  }
+  const cavClass = hasCaveat ? ' has-caveat' : '';
+  return `<span class="pill ${profileType}${cavClass}" title="${_esc(prettyShort)}: ${_esc(label)}${caveatTitle}">${_esc(prettyShort)} <b>${_esc(label)}</b></span>`;
+}
+
+// ─── One member card ───
+function renderMemberCard(m){
+  // Badges
+  const facBadge = (m.is_facilitator || m.facilitator_role)
+    ? `<span class="mc-badge">⭐ ${_esc(m.facilitator_role || 'Facilitator')}</span>` : '';
+  const testBadge = m.is_test_member ? `<span class="mc-badge test">🧪 Test</span>` : '';
+  const guestBadge = m.is_external_user ? `<span class="mc-badge guest">👤 Guest</span>` : '';
+
+  // Metadata row: Level · Ministry · Last seen
+  const lvl = m.pipeline_level || 0;
+  const lvlName = MultiplyShared.LEVEL_NAMES[lvl] || '—';
+  const ministries = [m.ministry, m.ministry2, m.ministry3].filter(Boolean);
+  const minStr = ministries.length ? ministries.join(' · ') : 'Unplaced';
+  const lastSeen = m.updated_at
+    ? new Date(m.updated_at).toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' })
+    : '—';
+
+  const pills = [
+    renderSalvationPill(m),
+    renderAssessmentPill(m.id, 'gifts',          'Gifts'),
+    renderAssessmentPill(m.id, 'disc',           'DISC'),
+    renderAssessmentPill(m.id, 'enneagram',      'Enn'),
+    renderAssessmentPill(m.id, 'love_language',  'Love'),
+    renderAssessmentPill(m.id, 'strengths',      'Strengths'),
+    renderAssessmentPill(m.id, 'conflict_style', 'Conflict')
+  ].join('');
+
+  return `
+    <div class="mcard">
+      <div class="mcard-head">
+        ${avatarFor(m)}
+        <div class="mc-name-wrap">
+          <div class="mc-name">${_esc(m.name || '—')}${facBadge}${testBadge}${guestBadge}</div>
+          <div class="mc-meta">
+            <span>⛪ <b>L${lvl}</b> ${_esc(lvlName)}</span>
+            <span>🎯 ${_esc(minStr)}</span>
+            <span>🕒 Updated ${_esc(lastSeen)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="pill-row">${pills}</div>
+    </div>`;
+}
+
+// ─── Per-LCG rollup math ───
+function computeRollup(memberList){
+  if (!memberList.length) return { salvCount: 0, totalLcMembers: 0, coverage: 0 };
+  // Salvation: count taken (any zone) / total
+  const taken = memberList.filter(m => !!m.diagnostic_zone).length;
+  // Assessment coverage: avg across 6 instruments per member (gifts + 5 in member_profiles)
+  const TYPES = ['gifts','disc','enneagram','love_language','strengths','conflict_style'];
+  let totalCells = memberList.length * TYPES.length;
+  let filled = 0;
+  memberList.forEach(m => {
+    const got = latestByMember[m.id] || {};
+    TYPES.forEach(t => { if (got[t]) filled++; });
+  });
+  const coverage = totalCells > 0 ? Math.round((filled / totalCells) * 100) : 0;
+  return { salvCount: taken, totalLcMembers: memberList.length, coverage };
+}
+
+// ─── Render whole report ───
+function render(){
+  const wrap = document.getElementById('content');
+
+  // ── Apply leader scope (and inject the logged-in leader into pool) ──
+  // Pastor (level >= 5): sees all members (includes themselves)
+  // Other leaders: sees their tree + themselves (so their own LCG renders)
+  // is_test_member + is_external_user excluded by LeaderScope by default.
+  const scoped = getReportPool();
+
+  // ── Group by LC leader ──
+  const { groups, unassigned } = groupMembersByLcLeader(scoped);
+
+  // ── Hero stats ──
+  const allInScope = scoped;
+  const totalMembers = allInScope.length;
+  const allFacs = getFacilitators(allInScope);
+  const grandRollup = computeRollup(allInScope.filter(m => !(m.is_facilitator || m.facilitator_role)));
+
+  // Subline indicates current scope (transparency for Pastor)
+  const scopeLabel = LeaderScope.isPastor() ? 'All LCGs' : 'My LCG tree';
+  document.getElementById('pageSub').textContent =
+    `${scopeLabel} · ${allFacs.length} LC leader${allFacs.length === 1 ? '' : 's'} · ${totalMembers} member${totalMembers === 1 ? '' : 's'} in scope`;
+
+  // ── Build HTML ──
+  let html = '';
+
+  // Hero
+  html += `
+    <div class="hero">
+      <div class="stat">
+        <div class="stat-label">LC Groups</div>
+        <div class="stat-val">${allFacs.length}</div>
+        <div class="stat-foot">in scope</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Members</div>
+        <div class="stat-val">${grandRollup.totalLcMembers}</div>
+        <div class="stat-foot">excluding LC leaders</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Salvation Taken</div>
+        <div class="stat-val">${grandRollup.salvCount}${grandRollup.totalLcMembers ? ` <span style="font-size:1rem;color:var(--muted);font-weight:400">/ ${grandRollup.totalLcMembers}</span>` : ''}</div>
+        <div class="stat-foot">${grandRollup.totalLcMembers ? Math.round((grandRollup.salvCount/grandRollup.totalLcMembers)*100) : 0}% have a diagnostic</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Assessment Coverage</div>
+        <div class="stat-val">${grandRollup.coverage}<span style="font-size:1rem;color:var(--muted);font-weight:400">%</span></div>
+        <div class="stat-foot">avg across 6 instruments</div>
+      </div>
+    </div>`;
+
+  // Pastoral caveat (Invariant #16)
+  html += `
+    <div class="caveat-bar">
+      <div style="font-size:14px;line-height:1.2;">💬</div>
+      <div>
+        <b>Assessments are conversation starters, not verdicts.</b> A ⚠ on a pill means the
+        result was produced by an earlier version of an instrument being redesigned —
+        treat as a discipleship prompt and re-administer when available. The AI surfaces
+        information; the pastor pastors.
+      </div>
+    </div>`;
+
+  // Legend
+  html += `
+    <div class="legend">
+      <span style="font-weight:600;color:var(--ink);">Salvation zones:</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--z1)"></span> Z1 Clear</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--z2)"></span> Z2 Uncertain</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--z3)"></span> Z3 Formation Gap</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--z4)"></span> Z4 Unresolved</span>
+      <span style="color:var(--lighter);margin:0 .25rem;">|</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--surface3);border:1px solid var(--border);"></span> "—" = not yet taken</span>
+    </div>`;
+
+  // ── LCG sections ──
+  const facIds = Object.keys(groups).sort((a, b) => {
+    const an = (groups[a].leader.name || '').toLowerCase();
+    const bn = (groups[b].leader.name || '').toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  if (!facIds.length && !unassigned.length) {
+    html += `
+      <div class="empty-card">
+        <div class="emoji">🌱</div>
+        <div style="font-weight:600;color:var(--ink);margin-bottom:.3rem;">No members in scope yet</div>
+        <div>${LeaderScope.isPastor() ? 'No LC leaders or members have been added.' : 'Your disciple tree is empty. Add members or wait for assignments.'}</div>
+      </div>`;
+  } else {
+    facIds.forEach(fid => {
+      const { leader, members: list } = groups[fid];
+      const rollup = computeRollup(list);
+      const groupName = (leader.lc_group || '').trim() || `${leader.name}'s Group`;
+      html += `
+        <div class="lcg-sec" id="sec-${_esc(fid)}">
+          <div class="lcg-head" onclick="toggleSec('${_esc(fid)}')">
+            <div class="lcg-chev">▾</div>
+            <div class="lcg-title">
+              ${_esc(groupName)}
+              <span class="lcg-count">· led by ${_esc(leader.name)}${leader.facilitator_role ? ' · ' + _esc(leader.facilitator_role) : ''}</span>
+            </div>
+            <div class="lcg-rollup">
+              <span class="rollup-chip">👥 <b>${rollup.totalLcMembers}</b> ${rollup.totalLcMembers === 1 ? 'member' : 'members'}</span>
+              <span class="rollup-chip">✝️ Salv: <b>${rollup.salvCount}/${rollup.totalLcMembers || 0}</b></span>
+              <span class="rollup-chip">📊 Coverage: <b>${rollup.coverage}%</b></span>
+            </div>
+          </div>
+          <div class="lcg-body">
+            ${list.length
+              ? list.map(renderMemberCard).join('')
+              : '<div class="empty-card" style="padding:1.25rem 1rem;"><div style="font-size:1.5rem;margin-bottom:.3rem;">🌾</div><div>No members yet in this LCG.</div></div>'}
+          </div>
+        </div>`;
+    });
+
+    // Unassigned bucket — members in scope who have no facilitator ancestor.
+    // For most leaders this should be empty; for Pastor it surfaces orphan members.
+    if (unassigned.length) {
+      const rollup = computeRollup(unassigned);
+      html += `
+        <div class="lcg-sec" id="sec-_unassigned">
+          <div class="lcg-head" onclick="toggleSec('_unassigned')" style="background:var(--gold-light);">
+            <div class="lcg-chev">▾</div>
+            <div class="lcg-title">
+              Unassigned
+              <span class="lcg-count">· no LC leader ancestor</span>
+            </div>
+            <div class="lcg-rollup">
+              <span class="rollup-chip">👥 <b>${rollup.totalLcMembers}</b> ${rollup.totalLcMembers === 1 ? 'member' : 'members'}</span>
+              <span class="rollup-chip">✝️ Salv: <b>${rollup.salvCount}/${rollup.totalLcMembers}</b></span>
+              <span class="rollup-chip">📊 Coverage: <b>${rollup.coverage}%</b></span>
+            </div>
+          </div>
+          <div class="lcg-body">
+            ${unassigned.map(renderMemberCard).join('')}
+          </div>
+        </div>`;
+    }
+  }
+
+  wrap.innerHTML = html;
+}
+
+// ─── Collapse/expand a section ───
+function toggleSec(facId){
+  const el = document.getElementById('sec-' + facId);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+}
+window.toggleSec = toggleSec;
+
+// ─── Kick off ───
+loadAll();
+</script>
+</body>
+</html>
