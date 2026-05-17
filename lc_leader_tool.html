@@ -361,12 +361,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 /* ── TOAST ── */
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(10px);
   background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);
-  padding:10px 18px;font-size:13px;font-weight:600;color:var(--text);
-  z-index:300;opacity:0;transition:all .25s;white-space:nowrap;
+  padding:11px 18px;font-size:13px;font-weight:600;color:var(--text);
+  z-index:300;opacity:0;transition:all .25s;white-space:nowrap;max-width:92vw;
   box-shadow:0 4px 20px rgba(0,0,0,.4);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-.toast.success{border-color:rgba(52,211,153,.4);color:var(--green);}
-.toast.error{border-color:rgba(248,113,113,.4);color:var(--red);}
+/* Success/error: keep text bright for contrast; use tinted background +
+   left accent stripe to signal type. Fixes WCAG AA contrast failure
+   from colored-text-on-dark-surface (May 16, 2026). */
+.toast.success{
+  background:linear-gradient(135deg, rgba(52,211,153,.22), rgba(52,211,153,.10)), var(--surface2);
+  border-color:rgba(52,211,153,.55);
+  border-left:4px solid var(--green);
+  color:#eafff5;
+  padding-left:14px;}
+.toast.error{
+  background:linear-gradient(135deg, rgba(248,113,113,.22), rgba(248,113,113,.10)), var(--surface2);
+  border-color:rgba(248,113,113,.55);
+  border-left:4px solid var(--red);
+  color:#ffeded;
+  padding-left:14px;}
 
 /* ── LOADING ── */
 .loading{display:flex;align-items:center;justify-content:center;
@@ -494,24 +507,29 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div id="alertsWrap"></div>
 
   <!-- ════ L5 SELF-ATTEST CARD (hidden unless leaderLevel >= 5) ════ -->
+  <!-- Cream-on-dark card. ALL text colors must be hardcoded dark hex
+       values, NOT var(--text)/var(--muted) — those vars are tuned for
+       the dark home background and disappear on this light surface.
+       (Bug fix · May 16, 2026 — followed the Pending Confirmations
+       card's color pattern so the two cream cards look consistent.) -->
   <div id="l5SelfAttestCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
        background:linear-gradient(135deg, #fdfaf3, #f7f1e1);
-       border:1px solid var(--border); border-radius:var(--r);">
+       border:1px solid #e3d4a8; border-radius:var(--r);">
     <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;">
       <span style="font-size:22px;">📋</span>
-      <div style="font-weight:700;font-size:14.5px;color:var(--text);">My Attendance</div>
-      <div style="margin-left:auto;font-size:10.5px;color:var(--muted);font-style:italic;">
+      <div style="font-weight:700;font-size:14.5px;color:#3a2c0a;">My Attendance</div>
+      <div style="margin-left:auto;font-size:10.5px;color:#7a5800;font-style:italic;">
         For Pastoral Staff
       </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:.65rem;line-height:1.5;">
+    <div style="font-size:12px;color:#5a4316;margin-bottom:.65rem;line-height:1.5;">
       Mark yourself present at events you attended. No one logs attendance for Pastoral Staff
       so this keeps your attendance record honest. 🙏
     </div>
     <div id="l5AttestPickerRow" style="display:flex;flex-wrap:wrap;gap:.45rem;">
       <!-- Buttons inserted by renderL5AttestCard() -->
     </div>
-    <div id="l5LastMarkedRow" style="margin-top:.7rem;font-size:11.5px;color:#9aa0a6;min-height:14px;line-height:1.5;">
+    <div id="l5LastMarkedRow" style="margin-top:.7rem;font-size:11.5px;color:#7a5800;min-height:14px;line-height:1.5;">
       <!-- Last marked status -->
     </div>
   </div>
@@ -1432,14 +1450,17 @@ async function renderL5AttestCard(){
   }
 
   // Render buttons
+  // Brown-on-cream palette to match the parent card (light cream gradient).
+  // Earlier these used var(--surface)/var(--text) which produced jarring
+  // dark buttons floating on cream. May 16, 2026 contrast fix.
   row.innerHTML = types.map(et => {
     const targetDate = _l5LastTypicalDay(et.typical_day || 7);
     return `<button onclick="l5MarkSelfPresent('${et.key}', ${et.typical_day || 7})"
               style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
-                     background:var(--surface); border:1px solid var(--border);
+                     background:#fffdf7; border:1px solid #d8c690;
                      border-radius:var(--r); cursor:pointer; font-size:12px;
                      display:flex; align-items:center; gap:.4rem; justify-content:center;
-                     line-height:1.25; color:var(--text);">
+                     line-height:1.25; color:#3a2c0a;">
         <span style="font-size:15px;">${et.icon || '✓'}</span>
         <span style="font-weight:600;">${MultiplyShared.escapeHTML(et.label)}</span>
       </button>`;
@@ -1472,7 +1493,7 @@ async function _l5RefreshLastMarked(){
     const parts = Object.entries(latestByType).slice(0,3).map(([t,d]) =>
       `${MultiplyShared.escapeHTML(t)} → ${_l5FmtShort(d)}`
     );
-    row.innerHTML = '<strong style="color:#c8a456;font-weight:700;">Last:</strong> ' + parts.join(' &nbsp;·&nbsp; ');
+    row.innerHTML = '<strong style="color:#7a5800;font-weight:700;">Last:</strong> ' + parts.join(' &nbsp;·&nbsp; ');
   } catch(e) {
     row.innerHTML = '';
   }
@@ -4091,7 +4112,13 @@ function avColor(level){
 }
 function toast(msg,type=''){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.className='toast '+(type||'');
+  // Type aliasing — many call sites pass emoji as the type (e.g. '❌', '⚠️', '✓').
+  // Normalize so the CSS .success / .error variants still apply.
+  let cls = (type || '').toString().toLowerCase();
+  if (cls === '✓' || cls === '✅' || cls === '🎓') cls = 'success';
+  else if (cls === '❌' || cls === '⚠️' || cls === '⚠' || cls === '🚫') cls = 'error';
+  // 'ℹ️' / 'info' fall through as a neutral toast (default styling reads well).
+  t.textContent=msg; t.className='toast '+(cls||'');
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800);
 }
 
