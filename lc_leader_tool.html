@@ -917,6 +917,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="detail-sections" id="detailSections"></div>
   <div class="detail-actions">
     <button class="da-btn da-secondary" id="markPresentBtn" onclick="logQuickAttendance()">✓ Mark present</button>
+    <button class="da-btn da-secondary" id="proposeTransferBtn" onclick="openProposeTransfer()" style="display:none">🔀 Transfer</button>
     <button class="da-btn da-primary" onclick="openSalvationDiag()">📋 Salvation Diag</button>
   </div>
 </div>
@@ -1208,7 +1209,7 @@ async function loadMyMembers(){
     // natural_talents, enneagram_description, sports_inclination,
     // max_interventions, leader_pin_*, member_pin_*.
     const {data, error} = await db.from('members')
-      .select('id,created_at,updated_at,name,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
+      .select('id,created_at,updated_at,name,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
       .order('name');
     if(error) throw error;
     allMembers = data || [];
@@ -1377,7 +1378,11 @@ function renderHome(){
   </div>`;
 
   const alertsWrap = document.getElementById('alertsWrap');
-  alertsWrap.innerHTML = alerts + renderTransferAlerts();
+  alertsWrap.innerHTML = alerts + renderTransferAlerts()
+    + '<div id="incomingTransfersHost"></div>';
+
+  // Async-load incoming transfers card (Invariant #45 — pending TO me)
+  _refreshIncomingTransfersCard();
 
   // L5 self-attest card (Pastor + Pastoral Staff only)
   renderL5AttestCard();
@@ -1741,6 +1746,8 @@ function openMember(id){
   showScreen('screenDetail');
   // Refresh Mark Present button to reflect today's attendance state
   _refreshMarkPresentBtn();
+  // Show transfer button only if I'm this member's current LCL (or Pastor)
+  _refreshTransferBtn(mem);
 }
 
 function buildDetailSections(mem){
@@ -1750,6 +1757,8 @@ function buildDetailSections(mem){
 
   // Transfer info if pending
   if(mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group){
+    const iProposed = mem.pending_transfer_by && mem.pending_transfer_by === LEADER.leaderId;
+    const proposerName = _findMemberName(mem.pending_transfer_by);
     html += `<div class="ds-card open" style="border-color:rgba(251,191,36,.3)">
       <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
         <div class="ds-icon">🔀</div>
@@ -1762,7 +1771,14 @@ function buildDetailSections(mem){
           <div><span style="color:var(--muted)">From:</span> <strong>${mem.lc_group||'—'}</strong></div>
           <div><span style="color:var(--muted)">To:</span> <strong style="color:#fbbf24">${mem.pending_lc_group}</strong></div>
           ${mem.transfer_date?`<div><span style="color:var(--muted)">Effective:</span> <strong>${mem.transfer_date}</strong></div>`:''}
+          ${proposerName?`<div><span style="color:var(--muted)">Proposed by:</span> <strong>${MultiplyShared.escapeHTML(proposerName)}</strong></div>`:''}
         </div>
+        ${iProposed?`
+          <div style="margin-top:10px">
+            <button class="btn-secondary" style="font-size:12px;padding:7px 12px"
+                    onclick="cancelMyTransferProposal('${mem.id}')">↩ Cancel my request</button>
+          </div>
+        `:''}
       </div>
     </div>`;
   }
@@ -2148,6 +2164,224 @@ async function logQuickAttendance(){
   }
   toast('✓ Marked present for ' + targetLbl, 'success');
   _setMarkPresentBtn('marked');
+}
+
+// ═══════════════════════════════════════════════════════
+// LCG TRANSFERS — propose / cancel / incoming heads-up
+// ─────────────────────────────────────────────────────────
+// Mental model (see MULTIPLY_INVARIANTS.md #45):
+//   • Destination is identified by LCL (member with pipeline_level >= 2),
+//     not the sparse lc_group text field.
+//   • LCL can propose only for members where facilitator_id === LEADER.leaderId.
+//   • Pastor can do everything (handled in transfer_management.html).
+//   • Cancel button on the yellow card appears only if the proposer is me.
+//   • Incoming heads-up card on Home renders pending transfers TO me.
+// ═══════════════════════════════════════════════════════
+
+// Lookup helper for proposer name (used by the yellow card).
+function _findMemberName(id){
+  if(!id) return null;
+  const m = (allMembers||[]).find(x => x.id === id);
+  return m ? m.name : null;
+}
+
+// Show/hide the Transfer button on the member detail screen.
+// Visible only when the current leader is this member's shepherd (or Pastor).
+function _refreshTransferBtn(mem){
+  const btn = document.getElementById('proposeTransferBtn');
+  if(!btn || !mem) return;
+  const isMyMember  = mem.facilitator_id === LEADER.leaderId;
+  const isPastor    = (LEADER.leaderLevel || 0) >= 5;
+  const hasPending  = !!mem.pending_lc_group;
+  // Show button only if I can propose AND there's no pending request yet.
+  // (If there's already one pending, the cancel button on the yellow card
+  //  is the action surface — not the Transfer button.)
+  btn.style.display = ((isMyMember || isPastor) && !hasPending) ? '' : 'none';
+}
+
+// Open the propose-transfer modal.
+async function openProposeTransfer(){
+  if(!currentMember) return;
+  const mem = currentMember;
+  const isMyMember = mem.facilitator_id === LEADER.leaderId;
+  const isPastor   = (LEADER.leaderLevel || 0) >= 5;
+  if(!isMyMember && !isPastor){
+    toast('You can only transfer members in your own LCG','error');
+    return;
+  }
+
+  // Build modal
+  let modal = document.getElementById('proposeTransferModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'proposeTransferModal';
+    modal.className = 'lessons-overlay';
+    modal.innerHTML = `
+      <div class="lessons-panel" style="max-width:480px">
+        <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:18px">🔀</div>
+          <div style="font-weight:800;font-size:15px;flex:1">Propose Transfer</div>
+          <button onclick="closeProposeTransfer()" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:16px 18px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">MEMBER</div>
+          <div id="ptMemberName" style="font-weight:700;margin-bottom:14px"></div>
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">CURRENT LCL</div>
+          <div id="ptCurrentLcl" style="margin-bottom:14px"></div>
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">TRANSFER TO (LCL)</div>
+          <select id="ptToLcl" style="width:100%;padding:9px 11px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:13px;margin-bottom:14px">
+            <option value="">— Loading shepherds… —</option>
+          </select>
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">EFFECTIVE DATE</div>
+          <input type="date" id="ptDate" style="width:100%;padding:9px 11px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:13px;margin-bottom:14px;font-family:inherit">
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">REASON / NOTES (optional)</div>
+          <textarea id="ptReason" rows="2" placeholder="Geographic move, growth track, ministry fit…"
+            style="width:100%;padding:9px 11px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+          <div style="display:flex;gap:8px;margin-top:18px">
+            <button onclick="submitProposeTransfer()" class="da-btn da-primary" style="flex:1">Submit Request</button>
+            <button onclick="closeProposeTransfer()" class="da-btn da-secondary">Cancel</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">
+            This request will be reviewed by Pastor before the transfer takes effect.
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  // Populate fields
+  document.getElementById('ptMemberName').textContent = mem.name;
+  document.getElementById('ptCurrentLcl').textContent = mem.facilitator_name || mem.lc_group || '— No current LCL —';
+
+  // Default date to today (Manila-safe per Invariant #12)
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  document.getElementById('ptDate').value = ymd;
+  document.getElementById('ptReason').value = '';
+
+  modal.classList.add('open');
+
+  // Async populate destination LCL dropdown (Invariant #45 pool)
+  try{
+    const lcls = await MultiplyShared.transfers.listEligibleDestinationLCLs();
+    // Filter out the current LCL from the dropdown
+    const choices = (lcls||[]).filter(l => l.id !== mem.facilitator_id);
+    const sel = document.getElementById('ptToLcl');
+    if(!choices.length){
+      sel.innerHTML = '<option value="">⚠ No eligible destination LCLs</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— Select destination LCL —</option>' +
+      choices.map(l => {
+        const tag = l.lc_group ? ` · ${l.lc_group}` : '';
+        return `<option value="${l.id}">${MultiplyShared.escapeHTML(l.name)} (${l.level_name})${MultiplyShared.escapeHTML(tag)}</option>`;
+      }).join('');
+  }catch(e){
+    console.error('Failed to load LCLs:', e);
+    document.getElementById('ptToLcl').innerHTML = '<option value="">⚠ Error loading shepherds</option>';
+    toast('Failed to load destination list: '+e.message,'error');
+  }
+}
+
+function closeProposeTransfer(){
+  const m = document.getElementById('proposeTransferModal');
+  if(m) m.classList.remove('open');
+}
+
+async function submitProposeTransfer(){
+  if(!currentMember) return;
+  const mem = currentMember;
+  const toLcl = document.getElementById('ptToLcl').value;
+  const effDate = document.getElementById('ptDate').value;
+  const reason  = document.getElementById('ptReason').value.trim();
+
+  if(!toLcl){ toast('Select a destination LCL','error'); return; }
+  // effective date is optional per Pastor's decision
+
+  try{
+    await MultiplyShared.transfers.propose({
+      memberId: mem.id,
+      toFacilitatorId: toLcl,
+      effectiveDate: effDate || null,
+      reason: reason || null,
+      proposedBy: LEADER.leaderId
+    });
+    toast('🔀 Transfer request submitted','success');
+    closeProposeTransfer();
+    // Reload member data so the yellow card appears
+    await loadMembers();
+    const refreshed = (allMembers||[]).find(m => m.id === mem.id);
+    if(refreshed){
+      currentMember = refreshed;
+      openMember(refreshed.id);
+    }
+    // Refresh home card counts if user goes back
+    _refreshIncomingTransfersCard();
+  }catch(e){
+    console.error('Propose transfer failed:', e);
+    toast('❌ '+(e.message||'Transfer failed'),'error');
+  }
+}
+
+// Cancel my own transfer proposal (from the yellow card).
+async function cancelMyTransferProposal(memberId){
+  if(!memberId) return;
+  if(!confirm('Cancel your transfer request for this member?')) return;
+  try{
+    await MultiplyShared.transfers.cancel({
+      memberId,
+      cancelledBy: LEADER.leaderId
+    });
+    toast('↩ Transfer request cancelled','success');
+    await loadMembers();
+    const refreshed = (allMembers||[]).find(m => m.id === memberId);
+    if(refreshed){
+      currentMember = refreshed;
+      openMember(refreshed.id);
+    }
+    _refreshIncomingTransfersCard();
+  }catch(e){
+    console.error('Cancel transfer failed:', e);
+    toast('❌ '+(e.message||'Cancel failed'),'error');
+  }
+}
+
+// Renders the "📥 Incoming Members" home card. Shows pending transfers
+// where I am the destination LCL. Read-only — Pastor approves.
+async function _refreshIncomingTransfersCard(){
+  const host = document.getElementById('incomingTransfersHost');
+  if(!host) return;
+  if(!LEADER || !LEADER.leaderId){ host.innerHTML=''; return; }
+  try{
+    const incoming = await MultiplyShared.transfers.incomingFor(LEADER.leaderId);
+    if(!incoming || !incoming.length){ host.innerHTML=''; return; }
+
+    const rows = incoming.map(m => {
+      const proposer = _findMemberName(m.pending_transfer_by);
+      const fromLcl  = _findMemberName(m.facilitator_id) || m.lc_group || '—';
+      return `<div class="ta-row">
+        <div class="ta-name">${MultiplyShared.escapeHTML(m.name)}</div>
+        <div class="ta-to" style="color:var(--muted)">from ${MultiplyShared.escapeHTML(fromLcl)}${proposer?` · proposed by ${MultiplyShared.escapeHTML(proposer)}`:''}</div>
+        ${m.transfer_date?`<div class="ta-date">${m.transfer_date}</div>`:''}
+      </div>`;
+    }).join('');
+
+    host.innerHTML = `<div class="transfer-alert" style="border-color:rgba(96,165,250,.3);background:rgba(96,165,250,.07)">
+      <div class="ta-title" style="color:#60a5fa">📥 INCOMING MEMBERS (${incoming.length})</div>
+      ${rows}
+      <div style="font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.5">
+        Awaiting Pastor's approval. You'll see these members in your roster once approved.
+      </div>
+    </div>`;
+  }catch(e){
+    console.error('Failed to load incoming transfers:', e);
+    host.innerHTML='';
+  }
 }
 
 // ═══════════════════════════════════════════════════════

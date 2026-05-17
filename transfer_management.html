@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="shortcut icon" href="favicon.svg">
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🔀</text></svg>">
 <title>Transfer Management · MULTIPLY Pastor Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
 <style>
 /* ── Design tokens (match multiply_dashboard) ── */
 :root{
@@ -80,12 +80,13 @@ body{background:var(--bg);color:var(--ink);font-family:'DM Sans',sans-serif;
 .tc-arrow{color:var(--muted);font-size:10px;}
 .tc-to{background:rgba(251,191,36,.15);color:var(--gold2);}
 .tc-date{font-size:10px;color:var(--muted);}
+.tc-meta{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.4;}
 .tc-level{position:absolute;top:10px;right:10px;
   font-size:9px;font-weight:800;letter-spacing:.05em;
   padding:2px 6px;border-radius:4px;}
 
 /* ── Action buttons ── */
-.tc-actions{display:flex;gap:6px;margin-top:8px;}
+.tc-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
 .tc-btn{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
   cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .15s;}
 .tc-approve{background:rgba(52,211,153,.15);color:var(--green);border:1px solid rgba(52,211,153,.3);}
@@ -101,15 +102,15 @@ body{background:var(--bg);color:var(--ink);font-family:'DM Sans',sans-serif;
 .ltable th{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);}
 .ltable td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;}
-.ltable tr:hover td{background:var(--surface2);}
+.ltable tr:hover td{background:var(--surface2);cursor:pointer;}
 .ltable tr:last-child td{border-bottom:none;}
 
 /* ── Modal ── */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;
-  z-index:100;align-items:center;justify-content:center;}
+  z-index:100;align-items:center;justify-content:center;padding:16px;}
 .modal-bg.open{display:flex;}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;
-  width:90%;max-width:480px;padding:22px;position:relative;}
+  width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:22px;position:relative;}
 .modal-title{font-size:16px;font-weight:800;margin-bottom:16px;}
 .modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;
   background:var(--surface2);border:none;border-radius:6px;cursor:pointer;
@@ -124,7 +125,7 @@ body{background:var(--bg);color:var(--ink);font-family:'DM Sans',sans-serif;
   border-radius:var(--r-sm);padding:8px 11px;color:var(--ink);
   font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
 .field-input:focus{border-color:var(--gold2);}
-.modal-btns{display:flex;gap:8px;margin-top:18px;}
+.modal-btns{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
 .mbtn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;
   cursor:pointer;border:none;font-family:'DM Sans',sans-serif;}
 .mbtn-primary{background:var(--green);color:#0f0f13;}
@@ -156,6 +157,23 @@ select.field-input option{background:var(--surface2);}
 .lv3{background:rgba(251,146,60,.12);color:var(--orange);}
 .lv4{background:rgba(248,113,113,.12);color:var(--red);}
 .lv5{background:rgba(167,139,250,.12);color:var(--purple);}
+
+/* ── History timeline ── */
+.history-section{margin-top:18px;border-top:1px solid var(--border);padding-top:14px;}
+.history-toggle{cursor:pointer;display:flex;align-items:center;gap:8px;
+  font-size:12px;font-weight:700;color:var(--muted);user-select:none;}
+.history-toggle:hover{color:var(--ink);}
+.history-list{margin-top:10px;display:none;}
+.history-list.open{display:block;}
+.hist-row{padding:8px 10px;border-left:3px solid var(--border);margin-bottom:6px;
+  background:var(--surface2);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:11.5px;line-height:1.5;}
+.hist-row.proposed{border-left-color:var(--gold2);}
+.hist-row.approved{border-left-color:var(--green);}
+.hist-row.rejected{border-left-color:var(--red);}
+.hist-row.cancelled{border-left-color:var(--muted);}
+.hist-row.modified{border-left-color:var(--blue);}
+.hist-status{font-weight:800;letter-spacing:.05em;text-transform:uppercase;font-size:10px;}
+.hist-meta{color:var(--muted);font-size:10.5px;}
 
 /* ── Toast ── */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
@@ -202,7 +220,7 @@ select.field-input option{background:var(--surface2);}
     </div>
     <div class="stat-card">
       <div class="stat-num" id="statApprovedToday" style="color:var(--green)">—</div>
-      <div class="stat-label">Approved Today</div>
+      <div class="stat-label">Approved This Month</div>
     </div>
     <div class="stat-card">
       <div class="stat-num" id="statOverdue" style="color:var(--red)">—</div>
@@ -210,7 +228,7 @@ select.field-input option{background:var(--surface2);}
     </div>
     <div class="stat-card">
       <div class="stat-num" id="statTotal" style="color:var(--blue)">—</div>
-      <div class="stat-label">All Transfers</div>
+      <div class="stat-label">All-Time Transfers</div>
     </div>
   </div>
 
@@ -225,12 +243,14 @@ select.field-input option{background:var(--surface2);}
         </select>
       </div>
       <div class="field-row">
-        <div class="field-label">Current LC Group</div>
+        <div class="field-label">Current LCL</div>
         <input class="field-input" id="ntfFrom" placeholder="Auto-filled" readonly>
       </div>
       <div class="field-row">
-        <div class="field-label">Transfer To (LC Group)</div>
-        <input class="field-input" id="ntfTo" placeholder="Destination LC group name">
+        <div class="field-label">Transfer To (LCL)</div>
+        <select class="field-input" id="ntfTo">
+          <option value="">— Loading shepherds… —</option>
+        </select>
       </div>
       <div class="field-row">
         <div class="field-label">Effective Date</div>
@@ -249,7 +269,7 @@ select.field-input option{background:var(--surface2);}
 
   <!-- Filter + actions bar -->
   <div class="fbar">
-    <input class="fbar-input" id="searchQ" placeholder="Search member or LC group..." oninput="applyFilter()">
+    <input class="fbar-input" id="searchQ" placeholder="Search member or LCL..." oninput="applyFilter()">
     <div class="fchip on" data-f="pending" onclick="setFilter(this)">Pending</div>
     <div class="fchip" data-f="overdue" onclick="setFilter(this)">Overdue</div>
     <div class="fchip" data-f="all" onclick="setFilter(this)">All Members</div>
@@ -305,8 +325,8 @@ select.field-input option{background:var(--surface2);}
           <tr>
             <th>Member</th>
             <th>Level</th>
-            <th>From Group</th>
-            <th>To Group</th>
+            <th>From LCL</th>
+            <th>To LCL</th>
             <th>Effective Date</th>
             <th>Status</th>
             <th>Actions</th>
@@ -328,6 +348,8 @@ select.field-input option{background:var(--surface2);}
     <div class="modal-title" id="modalTitle">Transfer Details</div>
     <div id="modalBody"></div>
     <div class="modal-btns" id="modalBtns"></div>
+    <!-- History section appended dynamically -->
+    <div id="modalHistory"></div>
   </div>
 </div>
 
@@ -338,58 +360,73 @@ select.field-input option{background:var(--surface2);}
 </div>
 
 <script>
-// Smart back: if opened via target=_blank, no history exists, so close the tab.
-// Otherwise go back to the previous page.
+// ═══════════════════════════════════════════════════════════════════════════
+// MULTIPLY · Transfer Management (Pastor's kanban)
+// ─────────────────────────────────────────────────────────────────────────
+// Rewritten May 18, 2026 to:
+//   • Use multiply_shared.js (gateOrRedirect + MultiplyShared.transfers.*)
+//   • Show "Proposed by [name]" everywhere
+//   • Save reason field properly (writes to transfers.reason on propose)
+//   • Write audit trail on every action (approve/reject/modify)
+//   • Render "📜 Transfer History" in modal (chronological per member)
+//   • Use LCL dropdown (pipeline_level >= 2) instead of free-text LCG name
+//   • Align back-button cascade to Invariant #15
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Gate: require leader session. Pastor uses this page; LCL access should
+// redirect them to MLT instead (handled by the gate; if a non-Pastor reaches
+// this URL by accident, the page still works for any leader, but the
+// "actions" are tracked in audit trail with their leaderId).
+MultiplyShared.gateOrRedirect('login.html');
+
+// ── Back button per Invariant #15 ─────────────────────────────────────
 function goBackOrClose(){
-  // history.length is 1 when the tab was opened fresh (target=_blank or direct link)
-  if(window.history.length > 1){
-    window.history.back();
-    // Safety net: if back() didn't actually navigate within 250ms, try closing
-    setTimeout(()=>{
-      try{ window.close(); }catch(e){}
-    }, 250);
-  } else {
-    // Try to close — works only if the tab was opened by a script (window.open).
-    // If browser blocks it, fall back to redirecting to the dashboard.
-    const closed = (function(){
-      try{ window.close(); return true; }catch(e){ return false; }
-    })();
-    // After 200ms, if still here, redirect
-    setTimeout(()=>{
-      if(!window.closed){
-        window.location.href = 'https://gejable1.github.io/multiply/multiply_dashboard.html';
-      }
-    }, 200);
-  }
+  try { window.close(); } catch(e){}
+  setTimeout(() => {
+    if (!window.closed && document.referrer &&
+        new URL(document.referrer).host === location.host) {
+      window.history.back();
+    } else if (!window.closed) {
+      window.location.href = 'multiply_dashboard.html';
+    }
+  }, 150);
 }
 
 // ── Supabase ──────────────────────────────────────────────────────────
-const SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-const db = supabase.createClient(SB_URL, SB_KEY);
-
+const db = MultiplyShared.getDB();
 const LN = ['Pre-Pipeline','Team Member','Leader','Coach','Director','Exec. Leader'];
 const LC_CLS = ['','lv1','lv2','lv3','lv4','lv5'];
 
-let allMembers = [];   // all members with pending_lc_group
-let memberMap  = {};   // id → member for quick lookup
-let currentFilter = 'pending';
-let currentView   = 'kanban';
-let ntfVisible    = false;
-let modalMember   = null;
+let allMembers   = [];   // all members (full table)
+let memberMap    = {};   // id → member for lookup
+let lclMap       = {};   // id → LCL for dropdown/name lookup
+let currentFilter= 'pending';
+let currentView  = 'kanban';
+let ntfVisible   = false;
+let modalMember  = null;
+
+// Manila-safe YYYY-MM-DD per Invariant #12
+function ymd(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+const today = ymd(new Date());
+const thisMonthStart = today.slice(0,7)+'-01';
 
 // ── Init ──────────────────────────────────────────────────────────────
 async function init() {
-  await loadData();
+  await Promise.all([
+    loadData(),
+    loadLcls()
+  ]);
   await populateMemberDropdown();
 }
 
 async function loadData() {
   try {
-    // Fetch ALL members that have ever had a pending transfer OR have one now
     const { data, error } = await db
       .from('members')
-      .select('id,name,pipeline_level,lc_group,pending_lc_group,pending_discipler,transfer_date,diagnostic_zone,discipler_name')
+      .select('id,name,pipeline_level,lc_group,facilitator_id,facilitator_name,pending_lc_group,pending_facilitator_id,pending_discipler,pending_transfer_by,transfer_date,diagnostic_zone,discipler_name')
       .order('name');
 
     if (error) throw error;
@@ -403,35 +440,57 @@ async function loadData() {
   }
 }
 
+async function loadLcls() {
+  try {
+    const lcls = await MultiplyShared.transfers.listEligibleDestinationLCLs();
+    lclMap = Object.fromEntries((lcls||[]).map(l => [l.id, l]));
+    const sel = document.getElementById('ntfTo');
+    if(sel){
+      sel.innerHTML = '<option value="">— Select destination LCL —</option>' +
+        (lcls||[]).map(l => {
+          const tag = l.lc_group ? ` · ${l.lc_group}` : '';
+          return `<option value="${l.id}">${esc(l.name)} (${l.level_name})${esc(tag)}</option>`;
+        }).join('');
+    }
+  } catch (e) {
+    console.error('Failed to load LCLs:', e);
+    showToast('❌ Loading shepherds: '+e.message, true);
+  }
+}
+
 async function populateMemberDropdown() {
   const sel = document.getElementById('ntfMember');
-  const { data } = await db.from('members').select('id,name,lc_group').order('name');
-  (data || []).forEach(m => {
+  sel.innerHTML = '<option value="">— Select member —</option>';
+  allMembers.forEach(m => {
     const o = document.createElement('option');
     o.value = m.id;
-    o.dataset.group = m.lc_group || '';
+    o.dataset.fac = m.facilitator_id || '';
+    o.dataset.facName = m.facilitator_name || '';
     o.textContent = m.name + (m.lc_group ? ' · ' + m.lc_group : '');
     sel.appendChild(o);
   });
   sel.addEventListener('change', () => {
     const opt = sel.options[sel.selectedIndex];
-    document.getElementById('ntfFrom').value = opt.dataset.group || '';
+    const fac = opt.dataset.fac;
+    const facName = opt.dataset.facName;
+    const lclLc = (fac && lclMap[fac]) ? lclMap[fac].lc_group : '';
+    document.getElementById('ntfFrom').value = facName ? facName + (lclLc ? ' · ' + lclLc : '') : '(no current LCL)';
   });
 }
 
-// ── Data helpers ──────────────────────────────────────────────────────
-const today = new Date().toISOString().split('T')[0];
-const thisMonthStart = today.slice(0,7) + '-01';
-
-function isPending(m)  { return m.pending_lc_group && m.pending_lc_group !== m.lc_group; }
+// ── Helpers ───────────────────────────────────────────────────────────
+function esc(s){ return MultiplyShared.escapeHTML(s||''); }
+function lclNameFor(id){
+  if(!id) return null;
+  if(memberMap[id]) return memberMap[id].name;
+  if(lclMap[id]) return lclMap[id].name;
+  return null;
+}
+function isPending(m)  { return !!(m.pending_facilitator_id || (m.pending_lc_group && m.pending_lc_group !== m.lc_group)); }
 function isOverdue(m)  { return isPending(m) && m.transfer_date && m.transfer_date < today; }
 function isApprovedThisMonth(m) {
-  // Approved = pending was cleared this month. We approximate by checking
-  // transfer_date in this month and pending_lc_group === lc_group
-  // (i.e., the transfer was processed).
-  return m.transfer_date >= thisMonthStart && m.transfer_date <= today
-      && (!m.pending_lc_group || m.pending_lc_group === m.lc_group)
-      && m.transfer_date; // has a transfer_date
+  return m.transfer_date && m.transfer_date >= thisMonthStart && m.transfer_date <= today
+      && !isPending(m);
 }
 
 // ── Filter & search ───────────────────────────────────────────────────
@@ -441,7 +500,6 @@ function setFilter(el) {
   currentFilter = el.dataset.f;
   render();
 }
-
 function applyFilter() { render(); }
 
 function getFiltered() {
@@ -450,12 +508,13 @@ function getFiltered() {
 
   if (currentFilter === 'pending') list = list.filter(isPending);
   else if (currentFilter === 'overdue') list = list.filter(isOverdue);
-  // 'all' = all members
 
   if (q) list = list.filter(m =>
     m.name.toLowerCase().includes(q) ||
     (m.lc_group||'').toLowerCase().includes(q) ||
-    (m.pending_lc_group||'').toLowerCase().includes(q)
+    (m.pending_lc_group||'').toLowerCase().includes(q) ||
+    (m.facilitator_name||'').toLowerCase().includes(q) ||
+    (lclNameFor(m.pending_facilitator_id)||'').toLowerCase().includes(q)
   );
   return list;
 }
@@ -491,7 +550,9 @@ function renderKanban() {
   const q   = document.getElementById('searchQ').value.toLowerCase();
   const flt = m => !q || m.name.toLowerCase().includes(q)
     || (m.lc_group||'').toLowerCase().includes(q)
-    || (m.pending_lc_group||'').toLowerCase().includes(q);
+    || (m.pending_lc_group||'').toLowerCase().includes(q)
+    || (m.facilitator_name||'').toLowerCase().includes(q)
+    || (lclNameFor(m.pending_facilitator_id)||'').toLowerCase().includes(q);
 
   const pending  = all.filter(m => isPending(m) && !isOverdue(m) && flt(m));
   const overdue  = all.filter(m => isOverdue(m) && flt(m));
@@ -518,12 +579,14 @@ function renderList() {
     const pending = isPending(m);
     const overdueFlag = isOverdue(m);
     const status = overdueFlag ? '🔴 Overdue' : pending ? '🟡 Pending' : '✅ Done';
+    const fromLcl = m.facilitator_name || m.lc_group || '—';
+    const toLcl   = lclNameFor(m.pending_facilitator_id) || m.pending_lc_group || m.facilitator_name || '—';
     return `
       <tr onclick="openModal('${m.id}')">
-        <td><strong>${m.name}</strong></td>
+        <td><strong>${esc(m.name)}</strong></td>
         <td><span class="tc-chip ${LC_CLS[lvl]}" style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:800">${LN[lvl]||'—'}</span></td>
-        <td>${m.lc_group || '—'}</td>
-        <td>${m.pending_lc_group || m.lc_group || '—'}</td>
+        <td>${esc(fromLcl)}</td>
+        <td>${esc(toLcl)}</td>
         <td style="font-family:'DM Mono',monospace;font-size:12px">${m.transfer_date || '—'}</td>
         <td>${status}</td>
         <td>
@@ -539,16 +602,20 @@ function renderList() {
 function cardHTML(m, approved = false) {
   const lvl = m.pipeline_level || 0;
   const overdue = isOverdue(m);
+  const fromLcl = m.facilitator_name || m.lc_group || '(none)';
+  const toLcl   = lclNameFor(m.pending_facilitator_id) || m.pending_lc_group || '—';
+  const proposer = lclNameFor(m.pending_transfer_by);
   return `
     <div class="tc" onclick="openModal('${m.id}')">
       <div class="tc-level ${LC_CLS[lvl]}">${LN[lvl]||'—'}</div>
-      <div class="tc-name">${m.name}</div>
+      <div class="tc-name">${esc(m.name)}</div>
       <div class="tc-row">
-        <span class="tc-chip tc-from">${m.lc_group || '(none)'}</span>
+        <span class="tc-chip tc-from">${esc(fromLcl)}</span>
         <span class="tc-arrow">→</span>
-        <span class="tc-chip tc-to">${m.pending_lc_group || m.lc_group || '—'}</span>
+        <span class="tc-chip tc-to">${esc(toLcl)}</span>
       </div>
       ${m.transfer_date ? `<div class="tc-date">${overdue ? '⚠️' : '📅'} ${m.transfer_date}${overdue ? ' · OVERDUE' : ''}</div>` : ''}
+      ${proposer ? `<div class="tc-meta">Proposed by ${esc(proposer)}</div>` : ''}
       ${!approved ? `
         <div class="tc-actions" onclick="event.stopPropagation()">
           <button class="tc-btn tc-approve" onclick="approveTransfer('${m.id}')">✓ Approve</button>
@@ -562,56 +629,88 @@ function cardHTML(m, approved = false) {
 }
 
 function emptyHTML(msg) {
-  return `<div class="empty"><div class="empty-icon">🔀</div><div class="empty-title">${msg}</div></div>`;
+  return `<div class="empty"><div class="empty-icon">🔀</div><div class="empty-title">${esc(msg)}</div></div>`;
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────
-function openModal(memberId) {
+async function openModal(memberId) {
   const m = memberMap[memberId];
   if (!m) return;
   modalMember = m;
   const pending = isPending(m);
   const overdue = isOverdue(m);
   const lvl = m.pipeline_level || 0;
+  const fromLcl = m.facilitator_name || m.lc_group || '—';
+  const toLcl   = lclNameFor(m.pending_facilitator_id) || m.pending_lc_group || '—';
+  const proposer = lclNameFor(m.pending_transfer_by);
 
   document.getElementById('modalTitle').textContent = m.name + ' — Transfer';
+
+  const allLcls = Object.values(lclMap).filter(l => l.id !== m.facilitator_id);
+
   document.getElementById('modalBody').innerHTML = `
     <div class="field-row">
       <div class="field-label">Pipeline Level</div>
-      <div class="field-val">${LN[lvl]}</div>
+      <div class="field-val">${LN[lvl]||'—'}</div>
     </div>
     <div class="field-row">
-      <div class="field-label">Current LC Group</div>
-      <div class="field-val">${m.lc_group || '—'}</div>
+      <div class="field-label">Current LCL</div>
+      <div class="field-val">${esc(fromLcl)}</div>
     </div>
     <div class="field-row">
       <div class="field-label">Pending Transfer To</div>
-      <div class="field-val" style="color:var(--gold2)">${m.pending_lc_group || '(none)'}</div>
+      <div class="field-val" style="color:var(--gold2)">${esc(toLcl)}${m.pending_lc_group?` <span class="field-sub">· ${esc(m.pending_lc_group)}</span>`:''}</div>
     </div>
     <div class="field-row">
       <div class="field-label">Effective Date</div>
       <div class="field-val" style="${overdue ? 'color:var(--red)' : ''}">${m.transfer_date || '—'}${overdue ? ' ⚠️ Overdue' : ''}</div>
     </div>
+    ${proposer ? `
+    <div class="field-row">
+      <div class="field-label">Proposed By</div>
+      <div class="field-val">${esc(proposer)}</div>
+    </div>` : ''}
     <div class="field-row">
       <div class="field-label">Current Discipler</div>
-      <div class="field-val">${m.discipler_name || '—'}</div>
+      <div class="field-val">${esc(m.discipler_name || '—')}</div>
     </div>
     ${pending ? `
-    <div class="field-row" style="margin-top:12px">
-      <div class="field-label">Update Transfer Date</div>
+    <div class="field-row" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div class="field-label">Update Effective Date</div>
       <input class="field-input" type="date" id="modalNewDate" value="${m.transfer_date || today}">
     </div>
     <div class="field-row">
-      <div class="field-label">Update Destination Group</div>
-      <input class="field-input" type="text" id="modalNewGroup" value="${m.pending_lc_group || ''}">
+      <div class="field-label">Change Destination LCL</div>
+      <select class="field-input" id="modalNewLcl">
+        <option value="">(no change)</option>
+        ${allLcls.map(l => `<option value="${l.id}">${esc(l.name)} (${esc(l.level_name)})${l.lc_group?' · '+esc(l.lc_group):''}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field-row">
+      <div class="field-label">Decision Note (optional)</div>
+      <input class="field-input" id="modalNote" placeholder="Optional note for approval/rejection/modification...">
     </div>` : ''}
   `;
+
   document.getElementById('modalBtns').innerHTML = pending ? `
-    <button class="mbtn mbtn-primary" onclick="approveTransfer('${m.id}',true)">✓ Approve Transfer</button>
+    <button class="mbtn mbtn-primary" onclick="approveTransfer('${m.id}',true)">✓ Approve</button>
     <button class="mbtn mbtn-danger" onclick="rejectTransfer('${m.id}',true)">✕ Reject</button>
-    <button class="mbtn mbtn-cancel" onclick="updateTransfer('${m.id}')">Save Changes</button>
+    <button class="mbtn mbtn-cancel" onclick="modifyTransfer('${m.id}')">Save Changes</button>
     <button class="mbtn mbtn-cancel" onclick="closeModal()">Close</button>
   ` : `<button class="mbtn mbtn-cancel" onclick="closeModal()">Close</button>`;
+
+  document.getElementById('modalHistory').innerHTML = `
+    <div class="history-section">
+      <div class="history-toggle" onclick="toggleHistory()" id="historyToggle">
+        <span>📜</span>
+        <span>Transfer History</span>
+        <span id="histChevron" style="margin-left:auto">▼</span>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="loading">Loading history…</div>
+      </div>
+    </div>`;
+  _loadModalHistory(memberId);
 
   document.getElementById('modalBg').classList.add('open');
 }
@@ -621,26 +720,63 @@ function closeModal() {
   modalMember = null;
 }
 
+function toggleHistory(){
+  const list = document.getElementById('historyList');
+  const chev = document.getElementById('histChevron');
+  list.classList.toggle('open');
+  chev.textContent = list.classList.contains('open') ? '▲' : '▼';
+}
+
+async function _loadModalHistory(memberId){
+  try {
+    const rows = await MultiplyShared.transfers.historyFor(memberId);
+    const list = document.getElementById('historyList');
+    if(!rows || !rows.length){
+      list.innerHTML = '<div class="empty" style="padding:14px"><div class="empty-sub">No transfer history yet.</div></div>';
+      return;
+    }
+    list.innerHTML = rows.map(r => {
+      const toName = lclNameFor(r.to_facilitator_id) || r.to_lc_group || '—';
+      const fromName = lclNameFor(r.from_facilitator_id) || r.from_lc_group || '(initial)';
+      const proposer = lclNameFor(r.proposed_by);
+      const decider  = lclNameFor(r.decided_by);
+      const when = r.created_at ? r.created_at.slice(0,16).replace('T',' ') : '';
+      const decidedAt = r.decided_at ? r.decided_at.slice(0,16).replace('T',' ') : '';
+      const statusColor = r.status==='approved'?'green':r.status==='rejected'?'red':r.status==='cancelled'?'muted':r.status==='modified'?'blue':'gold2';
+      return `<div class="hist-row ${r.status}">
+        <div><span class="hist-status" style="color:var(--${statusColor})">${r.status}</span>
+          · ${esc(fromName)} → <strong>${esc(toName)}</strong></div>
+        <div class="hist-meta">
+          ${proposer?`Proposed by ${esc(proposer)}`:''} ${when?'· '+when:''}
+          ${decider && r.status!=='proposed'?` · ${esc(r.status)} by ${esc(decider)}${decidedAt?' · '+decidedAt:''}`:''}
+        </div>
+        ${r.reason?`<div class="hist-meta" style="font-style:italic;margin-top:3px">"${esc(r.reason)}"</div>`:''}
+        ${r.decision_note?`<div class="hist-meta" style="margin-top:3px">📝 ${esc(r.decision_note)}</div>`:''}
+        ${r.effective_date?`<div class="hist-meta">📅 effective ${r.effective_date}</div>`:''}
+      </div>`;
+    }).join('');
+  } catch(e){
+    document.getElementById('historyList').innerHTML = `<div class="empty" style="padding:14px"><div class="empty-sub">Error: ${esc(e.message)}</div></div>`;
+  }
+}
+
 // ── Actions ───────────────────────────────────────────────────────────
 async function approveTransfer(memberId, fromModal = false) {
   const m = memberMap[memberId];
   if (!m) return;
-  const newGroup = fromModal
-    ? document.getElementById('modalNewGroup')?.value || m.pending_lc_group
-    : m.pending_lc_group;
-
-  if (!newGroup) { showToast('No destination group set', true); return; }
+  if (!m.pending_facilitator_id && !m.pending_lc_group) {
+    showToast('No pending transfer to approve', true);
+    return;
+  }
+  const note = fromModal ? (document.getElementById('modalNote')?.value || null) : null;
 
   try {
-    const { error } = await db.from('members').update({
-      lc_group:        newGroup,
-      pending_lc_group: null,
-      transfer_date:   today,
-      updated_at:      new Date().toISOString()
-    }).eq('id', memberId);
-
-    if (error) throw error;
-    showToast(`✅ ${m.name} transferred to ${newGroup}`);
+    await MultiplyShared.transfers.approve({
+      memberId,
+      decidedBy: window.LEADER.leaderId,
+      decisionNote: note
+    });
+    showToast(`✅ ${m.name} transferred`);
     if (fromModal) closeModal();
     await loadData();
   } catch (e) {
@@ -651,16 +787,16 @@ async function approveTransfer(memberId, fromModal = false) {
 async function rejectTransfer(memberId, fromModal = false) {
   const m = memberMap[memberId];
   if (!m) return;
+  if (!confirm('Reject the pending transfer for ' + m.name + '?')) return;
+  const note = fromModal ? (document.getElementById('modalNote')?.value || null) : null;
 
   try {
-    const { error } = await db.from('members').update({
-      pending_lc_group: null,
-      transfer_date:    null,
-      updated_at:       new Date().toISOString()
-    }).eq('id', memberId);
-
-    if (error) throw error;
-    showToast(`↩ Transfer for ${m.name} cancelled`);
+    await MultiplyShared.transfers.reject({
+      memberId,
+      decidedBy: window.LEADER.leaderId,
+      decisionNote: note
+    });
+    showToast(`↩ Transfer for ${m.name} rejected`);
     if (fromModal) closeModal();
     await loadData();
   } catch (e) {
@@ -668,20 +804,23 @@ async function rejectTransfer(memberId, fromModal = false) {
   }
 }
 
-async function updateTransfer(memberId) {
+async function modifyTransfer(memberId) {
   const m = memberMap[memberId];
-  const newDate  = document.getElementById('modalNewDate')?.value;
-  const newGroup = document.getElementById('modalNewGroup')?.value;
+  const newDate = document.getElementById('modalNewDate')?.value || null;
+  const newLcl  = document.getElementById('modalNewLcl')?.value || null;
   if (!m) return;
+  if (!newDate && !newLcl) {
+    showToast('Nothing to update', true);
+    return;
+  }
 
   try {
-    const { error } = await db.from('members').update({
-      pending_lc_group: newGroup || m.pending_lc_group,
-      transfer_date:    newDate  || m.transfer_date,
-      updated_at:       new Date().toISOString()
-    }).eq('id', memberId);
-
-    if (error) throw error;
+    await MultiplyShared.transfers.modify({
+      memberId,
+      toFacilitatorId: newLcl || null,
+      effectiveDate: newDate,
+      modifiedBy: window.LEADER.leaderId
+    });
     showToast('✏️ Transfer updated');
     closeModal();
     await loadData();
@@ -698,21 +837,21 @@ function toggleNTF() {
 
 async function submitTransfer() {
   const memberId = document.getElementById('ntfMember').value;
-  const toGroup  = document.getElementById('ntfTo').value.trim();
+  const toLcl    = document.getElementById('ntfTo').value;
   const date     = document.getElementById('ntfDate').value;
+  const reason   = document.getElementById('ntfReason').value.trim();
 
   if (!memberId) { showToast('Select a member', true); return; }
-  if (!toGroup)  { showToast('Enter destination LC group', true); return; }
-  if (!date)     { showToast('Set an effective date', true); return; }
+  if (!toLcl)    { showToast('Select destination LCL', true); return; }
 
   try {
-    const { error } = await db.from('members').update({
-      pending_lc_group: toGroup,
-      transfer_date:    date,
-      updated_at:       new Date().toISOString()
-    }).eq('id', memberId);
-
-    if (error) throw error;
+    await MultiplyShared.transfers.propose({
+      memberId,
+      toFacilitatorId: toLcl,
+      effectiveDate: date || null,
+      reason: reason || null,
+      proposedBy: window.LEADER.leaderId
+    });
     showToast('🔀 Transfer request submitted');
     document.getElementById('ntfMember').value = '';
     document.getElementById('ntfFrom').value   = '';

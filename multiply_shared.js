@@ -13,6 +13,8 @@
 //   • Member-session gating (gateMemberOrRedirect, logoutMember)
 //   • LeaderScope factory (scoping + tiers for leader-side tools)
 //   • Audit logging
+//   • Lessons / BTLI eligibility / Cohorts / Preaching helpers
+//   • Transfers (LCG transfer propose/approve flow, May 2026)
 //
 // Two distinct session keys live in sessionStorage:
 //   multiply_leader_session — used by MD/MLT/reports
@@ -1507,6 +1509,424 @@
       });
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // TRANSFERS — LCG transfer flow with audit history (May 18, 2026)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Mental model:
+  //   • Destination is identified by LCL (a member with pipeline_level >= 2),
+  //     not by the sparse lc_group text field. Per Invariant #45.
+  //   • members.pending_facilitator_id is the in-flight uuid pointer to the
+  //     destination LCL. We also keep members.pending_lc_group + transfer_date
+  //     populated for backwards compatibility with the existing yellow card
+  //     in MLT and Pastor's kanban.
+  //   • transfers table is APPEND-ONLY history. Every action writes a row.
+  //   • Approve: members.facilitator_id := pending_facilitator_id; resolve
+  //     facilitator_name + lc_group from the destination LCL. Clear pending_*.
+  //   • Reject/cancel: clear pending_* without touching facilitator_id.
+  //
+  // Usage pattern:
+  //   await MultiplyShared.transfers.propose({
+  //     memberId, toFacilitatorId, effectiveDate, reason, proposedBy
+  //   });
+  //   await MultiplyShared.transfers.approve({memberId, decidedBy, decisionNote});
+  //   await MultiplyShared.transfers.reject({memberId, decidedBy, decisionNote});
+  //   await MultiplyShared.transfers.cancel({memberId, cancelledBy});
+  //   await MultiplyShared.transfers.modify({memberId, toFacilitatorId, effectiveDate, modifiedBy});
+  //   await MultiplyShared.transfers.listEligibleDestinationLCLs();
+  //   await MultiplyShared.transfers.historyFor(memberId);
+  //   await MultiplyShared.transfers.incomingFor(facilitatorId);
+  //   await MultiplyShared.transfers.outgoingFor(facilitatorId);
+  //   await MultiplyShared.transfers.openProposalsCount();
+  //
+  // All functions throw on error per Invariant #38 — never swallow.
+
+  // Internal helper: fetch a member row (id, name, lc_group, facilitator_id)
+  // Used to resolve names/groups at the moment of write.
+  async function _xferGetMember(db, memberId) {
+    const { data, error } = await db.from('members')
+      .select('id,name,lc_group,facilitator_id,facilitator_name,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,pipeline_level')
+      .eq('id', memberId).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('Member not found: ' + memberId);
+    return data;
+  }
+
+  // List of eligible destination LCLs (pipeline_level >= 2, excluding test).
+  // Returns: [{id, name, pipeline_level, lc_group, level_name}, ...]
+  async function _xferListEligibleDestinationLCLs() {
+    const db = getDB();
+    const { data, error } = await db.from('members')
+      .select('id,name,pipeline_level,lc_group,is_test_member')
+      .gte('pipeline_level', 2)
+      .order('name');
+    if (error) throw error;
+    return (data || [])
+      .filter(m => !m.is_test_member)
+      .map(m => ({
+        id: m.id,
+        name: m.name,
+        pipeline_level: m.pipeline_level,
+        lc_group: m.lc_group || null,
+        level_name: LEVEL_NAMES[m.pipeline_level] || 'Leader'
+      }));
+  }
+
+  // Propose a transfer. Writes to members.pending_* AND inserts transfers row.
+  // Args:
+  //   memberId          — disciple being transferred
+  //   toFacilitatorId   — destination LCL (member.id with pipeline_level >= 2)
+  //   effectiveDate     — 'YYYY-MM-DD' string or null (defaults to today on UI)
+  //   reason            — optional text
+  //   proposedBy        — member.id of the proposer (LCL or Pastor)
+  //
+  // Throws if member already has a pending transfer (caller should cancel first).
+  // Throws if destination LCL is not pipeline_level >= 2.
+  async function _xferPropose(args) {
+    const { memberId, toFacilitatorId, effectiveDate, reason, proposedBy } = args || {};
+    if (!memberId) throw new Error('memberId required');
+    if (!toFacilitatorId) throw new Error('toFacilitatorId required');
+    if (!proposedBy) throw new Error('proposedBy required');
+
+    const db = getDB();
+
+    // Resolve current member + destination LCL state.
+    const member = await _xferGetMember(db, memberId);
+    if (member.pending_facilitator_id || member.pending_lc_group) {
+      throw new Error('Member already has a pending transfer. Cancel it first.');
+    }
+
+    const { data: destRow, error: destErr } = await db.from('members')
+      .select('id,name,lc_group,pipeline_level')
+      .eq('id', toFacilitatorId).maybeSingle();
+    if (destErr) throw destErr;
+    if (!destRow) throw new Error('Destination LCL not found');
+    if ((destRow.pipeline_level || 0) < 2) {
+      throw new Error('Destination LCL must be pipeline_level >= 2');
+    }
+
+    // Resolve destination lc_group text (LCL's own lc_group, else their name)
+    const toLcGroup = destRow.lc_group || destRow.name;
+
+    // 1) Update members.pending_* in-flight state
+    const updates = {
+      pending_facilitator_id: toFacilitatorId,
+      pending_lc_group: toLcGroup,
+      pending_transfer_by: proposedBy,
+      transfer_date: effectiveDate || null,
+      updated_at: new Date().toISOString()
+    };
+    const { error: mErr } = await db.from('members').update(updates).eq('id', memberId);
+    if (mErr) throw mErr;
+
+    // 2) Insert transfers row (status=proposed)
+    const { data: row, error: tErr } = await db.from('transfers').insert({
+      member_id: memberId,
+      from_facilitator_id: member.facilitator_id || null,
+      to_facilitator_id: toFacilitatorId,
+      from_lc_group: member.lc_group || null,
+      to_lc_group: toLcGroup,
+      effective_date: effectiveDate || null,
+      reason: reason || null,
+      status: 'proposed',
+      proposed_by: proposedBy
+    }).select().single();
+    if (tErr) throw tErr;
+    return row;
+  }
+
+  // Approve the current pending transfer for a member. Writes the transition
+  // to members (facilitator_id, facilitator_name, lc_group) and stamps the
+  // most recent 'proposed' transfers row as 'approved'.
+  async function _xferApprove(args) {
+    const { memberId, decidedBy, decisionNote } = args || {};
+    if (!memberId) throw new Error('memberId required');
+    if (!decidedBy) throw new Error('decidedBy required');
+
+    const db = getDB();
+    const member = await _xferGetMember(db, memberId);
+    if (!member.pending_facilitator_id) {
+      throw new Error('No pending transfer to approve');
+    }
+
+    // Resolve destination LCL display name
+    const { data: destRow, error: destErr } = await db.from('members')
+      .select('id,name,lc_group').eq('id', member.pending_facilitator_id).maybeSingle();
+    if (destErr) throw destErr;
+    if (!destRow) throw new Error('Destination LCL no longer exists');
+
+    const nowIso = new Date().toISOString();
+    const todayYmd = _xferYmd(new Date());
+
+    // 1) Promote pending → live on members
+    const memUpdates = {
+      facilitator_id: destRow.id,
+      facilitator_name: destRow.name,
+      lc_group: destRow.lc_group || destRow.name,
+      pending_facilitator_id: null,
+      pending_lc_group: null,
+      pending_transfer_by: null,
+      transfer_date: todayYmd,
+      updated_at: nowIso
+    };
+    const { error: mErr } = await db.from('members').update(memUpdates).eq('id', memberId);
+    if (mErr) throw mErr;
+
+    // 2) Stamp most-recent proposed row as approved
+    const stamped = await _xferStampLatestProposed(db, memberId, {
+      status: 'approved',
+      decided_by: decidedBy,
+      decided_at: nowIso,
+      decision_note: decisionNote || null
+    });
+    return stamped;
+  }
+
+  // Reject the current pending transfer for a member. Clears pending_* without
+  // touching facilitator_id. Stamps the proposed row as 'rejected'.
+  async function _xferReject(args) {
+    const { memberId, decidedBy, decisionNote } = args || {};
+    if (!memberId) throw new Error('memberId required');
+    if (!decidedBy) throw new Error('decidedBy required');
+
+    const db = getDB();
+    const member = await _xferGetMember(db, memberId);
+    if (!member.pending_facilitator_id && !member.pending_lc_group) {
+      throw new Error('No pending transfer to reject');
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: mErr } = await db.from('members').update({
+      pending_facilitator_id: null,
+      pending_lc_group: null,
+      pending_transfer_by: null,
+      transfer_date: null,
+      updated_at: nowIso
+    }).eq('id', memberId);
+    if (mErr) throw mErr;
+
+    const stamped = await _xferStampLatestProposed(db, memberId, {
+      status: 'rejected',
+      decided_by: decidedBy,
+      decided_at: nowIso,
+      decision_note: decisionNote || null
+    });
+    return stamped;
+  }
+
+  // Cancel one's own proposed transfer (LCL who initiated, or Pastor).
+  // Schema-wise identical to reject except status='cancelled' and decided_by
+  // is the canceller.
+  async function _xferCancel(args) {
+    const { memberId, cancelledBy } = args || {};
+    if (!memberId) throw new Error('memberId required');
+    if (!cancelledBy) throw new Error('cancelledBy required');
+
+    const db = getDB();
+    const member = await _xferGetMember(db, memberId);
+    if (!member.pending_facilitator_id && !member.pending_lc_group) {
+      throw new Error('No pending transfer to cancel');
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: mErr } = await db.from('members').update({
+      pending_facilitator_id: null,
+      pending_lc_group: null,
+      pending_transfer_by: null,
+      transfer_date: null,
+      updated_at: nowIso
+    }).eq('id', memberId);
+    if (mErr) throw mErr;
+
+    const stamped = await _xferStampLatestProposed(db, memberId, {
+      status: 'cancelled',
+      decided_by: cancelledBy,
+      decided_at: nowIso,
+      decision_note: null
+    });
+    return stamped;
+  }
+
+  // Modify an in-flight proposal: change destination LCL or effective date.
+  // Stamps the existing proposed row as 'modified' (chained via parent_id)
+  // and inserts a new 'proposed' row with the new values. Updates members.pending_*.
+  async function _xferModify(args) {
+    const { memberId, toFacilitatorId, effectiveDate, modifiedBy } = args || {};
+    if (!memberId) throw new Error('memberId required');
+    if (!modifiedBy) throw new Error('modifiedBy required');
+
+    const db = getDB();
+    const member = await _xferGetMember(db, memberId);
+    if (!member.pending_facilitator_id) {
+      throw new Error('No pending transfer to modify');
+    }
+
+    // If destination unchanged, only effective_date needs updating.
+    const newToFacId = toFacilitatorId || member.pending_facilitator_id;
+    let toLcGroup = member.pending_lc_group;
+    if (toFacilitatorId && toFacilitatorId !== member.pending_facilitator_id) {
+      const { data: destRow, error: destErr } = await db.from('members')
+        .select('id,name,lc_group,pipeline_level').eq('id', toFacilitatorId).maybeSingle();
+      if (destErr) throw destErr;
+      if (!destRow) throw new Error('Destination LCL not found');
+      if ((destRow.pipeline_level || 0) < 2) {
+        throw new Error('Destination LCL must be pipeline_level >= 2');
+      }
+      toLcGroup = destRow.lc_group || destRow.name;
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // Get the existing proposed row to chain via parent_id
+    const { data: existing, error: exErr } = await db.from('transfers')
+      .select('id,from_facilitator_id,from_lc_group,reason,proposed_by')
+      .eq('member_id', memberId)
+      .eq('status', 'proposed')
+      .order('created_at', { ascending: false })
+      .limit(1).maybeSingle();
+    if (exErr) throw exErr;
+    if (!existing) {
+      // No proposed row found — treat as fresh propose
+      return await _xferPropose({
+        memberId, toFacilitatorId: newToFacId,
+        effectiveDate, reason: null, proposedBy: modifiedBy
+      });
+    }
+
+    // 1) Stamp existing as 'modified'
+    const { error: stampErr } = await db.from('transfers').update({
+      status: 'modified',
+      decided_by: modifiedBy,
+      decided_at: nowIso
+    }).eq('id', existing.id);
+    if (stampErr) throw stampErr;
+
+    // 2) Insert new 'proposed' row chained to it
+    const { data: newRow, error: insErr } = await db.from('transfers').insert({
+      member_id: memberId,
+      from_facilitator_id: existing.from_facilitator_id,
+      to_facilitator_id: newToFacId,
+      from_lc_group: existing.from_lc_group,
+      to_lc_group: toLcGroup,
+      effective_date: effectiveDate || member.transfer_date || null,
+      reason: existing.reason,
+      status: 'proposed',
+      proposed_by: existing.proposed_by,
+      parent_id: existing.id
+    }).select().single();
+    if (insErr) throw insErr;
+
+    // 3) Update members.pending_*
+    const { error: mErr } = await db.from('members').update({
+      pending_facilitator_id: newToFacId,
+      pending_lc_group: toLcGroup,
+      transfer_date: effectiveDate || member.transfer_date || null,
+      updated_at: nowIso
+    }).eq('id', memberId);
+    if (mErr) throw mErr;
+
+    return newRow;
+  }
+
+  // Full chronological history for a member (all transfers rows).
+  async function _xferHistoryFor(memberId) {
+    if (!memberId) return [];
+    const db = getDB();
+    const { data, error } = await db.from('transfers')
+      .select('*')
+      .eq('member_id', memberId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Members with a pending transfer INTO the given LCL.
+  // Used by the destination LCL's "Incoming Members" home card.
+  async function _xferIncomingFor(facilitatorId) {
+    if (!facilitatorId) return [];
+    const db = getDB();
+    const { data, error } = await db.from('members')
+      .select('id,name,lc_group,facilitator_id,facilitator_name,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,pipeline_level')
+      .eq('pending_facilitator_id', facilitatorId)
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Members with a pending transfer OUT of the given LCL (whose facilitator_id
+  // is the LCL but who have a pending_facilitator_id set to someone else).
+  // Used by source LCL to find their own outgoing proposals.
+  async function _xferOutgoingFor(facilitatorId) {
+    if (!facilitatorId) return [];
+    const db = getDB();
+    const { data, error } = await db.from('members')
+      .select('id,name,lc_group,facilitator_id,facilitator_name,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,pipeline_level')
+      .eq('facilitator_id', facilitatorId)
+      .not('pending_facilitator_id', 'is', null)
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Count of open proposals (for Pastor's badge / nav count).
+  async function _xferOpenProposalsCount() {
+    const db = getDB();
+    const { count, error } = await db.from('transfers')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'proposed');
+    if (error) throw error;
+    return count || 0;
+  }
+
+  // ── Internal helpers for transfers ──
+
+  // Stamp the most recent 'proposed' row for a member with new status.
+  // If multiple proposed rows exist (shouldn't happen, but defensive),
+  // stamps the newest one only.
+  async function _xferStampLatestProposed(db, memberId, patch) {
+    const { data: existing, error: exErr } = await db.from('transfers')
+      .select('id')
+      .eq('member_id', memberId)
+      .eq('status', 'proposed')
+      .order('created_at', { ascending: false })
+      .limit(1).maybeSingle();
+    if (exErr) throw exErr;
+    if (!existing) {
+      // Edge case: pending_lc_group was set without a transfers row (legacy
+      // data from before this migration). Insert a synthetic row so the
+      // audit trail has something.
+      const { data: synth, error: synthErr } = await db.from('transfers').insert({
+        member_id: memberId,
+        to_facilitator_id: patch.decided_by, // best effort — caller-decided
+        to_lc_group: '(legacy)',
+        status: patch.status,
+        proposed_by: null,
+        proposed_at: new Date().toISOString(),
+        decided_by: patch.decided_by,
+        decided_at: patch.decided_at,
+        decision_note: (patch.decision_note || '') + ' [legacy — no proposed row]'
+      }).select().single();
+      if (synthErr) throw synthErr;
+      return synth;
+    }
+
+    const { data: stamped, error: upErr } = await db.from('transfers')
+      .update(patch).eq('id', existing.id).select().single();
+    if (upErr) throw upErr;
+    return stamped;
+  }
+
+  // Manila-safe YYYY-MM-DD (Invariant #12 trap avoidance)
+  function _xferYmd(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -1554,6 +1974,19 @@
       isDismissed: _preaching_isDismissed,
       dismiss: _preaching_dismiss,
       renderReminderBanner: _preaching_renderReminderBanner
+    },
+    // LCG Transfers — propose/approve flow with audit history (May 18, 2026)
+    transfers: {
+      listEligibleDestinationLCLs: _xferListEligibleDestinationLCLs,
+      propose:               _xferPropose,
+      approve:               _xferApprove,
+      reject:                _xferReject,
+      cancel:                _xferCancel,
+      modify:                _xferModify,
+      historyFor:            _xferHistoryFor,
+      incomingFor:           _xferIncomingFor,
+      outgoingFor:           _xferOutgoingFor,
+      openProposalsCount:    _xferOpenProposalsCount
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
