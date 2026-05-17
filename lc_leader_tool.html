@@ -583,6 +583,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-label">My Group</div>
       <div class="qa-desc">View & manage members</div>
     </div>
+    <div class="qa-btn" onclick="openTransferActivity()">
+      <div class="qa-icon">🔀</div>
+      <div class="qa-label">Transfers</div>
+      <div class="qa-desc">Propose · view outgoing & incoming</div>
+    </div>
     <div class="qa-btn" onclick="showAttendance()">
       <div class="qa-icon">✅</div>
       <div class="qa-label">Attendance</div>
@@ -1589,6 +1594,20 @@ function setFilter(f, el){
   renderMemberList();
 }
 
+// Home → 🔀 Transfers tile. Switches to My Group with Transfer chip
+// pre-applied. To propose a new transfer, tap any member → 🔀 Transfer.
+function openTransferActivity(){
+  showScreen('screenMembers');
+  currentFilter = 'transfer';
+  // Apply .active class to the Transfer chip
+  document.querySelectorAll('#screenMembers .ftab').forEach(t => {
+    t.classList.toggle('active', /Transfer/.test(t.textContent));
+  });
+  renderMemberList();
+  // One-time discovery hint
+  setTimeout(() => toast('To propose a transfer, tap any member → 🔀 Transfer','success'), 250);
+}
+
 function filterMembers(q){ filterStr = q; renderMemberList(); }
 
 function renderMemberList(){
@@ -2211,16 +2230,17 @@ function _findMemberName(id){
 }
 
 // Show/hide the Transfer button on the member detail screen.
-// Visible only when the current leader is this member's shepherd (or Pastor).
+// Per Invariant #46 (discipler = LCL), button appears when the current
+// leader is EITHER the facilitator OR the discipler of this member. This
+// handles legacy data where only one pointer is set. Pastor sees it always.
 function _refreshTransferBtn(mem){
   const btn = document.getElementById('proposeTransferBtn');
   if(!btn || !mem) return;
-  const isMyMember  = mem.facilitator_id === LEADER.leaderId;
+  const isMyFac     = mem.facilitator_id === LEADER.leaderId;
+  const isMyDisc    = mem.discipler_id   === LEADER.leaderId;
+  const isMyMember  = isMyFac || isMyDisc;
   const isPastor    = (LEADER.leaderLevel || 0) >= 5;
   const hasPending  = !!mem.pending_lc_group;
-  // Show button only if I can propose AND there's no pending request yet.
-  // (If there's already one pending, the cancel button on the yellow card
-  //  is the action surface — not the Transfer button.)
   btn.style.display = ((isMyMember || isPastor) && !hasPending) ? '' : 'none';
 }
 
@@ -2228,10 +2248,12 @@ function _refreshTransferBtn(mem){
 async function openProposeTransfer(){
   if(!currentMember) return;
   const mem = currentMember;
-  const isMyMember = mem.facilitator_id === LEADER.leaderId;
+  const isMyFac    = mem.facilitator_id === LEADER.leaderId;
+  const isMyDisc   = mem.discipler_id   === LEADER.leaderId;
+  const isMyMember = isMyFac || isMyDisc;
   const isPastor   = (LEADER.leaderLevel || 0) >= 5;
   if(!isMyMember && !isPastor){
-    toast('You can only transfer members in your own LCG','error');
+    toast('You can only transfer members you shepherd','error');
     return;
   }
 
