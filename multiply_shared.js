@@ -1516,14 +1516,19 @@
   // Mental model:
   //   • Destination is identified by LCL (a member with pipeline_level >= 2),
   //     not by the sparse lc_group text field. Per Invariant #45.
+  //   • Per Invariant #46 (Rosehill pastoral practice): discipler = LCL.
+  //     A member's facilitator_id and discipler_id always point to the same
+  //     person. On approve, BOTH pointers move atomically to the destination.
   //   • members.pending_facilitator_id is the in-flight uuid pointer to the
   //     destination LCL. We also keep members.pending_lc_group + transfer_date
   //     populated for backwards compatibility with the existing yellow card
   //     in MLT and Pastor's kanban.
   //   • transfers table is APPEND-ONLY history. Every action writes a row.
-  //   • Approve: members.facilitator_id := pending_facilitator_id; resolve
-  //     facilitator_name + lc_group from the destination LCL. Clear pending_*.
-  //   • Reject/cancel: clear pending_* without touching facilitator_id.
+  //   • Approve: members.facilitator_id := pending_facilitator_id;
+  //              members.discipler_id   := pending_facilitator_id;
+  //              resolve names + lc_group from destination LCL. Clear pending_*.
+  //   • Reject/cancel: clear pending_* without touching facilitator_id or
+  //     discipler_id.
   //
   // Usage pattern:
   //   await MultiplyShared.transfers.propose({
@@ -1658,16 +1663,23 @@
     const nowIso = new Date().toISOString();
     const todayYmd = _xferYmd(new Date());
 
-    // 1) Promote pending → live on members
+    // 1) Promote pending → live on members.
+    //    Per Invariant #46 (Rosehill pastoral practice): discipler = LCL.
+    //    The transfer moves BOTH pointers atomically. If a future practice
+    //    ever decouples them, change here and document in the invariant.
     const memUpdates = {
-      facilitator_id: destRow.id,
+      facilitator_id:   destRow.id,
       facilitator_name: destRow.name,
-      lc_group: destRow.lc_group || destRow.name,
+      discipler_id:     destRow.id,
+      discipler_name:   destRow.name,
+      discipler:        destRow.name,  // legacy text field — keep in sync
+      lc_group:         destRow.lc_group || destRow.name,
       pending_facilitator_id: null,
-      pending_lc_group: null,
-      pending_transfer_by: null,
-      transfer_date: todayYmd,
-      updated_at: nowIso
+      pending_lc_group:       null,
+      pending_transfer_by:    null,
+      pending_discipler:      null,
+      transfer_date:    todayYmd,
+      updated_at:       nowIso
     };
     const { error: mErr } = await db.from('members').update(memUpdates).eq('id', memberId);
     if (mErr) throw mErr;

@@ -243,11 +243,11 @@ select.field-input option{background:var(--surface2);}
         </select>
       </div>
       <div class="field-row">
-        <div class="field-label">Current LCL</div>
+        <div class="field-label">Current Shepherd</div>
         <input class="field-input" id="ntfFrom" placeholder="Auto-filled" readonly>
       </div>
       <div class="field-row">
-        <div class="field-label">Transfer To (LCL)</div>
+        <div class="field-label">Transfer To (New Shepherd)</div>
         <select class="field-input" id="ntfTo">
           <option value="">— Loading shepherds… —</option>
         </select>
@@ -269,7 +269,7 @@ select.field-input option{background:var(--surface2);}
 
   <!-- Filter + actions bar -->
   <div class="fbar">
-    <input class="fbar-input" id="searchQ" placeholder="Search member or LCL..." oninput="applyFilter()">
+    <input class="fbar-input" id="searchQ" placeholder="Search member or shepherd..." oninput="applyFilter()">
     <div class="fchip on" data-f="pending" onclick="setFilter(this)">Pending</div>
     <div class="fchip" data-f="overdue" onclick="setFilter(this)">Overdue</div>
     <div class="fchip" data-f="all" onclick="setFilter(this)">All Members</div>
@@ -325,8 +325,8 @@ select.field-input option{background:var(--surface2);}
           <tr>
             <th>Member</th>
             <th>Level</th>
-            <th>From LCL</th>
-            <th>To LCL</th>
+            <th>From Shepherd</th>
+            <th>To Shepherd</th>
             <th>Effective Date</th>
             <th>Status</th>
             <th>Actions</th>
@@ -446,7 +446,7 @@ async function loadLcls() {
     lclMap = Object.fromEntries((lcls||[]).map(l => [l.id, l]));
     const sel = document.getElementById('ntfTo');
     if(sel){
-      sel.innerHTML = '<option value="">— Select destination LCL —</option>' +
+      sel.innerHTML = '<option value="">— Select destination shepherd —</option>' +
         (lcls||[]).map(l => {
           const tag = l.lc_group ? ` · ${l.lc_group}` : '';
           return `<option value="${l.id}">${esc(l.name)} (${l.level_name})${esc(tag)}</option>`;
@@ -464,17 +464,42 @@ async function populateMemberDropdown() {
   allMembers.forEach(m => {
     const o = document.createElement('option');
     o.value = m.id;
-    o.dataset.fac = m.facilitator_id || '';
-    o.dataset.facName = m.facilitator_name || '';
+    o.dataset.fac       = m.facilitator_id || '';
+    o.dataset.facName   = m.facilitator_name || '';
+    o.dataset.lcGroup   = m.lc_group || '';
+    o.dataset.discName  = m.discipler_name || '';
     o.textContent = m.name + (m.lc_group ? ' · ' + m.lc_group : '');
     sel.appendChild(o);
   });
   sel.addEventListener('change', () => {
     const opt = sel.options[sel.selectedIndex];
-    const fac = opt.dataset.fac;
-    const facName = opt.dataset.facName;
-    const lclLc = (fac && lclMap[fac]) ? lclMap[fac].lc_group : '';
-    document.getElementById('ntfFrom').value = facName ? facName + (lclLc ? ' · ' + lclLc : '') : '(no current LCL)';
+    if (!opt || !opt.value) {
+      document.getElementById('ntfFrom').value = '';
+      return;
+    }
+    const fac      = opt.dataset.fac;
+    const facName  = opt.dataset.facName;
+    const lcGroup  = opt.dataset.lcGroup;
+    const discName = opt.dataset.discName;
+    const lclLc    = (fac && lclMap[fac]) ? lclMap[fac].lc_group : '';
+
+    // Per Invariant #46 (Rosehill practice): discipler = LCL = "shepherd"
+    // (one person, two pointer columns). Display resolution:
+    //   1. facilitator (+ their LCG)       → "Tina Reyes · JOY"
+    //   2. discipler only (data drift)     → "Gloria Jacob · ⚠ no LCL pointer"
+    //   3. lc_group text only              → "JOY · ⚠ no shepherd on record"
+    //   4. nothing                         → "(no current shepherd)"
+    let displayValue;
+    if (facName) {
+      displayValue = facName + (lclLc ? ' · ' + lclLc : '');
+    } else if (discName) {
+      displayValue = discName + ' · ⚠ no LCL pointer (needs reconcile)';
+    } else if (lcGroup) {
+      displayValue = lcGroup + ' · ⚠ no shepherd on record';
+    } else {
+      displayValue = '(no current shepherd)';
+    }
+    document.getElementById('ntfFrom').value = displayValue;
   });
 }
 
@@ -654,7 +679,7 @@ async function openModal(memberId) {
       <div class="field-val">${LN[lvl]||'—'}</div>
     </div>
     <div class="field-row">
-      <div class="field-label">Current LCL</div>
+      <div class="field-label">Current Shepherd</div>
       <div class="field-val">${esc(fromLcl)}</div>
     </div>
     <div class="field-row">
@@ -670,17 +695,19 @@ async function openModal(memberId) {
       <div class="field-label">Proposed By</div>
       <div class="field-val">${esc(proposer)}</div>
     </div>` : ''}
-    <div class="field-row">
-      <div class="field-label">Current Discipler</div>
-      <div class="field-val">${esc(m.discipler_name || '—')}</div>
-    </div>
+    ${(m.discipler_name && m.discipler_name !== m.facilitator_name) ? `
+    <div class="field-row" style="background:rgba(248,113,113,.08);border-left:3px solid var(--red);padding:8px 12px;border-radius:4px">
+      <div class="field-label" style="color:var(--red)">⚠ Discipler mismatch</div>
+      <div class="field-val">Discipler: ${esc(m.discipler_name || '—')} · LCL: ${esc(m.facilitator_name || '—')}</div>
+      <div class="field-sub">Per Invariant #46 these should match. Approving this transfer will set both to the new shepherd.</div>
+    </div>` : ''}
     ${pending ? `
     <div class="field-row" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
       <div class="field-label">Update Effective Date</div>
       <input class="field-input" type="date" id="modalNewDate" value="${m.transfer_date || today}">
     </div>
     <div class="field-row">
-      <div class="field-label">Change Destination LCL</div>
+      <div class="field-label">Change Destination Shepherd</div>
       <select class="field-input" id="modalNewLcl">
         <option value="">(no change)</option>
         ${allLcls.map(l => `<option value="${l.id}">${esc(l.name)} (${esc(l.level_name)})${l.lc_group?' · '+esc(l.lc_group):''}</option>`).join('')}
@@ -842,7 +869,7 @@ async function submitTransfer() {
   const reason   = document.getElementById('ntfReason').value.trim();
 
   if (!memberId) { showToast('Select a member', true); return; }
-  if (!toLcl)    { showToast('Select destination LCL', true); return; }
+  if (!toLcl)    { showToast('Select destination shepherd', true); return; }
 
   try {
     await MultiplyShared.transfers.propose({
