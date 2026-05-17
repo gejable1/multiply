@@ -349,7 +349,7 @@
   //   lesson — full pipeline_lessons row
   //   role   — the user's effective role for THIS lesson:
   //              'pastor' | 'teacher' | 'co-teacher' | 'apprentice'
-  //              | 'observer' | 'leader' | 'member'
+  //              | 'participant' | 'observer' | 'leader' | 'member'
   //   attachments — filtered + sorted list of {label, url, role_required}
   //                  that the user CAN see
   //   lockedAttachmentCount — how many were hidden (for UI hint)
@@ -370,6 +370,16 @@
   // Map the user's batch-role string (from cohort_members.role) to an
   // attachment-rank number.
   // Pastor always = 3. Leader-not-in-cohort = 0 (sees only 'all' attachments).
+  //
+  // Canonical batch roles (cohort_members.role) — five values:
+  //   'teacher'     — rank 2 (sees teacher+ attachments)
+  //   'co-teacher'  — rank 2
+  //   'apprentice'  — rank 1 (apprentice+), promoted to rank 2 if cohort has
+  //                   a lesson-unlock row for this lesson
+  //   'participant' — rank 0 (the disciple being trained; sees only 'all'
+  //                   attachments — no facilitator material). Default role
+  //                   on new enrollments. Added May 17, 2026.
+  //   'observer'    — rank 0 (watching to learn the format)
   function _userRoleRankForLesson(opts) {
     if (opts.isPastor) return 3;
     if (opts.batchRole === 'teacher')    return 2;
@@ -378,7 +388,8 @@
       // Apprentice with cohort unlock for this lesson → promoted to teacher rank
       return opts.cohortUnlockedForThisLesson ? 2 : 1;
     }
-    if (opts.batchRole === 'observer') return 0;
+    if (opts.batchRole === 'participant') return 0;
+    if (opts.batchRole === 'observer')    return 0;
     // Not in any cohort that grants this lesson
     return 0;
   }
@@ -501,8 +512,10 @@
             grantingCohorts.push(cm);
           }
         });
-        // Role priority: teacher > co-teacher > apprentice > observer
-        const rolePriority = { teacher: 4, 'co-teacher': 3, apprentice: 2, observer: 1 };
+        // Role priority: teacher > co-teacher > apprentice > participant > observer
+        // (participant added May 17, 2026 — the disciple being trained; ranks
+        // above observer because they're the higher-investment learner)
+        const rolePriority = { teacher: 5, 'co-teacher': 4, apprentice: 3, participant: 2, observer: 1 };
         grantingCohorts.sort((a,b) => (rolePriority[b.role]||0) - (rolePriority[a.role]||0));
         bestRole = grantingCohorts[0]?.role || 'member';
         // Check if any of the granting cohorts have unlocked this lesson
@@ -526,7 +539,7 @@
       // 3. Filter attachments by role rank
       const userRank = _userRoleRankForLesson({
         isPastor,
-        batchRole: ['teacher','co-teacher','apprentice','observer'].includes(bestRole) ? bestRole : null,
+        batchRole: ['teacher','co-teacher','apprentice','participant','observer'].includes(bestRole) ? bestRole : null,
         cohortUnlockedForThisLesson
       });
       const rawAttachments = Array.isArray(l.attachments) ? l.attachments : [];

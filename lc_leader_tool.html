@@ -6251,6 +6251,7 @@ function _renderLessonCard(row){
     teacher:      { label: 'Teacher',      bg: 'rgba(232,184,75,.18)',  col: 'var(--gold)' },
     'co-teacher': { label: 'Co-teacher',   bg: 'rgba(232,184,75,.10)',  col: 'var(--gold)' },
     apprentice:   { label: 'Apprentice',   bg: 'rgba(52,211,153,.15)',  col: 'var(--green)' },
+    participant:  { label: 'Participant',  bg: 'rgba(96,165,250,.15)',  col: 'var(--blue)' },
     observer:     { label: 'Observer',     bg: 'rgba(136,136,168,.15)', col: 'var(--muted)' },
     leader:       { label: 'LC Leader',    bg: 'rgba(96,165,250,.15)',  col: 'var(--blue)' },
     member:       { label: 'Member',       bg: 'rgba(96,165,250,.12)',  col: 'var(--blue)' }
@@ -6914,7 +6915,11 @@ async function _batchesEnrollOne(memberId, memberName){
     const { error } = await db.from('cohort_members').insert({
       cohort_id: c.id,
       member_id: memberId,
-      role: 'apprentice',
+      // May 17, 2026: default role is 'participant' — the disciple being
+      // trained, which is what most enrollments are. Pastor or LCL can
+      // upgrade to 'apprentice' / 'co-teacher' / 'teacher' / 'observer'
+      // via MD's roster modal when applicable.
+      role: 'participant',
       status: 'active'
     });
     if (error) {

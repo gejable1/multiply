@@ -6069,6 +6069,7 @@ function _coRender(){
 function _coRenderCohortCard(c){
   const cms = _cohortState.cohortMembers[c.id] || [];
   const activeCount = cms.filter(m => m.status === 'active').length;
+  const participantCount = cms.filter(m => m.status === 'active' && m.role === 'participant').length;
   const apprenticeCount = cms.filter(m => m.status === 'active' && m.role === 'apprentice').length;
   const teacherCount   = cms.filter(m => m.status === 'active' && (m.role === 'teacher' || m.role === 'co-teacher')).length;
   const observerCount  = cms.filter(m => m.status === 'active' && m.role === 'observer').length;
@@ -6097,8 +6098,9 @@ function _coRenderCohortCard(c){
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px">${dateLine}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;flex-wrap:wrap;gap:.5rem">
-            ${apprenticeCount ? `<span>👤 ${apprenticeCount} apprentice${apprenticeCount===1?'':'s'}</span>` : ''}
+            ${participantCount ? `<span>👥 ${participantCount} participant${participantCount===1?'':'s'}</span>` : ''}
             ${teacherCount    ? `<span>🎓 ${teacherCount} teacher${teacherCount===1?'':'s'}</span>`     : ''}
+            ${apprenticeCount ? `<span>🌱 ${apprenticeCount} apprentice${apprenticeCount===1?'':'s'}</span>` : ''}
             ${observerCount   ? `<span>👁 ${observerCount} observer${observerCount===1?'':'s'}</span>`   : ''}
             ${graduatedCount  ? `<span style="color:var(--lighter)">✓ ${graduatedCount} graduated</span>` : ''}
             ${activeCount === 0 && graduatedCount === 0 ? '<span style="color:var(--lighter);font-style:italic">No members yet</span>' : ''}
@@ -6535,9 +6537,10 @@ function _coRenderRoster(){
   const program = _cohortState.programs.find(p => p.id === c.program_id);
   const cms = (_cohortState.cohortMembers[cohortId] || []).slice();
 
-  // Sort: active first (by role: teacher, co-teacher, apprentice, observer), then graduated, then withdrew
+  // Sort: active first (by role: teacher, co-teacher, apprentice, participant, observer), then graduated, then withdrew
+  // (participant slotted between apprentice and observer May 17, 2026)
   const statusOrder = { active: 0, graduated: 1, withdrew: 2 };
-  const roleOrder = { teacher: 0, 'co-teacher': 1, apprentice: 2, observer: 3 };
+  const roleOrder = { teacher: 0, 'co-teacher': 1, apprentice: 2, participant: 3, observer: 4 };
   cms.sort((a,b) => {
     const sd = (statusOrder[a.status]??99) - (statusOrder[b.status]??99);
     if(sd !== 0) return sd;
@@ -6576,6 +6579,7 @@ function _coRenderRoster(){
               .map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}</option>`).join('')}
           </select>
           <select id="crNewRole" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
+            <option value="participant" selected>participant</option>
             <option value="apprentice">apprentice</option>
             <option value="teacher">teacher</option>
             <option value="co-teacher">co-teacher</option>
@@ -6722,6 +6726,7 @@ function _coRenderRosterRow(cm, name){
     teacher:      { bg: 'rgba(184,136,42,.18)', col: 'var(--gold,#8a5b2e)' },
     'co-teacher': { bg: 'rgba(184,136,42,.10)', col: 'var(--gold,#8a5b2e)' },
     apprentice:   { bg: 'rgba(94,125,82,.15)',  col: 'var(--green)' },
+    participant:  { bg: 'rgba(74,144,226,.14)', col: 'var(--blue,#4a90e2)' },
     observer:     { bg: 'var(--surface2)',      col: 'var(--muted)' }
   }[cm.role] || { bg: 'var(--surface2)', col: 'var(--muted)' };
 
@@ -6744,6 +6749,7 @@ function _coRenderRosterRow(cm, name){
       <div style="display:flex;gap:4px;flex-shrink:0">
         ${isActive ? `
           <select onchange="_coChangeRosterRole('${cm.id}', this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-family:inherit;font-size:11px;color:var(--ink)">
+            <option value="participant" ${cm.role==='participant'?'selected':''}>participant</option>
             <option value="apprentice"  ${cm.role==='apprentice'?'selected':''}>apprentice</option>
             <option value="teacher"     ${cm.role==='teacher'?'selected':''}>teacher</option>
             <option value="co-teacher"  ${cm.role==='co-teacher'?'selected':''}>co-teacher</option>
