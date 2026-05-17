@@ -1465,6 +1465,35 @@
     });
   }
 
+  // For C3b (BTLI attendance roster derivation, May 17, 2026):
+  // returns all active cohorts whose program teaches the given BTLI
+  // course_code, scoped to what `actor` can see (Pastor-owned or own).
+  // Each cohort has its active members resolved with display data.
+  //
+  // Caller is MLT attendance flow — once the LCL picks a BTLI lesson,
+  // we derive course_code from it and call this to populate the batch
+  // picker. The picker shows the resulting cohorts; on selection, the
+  // chosen cohort's active members become the attendance roster.
+  //
+  // Returns array of cohorts, each with _members (active only) and
+  // _ownerIsPastor populated. Empty array if nothing matches.
+  async function _cohortsListActiveByCourseCode(actor, courseCode) {
+    if (!actor || !actor.memberId || !courseCode) return [];
+    // We reuse listVisibleToLeader and filter to matching course_code.
+    // It returns more than we need (all visible cohorts), but the table
+    // is small and this avoids drift between the two helpers' logic.
+    const all = await _cohortsListVisibleToLeader(actor);
+    return (all || [])
+      .filter(c => c.cohort_programs &&
+                   c.cohort_programs.btli_course_code === courseCode &&
+                   c.status === 'active')
+      .map(c => {
+        // Narrow _members to active enrollments only
+        c._members = (c._members || []).filter(cm => cm.status === 'active');
+        return c;
+      });
+  }
+
   // ───── Public surface ─────
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
@@ -1501,6 +1530,7 @@
       canEdit:             _cohortsCanEdit,
       canGraduate:         _cohortsCanGraduate,
       listVisibleToLeader: _cohortsListVisibleToLeader,
+      listActiveByCourseCode: _cohortsListActiveByCourseCode,
       eligibleCandidates:  _cohortsEligibleCandidates
     },
     // Wednesday Preaching (May 2026)

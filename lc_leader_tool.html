@@ -800,6 +800,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       </select>
       <div id="attBtliLessonHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Pick the specific lesson this BTLI session covers. This unlocks the comprehension quiz for everyone marked present.</div>
     </div>
+    <!-- BTLI batch picker (Priority C3b · May 17, 2026)
+         Shown only once a BTLI lesson is selected. Derives course_code
+         from the picked lesson and populates with active cohorts of
+         programs teaching that course (Pastor-owned + LCL's own).
+         When set, the cohort's active members become the attendance
+         roster — non-enrolled members can't be falsely marked absent. -->
+    <div id="attBtliBatchRow" style="display:none;margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--gold);border-radius:var(--r-sm);">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">🎓 Which Batch?</div>
+      <select id="attBtliBatchSelect" onchange="onBtliBatchChange()" style="width:100%;padding:9px 12px;font-size:14px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;color:var(--text);outline:none;cursor:pointer;">
+        <option value="">— Pick the batch —</option>
+      </select>
+      <div id="attBtliBatchHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Only members enrolled in the chosen batch can be marked present.</div>
+    </div>
   </div>
   <!-- "Already saved" banner — populated by loadExistingAttendance(); hidden when nothing on file -->
   <div id="attLoadedBanner" style="display:none;margin:0 14px 8px;padding:10px 12px;background:rgba(52,211,153,.18);border:1.5px solid rgba(52,211,153,.55);border-radius:10px;font-size:12px;color:var(--text);line-height:1.45"></div>
@@ -987,6 +1000,17 @@ let _btliQuizzes = null;        // cached fetch of active btli_quizzes rows
 let _btliQuizzesLoading = false;
 let selectedBtliQuizId = null;  // id of chosen btli_quizzes row
 let selectedBtliEventName = ''; // computed "BTLI 1 · L1 · Pananalangin" string
+
+// BTLI batch picker state (Priority C3b · May 17, 2026)
+// Once a BTLI lesson is selected, we derive its course_code and load
+// active cohorts of programs teaching that course. The LCL must pick a
+// batch; that batch's active members become the attendance roster.
+let _btliBatchesForCourse = null;  // array of cohort rows, populated per course_code
+let _btliBatchesLoading = false;
+let selectedBtliBatchId = null;    // id of chosen cohort
+let _btliBatchRoster = null;       // member rows of the chosen batch, sorted
+                                   // When non-null AND selectedAttType === 'BTLI',
+                                   // renderAttList draws from this instead of myMembers.
 let filterStr = '';
 let allSelected = false;
 
@@ -2124,6 +2148,24 @@ async function logQuickAttendance(){
 // ═══════════════════════════════════════════════════════
 // ATTENDANCE
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// ATTENDANCE ROSTER SOURCE (C3b · May 17, 2026)
+// ─────────────────────────────────────────────────────────────────
+// Single source of truth for "which members appear in the attendance
+// list right now." Returns _btliBatchRoster when BTLI + batch picked;
+// myMembers (the LeaderScope-filtered LCG roster) otherwise.
+//
+// Every attendance-flow function that previously iterated `myMembers`
+// directly now goes through this helper. Keeps the BTLI/non-BTLI logic
+// in one place — if the rule ever changes, change it here only.
+// ═══════════════════════════════════════════════════════════════════
+function _currentAttRoster(){
+  if (selectedAttType === 'BTLI' && Array.isArray(_btliBatchRoster) && _btliBatchRoster.length > 0) {
+    return _btliBatchRoster;
+  }
+  return myMembers || [];
+}
+
 function showAttendance(){
   // Invariant #12: use local-component date, not toISOString().slice(0,10).
   // After 4PM Manila, toISOString() returns tomorrow's date in UTC.
@@ -2139,8 +2181,16 @@ function showAttendance(){
   if (_btliSel) _btliSel.value = '';
   const _btliRow = document.getElementById('attBtliLessonRow');
   if (_btliRow) _btliRow.style.display = (selectedAttType === 'BTLI') ? 'block' : 'none';
+  // C3b: reset batch picker state too — never carry a stale batch across sessions.
+  selectedBtliBatchId = null;
+  _btliBatchRoster = null;
+  _btliBatchesForCourse = null;
+  const _btliBatchRow = document.getElementById('attBtliBatchRow');
+  if (_btliBatchRow) _btliBatchRow.style.display = 'none';
+  const _btliBatchSelEl = document.getElementById('attBtliBatchSelect');
+  if (_btliBatchSelEl) _btliBatchSelEl.innerHTML = '<option value="">— Pick the batch —</option>';
   attendanceState = {};
-  myMembers.forEach(m=>{ attendanceState[m.id]=false; });
+  _currentAttRoster().forEach(m=>{ attendanceState[m.id]=false; });
   allSelected = false;
   attendanceDirty = false;
   // Reset banner before fetching
@@ -2168,6 +2218,11 @@ const _ATT_DRAFT_KEY = 'multiply_mlt_att_draft';
 
 function _persistAttendanceDraft(){
   if(!currentLeader) return;
+  // C3b TODO (May 17, 2026): drafts do not persist selectedBtliBatchId
+  // or selectedBtliEventName. If LCL closes mid-BTLI-attendance, the
+  // checks recover but they must re-pick lesson + batch. Not data-
+  // corrupting (save guard catches missing batch), just a small UX
+  // bump on recovery for BTLI events. Acceptable for safe scope.
   // Only persist if there's at least one checked member — otherwise
   // an empty load would trigger a useless "recover" prompt later.
   const hasAny = Object.values(attendanceState).some(Boolean);
@@ -2249,16 +2304,26 @@ function selectAttType(el){
   selectedAttType = el.dataset.type;
   // Show/hide BTLI lesson picker
   const btliRow = document.getElementById('attBtliLessonRow');
+  const btliBatchRow = document.getElementById('attBtliBatchRow');
   if (btliRow) {
     if (selectedAttType === 'BTLI') {
       btliRow.style.display = 'block';
       ensureBtliQuizzesLoaded();
+      // Don't auto-show batch row yet — appears only after a lesson is picked.
+      if (btliBatchRow) btliBatchRow.style.display = 'none';
     } else {
       btliRow.style.display = 'none';
+      if (btliBatchRow) btliBatchRow.style.display = 'none';
       selectedBtliQuizId = null;
       selectedBtliEventName = '';
+      // C3b: clear batch picker state too on leaving BTLI
+      selectedBtliBatchId = null;
+      _btliBatchRoster = null;
+      _btliBatchesForCourse = null;
       const sel = document.getElementById('attBtliLessonSelect');
       if (sel) sel.value = '';
+      const batchSel = document.getElementById('attBtliBatchSelect');
+      if (batchSel) batchSel.innerHTML = '<option value="">— Pick the batch —</option>';
     }
   }
   onAttContextChange();
@@ -2291,6 +2356,8 @@ async function ensureBtliQuizzesLoaded(){
       opt.value = q.id;
       opt.textContent = eventName;
       opt.dataset.eventName = eventName;
+      // C3b: course_code needed by onBtliLessonChange → batch picker loader.
+      opt.dataset.courseCode = q.course_code || '';
       sel.appendChild(opt);
     });
     if (!_btliQuizzes.length) {
@@ -2311,8 +2378,92 @@ function onBtliLessonChange(){
   selectedBtliQuizId = sel.value || null;
   const chosen = sel.options[sel.selectedIndex];
   selectedBtliEventName = (chosen && chosen.dataset && chosen.dataset.eventName) || '';
+  // Derive course_code from the picked quiz and load matching batches.
+  // C3b · May 17, 2026: the batch picker is the source of truth for
+  // the attendance roster on BTLI sessions, not LCG membership.
+  const courseCode = (chosen && chosen.dataset && chosen.dataset.courseCode) || '';
+  _btliLoadBatchesForCourse(courseCode);
+  // Reset any prior batch selection — different lesson may be in a
+  // different course's batch, and we don't want a stale roster.
+  selectedBtliBatchId = null;
+  _btliBatchRoster = null;
   // If BTLI lesson changes mid-form, reload existing attendance so we
   // see the right set (different lesson on same day = different event_name).
+  onAttContextChange();
+}
+
+// C3b · BTLI batch picker — load active cohorts teaching the given course.
+async function _btliLoadBatchesForCourse(courseCode){
+  const row = document.getElementById('attBtliBatchRow');
+  const sel = document.getElementById('attBtliBatchSelect');
+  const hint = document.getElementById('attBtliBatchHint');
+  if (!row || !sel) return;
+  if (!courseCode) {
+    row.style.display = 'none';
+    sel.innerHTML = '<option value="">— Pick the batch —</option>';
+    _btliBatchesForCourse = null;
+    return;
+  }
+  // Show the row + loading state
+  row.style.display = 'block';
+  sel.innerHTML = '<option value="">— loading batches… —</option>';
+  sel.disabled = true;
+  try {
+    const L = LEADER || {};
+    const actor = {
+      memberId: L.leaderId,
+      isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
+    };
+    const batches = await MultiplyShared.cohorts.listActiveByCourseCode(actor, courseCode);
+    _btliBatchesForCourse = batches || [];
+    sel.disabled = false;
+    if (_btliBatchesForCourse.length === 0) {
+      sel.innerHTML = '<option value="">⚠ No active batches for ' + MultiplyShared.escapeHTML(courseCode) + '</option>';
+      if (hint) hint.textContent = 'No active batches you can manage for ' + courseCode + '. Ask Pastor to set up a batch first.';
+      return;
+    }
+    sel.innerHTML = '<option value="">— Pick the batch —</option>' +
+      _btliBatchesForCourse.map(c => {
+        const count = (c._members || []).length;
+        const prog = c.cohort_programs || {};
+        const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? '' : ' (other)');
+        return '<option value="' + c.id + '">' +
+          MultiplyShared.escapeHTML(c.name || '(unnamed)') + ' · ' +
+          count + ' enrolled' + MultiplyShared.escapeHTML(ownerTag) +
+          '</option>';
+      }).join('');
+    if (hint) hint.textContent = 'Only members enrolled in the chosen batch can be marked present.';
+  } catch(e) {
+    console.error('_btliLoadBatchesForCourse failed:', e);
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">⚠ Could not load batches</option>';
+    if (hint) hint.textContent = 'Could not load batches: ' + (e.message || e);
+    _btliBatchesForCourse = null;
+  }
+}
+
+// C3b · LCL picked a specific batch — set the roster from its enrolled members.
+function onBtliBatchChange(){
+  const sel = document.getElementById('attBtliBatchSelect');
+  if (!sel) return;
+  selectedBtliBatchId = sel.value || null;
+  if (!selectedBtliBatchId || !_btliBatchesForCourse) {
+    _btliBatchRoster = null;
+    onAttContextChange();
+    return;
+  }
+  const batch = _btliBatchesForCourse.find(c => c.id === selectedBtliBatchId);
+  if (!batch) {
+    _btliBatchRoster = null;
+    onAttContextChange();
+    return;
+  }
+  // Map cohort_members → member rows (with name, level, lc_group).
+  // Sort alphabetically for stable scan order on mobile.
+  _btliBatchRoster = (batch._members || [])
+    .map(cm => cm.members)
+    .filter(m => m && m.id)
+    .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
   onAttContextChange();
 }
 
@@ -2327,8 +2478,10 @@ function onAttContextChange(){
       return;
     }
   }
-  // Reset checks before fetching the new context
-  myMembers.forEach(m=>{ attendanceState[m.id]=false; });
+  // Reset checks before fetching the new context.
+  // C3b: also reset attendanceState for any roster (BTLI batch or LCG).
+  attendanceState = {};
+  _currentAttRoster().forEach(m=>{ attendanceState[m.id]=false; });
   attendanceDirty = false;
   renderAttList();
   loadExistingAttendance();
@@ -2343,7 +2496,7 @@ async function loadExistingAttendance(){
   const date = document.getElementById('attDate').value;
   const type = selectedAttType;
   const banner = document.getElementById('attLoadedBanner');
-  console.log('[attendance-load] called', {date, type, btliEventName: selectedBtliEventName, scope: LeaderScope.getCurrent ? LeaderScope.getCurrent() : '?', myMembersCount: (myMembers||[]).length});
+  console.log('[attendance-load] called', {date, type, btliEventName: selectedBtliEventName, btliBatchId: selectedBtliBatchId, scope: LeaderScope.getCurrent ? LeaderScope.getCurrent() : '?', rosterCount: _currentAttRoster().length, myMembersCount: (myMembers||[]).length, batchRosterCount: (_btliBatchRoster||[]).length});
   if(!date || !type){
     console.log('[attendance-load] missing date or type — abort');
     if(banner){ banner.style.display='none'; banner.innerHTML=''; }
@@ -2359,11 +2512,12 @@ async function loadExistingAttendance(){
   const myToken = ++_attLoadToken;
 
   try {
-    // Pull all rows for this date+type that touch members in our scope.
-    // We filter by member_id list to limit row count and respect scoping.
-    const memberIds = myMembers.map(m=>m.id);
+    // Pull all rows for this date+type that touch members in the roster.
+    // C3b: roster is _btliBatchRoster when BTLI batch picked, else myMembers.
+    const roster = _currentAttRoster();
+    const memberIds = roster.map(m=>m.id);
     if(!memberIds.length){
-      console.log('[attendance-load] no member ids in scope — abort');
+      console.log('[attendance-load] no member ids in roster — abort');
       if(banner){ banner.style.display='none'; banner.innerHTML=''; }
       return;
     }
@@ -2455,7 +2609,18 @@ function renderAttList(){
   const list = document.getElementById('attList');
   const presentCount = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = presentCount+' present';
-  list.innerHTML = myMembers.map((mem, idx)=>{
+  // C3b: roster source switches to cohort members when a BTLI batch is picked.
+  const roster = _currentAttRoster();
+  if (selectedAttType === 'BTLI' && !selectedBtliBatchId) {
+    // Honest empty state when BTLI is selected but no batch yet
+    list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.55">Pick a BTLI lesson and batch above to load the roster.</div>';
+    return;
+  }
+  if (selectedAttType === 'BTLI' && selectedBtliBatchId && roster.length === 0) {
+    list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.55">This batch has no active enrollees yet.<br><span style="font-size:11px">Enroll members from <strong>🎓 My Batches</strong> first.</span></div>';
+    return;
+  }
+  list.innerHTML = roster.map((mem, idx)=>{
     const present = attendanceState[mem.id];
     return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
@@ -2500,7 +2665,7 @@ function toggleAtt(id){
 
 function toggleSelectAll(){
   allSelected = !allSelected;
-  myMembers.forEach(m=>{ attendanceState[m.id]=allSelected; });
+  _currentAttRoster().forEach(m=>{ attendanceState[m.id]=allSelected; });
   attendanceDirty = true;
   renderAttList();
   _persistAttendanceDraft();
@@ -2524,6 +2689,15 @@ async function saveAttendance(){
       if (sel) sel.focus();
       return;
     }
+    // C3b (May 17, 2026): batch is also required for BTLI sessions.
+    // Without it, we'd fall back to myMembers and record false absences
+    // for non-enrolled LCG members.
+    if (!selectedBtliBatchId) {
+      toast('Please pick the batch before saving BTLI attendance.','error');
+      const sel = document.getElementById('attBtliBatchSelect');
+      if (sel) sel.focus();
+      return;
+    }
   }
 
   const leader        = currentLeader;
@@ -2532,7 +2706,9 @@ async function saveAttendance(){
   const loggedBy      = leader?.name || 'Unknown';
   const eventName     = (selectedAttType === 'BTLI') ? selectedBtliEventName : null;
 
-  const rows = myMembers.map(m => ({
+  // C3b: roster is _btliBatchRoster for BTLI, myMembers otherwise.
+  const rosterForSave = _currentAttRoster();
+  const rows = rosterForSave.map(m => ({
     member_id:       m.id,
     member_name:     m.name,
     event_date:      date,
@@ -2599,7 +2775,7 @@ async function saveAttendance(){
   attendanceDirty = false;
   // Successful save → clear the recovery draft so we don't re-prompt
   _clearAttendanceDraft();
-  toast(`✅ Saved! ${cnt}/${myMembers.length} present`,'success');
+  toast(`✅ Saved! ${cnt}/${rosterForSave.length} present`,'success');
   // Refresh the banner so it now reflects this save (logged_by becomes us)
   loadExistingAttendance();
   setTimeout(()=>showScreen('screenHome'),1500);
