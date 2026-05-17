@@ -6737,8 +6737,11 @@ async function _batchesEnrollOne(memberId, memberName){
       status: 'active'
     });
     if (error) {
-      // Unique-constraint collision = already enrolled (race condition)
-      if ((error.message || '').toLowerCase().includes('cohort_members_unique')) {
+      // 23505 = PostgreSQL unique_violation (any uniqueness constraint).
+      // PostgREST surfaces it as HTTP 409 with code '23505'. Match by code
+      // rather than guessing the constraint name (Invariant #30 lesson).
+      const isDup = (error.code === '23505') || /already exists|duplicate key|unique constraint/i.test(error.message || '');
+      if (isDup) {
         toast(memberName + ' is already enrolled in this batch', '⚠️');
       } else {
         throw error;

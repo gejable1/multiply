@@ -1021,32 +1021,74 @@
 
   // Internal: fetch a member's active BTLI program enrollments.
   // Returns array of { program_id, program_name, btli_course_code, cohort_id, cohort_name, role }
+  //
+  // IMPORTANT: does NOT use PostgREST !inner(...) embedding — embed
+  // resolution failed with HTTP 400 in some Supabase configurations
+  // (May 17, 2026). Three small queries + client-side stitching is
+  // both faster and more robust.
   async function _btliFetchEnrollments(memberId) {
     if (!memberId) return [];
     const db = getDB();
     if (!db) return [];
-    // One JOIN-shaped query via PostgREST embedding.
-    // cohort_members → cohorts → cohort_programs (filtered to BTLI programs).
-    const { data, error } = await db
+
+    // 1) Member's active cohort_members rows
+    const cmRes = await db
       .from('cohort_members')
-      .select('cohort_id, role, status, cohorts!inner(id, name, status, program_id, cohort_programs!inner(id, name, btli_course_code, is_active))')
+      .select('cohort_id, role, status')
       .eq('member_id', memberId)
-      .eq('status', 'active')
-      .eq('cohorts.status', 'active')
-      .eq('cohorts.cohort_programs.is_active', true)
-      .not('cohorts.cohort_programs.btli_course_code', 'is', null);
-    if (error) {
-      console.warn('_btliFetchEnrollments failed (failing open to no-enrollment):', error);
+      .eq('status', 'active');
+    if (cmRes.error) {
+      console.warn('_btliFetchEnrollments: cohort_members fetch failed (failing open):', cmRes.error);
       return [];
     }
-    return (data || []).map(row => ({
-      cohort_id: row.cohort_id,
-      cohort_name: row.cohorts?.name || '',
-      role: row.role,
-      program_id: row.cohorts?.cohort_programs?.id || null,
-      program_name: row.cohorts?.cohort_programs?.name || '',
-      btli_course_code: row.cohorts?.cohort_programs?.btli_course_code || null
-    })).filter(r => !!r.btli_course_code);
+    const enrolls = cmRes.data || [];
+    if (enrolls.length === 0) return [];
+
+    // 2) Their active cohorts
+    const cohortIds = Array.from(new Set(enrolls.map(e => e.cohort_id).filter(Boolean)));
+    const cohRes = await db
+      .from('cohorts')
+      .select('id, name, status, program_id')
+      .in('id', cohortIds)
+      .eq('status', 'active');
+    if (cohRes.error) {
+      console.warn('_btliFetchEnrollments: cohorts fetch failed (failing open):', cohRes.error);
+      return [];
+    }
+    const cohortById = {};
+    (cohRes.data || []).forEach(c => { cohortById[c.id] = c; });
+
+    // 3) Their active BTLI programs (must have btli_course_code set)
+    const programIds = Array.from(new Set(Object.values(cohortById).map(c => c.program_id).filter(Boolean)));
+    if (programIds.length === 0) return [];
+    const pRes = await db
+      .from('cohort_programs')
+      .select('id, name, btli_course_code, is_active')
+      .in('id', programIds)
+      .eq('is_active', true)
+      .not('btli_course_code', 'is', null);
+    if (pRes.error) {
+      console.warn('_btliFetchEnrollments: programs fetch failed (failing open):', pRes.error);
+      return [];
+    }
+    const programById = {};
+    (pRes.data || []).forEach(p => { programById[p.id] = p; });
+
+    // 4) Stitch: only keep enrollments whose cohort is active AND program is active BTLI
+    return enrolls.flatMap(e => {
+      const c = cohortById[e.cohort_id];
+      if (!c) return [];
+      const p = programById[c.program_id];
+      if (!p || !p.btli_course_code) return [];
+      return [{
+        cohort_id: c.id,
+        cohort_name: c.name || '',
+        role: e.role,
+        program_id: p.id,
+        program_name: p.name || '',
+        btli_course_code: p.btli_course_code
+      }];
+    });
   }
 
   // Internal: fetch all present=true attendance event_names for a member.
@@ -1277,31 +1319,50 @@
   // Returns each row with:
   //   • cohort fields
   //   • _ownerIsPastor: bool (resolved by checking owner.pipeline_level)
-  //   • program: embedded cohort_programs row
-  //   • members: array of cohort_members rows (with embedded member name/level)
+  //   • cohort_programs: embedded program row
+  //   • _members: array of cohort_members rows (each with `members` resolved)
   //
   // Caller-supplied: actor = { memberId, isPastor }.
+  //
+  // IMPORTANT: this function does NOT use PostgREST `!inner(...)` embed
+  // syntax. We tried that originally and hit HTTP 400 from PostgREST
+  // (embed resolution failed silently, leaving roster screens empty).
+  // Instead we fetch each table separately and stitch client-side. Three
+  // queries total — small data, fast, robust. (May 17, 2026 fix.)
   async function _cohortsListVisibleToLeader(actor) {
     if (!actor || !actor.memberId) return [];
     const db = getDB();
     if (!db) return [];
 
-    // 1) Fetch all relevant cohorts. We over-fetch slightly (Pastor-owned
-    //    of any program) and trim client-side, because:
-    //    - The cohorts table is small (dozens, not thousands)
-    //    - The owner-level check needs a members lookup we'd do anyway
+    // ─── Step 1: Fetch cohorts (no embed) ───
     const cohRes = await db
       .from('cohorts')
-      .select('id, name, start_date, end_date, status, notes, program_id, owner_id, created_at, cohort_programs!inner(id, name, category, pipeline_level, btli_course_code, is_active)')
+      .select('id, name, start_date, end_date, status, notes, program_id, owner_id, created_at')
       .in('status', ['active', 'forming']);
     if (cohRes.error) {
-      console.warn('_cohortsListVisibleToLeader: cohorts query failed', cohRes.error);
-      return [];
+      console.error('_cohortsListVisibleToLeader: cohorts query failed', cohRes.error);
+      throw new Error('Could not load batches: ' + (cohRes.error.message || cohRes.error));
     }
     let cohorts = cohRes.data || [];
+    if (cohorts.length === 0) return [];
 
-    // 2) Find which owners are Pastor (pipeline_level >= PASTOR_LEVEL).
-    //    Single batch query for all distinct owners.
+    // ─── Step 2: Fetch programs for these cohorts (separate query) ───
+    const programIds = Array.from(new Set(cohorts.map(c => c.program_id).filter(Boolean)));
+    const programById = {};
+    if (programIds.length > 0) {
+      const pRes = await db
+        .from('cohort_programs')
+        .select('id, name, category, pipeline_level, btli_course_code, is_active')
+        .in('id', programIds);
+      if (pRes.error) {
+        console.error('_cohortsListVisibleToLeader: programs query failed', pRes.error);
+        throw new Error('Could not load programs: ' + (pRes.error.message || pRes.error));
+      }
+      (pRes.data || []).forEach(p => { programById[p.id] = p; });
+    }
+    cohorts.forEach(c => { c.cohort_programs = programById[c.program_id] || null; });
+
+    // ─── Step 3: Resolve Pastor-owned flag ───
     const ownerIds = Array.from(new Set(cohorts.map(c => c.owner_id).filter(Boolean)));
     let pastorOwnerSet = new Set();
     if (ownerIds.length > 0) {
@@ -1313,33 +1374,63 @@
         (oRes.data || []).forEach(m => {
           if ((m.pipeline_level || 0) >= PASTOR_LEVEL) pastorOwnerSet.add(m.id);
         });
+      } else {
+        console.warn('_cohortsListVisibleToLeader: pastor-owner lookup failed (treating as non-pastor)', oRes.error);
       }
     }
     cohorts.forEach(c => { c._ownerIsPastor = pastorOwnerSet.has(c.owner_id); });
 
-    // 3) Trim by visibility rule. (Pastor sees all; LCL sees Pastor-owned + own.)
+    // ─── Step 4: Trim by visibility rule ───
     if (!actor.isPastor) {
       cohorts = cohorts.filter(c =>
         c._ownerIsPastor === true || c.owner_id === actor.memberId
       );
     }
+    if (cohorts.length === 0) {
+      // Nothing visible to this LCL — still return empty array (not an error).
+      return [];
+    }
 
-    // 4) Load cohort_members for each visible cohort (one batched query).
+    // ─── Step 5: Fetch cohort_members for visible cohorts (no embed) ───
     const cohortIds = cohorts.map(c => c.id);
-    let membersByCohort = {};
-    if (cohortIds.length > 0) {
-      const cmRes = await db
-        .from('cohort_members')
-        .select('id, cohort_id, member_id, role, status, joined_at, exited_at, members!inner(id, name, pipeline_level, lc_group)')
-        .in('cohort_id', cohortIds);
-      if (!cmRes.error) {
-        (cmRes.data || []).forEach(cm => {
-          if (!membersByCohort[cm.cohort_id]) membersByCohort[cm.cohort_id] = [];
-          membersByCohort[cm.cohort_id].push(cm);
-        });
+    const cmRes = await db
+      .from('cohort_members')
+      .select('id, cohort_id, member_id, role, status, joined_at, exited_at')
+      .in('cohort_id', cohortIds);
+    if (cmRes.error) {
+      console.error('_cohortsListVisibleToLeader: cohort_members query failed', cmRes.error);
+      throw new Error('Could not load rosters: ' + (cmRes.error.message || cmRes.error));
+    }
+    const enrollments = cmRes.data || [];
+
+    // ─── Step 6: Resolve member details (separate query) ───
+    const memberIds = Array.from(new Set(enrollments.map(cm => cm.member_id).filter(Boolean)));
+    const memberById = {};
+    if (memberIds.length > 0) {
+      const mRes = await db
+        .from('members')
+        .select('id, name, pipeline_level, lc_group, is_test_member, is_external_user')
+        .in('id', memberIds);
+      if (mRes.error) {
+        console.warn('_cohortsListVisibleToLeader: member detail lookup failed (rendering with IDs only)', mRes.error);
+        // Don't throw — render the enrollments anyway, with placeholder names.
+      } else {
+        (mRes.data || []).forEach(m => { memberById[m.id] = m; });
       }
     }
-    cohorts.forEach(c => { c._members = membersByCohort[c.id] || []; });
+    enrollments.forEach(cm => {
+      cm.members = memberById[cm.member_id] || {
+        id: cm.member_id, name: '(unknown member)', pipeline_level: null, lc_group: null
+      };
+    });
+
+    // ─── Step 7: Bucket enrollments under their cohorts ───
+    const byCohort = {};
+    enrollments.forEach(cm => {
+      if (!byCohort[cm.cohort_id]) byCohort[cm.cohort_id] = [];
+      byCohort[cm.cohort_id].push(cm);
+    });
+    cohorts.forEach(c => { c._members = byCohort[c.id] || []; });
 
     return cohorts;
   }
