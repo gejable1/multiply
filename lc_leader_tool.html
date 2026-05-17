@@ -1599,23 +1599,48 @@ function renderMemberList(){
   else if(currentFilter==='z3') members = members.filter(m=>m.diagnostic_zone===3);
   else if(currentFilter==='z4') members = members.filter(m=>m.diagnostic_zone===4);
   else if(currentFilter==='no_diag') members = members.filter(m=>!m.diagnostic_zone);
-  else if(currentFilter==='transfer') members = members.filter(m=>m.pending_lc_group && m.pending_lc_group !== m.lc_group);
+  else if(currentFilter==='transfer'){
+    // Show BOTH directions of transfer activity affecting me:
+    //   • OUTGOING — my disciples being sent elsewhere
+    //   • INCOMING — anyone whose pending_facilitator_id points to me
+    // For incoming, we pull from allMembers (not myMembers) because they
+    // are still in someone else's LCG until the transfer is approved.
+    const outgoing = members.filter(m =>
+      m.pending_lc_group && m.pending_lc_group !== m.lc_group &&
+      m.facilitator_id === LEADER.leaderId
+    );
+    const incoming = (allMembers||[]).filter(m =>
+      m.pending_facilitator_id === LEADER.leaderId
+    );
+    // Dedupe by id (defensive — shouldn't overlap, but just in case)
+    const seen = new Set();
+    members = [...outgoing, ...incoming].filter(m => {
+      if(seen.has(m.id)) return false;
+      seen.add(m.id); return true;
+    });
+    if(filterStr) members = members.filter(m=>m.name.toLowerCase().includes(filterStr.toLowerCase()));
+  }
 
   const list = document.getElementById('memberList');
   if(!members.length){
-    list.innerHTML='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No members found</div><div class="empty-sub">Try a different filter</div></div>';
+    const msg = currentFilter==='transfer'
+      ? '<div class="empty-title">No transfer activity</div><div class="empty-sub">No outgoing or incoming transfers right now. 🎉</div>'
+      : '<div class="empty-title">No members found</div><div class="empty-sub">Try a different filter</div>';
+    list.innerHTML='<div class="empty"><div class="empty-icon">🔍</div>'+msg+'</div>';
     return;
   }
   list.innerHTML = members.map(mem=>{
     const z = mem.diagnostic_zone||0;
     const zd = ZONE_DATA[z]||{color:'var(--muted)',bg:'var(--surface2)',label:'No Zone'};
     const pendingAssess = ASSESSMENTS.filter(a=>!hasFormalAssessment(mem, a)).length;
-    const hasPendingTransfer = mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group;
+    const hasPendingOutgoing = mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group && mem.facilitator_id === LEADER.leaderId;
+    const hasPendingIncoming = mem.pending_facilitator_id === LEADER.leaderId;
     const tags = [];
     if(mem.spiritual_gifts) tags.push({text:'🎁 '+mem.spiritual_gifts.split(',')[0].trim(),cls:'done'});
     if(mem.disc_primary) tags.push({text:'🧭 '+mem.disc_primary,cls:'done'});
     if(pendingAssess>0) tags.push({text:pendingAssess+' assessment'+(pendingAssess>1?'s':'')+' pending',cls:'pending'});
-    if(hasPendingTransfer) tags.push({text:'🔀 Transfer → '+mem.pending_lc_group,cls:'transfer'});
+    if(hasPendingOutgoing) tags.push({text:'🔀 Outgoing → '+mem.pending_lc_group,cls:'transfer'});
+    if(hasPendingIncoming) tags.push({text:'📥 Incoming from '+(mem.facilitator_name || mem.lc_group || '—'),cls:'transfer'});
     return `<div class="member-card" data-mid="${mem.id}">
       <div class="mc-left-bar z${z}-bar"></div>
       <div class="mc-body">
