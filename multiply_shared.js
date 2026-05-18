@@ -1234,6 +1234,232 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // USBONG ELIGIBILITY (Session 5 · May 18, 2026)
+  // ─────────────────────────────────────────────────────────────────
+  // Pre-Pipeline (Level 0) quiz eligibility — parallel to BTLI per
+  // Invariant #50. Mirrors the BTLI hybrid gate exactly:
+  //
+  //   eligible = enrolled OR attendance_pattern_matches
+  //   drop_in  = eligible AND NOT enrolled
+  //
+  // "Enrolled" means the member has an active cohort_members row in an
+  // active cohort whose program.usbong_course_code matches the quiz's
+  // course_code. (Schema added by
+  // cohort_programs_usbong_course_code_migration.sql.)
+  //
+  // Used by:
+  //   • member_tool.html → renderUsbongQuizzes (cards on Journey page,
+  //     parallel to renderBtliQuizzes — Level 0 members only)
+  //   • usbong_quiz_player.html → loadQuiz (gate before showing intro)
+  //
+  // Returns the SAME object shape as btliEligibilityFor so callers can
+  // reuse the same UI-rendering code paths.
+  //
+  // NOTE: Pre-Pipeline ≠ BTLI (Invariant #25). This helper deliberately
+  // does NOT share state or queries with the BTLI helper. Programs with
+  // btli_course_code set are invisible here; programs with
+  // usbong_course_code set are invisible to the BTLI helper. The two
+  // namespaces stay clean.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Internal: fetch a member's active Usbong program enrollments.
+  // Returns array of { program_id, program_name, usbong_course_code, cohort_id, cohort_name, role }
+  //
+  // Three-query stitch pattern — same as _btliFetchEnrollments per the
+  // PostgREST !inner() avoidance learned May 17, 2026.
+  async function _usbongFetchEnrollments(memberId) {
+    if (!memberId) return [];
+    const db = getDB();
+    if (!db) return [];
+
+    // 1) Member's active cohort_members rows
+    const cmRes = await db
+      .from('cohort_members')
+      .select('cohort_id, role, status')
+      .eq('member_id', memberId)
+      .eq('status', 'active');
+    if (cmRes.error) {
+      console.warn('_usbongFetchEnrollments: cohort_members fetch failed (failing open):', cmRes.error);
+      return [];
+    }
+    const enrolls = cmRes.data || [];
+    if (enrolls.length === 0) return [];
+
+    // 2) Their active cohorts
+    const cohortIds = Array.from(new Set(enrolls.map(e => e.cohort_id).filter(Boolean)));
+    const cohRes = await db
+      .from('cohorts')
+      .select('id, name, status, program_id')
+      .in('id', cohortIds)
+      .eq('status', 'active');
+    if (cohRes.error) {
+      console.warn('_usbongFetchEnrollments: cohorts fetch failed (failing open):', cohRes.error);
+      return [];
+    }
+    const cohortById = {};
+    (cohRes.data || []).forEach(c => { cohortById[c.id] = c; });
+
+    // 3) Their active Usbong programs (must have usbong_course_code set)
+    const programIds = Array.from(new Set(Object.values(cohortById).map(c => c.program_id).filter(Boolean)));
+    if (programIds.length === 0) return [];
+    const pRes = await db
+      .from('cohort_programs')
+      .select('id, name, usbong_course_code, is_active')
+      .in('id', programIds)
+      .eq('is_active', true)
+      .not('usbong_course_code', 'is', null);
+    if (pRes.error) {
+      console.warn('_usbongFetchEnrollments: programs fetch failed (failing open):', pRes.error);
+      return [];
+    }
+    const programById = {};
+    (pRes.data || []).forEach(p => { programById[p.id] = p; });
+
+    // 4) Stitch: only keep enrollments whose cohort is active AND program is active Usbong
+    return enrolls.flatMap(e => {
+      const c = cohortById[e.cohort_id];
+      if (!c) return [];
+      const p = programById[c.program_id];
+      if (!p || !p.usbong_course_code) return [];
+      return [{
+        cohort_id: c.id,
+        cohort_name: c.name || '',
+        role: e.role,
+        program_id: p.id,
+        program_name: p.name || '',
+        usbong_course_code: p.usbong_course_code
+      }];
+    });
+  }
+
+  // Internal: fetch all present=true attendance event_names for a member.
+  // Identical query to _btliFetchAttendedNames — both helpers read the same
+  // attendance table. Could be DRYed in a future refactor, but parallel
+  // namespaces are clearer for now and avoid cross-curriculum coupling.
+  async function _usbongFetchAttendedNames(memberId) {
+    if (!memberId) return new Set();
+    const db = getDB();
+    if (!db) return new Set();
+    const { data, error } = await db
+      .from('attendance')
+      .select('event_name')
+      .eq('member_id', memberId)
+      .eq('present', true);
+    if (error) {
+      console.warn('_usbongFetchAttendedNames failed (failing open):', error);
+      return new Set();  // empty set = no attendance match; enrollment still works
+    }
+    return new Set((data || []).map(r => (r.event_name || '').toLowerCase()).filter(Boolean));
+  }
+
+  // Public: eligibility for a single Usbong quiz.
+  // `quiz` must include: course_code, attendance_event_name_pattern.
+  // `opts` may include: isPastor (skips all checks).
+  async function usbongEligibilityFor(memberId, quiz, opts) {
+    opts = opts || {};
+    const isPastor = !!opts.isPastor;
+    if (isPastor) {
+      return { eligible: true, reason: 'pastor', enrolled: false, dropIn: false, cohortIds: [], programNames: [] };
+    }
+    if (!memberId || !quiz || !quiz.course_code) {
+      return { eligible: false, reason: 'blocked', enrolled: false, dropIn: false, cohortIds: [], programNames: [] };
+    }
+    const [enrollments, attendedNames] = await Promise.all([
+      _usbongFetchEnrollments(memberId),
+      _usbongFetchAttendedNames(memberId)
+    ]);
+    return _usbongComputeOne(quiz, enrollments, attendedNames);
+  }
+
+  // Public: eligibility for many quizzes at once (single batch fetch).
+  // Returns Map<quizId, eligibilityObject>. Mirrors btliEligibilityForMany.
+  async function usbongEligibilityForMany(memberId, quizzes, opts) {
+    opts = opts || {};
+    const isPastor = !!opts.isPastor;
+    const out = new Map();
+    if (!Array.isArray(quizzes) || quizzes.length === 0) return out;
+    if (isPastor) {
+      quizzes.forEach(q => out.set(q.id, {
+        eligible: true, reason: 'pastor', enrolled: false, dropIn: false, cohortIds: [], programNames: []
+      }));
+      return out;
+    }
+    if (!memberId) {
+      quizzes.forEach(q => out.set(q.id, {
+        eligible: false, reason: 'blocked', enrolled: false, dropIn: false, cohortIds: [], programNames: []
+      }));
+      return out;
+    }
+    const [enrollments, attendedNames] = await Promise.all([
+      _usbongFetchEnrollments(memberId),
+      _usbongFetchAttendedNames(memberId)
+    ]);
+    quizzes.forEach(q => {
+      out.set(q.id, _usbongComputeOne(q, enrollments, attendedNames));
+    });
+    return out;
+  }
+
+  // Pure: given pre-fetched enrollments + attendance, decide for one quiz.
+  function _usbongComputeOne(quiz, enrollments, attendedNames) {
+    const courseCode = quiz.course_code || '';
+    // Enrollment match: any enrollment whose program teaches this course_code
+    const matchingEnrollments = enrollments.filter(e => e.usbong_course_code === courseCode);
+    const enrolled = matchingEnrollments.length > 0;
+
+    // Attendance match
+    const pattern = (quiz.attendance_event_name_pattern || '').toLowerCase();
+    let attendanceMatch = false;
+    if (pattern) {
+      for (const n of attendedNames) {
+        if (n.includes(pattern)) { attendanceMatch = true; break; }
+      }
+    }
+
+    if (enrolled) {
+      return {
+        eligible: true,
+        reason: 'enrolled',
+        enrolled: true,
+        dropIn: false,
+        cohortIds: matchingEnrollments.map(e => e.cohort_id),
+        programNames: Array.from(new Set(matchingEnrollments.map(e => e.program_name).filter(Boolean)))
+      };
+    }
+    if (attendanceMatch) {
+      return {
+        eligible: true,
+        reason: 'attendance',
+        enrolled: false,
+        dropIn: true,
+        cohortIds: [],
+        programNames: []
+      };
+    }
+    if (!pattern) {
+      // Quiz has no attendance gate at all — historically "always unlocked".
+      // We honor that to preserve the v1 escape hatch, but flag as drop-in
+      // so Pastor still sees who's taking ungated quizzes without enrollment.
+      return {
+        eligible: true,
+        reason: 'no_gate',
+        enrolled: false,
+        dropIn: true,
+        cohortIds: [],
+        programNames: []
+      };
+    }
+    return {
+      eligible: false,
+      reason: 'blocked',
+      enrolled: false,
+      dropIn: false,
+      cohortIds: [],
+      programNames: []
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // COHORT PERMISSIONS + MLT HELPERS (Priority C2 · May 16, 2026)
   // ─────────────────────────────────────────────────────────────────
   // Ownership-based authorization for MLT enrollment self-service.
@@ -1968,6 +2194,11 @@
     btli: {
       eligibilityFor: btliEligibilityFor,
       eligibilityForMany: btliEligibilityForMany
+    },
+    // Usbong (Pre-Pipeline) Quiz eligibility (Session 5 · May 18, 2026 — parallel to BTLI per Invariant #50)
+    usbong: {
+      eligibilityFor: usbongEligibilityFor,
+      eligibilityForMany: usbongEligibilityForMany
     },
     // Cohort permissions + MLT helpers (Priority C2 · May 16, 2026)
     cohorts: {
