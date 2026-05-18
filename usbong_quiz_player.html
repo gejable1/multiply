@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usbong Quiz · MULTIPLY</title>
+<!--
+  This quiz player is part of the MULTIPLY Disciple-Making Pipeline — a generic, kingdom-shareable
+  curriculum tooling. To customize for your church: search this file for "MULTIPLY · Disciple-Making
+  Pipeline" and replace with your church name.
+
+  Launched from MMT via:  usbong_quiz_player.html?course=Usbong1&lesson=1
+  Uses member session via multiply_shared.js (Invariant #9).
+-->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231e3a5f'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='54' font-weight='700' text-anchor='middle' fill='%23d4a93f'%3EQ%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+<style>
+:root{
+  --navy:#1e3a5f;--navy2:#2d5380;--navy-bg:#eef2f7;--navy-light:#f5f8fb;
+  --gold:#b8882a;--gold2:#d4a93f;--gold-bg:#fdf6e8;
+  --green:#2a5c40;--green-bg:#eef6f1;
+  --red:#a8322f;--red-bg:#fdf0ee;
+  --ink:#1a1612;--muted:#5a6655;--border:#cdd6e0;--paper:white;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{font-family:'DM Sans',sans-serif;background:var(--navy-bg);color:var(--ink);font-size:15px;line-height:1.6;-webkit-tap-highlight-color:transparent;}
+
+/* HEADER */
+.header{background:var(--navy);padding:1rem;text-align:center;}
+.h-eyebrow{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:.3rem;}
+.h-title{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:700;color:white;}
+.h-sub{font-size:11.5px;color:rgba(255,255,255,.55);font-style:italic;margin-top:.2rem;}
+.h-chips{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:.55rem;}
+.hc{font-size:10px;padding:2px 9px;border-radius:10px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);}
+.hc.gold{background:var(--gold);color:white;font-weight:600;}
+
+/* PROGRESS */
+.progress-bar{height:4px;background:rgba(255,255,255,.2);}
+.progress-fill{height:100%;background:var(--gold2);transition:width .3s;width:0%;}
+
+/* WRAP */
+.wrap{padding:1rem .9rem 5rem;max-width:560px;margin:0 auto;}
+
+/* LANG PILL (top-right fixed) */
+.lang-pill{position:fixed;top:.8rem;right:.8rem;display:flex;background:rgba(255,255,255,.95);border-radius:18px;padding:3px;box-shadow:0 2px 8px rgba(30,58,95,.15);z-index:50;}
+.lang-pill button{border:none;background:transparent;padding:5px 11px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:14px;font-family:inherit;}
+.lang-pill button.active{background:var(--gold);color:white;}
+
+/* tl/en toggle */
+.tl-text{display:none;}
+body.lang-tl .en-text{display:none;}
+body.lang-tl .tl-text{display:inline;}
+
+/* STATES */
+.state{display:none;}
+.state.active{display:block;}
+
+/* INTRO STATE */
+.intro-card{background:var(--paper);border:1px solid var(--border);border-radius:11px;padding:1.5rem 1.2rem;margin-bottom:.75rem;text-align:center;box-shadow:0 1px 3px rgba(30,58,95,.05);}
+.ic-icon{font-size:48px;margin-bottom:.5rem;}
+.ic-title{font-family:'Playfair Display',serif;font-size:1.5rem;color:var(--navy);margin-bottom:.4rem;line-height:1.3;font-weight:700;}
+.ic-lesson{font-size:13px;color:var(--gold);font-weight:600;letter-spacing:.05em;margin-bottom:1rem;}
+.ic-text{font-size:14px;color:var(--ink);line-height:1.7;text-align:left;margin-bottom:1rem;}
+
+.facts-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-bottom:1.1rem;}
+.fact{background:var(--navy-light);border-left:3px solid var(--gold);border-radius:0 7px 7px 0;padding:.6rem .75rem;text-align:left;}
+.f-label{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--gold);margin-bottom:.15rem;}
+.f-val{font-size:14px;font-weight:700;color:var(--navy);line-height:1.3;}
+.f-sub{font-size:11px;color:var(--muted);font-style:italic;margin-top:.1rem;}
+
+/* UNLOCK BLOCKER */
+.blocker{background:var(--red-bg);border:1.5px solid #e6b8b5;border-radius:11px;padding:1.2rem;margin-bottom:.75rem;text-align:center;}
+.blocker-icon{font-size:36px;margin-bottom:.4rem;}
+.blocker-title{font-size:16px;font-weight:700;color:var(--red);margin-bottom:.4rem;}
+.blocker-text{font-size:13.5px;color:#7a2624;line-height:1.6;}
+
+/* COOLDOWN */
+.cooldown{background:var(--gold-bg);border:1.5px solid #e0c888;border-radius:11px;padding:1.2rem;margin-bottom:.75rem;text-align:center;}
+.cooldown-title{font-size:15px;font-weight:700;color:var(--gold);margin-bottom:.3rem;}
+.cooldown-text{font-size:13px;color:#7a6b3e;line-height:1.55;}
+
+/* BIG START BUTTON */
+.btn{display:inline-block;width:100%;background:var(--navy);color:white;border:none;border-radius:10px;padding:14px 18px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:filter .15s;text-decoration:none;text-align:center;}
+.btn:hover{filter:brightness(1.15);}
+.btn:active{filter:brightness(.9);}
+.btn:disabled{background:#aab0bc;cursor:not-allowed;}
+.btn.gold{background:var(--gold);}
+.btn.outline{background:transparent;color:var(--navy);border:1.5px solid var(--navy);}
+
+/* QUESTION STATE */
+.q-counter{display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;padding:0 .2rem;}
+.q-counter-text{font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--gold);}
+.q-counter-stars{font-size:12px;color:var(--muted);}
+
+.q-card{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:1.2rem 1rem;margin-bottom:.75rem;box-shadow:0 1px 3px rgba(30,58,95,.05);}
+.q-type{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--gold);margin-bottom:.45rem;}
+.q-text{font-size:15.5px;font-weight:600;color:var(--ink);margin-bottom:1rem;line-height:1.5;}
+
+.options{display:flex;flex-direction:column;gap:.5rem;}
+.option{display:flex;gap:.65rem;align-items:flex-start;padding:.75rem .85rem;background:var(--navy-light);border:1.5px solid var(--border);border-radius:9px;cursor:pointer;transition:all .12s;}
+.option:hover{border-color:var(--navy2);}
+.option.selected{background:var(--navy);border-color:var(--navy);color:white;}
+.option.selected .opt-letter{background:var(--gold2);color:var(--navy);}
+.opt-letter{width:28px;height:28px;border-radius:7px;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;font-family:'Playfair Display',serif;}
+.opt-text{flex:1;font-size:13.5px;line-height:1.5;}
+
+.q-actions{display:flex;gap:.5rem;margin-top:.75rem;}
+.q-actions .btn{flex:1;}
+.btn.small{padding:10px 12px;font-size:13.5px;}
+
+/* RESULTS STATE */
+.results-hero{border-radius:12px;padding:1.5rem 1.2rem;text-align:center;margin-bottom:.75rem;color:white;}
+.results-hero.passed{background:linear-gradient(135deg,var(--green),#1a4a2c);}
+.results-hero.failed{background:linear-gradient(135deg,#7a2624,var(--red));}
+.results-hero.practice{background:linear-gradient(135deg,var(--navy),var(--navy2));}
+.rh-icon{font-size:48px;margin-bottom:.3rem;}
+.rh-title{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:700;margin-bottom:.35rem;}
+.rh-score{font-family:'Playfair Display',serif;font-size:3.5rem;font-weight:700;color:var(--gold2);line-height:1;margin-bottom:.4rem;}
+.rh-raw{font-size:13px;opacity:.85;margin-bottom:.6rem;}
+.rh-outro{font-size:13.5px;line-height:1.65;font-style:italic;opacity:.95;}
+
+.results-stats{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.75rem;}
+.stat{background:var(--paper);border:1px solid var(--border);border-radius:9px;padding:.7rem;text-align:center;}
+.stat-label{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--gold);margin-bottom:.2rem;}
+.stat-val{font-size:18px;font-weight:700;color:var(--navy);line-height:1.2;}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:.1rem;font-style:italic;}
+
+.rank-card{background:var(--gold-bg);border:1.5px solid #e0c888;border-radius:11px;padding:1rem;margin-bottom:.75rem;text-align:center;}
+.rank-label{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--gold);margin-bottom:.25rem;}
+.rank-val{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;color:var(--navy);}
+.rank-sub{font-size:12px;color:#7a6b3e;margin-top:.3rem;font-style:italic;line-height:1.5;}
+
+.review-card{background:var(--paper);border:1px solid var(--border);border-radius:11px;padding:1rem;margin-bottom:.75rem;}
+.rc-title{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:.65rem;letter-spacing:.02em;}
+.review-item{padding:.5rem .7rem;border-radius:7px;margin-bottom:.4rem;font-size:12.5px;line-height:1.5;border-left:3px solid;}
+.review-item.correct{background:var(--green-bg);border-left-color:var(--green);}
+.review-item.wrong{background:var(--red-bg);border-left-color:var(--red);}
+.ri-num{font-weight:700;color:var(--muted);font-size:11px;letter-spacing:.05em;margin-right:.4rem;}
+
+.actions-row{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem;}
+
+/* SUBMITTING OVERLAY */
+.overlay{display:none;position:fixed;inset:0;background:rgba(30,58,95,.85);z-index:100;align-items:center;justify-content:center;flex-direction:column;color:white;font-family:'DM Sans',sans-serif;}
+.overlay.show{display:flex;}
+.spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.2);border-top-color:var(--gold2);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:1rem;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.overlay-text{font-size:15px;letter-spacing:.02em;}
+
+/* FOOTER */
+.footer{text-align:center;padding:1rem;font-size:11px;color:var(--muted);}
+.footer .gpath{margin-top:.3rem;color:var(--gold);font-weight:600;letter-spacing:.05em;font-size:10px;}
+
+/* ERROR */
+.error-msg{background:var(--red-bg);border:1px solid #e6b8b5;color:#7a2624;border-radius:9px;padding:.85rem;margin-bottom:.7rem;font-size:13px;line-height:1.55;}
+</style>
+</head>
+<body>
+
+<div class="lang-pill">
+  <button id="langEn" class="active" onclick="setLang('en')">English</button>
+  <button id="langTl" onclick="setLang('tl')">Tagalog</button>
+</div>
+
+<div class="header">
+  <div class="h-eyebrow">MULTIPLY · Disciple-Making Pipeline</div>
+  <div class="h-title" id="qHeaderTitle">Usbong Comprehension Check</div>
+  <div class="h-sub" id="qHeaderSub">Loading...</div>
+  <div class="h-chips" id="qHeaderChips"></div>
+</div>
+<div class="progress-bar"><div class="progress-fill" id="pfill"></div></div>
+
+<div class="wrap">
+
+  <!-- LOADING -->
+  <div id="state_loading" class="state active">
+    <div class="intro-card">
+      <div class="ic-icon">⏳</div>
+      <div class="ic-title">
+        <span class="en-text">Loading quiz...</span>
+        <span class="tl-text">Naglo-load...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div id="state_error" class="state">
+    <div class="error-msg" id="errMsg">Something went wrong.</div>
+    <button class="btn outline" onclick="window.close()">
+      <span class="en-text">Close</span>
+      <span class="tl-text">Isara</span>
+    </button>
+  </div>
+
+  <!-- BLOCKED (not enrolled and no LCG attendance — hybrid gate) -->
+  <div id="state_blocked" class="state">
+    <div class="blocker">
+      <div class="blocker-icon">🔒</div>
+      <div class="blocker-title">
+        <span class="en-text">Quiz Locked</span>
+        <span class="tl-text">Naka-lock pa ang Quiz</span>
+      </div>
+      <div class="blocker-text">
+        <span class="en-text">You're not yet enrolled in this Usbong cohort, and we don't see attendance for this lesson under your name yet. Talk to your LC Leader to be enrolled in the batch, or have your facilitator mark your attendance, then come back here.</span>
+        <span class="tl-text">Hindi ka pa naka-enroll sa Usbong batch na ito, at wala pang naka-record na attendance mo para sa aralin na ito. Makipag-usap sa LC Leader mo para ma-enroll sa batch, o pa-mark ng attendance sa facilitator mo, tapos balik ka rito.</span>
+      </div>
+      <div class="blocker-detail" id="blockedDetail" style="margin-top:.6rem;font-size:12.5px;color:rgba(255,255,255,.7);font-style:italic;line-height:1.55;"></div>
+    </div>
+    <button class="btn outline" onclick="window.close()">
+      <span class="en-text">Back to Member Tool</span>
+      <span class="tl-text">Bumalik sa Member Tool</span>
+    </button>
+  </div>
+
+  <!-- INTRO -->
+  <div id="state_intro" class="state">
+    <div class="intro-card">
+      <div class="ic-icon">📝</div>
+      <div class="ic-title" id="introTitle">Lesson Title</div>
+      <div class="ic-lesson" id="introLesson">Usbong 1 · Lesson 1</div>
+      <div id="dropInBadge" style="display:none;margin:.4rem auto .2rem;padding:4px 11px;background:rgba(184,136,42,.15);border:1px solid rgba(184,136,42,.45);color:#b8882a;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;width:fit-content;">
+        <span class="en-text">Drop-in Mode</span>
+        <span class="tl-text">Drop-in Mode</span>
+      </div>
+      <div class="ic-text" id="introText"></div>
+
+      <div class="facts-grid">
+        <div class="fact">
+          <div class="f-label"><span class="en-text">Questions</span><span class="tl-text">Tanong</span></div>
+          <div class="f-val" id="factQuestions">10</div>
+        </div>
+        <div class="fact">
+          <div class="f-label"><span class="en-text">Passing</span><span class="tl-text">Pasado</span></div>
+          <div class="f-val" id="factPassing">70%</div>
+        </div>
+        <div class="fact">
+          <div class="f-label"><span class="en-text">Attempt</span><span class="tl-text">Pagsubok</span></div>
+          <div class="f-val" id="factAttempt">#1</div>
+          <div class="f-sub" id="factAttemptSub"><span class="en-text">counts for grade</span><span class="tl-text">bibilang sa grado</span></div>
+        </div>
+        <div class="fact">
+          <div class="f-label"><span class="en-text">Time</span><span class="tl-text">Oras</span></div>
+          <div class="f-val">∞</div>
+          <div class="f-sub"><span class="en-text">no limit</span><span class="tl-text">walang limit</span></div>
+        </div>
+      </div>
+
+      <div id="cooldownNotice"></div>
+
+      <button class="btn" id="startBtn" onclick="startQuiz()">
+        <span class="en-text">Begin Quiz</span>
+        <span class="tl-text">Simulan ang Quiz</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- QUIZ IN PROGRESS -->
+  <div id="state_quiz" class="state">
+    <div class="q-counter">
+      <span class="q-counter-text" id="qCounterText">Question 1 of 10</span>
+      <span class="q-counter-stars" id="qCounterStars">○○○○○○○○○○</span>
+    </div>
+    <div class="q-card" id="qCard">
+      <!-- Populated by renderQuestion() -->
+    </div>
+    <div class="q-actions">
+      <button class="btn outline small" id="prevBtn" onclick="goPrev()" disabled>
+        <span class="en-text">← Previous</span>
+        <span class="tl-text">← Bumalik</span>
+      </button>
+      <button class="btn small" id="nextBtn" onclick="goNext()" disabled>
+        <span class="en-text">Next →</span>
+        <span class="tl-text">Susunod →</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="state_results" class="state">
+    <div class="results-hero" id="resultsHero">
+      <div class="rh-icon" id="rhIcon">✨</div>
+      <div class="rh-title" id="rhTitle">Result</div>
+      <div class="rh-score" id="rhScore">0%</div>
+      <div class="rh-raw" id="rhRaw">0 / 10</div>
+      <div class="rh-outro" id="rhOutro"></div>
+    </div>
+
+    <div class="results-stats">
+      <div class="stat">
+        <div class="stat-label"><span class="en-text">This Attempt</span><span class="tl-text">Pagsubok na 'to</span></div>
+        <div class="stat-val" id="statAttempt">#1</div>
+        <div class="stat-sub" id="statAttemptSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label"><span class="en-text">Best Score</span><span class="tl-text">Pinakamataas</span></div>
+        <div class="stat-val" id="statBest">0%</div>
+        <div class="stat-sub"><span class="en-text">counts for grade</span><span class="tl-text">bibilang sa grado</span></div>
+      </div>
+    </div>
+
+    <div class="rank-card" id="rankCard" style="display:none;">
+      <div class="rank-label"><span class="en-text">Your Rank</span><span class="tl-text">Iyong Rank</span></div>
+      <div class="rank-val" id="rankVal">—</div>
+      <div class="rank-sub" id="rankSub"></div>
+    </div>
+
+    <div class="review-card">
+      <div class="rc-title">
+        <span class="en-text">📋 Review your answers</span>
+        <span class="tl-text">📋 I-review ang sagot</span>
+      </div>
+      <div id="reviewList"></div>
+    </div>
+
+    <div id="perfectNote" style="display:none;margin:14px 0;padding:14px 16px;background:linear-gradient(135deg,rgba(45,160,80,.18),rgba(45,160,80,.08));border:1.5px solid rgba(45,160,80,.55);border-radius:12px;color:#1a4a2c;font-size:14px;line-height:1.5;text-align:center;font-weight:500;"></div>
+
+    <div class="actions-row">
+      <button class="btn gold" id="retakeBtn" onclick="retakeQuiz()" style="display:none;">
+        <span class="en-text">🔁 Try Again</span>
+        <span class="tl-text">🔁 Subukan ulit</span>
+      </button>
+      <button class="btn outline" onclick="window.close()">
+        <span class="en-text">Done — Back to Member Tool</span>
+        <span class="tl-text">Tapos — Bumalik sa Member Tool</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="footer">
+    MULTIPLY · Disciple-Making Pipeline<br>
+    <div class="gpath" id="footerPath">Usbong · Quiz Player</div>
+  </div>
+</div>
+
+<!-- SUBMITTING OVERLAY -->
+<div class="overlay" id="submitOverlay">
+  <div class="spinner"></div>
+  <div class="overlay-text">
+    <span class="en-text">Saving your attempt...</span>
+    <span class="tl-text">Sine-save ang iyong sagot...</span>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// SESSION + DB BOOTSTRAP
+// ═══════════════════════════════════════════════════════════════════
+let MEMBER = null;
+let db = null;
+
+(function bootstrap(){
+  // Verify shared lib loaded (Invariant #9)
+  if (typeof MultiplyShared === 'undefined') {
+    showError('multiply_shared.js not loaded. Please refresh.');
+    return;
+  }
+  if (!MultiplyShared.gateMemberOrRedirect('member_login.html')) {
+    // gateMemberOrRedirect handles redirect; bail out.
+    return;
+  }
+  MEMBER = window.MEMBER;
+  // Invariant #29 fixes (May 16, 2026):
+  //   1. Supabase client must come from getDB() — there is no MultiplyShared.db
+  //      property nor a window.db. The old code silently undefined-ed.
+  //   2. Member session payload uses MEMBER.memberId, not MEMBER.id. Five
+  //      query sites below were updated to match the published session shape
+  //      (see multiply_shared.js line 112). Querying with MEMBER.id caused
+  //      Postgres to throw `invalid input syntax for type uuid: "undefined"`.
+  db = MultiplyShared.getDB();
+  if (!db) {
+    showError('Supabase client not available. Please refresh the page.');
+    return;
+  }
+  // Read course + lesson from URL
+  // Per Invariant #30: Usbong course codes use single-space form (e.g. "Usbong 1").
+  // Defensive: if a stale bookmark passes "Usbong1" (no space), repair it.
+  const params = new URLSearchParams(window.location.search);
+  let course = params.get('course') || 'Usbong 1';
+  if (/^Usbong\d+$/i.test(course)) {
+    course = course.replace(/^(Usbong)(\d+)$/i, '$1 $2');
+  }
+  const lesson = parseInt(params.get('lesson') || '1', 10);
+  loadQuiz(course, lesson);
+})();
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let QUIZ = null;           // loaded usbong_quizzes row
+let QUESTIONS = [];        // shuffled questions
+let ANSWERS = [];          // user answers: [{q_index, chosen, correct, is_correct}]
+let CURRENT_Q = 0;
+let ATTEMPT_NUMBER = 1;
+let COUNTS_FOR_GRADE = true;
+let START_TIME = null;
+let PRIOR_ATTEMPTS = [];   // existing attempts for retake/cooldown logic
+let LANG = 'en';
+let ELIGIBILITY = null;    // { eligible, reason, enrolled, dropIn, cohortIds, programNames }
+                           //   Populated by loadQuiz() via MultiplyShared.usbong.eligibilityFor.
+
+// ═══════════════════════════════════════════════════════════════════
+// LANG TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+function setLang(l){
+  LANG = l;
+  document.body.classList.toggle('lang-tl', l === 'tl');
+  document.getElementById('langEn').classList.toggle('active', l === 'en');
+  document.getElementById('langTl').classList.toggle('active', l === 'tl');
+  try { localStorage.setItem('usbong_quiz_lang', l); } catch(e){}
+  // Re-render current question with new language
+  if (document.getElementById('state_quiz').classList.contains('active')) {
+    renderQuestion();
+  }
+}
+try {
+  const savedLang = localStorage.getItem('usbong_quiz_lang');
+  if (savedLang === 'tl') setLang('tl');
+} catch(e){}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════
+function showState(name){
+  document.querySelectorAll('.state').forEach(s => s.classList.remove('active'));
+  document.getElementById('state_' + name).classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function showError(msg){
+  document.getElementById('errMsg').textContent = msg;
+  showState('error');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LOAD QUIZ + PRIOR ATTEMPTS + ATTENDANCE CHECK
+// ═══════════════════════════════════════════════════════════════════
+async function loadQuiz(course, lesson){
+  try {
+    const { data: quiz, error: qErr } = await db
+      .from('usbong_quizzes')
+      .select('*')
+      .eq('course_code', course)
+      .eq('lesson_number', lesson)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (qErr) throw qErr;
+    if (!quiz) {
+      showError('Quiz not found for ' + course + ' Lesson ' + lesson);
+      return;
+    }
+    QUIZ = quiz;
+
+    // Update header
+    document.getElementById('qHeaderTitle').textContent = quiz.lesson_title;
+    document.getElementById('qHeaderSub').textContent = course + ' · Lesson ' + lesson;
+    const chips = document.getElementById('qHeaderChips');
+    chips.innerHTML =
+      '<span class="hc gold">' + course + '</span>' +
+      '<span class="hc">L' + lesson + '</span>' +
+      '<span class="hc">' + (quiz.questions.length || 10) + ' questions</span>';
+    document.getElementById('footerPath').textContent = course + ' · L' + lesson + ' · ' + quiz.lesson_title;
+
+    // ───── Hybrid eligibility gate (Priority C · May 16, 2026) ─────
+    // Cohort enrollment OR attendance fallback. Drop-in mode flagged
+    // in the intro so Pastor can see who's taking without enrollment.
+    // Delegates to MultiplyShared.usbong.eligibilityFor to keep the gate
+    // identical with MMT's card list.
+    try {
+      ELIGIBILITY = await MultiplyShared.usbong.eligibilityFor(MEMBER.memberId, quiz, {});
+    } catch(eEli){
+      // Fail open per Invariant philosophy: don't block on infra error.
+      console.warn('usbong eligibility check threw, failing open:', eEli);
+      ELIGIBILITY = { eligible: true, reason: 'no_gate', enrolled: false, dropIn: true, cohortIds: [], programNames: [] };
+    }
+    if (!ELIGIBILITY.eligible) {
+      // Surface a quiet detail line so members + facilitators know which
+      // path is missing without us being preachy about it.
+      const detail = document.getElementById('blockedDetail');
+      if (detail) {
+        const enText = `Looking for: enrollment in a ${quiz.course_code} cohort, or attendance for "${quiz.course_code} · L${quiz.lesson_number}".`;
+        const tlText = `Hinahanap: enrollment sa ${quiz.course_code} cohort, o attendance para sa "${quiz.course_code} · L${quiz.lesson_number}".`;
+        detail.innerHTML =
+          '<span class="en-text">' + enText.replace(/</g,'&lt;') + '</span>' +
+          '<span class="tl-text">' + tlText.replace(/</g,'&lt;') + '</span>';
+      }
+      showState('blocked');
+      return;
+    }
+
+    // Load prior attempts
+    const { data: attempts, error: aErr } = await db
+      .from('usbong_quiz_attempts')
+      .select('*')
+      .eq('quiz_id', quiz.id)
+      .eq('member_id', MEMBER.memberId)
+      .order('attempt_number', { ascending: true });
+
+    if (aErr) throw aErr;
+    PRIOR_ATTEMPTS = attempts || [];
+    ATTEMPT_NUMBER = PRIOR_ATTEMPTS.length + 1;
+    COUNTS_FOR_GRADE = (ATTEMPT_NUMBER <= 3);
+
+    renderIntro();
+
+  } catch (e) {
+    console.error('loadQuiz failed', e);
+    showError('Failed to load quiz: ' + (e.message || e));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HYBRID ELIGIBILITY (Priority C · May 16, 2026)
+// ─────────────────────────────────────────────────────────────────
+// The gate is now: cohort enrollment OR attendance fallback. See
+// multiply_shared.js → MultiplyShared.usbong.eligibilityFor for the
+// canonical predicate. loadQuiz() calls that helper directly and
+// stores the result in the ELIGIBILITY global.
+//
+// `checkAttendance(quiz)` is preserved as a thin shim returning a
+// boolean for any external caller, but no internal code path uses
+// it anymore. Safe to delete in a future cleanup pass.
+// ═══════════════════════════════════════════════════════════════════
+async function checkAttendance(quiz){
+  // Deprecated shim — delegates to the hybrid eligibility helper.
+  try {
+    const e = await MultiplyShared.usbong.eligibilityFor(MEMBER.memberId, quiz, {});
+    return !!(e && e.eligible);
+  } catch(err) {
+    console.warn('checkAttendance shim threw (failing open):', err);
+    return true;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INTRO
+// ═══════════════════════════════════════════════════════════════════
+function renderIntro(){
+  document.getElementById('introTitle').textContent = QUIZ.lesson_title;
+  document.getElementById('introLesson').textContent = QUIZ.course_code + ' · Lesson ' + QUIZ.lesson_number;
+  document.getElementById('introText').textContent = QUIZ.intro_text || '';
+
+  // Drop-in mode pill — shown when member is eligible but not enrolled in
+  // a cohort that teaches this course. Subtle gold badge.
+  const dropInBadge = document.getElementById('dropInBadge');
+  if (dropInBadge) {
+    dropInBadge.style.display = (ELIGIBILITY && ELIGIBILITY.dropIn) ? '' : 'none';
+  }
+  document.getElementById('factQuestions').textContent = (QUIZ.questions || []).length || 10;
+  document.getElementById('factPassing').textContent = QUIZ.passing_score + '%';
+  document.getElementById('factAttempt').textContent = '#' + ATTEMPT_NUMBER;
+
+  const attSubEn = COUNTS_FOR_GRADE ? 'counts for grade' : 'practice only';
+  const attSubTl = COUNTS_FOR_GRADE ? 'bibilang sa grado' : 'practice lang';
+  document.getElementById('factAttemptSub').innerHTML =
+    '<span class="en-text">' + attSubEn + '</span><span class="tl-text">' + attSubTl + '</span>';
+
+  // Cooldown logic: if 3+ attempts within last 24h, no more counts-for-grade attempts available
+  // (but practice is fine)
+  const cooldownDiv = document.getElementById('cooldownNotice');
+  cooldownDiv.innerHTML = '';
+  if (ATTEMPT_NUMBER > 3) {
+    // Cooldown active — show notice but allow practice
+    cooldownDiv.innerHTML =
+      '<div class="cooldown">' +
+        '<div class="cooldown-title">' +
+          '<span class="en-text">Practice Mode</span>' +
+          '<span class="tl-text">Practice Mode</span>' +
+        '</div>' +
+        '<div class="cooldown-text">' +
+          '<span class="en-text">You\'ve used your 3 graded attempts. You can still take this for practice, but it won\'t change your grade. Your best of attempts 1-3 still counts.</span>' +
+          '<span class="tl-text">Naubos mo na ang 3 graded attempts mo. Pwede ka pa ring mag-try for practice, pero hindi na magbabago ang grado mo. Ang best of attempts 1-3 ang bibilang.</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  showState('intro');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// START QUIZ
+// ═══════════════════════════════════════════════════════════════════
+function startQuiz(){
+  // Shuffle questions (Fisher-Yates) — questions stay tied to original index for grading
+  QUESTIONS = (QUIZ.questions || []).map((q, i) => ({...q, _origIndex: i}));
+  for (let i = QUESTIONS.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [QUESTIONS[i], QUESTIONS[j]] = [QUESTIONS[j], QUESTIONS[i]];
+  }
+  // For each MC, also shuffle options
+  QUESTIONS.forEach(q => {
+    if (q.type === 'mc' && Array.isArray(q.options)) {
+      const shuffled = [...q.options];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      q._shuffledOpts = shuffled;
+    }
+  });
+  ANSWERS = new Array(QUESTIONS.length).fill(null);
+  CURRENT_Q = 0;
+  START_TIME = Date.now();
+  showState('quiz');
+  renderQuestion();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// QUESTION RENDERING
+// ═══════════════════════════════════════════════════════════════════
+function renderQuestion(){
+  const q = QUESTIONS[CURRENT_Q];
+  if (!q) return;
+
+  const total = QUESTIONS.length;
+  document.getElementById('qCounterText').textContent = 'Question ' + (CURRENT_Q + 1) + ' of ' + total;
+  const filled = ANSWERS.filter(a => a !== null).length;
+  document.getElementById('qCounterStars').textContent =
+    '●'.repeat(filled) + '○'.repeat(total - filled);
+  document.getElementById('pfill').style.width = Math.round(((CURRENT_Q + 1) / total) * 100) + '%';
+
+  const card = document.getElementById('qCard');
+  const typeLabel = q.type === 'mc' ? 'Multiple Choice' : 'True or False';
+  const qText = LANG === 'tl' ? (q.question_tl || q.question_en) : q.question_en;
+
+  let optionsHTML = '';
+  if (q.type === 'mc') {
+    const opts = q._shuffledOpts || q.options || [];
+    optionsHTML = '<div class="options">';
+    opts.forEach((opt, idx) => {
+      const letter = String.fromCharCode(65 + idx); // A, B, C, D
+      const text = LANG === 'tl' ? (opt.tl || opt.en) : opt.en;
+      const selected = ANSWERS[CURRENT_Q] && ANSWERS[CURRENT_Q].chosen === idx ? 'selected' : '';
+      optionsHTML += `<div class="option ${selected}" onclick="pickOption(${idx})" data-idx="${idx}">
+        <div class="opt-letter">${letter}</div>
+        <div class="opt-text">${escapeHtml(text)}</div>
+      </div>`;
+    });
+    optionsHTML += '</div>';
+  } else if (q.type === 'tf') {
+    const tLabel = LANG === 'tl' ? 'Tama (True)' : 'True';
+    const fLabel = LANG === 'tl' ? 'Mali (False)' : 'False';
+    const selT = ANSWERS[CURRENT_Q] && ANSWERS[CURRENT_Q].chosen === true ? 'selected' : '';
+    const selF = ANSWERS[CURRENT_Q] && ANSWERS[CURRENT_Q].chosen === false ? 'selected' : '';
+    optionsHTML = `<div class="options">
+      <div class="option ${selT}" onclick="pickTF(true)">
+        <div class="opt-letter">T</div>
+        <div class="opt-text">${tLabel}</div>
+      </div>
+      <div class="option ${selF}" onclick="pickTF(false)">
+        <div class="opt-letter">F</div>
+        <div class="opt-text">${fLabel}</div>
+      </div>
+    </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="q-type">${typeLabel}</div>
+    <div class="q-text">${escapeHtml(qText)}</div>
+    ${optionsHTML}
+  `;
+
+  // Update nav buttons
+  document.getElementById('prevBtn').disabled = (CURRENT_Q === 0);
+  const isLast = (CURRENT_Q === QUESTIONS.length - 1);
+  const nextBtn = document.getElementById('nextBtn');
+  const hasAnswer = ANSWERS[CURRENT_Q] !== null;
+  nextBtn.disabled = !hasAnswer;
+  nextBtn.innerHTML = isLast
+    ? '<span class="en-text">Submit ✓</span><span class="tl-text">I-submit ✓</span>'
+    : '<span class="en-text">Next →</span><span class="tl-text">Susunod →</span>';
+  if (isLast) nextBtn.classList.add('gold');
+  else nextBtn.classList.remove('gold');
+}
+
+function pickOption(idx){
+  const q = QUESTIONS[CURRENT_Q];
+  const opt = (q._shuffledOpts || q.options || [])[idx];
+  ANSWERS[CURRENT_Q] = {
+    q_origIndex: q._origIndex,
+    q_type: 'mc',
+    chosen: idx,
+    chosen_text: opt.en, // store for review
+    is_correct: !!opt.correct
+  };
+  renderQuestion();
+}
+
+function pickTF(val){
+  const q = QUESTIONS[CURRENT_Q];
+  ANSWERS[CURRENT_Q] = {
+    q_origIndex: q._origIndex,
+    q_type: 'tf',
+    chosen: val,
+    is_correct: (val === q.correct)
+  };
+  renderQuestion();
+}
+
+function goPrev(){
+  if (CURRENT_Q > 0) { CURRENT_Q--; renderQuestion(); }
+}
+
+function goNext(){
+  if (ANSWERS[CURRENT_Q] === null) return;
+  if (CURRENT_Q < QUESTIONS.length - 1) {
+    CURRENT_Q++;
+    renderQuestion();
+  } else {
+    submitQuiz();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUBMIT
+// ═══════════════════════════════════════════════════════════════════
+async function submitQuiz(){
+  document.getElementById('submitOverlay').classList.add('show');
+
+  const total = QUESTIONS.length;
+  const correctCount = ANSWERS.filter(a => a && a.is_correct).length;
+  const score = Math.round((correctCount / total) * 100);
+  const passed = score >= QUIZ.passing_score;
+  const timeTaken = Math.round((Date.now() - START_TIME) / 1000);
+
+  // Build answers payload (use original question indices for stability)
+  const answersPayload = ANSWERS.map((a, i) => {
+    const q = QUESTIONS[i];
+    return {
+      q_orig_index: q._origIndex,
+      q_type: q.type,
+      chosen: a ? a.chosen : null,
+      is_correct: a ? a.is_correct : false
+    };
+  });
+
+  try {
+    const { data, error } = await db
+      .from('usbong_quiz_attempts')
+      .insert({
+        quiz_id: QUIZ.id,
+        member_id: MEMBER.memberId,
+        attempt_number: ATTEMPT_NUMBER,
+        counts_for_grade: COUNTS_FOR_GRADE,
+        score: score,
+        raw_score: correctCount,
+        total_questions: total,
+        passed: passed,
+        time_taken_seconds: timeTaken,
+        answers: answersPayload,
+        started_at: new Date(START_TIME).toISOString(),
+        submitted_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    PRIOR_ATTEMPTS.push(data);
+    await renderResults(score, correctCount, total, passed, timeTaken);
+
+  } catch (e) {
+    console.error('submitQuiz failed', e);
+    showError('Failed to save attempt: ' + (e.message || e));
+  } finally {
+    document.getElementById('submitOverlay').classList.remove('show');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RESULTS
+// ═══════════════════════════════════════════════════════════════════
+async function renderResults(score, raw, total, passed, timeTaken){
+  // Determine hero style
+  const hero = document.getElementById('resultsHero');
+  hero.className = 'results-hero ' + (passed ? 'passed' : 'failed');
+  if (!COUNTS_FOR_GRADE) hero.className = 'results-hero practice';
+
+  document.getElementById('rhIcon').textContent = passed ? '🎉' : (COUNTS_FOR_GRADE ? '💪' : '✨');
+  const titleEn = passed ? 'Passed!' : (COUNTS_FOR_GRADE ? 'Keep going' : 'Practice complete');
+  const titleTl = passed ? 'Pasado!' : (COUNTS_FOR_GRADE ? 'Tuloy lang' : 'Practice tapos');
+  document.getElementById('rhTitle').innerHTML =
+    '<span class="en-text">' + titleEn + '</span><span class="tl-text">' + titleTl + '</span>';
+  document.getElementById('rhScore').textContent = score + '%';
+  document.getElementById('rhRaw').textContent = raw + ' / ' + total + ' correct · ' + timeTaken + 's';
+
+  const outroText = passed ? (QUIZ.outro_pass_text || '') : (QUIZ.outro_fail_text || '');
+  document.getElementById('rhOutro').textContent = outroText;
+
+  // Stats
+  document.getElementById('statAttempt').textContent = '#' + ATTEMPT_NUMBER;
+  const attSubEn = COUNTS_FOR_GRADE ? 'graded' : 'practice';
+  const attSubTl = COUNTS_FOR_GRADE ? 'graded' : 'practice';
+  document.getElementById('statAttemptSub').innerHTML =
+    '<span class="en-text">' + attSubEn + '</span><span class="tl-text">' + attSubTl + '</span>';
+
+  // Best score (only counted attempts, max 1-3)
+  const counted = PRIOR_ATTEMPTS.filter(a => a.counts_for_grade);
+  const bestScore = counted.reduce((max, a) => Math.max(max, a.score || 0), 0);
+  document.getElementById('statBest').textContent = bestScore + '%';
+
+  // Rank: only show if course is_complete flag is set (future: course_meta table)
+  // For now, check if ALL active quizzes in this course have at least one attempt
+  // by THIS member — if so, course-end reached. Otherwise hide rank during course.
+  // Per Pastor decision Q5b: hide all rank during course; full leaderboard at end.
+  await maybeShowRank(score);
+
+  // Retake logic
+  const retakeBtn = document.getElementById('retakeBtn');
+  const perfectNote = document.getElementById('perfectNote');
+  if (score >= 100) {
+    // Perfect score — no need to retake. Pastor's call May 16, 2026.
+    retakeBtn.style.display = 'none';
+    if (perfectNote) {
+      perfectNote.style.display = 'block';
+      perfectNote.innerHTML =
+        '<span class="en-text">🎯 <b>Sakto!</b> You hit 100% — no need to retake. This is your highest possible score.</span>' +
+        '<span class="tl-text">🎯 <b>Sakto!</b> Perpekto ang sagot mo — hindi mo na kailangang ulitin. Ito na ang pinakamataas mong score.</span>';
+    }
+  } else if (PRIOR_ATTEMPTS.length < 3) {
+    if (perfectNote) perfectNote.style.display = 'none';
+    retakeBtn.style.display = 'block';
+    retakeBtn.innerHTML =
+      '<span class="en-text">🔁 Try Again — Attempt #' + (PRIOR_ATTEMPTS.length + 1) + ' (counts for grade)</span>' +
+      '<span class="tl-text">🔁 Subukan ulit — Pagsubok #' + (PRIOR_ATTEMPTS.length + 1) + ' (bibilang sa grado)</span>';
+  } else {
+    if (perfectNote) perfectNote.style.display = 'none';
+    retakeBtn.style.display = 'block';
+    retakeBtn.innerHTML =
+      '<span class="en-text">🔁 Practice Again (no grade change)</span>' +
+      '<span class="tl-text">🔁 Practice ulit (walang epekto sa grado)</span>';
+  }
+
+  // Review answers
+  renderReview();
+
+  showState('results');
+}
+
+async function maybeShowRank(currentScore){
+  const rankCard = document.getElementById('rankCard');
+  rankCard.style.display = 'none';
+
+  // Check if course is complete for this member (all active quizzes have ≥1 attempt)
+  try {
+    const { data: allQuizzes } = await db
+      .from('usbong_quizzes')
+      .select('id')
+      .eq('course_code', QUIZ.course_code)
+      .eq('is_active', true);
+
+    const { data: myAttempts } = await db
+      .from('usbong_quiz_attempts')
+      .select('quiz_id')
+      .eq('member_id', MEMBER.memberId);
+
+    const attemptedQuizIds = new Set((myAttempts || []).map(a => a.quiz_id));
+    const allDone = (allQuizzes || []).every(q => attemptedQuizIds.has(q.id));
+
+    if (!allDone) {
+      // During course: hide rank entirely (per Pastor decision)
+      return;
+    }
+
+    // Course complete — fetch leaderboard for this quiz
+    const { data: lb } = await db
+      .from('v_usbong_lesson_grade')
+      .select('member_id,best_score')
+      .eq('quiz_id', QUIZ.id)
+      .not('member_id', 'is', null)
+      .order('best_score', { ascending: false });
+
+    if (!lb || lb.length === 0) return;
+    const myIdx = lb.findIndex(r => r.member_id === MEMBER.memberId);
+    if (myIdx < 0) return;
+
+    const myRank = myIdx + 1;
+    const totalMembers = lb.length;
+    const topThird = Math.ceil(totalMembers / 3);
+
+    // Top 33% during course = N/A; this is post-course branch, show full rank
+    rankCard.style.display = 'block';
+    document.getElementById('rankVal').textContent = '#' + myRank + ' / ' + totalMembers;
+    document.getElementById('rankSub').innerHTML =
+      '<span class="en-text">Course complete — full leaderboard now visible. Salamat sa pagiging tapat.</span>' +
+      '<span class="tl-text">Tapos na ang course — buong leaderboard na nakikita. Salamat sa pagiging tapat.</span>';
+  } catch (e) {
+    console.warn('Rank fetch failed (hiding rank):', e);
+  }
+}
+
+function renderReview(){
+  const list = document.getElementById('reviewList');
+  list.innerHTML = '';
+  QUESTIONS.forEach((q, i) => {
+    const a = ANSWERS[i];
+    const qText = LANG === 'tl' ? (q.question_tl || q.question_en) : q.question_en;
+    const correct = a && a.is_correct;
+    let correctText = '';
+    if (q.type === 'mc') {
+      const correctOpt = (q.options || []).find(o => o.correct);
+      correctText = correctOpt ? (LANG === 'tl' ? (correctOpt.tl || correctOpt.en) : correctOpt.en) : '';
+    } else if (q.type === 'tf') {
+      correctText = q.correct ? (LANG === 'tl' ? 'Tama (True)' : 'True') : (LANG === 'tl' ? 'Mali (False)' : 'False');
+    }
+    const item = document.createElement('div');
+    item.className = 'review-item ' + (correct ? 'correct' : 'wrong');
+    item.innerHTML =
+      '<span class="ri-num">Q' + (i+1) + '.</span>' +
+      escapeHtml(qText.substring(0, 100)) + (qText.length > 100 ? '…' : '') +
+      '<br><strong>' + (correct ? '✓' : '✗') + '</strong> ' +
+      '<span class="en-text">' + (correct ? 'Correct' : 'Correct answer: ') + (correct ? '' : escapeHtml(correctText)) + '</span>' +
+      '<span class="tl-text">' + (correct ? 'Tama' : 'Tamang sagot: ') + (correct ? '' : escapeHtml(correctText)) + '</span>';
+    list.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RETAKE
+// ═══════════════════════════════════════════════════════════════════
+function retakeQuiz(){
+  ATTEMPT_NUMBER = PRIOR_ATTEMPTS.length + 1;
+  COUNTS_FOR_GRADE = (ATTEMPT_NUMBER <= 3);
+  renderIntro();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UTIL
+// ═══════════════════════════════════════════════════════════════════
+function escapeHtml(s){
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>
