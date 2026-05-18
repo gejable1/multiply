@@ -3718,6 +3718,12 @@ function _libOpenQuizPlayer(resourceId){
     toast('This quiz has no questions yet', 'ℹ️'); return;
   }
 
+  // Pause any podcast playback before the quiz takes over the screen.
+  // The YT iframe API doesn't always honor z-index in browser compositing,
+  // so a playing podcast can bleed through the modal visually (and audibly).
+  // Pastoral framing: a comprehension check deserves focus — silence is honest.
+  _libPauseAllYoutubePlayers();
+
   _quizPlayerState = {
     resourceId, resource, quiz,
     attemptId: null,
@@ -3730,12 +3736,35 @@ function _libOpenQuizPlayer(resourceId){
   _renderQuizIntro();
 }
 
+// Pause every embedded YouTube player on the page via postMessage. We
+// don't track Player instances (they're fire-and-forget in
+// _libCreateYoutubePlayer), so we iterate iframes directly. Safe to call
+// even when no players exist or the IFrame API never loaded.
+function _libPauseAllYoutubePlayers(){
+  try {
+    const iframes = document.querySelectorAll('iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"]');
+    iframes.forEach(f => {
+      try {
+        f.contentWindow.postMessage(
+          '{"event":"command","func":"pauseVideo","args":""}',
+          '*'
+        );
+      } catch(e) { /* cross-origin or detached frame — skip */ }
+    });
+  } catch(e) { console.warn('[quiz] pause podcasts failed (non-fatal):', e); }
+}
+
 function _quizGetModal(){
   let modal = document.getElementById('quizPlayerModal');
   if (!modal){
     modal = document.createElement('div');
     modal.id = 'quizPlayerModal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.7);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0';
+    // Backdrop is intentionally near-opaque (was rgba .7, May 18 2026 bug fix).
+    // The translucent backdrop combined with YouTube's native iframe compositing
+    // caused the underlying podcast player to bleed through the modal visually
+    // even though the modal was on top in DOM order. Belt-and-suspenders with
+    // _libPauseAllYoutubePlayers in _libOpenQuizPlayer.
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.95);z-index:9300;display:flex;align-items:center;justify-content:center;padding:0';
     document.body.appendChild(modal);
   }
   return modal;
