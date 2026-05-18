@@ -1593,7 +1593,7 @@
     if (programIds.length > 0) {
       const pRes = await db
         .from('cohort_programs')
-        .select('id, name, category, pipeline_level, btli_course_code, is_active')
+        .select('id, name, category, pipeline_level, btli_course_code, usbong_course_code, is_active')
         .in('id', programIds);
       if (pRes.error) {
         console.error('_cohortsListVisibleToLeader: programs query failed', pRes.error);
@@ -1706,27 +1706,44 @@
     });
   }
 
-  // For C3b (BTLI attendance roster derivation, May 17, 2026):
-  // returns all active cohorts whose program teaches the given BTLI
-  // course_code, scoped to what `actor` can see (Pastor-owned or own).
-  // Each cohort has its active members resolved with display data.
+  // For C3b (BTLI attendance roster derivation, May 17, 2026) and
+  // its Usbong parallel (Session 5, May 18, 2026):
+  // returns all active cohorts whose program teaches the given course_code
+  // in the given curriculum, scoped to what `actor` can see (Pastor-owned
+  // or own). Each cohort has its active members resolved with display data.
   //
-  // Caller is MLT attendance flow — once the LCL picks a BTLI lesson,
-  // we derive course_code from it and call this to populate the batch
-  // picker. The picker shows the resulting cohorts; on selection, the
+  // Caller is MLT attendance flow — once the LCL picks a lesson (BTLI or
+  // Usbong), we derive course_code from it and call this to populate the
+  // batch picker. The picker shows the resulting cohorts; on selection, the
   // chosen cohort's active members become the attendance roster.
+  //
+  // The optional `curriculum` arg selects which column on cohort_programs
+  // is matched against courseCode. Defaults to 'btli' to keep existing
+  // callers byte-stable. Per Invariant #50, BTLI and Usbong programs use
+  // separate columns (`btli_course_code` / `usbong_course_code`); this
+  // function lets MLT use one helper for both flows without entangling
+  // the data — the curriculum-specific column is just a column-name detail.
   //
   // Returns array of cohorts, each with _members (active only) and
   // _ownerIsPastor populated. Empty array if nothing matches.
-  async function _cohortsListActiveByCourseCode(actor, courseCode) {
+  async function _cohortsListActiveByCourseCode(actor, courseCode, curriculum) {
     if (!actor || !actor.memberId || !courseCode) return [];
+    // Default curriculum: 'btli' (backwards-compatible with pre-Session-5 callers)
+    const _curriculum = (curriculum || 'btli').toLowerCase();
+    let _columnName;
+    if (_curriculum === 'btli')  _columnName = 'btli_course_code';
+    else if (_curriculum === 'usbong') _columnName = 'usbong_course_code';
+    else {
+      console.warn('_cohortsListActiveByCourseCode: unknown curriculum', curriculum, '— returning []');
+      return [];
+    }
     // We reuse listVisibleToLeader and filter to matching course_code.
     // It returns more than we need (all visible cohorts), but the table
     // is small and this avoids drift between the two helpers' logic.
     const all = await _cohortsListVisibleToLeader(actor);
     return (all || [])
       .filter(c => c.cohort_programs &&
-                   c.cohort_programs.btli_course_code === courseCode &&
+                   c.cohort_programs[_columnName] === courseCode &&
                    c.status === 'active')
       .map(c => {
         // Narrow _members to active enrollments only
