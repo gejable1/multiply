@@ -7532,6 +7532,10 @@ function _renderBatchesRoster(){
                 </div>
               </div>
               ${editPerm.ok ? `
+                <button onclick="_batchesGraduate('${cm.id}', '${MultiplyShared.escapeHTML(m.name || '').replace(/'/g, "&#39;")}')"
+                  style="background:rgba(74,144,226,.15);border:1px solid rgba(74,144,226,.4);color:var(--blue,#4a90e2);border-radius:6px;padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">
+                  🎓 Graduate
+                </button>
                 <button onclick="_batchesWithdraw('${cm.id}', '${MultiplyShared.escapeHTML(m.name || '').replace(/'/g, "&#39;")}')"
                   style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">
                   Withdraw
@@ -7589,6 +7593,30 @@ async function _batchesWithdraw(cmId, memberName){
     _batchesOpenRoster(_batchesState.selectedCohortId);
   } catch(e) {
     toast('Could not withdraw: ' + (e.message || e), '❌');
+  }
+}
+
+// Individual graduation (Session 5 · May 18, 2026) — designed for the
+// Pre-Pipeline rolling-intake model where disciples finish at their own
+// pace rather than synchronously with the batch. Distinct from
+// _batchesGraduateAll, which is the bulk celebration step for BTLI-shaped
+// cohorts. This action marks ONE member as graduated and leaves the batch
+// itself active so new enrollees can still join.
+async function _batchesGraduate(cmId, memberName){
+  if (!confirm('🎓 Graduate ' + memberName + '?\n\nThey complete the curriculum and stop appearing in the active roster — but their attendance history is preserved. The batch stays active so others can keep going at their own pace.\n\nThis is a one-way celebration step.')) return;
+  try {
+    const { error } = await db.from('cohort_members').update({
+      status: 'graduated',
+      exited_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq('id', cmId);
+    if (error) throw error;
+    toast('🎓 ' + memberName + ' graduated. Congratulations!', 'success');
+    await openMyBatches();
+    // Re-open the roster after reload
+    _batchesOpenRoster(_batchesState.selectedCohortId);
+  } catch(e) {
+    toast('Could not graduate: ' + (e.message || e), '❌');
   }
 }
 
