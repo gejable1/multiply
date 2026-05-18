@@ -1489,7 +1489,7 @@ async function loadMembers(){
   // more efficiently, and the wire payload is smaller. Every column
   // listed here is consumed by r2l(); add columns here if r2l() adds
   // new fields. Approx 50-70% faster load on slow connections.
-  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at').order('updated_at',{ascending:false});
+  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at').order('updated_at',{ascending:false});
   if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   sync('ok');
@@ -1509,10 +1509,17 @@ async function loadMembers(){
 }
 
 function l2r(m){
+  // ─── Invariant #46: discipler = LCL = facilitator at Rosehill ───
+  // The MD modal exposes only a Discipler field. Mirror its value into
+  // facilitator_id / facilitator_name so the two pointer columns stay
+  // synchronized at the write surface. This is the May 18, 2026 fix
+  // following the one-time backfill reconciliation that fixed 201 rows.
+  const _disc_id   = m.discipler_id || null;
+  const _disc_name = m.discipler_name || m.discipler || null;
   return{
     id:m.id||undefined,name:m.name,birthday:m.bday||null,civil_status:m.civil||null,
     baptism_date:m.baptism||null,enrolled_date:m.enrolled||null,
-    discipler_id:m.discipler_id||null,discipler:m.discipler_name||m.discipler||null,
+    discipler_id:_disc_id,discipler:_disc_name,
     discipler_name:m.discipler_name||null,
     pipeline_level:m.level||0,spiritual_gifts:m.gifts||null,
     ministry:m.ministry||null,ministry_role:m.ministry_role||null,
@@ -1526,7 +1533,10 @@ function l2r(m){
     is_external_user:!!m.is_external_user,
     diagnostic_score:m.diagnostic_score||null,diagnostic_zone:m.diagnostic_zone||null,
     diagnostic_date:m.diagnostic_date||null,intervention_track:m.intervention_track||null,
-    intervention_status:m.intervention_status||null,facilitator_name:m.facilitator_name||null,
+    intervention_status:m.intervention_status||null,
+    // Invariant #46: facilitator pointers are always mirrored from discipler.
+    facilitator_id:_disc_id,
+    facilitator_name:m.discipler_name||null,
     updated_at:new Date().toISOString()
   };
 }
@@ -1552,6 +1562,7 @@ function r2l(r){
     facilitator_role:r.facilitator_role||'',diagnostic_score:r.diagnostic_score||null,
     diagnostic_zone:r.diagnostic_zone||null,diagnostic_date:r.diagnostic_date||'',
     intervention_track:r.intervention_track||'',intervention_status:r.intervention_status||'',
+    facilitator_id:r.facilitator_id||'',
     facilitator_name:r.facilitator_name||'',updated:r.updated_at||r.created_at,
     // PIN access metadata. As of May 14, 2026, MMT and MLT share a single
     // PIN per user (member_pin_hash). Pastor's "Reset PIN" button clears
@@ -3065,6 +3076,9 @@ async function saveMember(){
       data.discipler_id      = ex.discipler_id || null;
       data.discipler         = ex.discipler || null;
       data.discipler_name    = ex.discipler_name || null;
+      // Invariant #46: keep facilitator pointers in lockstep with discipler
+      data.facilitator_id    = ex.facilitator_id || ex.discipler_id || null;
+      data.facilitator_name  = ex.facilitator_name || ex.discipler_name || null;
       data.is_facilitator    = !!ex.is_facilitator;
       data.facilitator_role  = ex.facilitator_role || null;
       data.is_test_member    = !!ex.is_test_member; // lock — members can't toggle this
@@ -3072,7 +3086,7 @@ async function saveMember(){
       // are already preserved from `ex` in the block below — no extra work needed.
     }
   }
-  if(eid){const ex=members.find(x=>x.id===eid);if(ex){data.checks=ex.checks||{};data.eolo=ex.eolo||[];data.notes=ex.notes||[];data.diagnostic_score=ex.diagnostic_score;data.diagnostic_zone=ex.diagnostic_zone;data.diagnostic_date=ex.diagnostic_date;data.intervention_track=ex.intervention_track;data.intervention_status=ex.intervention_status;data.facilitator_name=ex.facilitator_name;}}
+  if(eid){const ex=members.find(x=>x.id===eid);if(ex){data.checks=ex.checks||{};data.eolo=ex.eolo||[];data.notes=ex.notes||[];data.diagnostic_score=ex.diagnostic_score;data.diagnostic_zone=ex.diagnostic_zone;data.diagnostic_date=ex.diagnostic_date;data.intervention_track=ex.intervention_track;data.intervention_status=ex.intervention_status;/* facilitator_name intentionally NOT preserved here — l2r mirrors it from discipler per Invariant #46 (May 18, 2026) */}}
   else{
     data.checks={};
     data.eolo=[{name:'',steps:{}},{name:'',steps:{}},{name:'',steps:{}}];
