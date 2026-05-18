@@ -1740,6 +1740,14 @@ body.lang-tl .tl-text{display:inline;}
            Populated by renderBtliQuizzes() on page-pipeline activation. -->
       <div id="btliQuizzesSection" style="margin-top:1.5rem"></div>
 
+      <!-- ═══════ USBONG (PRE-PIPELINE) COMPREHENSION QUIZZES ═══════
+           Pre-Pipeline (Level 0) comprehension quizzes — parallel to BTLI
+           per Invariant #50. Only visible to L0 members per the Session 5
+           L0-only gate decision. Soft-gated by Usbong cohort enrollment
+           or attendance pattern via MultiplyShared.usbong.eligibilityForMany.
+           Populated by renderUsbongQuizzes() on page-pipeline activation. -->
+      <div id="usbongQuizzesSection" style="margin-top:1.5rem"></div>
+
       <!-- ═══════ LIBRARY / READING LIST ═══════
            Level-gated reading materials. Current level shown prominently;
            future levels appear as locked previews so members can see
@@ -2952,6 +2960,7 @@ function renderPipeline(){
   if (typeof renderJourneyLessonsTeaser === 'function') renderJourneyLessonsTeaser();
   if (typeof renderLibrary === 'function') renderLibrary();
   if (typeof renderBtliQuizzes === 'function') renderBtliQuizzes();
+  if (typeof renderUsbongQuizzes === 'function') renderUsbongQuizzes();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -8964,6 +8973,205 @@ async function renderBtliQuizzes(){
 
 function _openBtliQuiz(course, lesson){
   window.open(`btli_quiz_player.html?course=${encodeURIComponent(course)}&lesson=${encodeURIComponent(lesson)}`, '_blank');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// USBONG (PRE-PIPELINE) COMPREHENSION QUIZZES
+// ─────────────────────────────────────────────────────────────
+// Pre-Pipeline (Level 0) per-lesson 10-question quizzes — parallel
+// to BTLI per Invariant #50, but in a separate table family
+// (usbong_quizzes / usbong_quiz_attempts) and eligibility namespace
+// (MultiplyShared.usbong) to honor Invariant #25 (Pre-Pipeline ≠ BTLI).
+//
+// Visibility gate (Session 5 decision, May 18, 2026):
+//   Visible to Level 0 members ONLY. Level 1+ members will not see
+//   this section at all. If a future edge case warrants it, the gate
+//   can be relaxed to "L0 OR has_usbong_attempts" without rewriting
+//   the rest of the function.
+//
+// Soft-gated by Usbong cohort enrollment or attendance pattern.
+// Best of first 3 attempts counts for course-end grade.
+// Quiz player opens in new tab via usbong_quiz_player.html.
+// ═══════════════════════════════════════════════════════════════
+
+async function renderUsbongQuizzes(){
+  const wrap = document.getElementById('usbongQuizzesSection');
+  if (!wrap) return;
+  if (!MEMBER || !MEMBER.memberId) return;
+
+  // ───── L0-only gate (Session 5 decision) ─────
+  // If member is not Level 0, hide the section entirely. Use a fresh
+  // memberRow read since this is the canonical level field per the
+  // pattern at line 2812 etc.
+  const lvl = (memberRow && memberRow.pipeline_level) || 0;
+  if (lvl !== 0) {
+    wrap.innerHTML = '';   // clear in case the member was just demoted/promoted mid-session
+    return;
+  }
+
+  wrap.innerHTML = `
+    <div style="background:linear-gradient(135deg,#2a5c40,#3d7a55);color:#fff;border-radius:12px;padding:1rem 1.1rem;margin-bottom:.8rem;">
+      <div style="font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#d4a93f;font-weight:700;margin-bottom:.3rem;">
+        <span class="en-text">Pre-Pipeline Comprehension Quizzes</span>
+        <span class="tl-text">Pre-Pipeline Comprehension Quizzes</span>
+      </div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;margin-bottom:.25rem;line-height:1.35;">
+        <span class="en-text">Test what stuck. Build your foundation.</span>
+        <span class="tl-text">Subukin ang natutunan. Itayo ang pundasyon.</span>
+      </div>
+      <div style="font-size:12.5px;opacity:.85;font-style:italic;line-height:1.55;">
+        <span class="en-text">10 questions per lesson · Best of 3 attempts counts · Unlocks via cohort enrollment or LCG attendance.</span>
+        <span class="tl-text">10 tanong bawat aralin · Best of 3 ang bibilang · Bubukas via cohort enrollment o LCG attendance.</span>
+      </div>
+    </div>
+    <div id="usbongQuizzesList" style="display:flex;flex-direction:column;gap:.55rem;">
+      <div style="text-align:center;padding:1.2rem;color:var(--muted);font-size:13px;">
+        <span class="en-text">Loading quizzes...</span>
+        <span class="tl-text">Naglo-load...</span>
+      </div>
+    </div>
+  `;
+
+  try {
+    // Fetch all active Usbong quizzes
+    const { data: quizzes, error: qErr } = await db
+      .from('usbong_quizzes')
+      .select('id,course_code,lesson_number,lesson_title,passing_score,attendance_event_name_pattern')
+      .eq('is_active', true)
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+
+    if (qErr) throw qErr;
+    if (!quizzes || quizzes.length === 0) {
+      document.getElementById('usbongQuizzesList').innerHTML = `
+        <div style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:1.2rem;text-align:center;color:var(--muted,#5a6655);font-size:13px;line-height:1.55;">
+          <span class="en-text">No quizzes published yet. Your discipler will share quizzes as you progress through your Pre-Pipeline lessons.</span>
+          <span class="tl-text">Wala pang naka-publish na quiz. Ipapaalam ng discipler mo habang lumalago ka sa Pre-Pipeline lessons.</span>
+        </div>
+      `;
+      return;
+    }
+
+    // Fetch member's attempts for all quizzes in one query
+    const quizIds = quizzes.map(q => q.id);
+    const { data: attempts } = await db
+      .from('usbong_quiz_attempts')
+      .select('quiz_id,attempt_number,score,passed,counts_for_grade')
+      .eq('member_id', MEMBER.memberId)
+      .in('quiz_id', quizIds);
+
+    // Group attempts by quiz_id
+    const byQuiz = {};
+    (attempts || []).forEach(a => {
+      if (!byQuiz[a.quiz_id]) byQuiz[a.quiz_id] = [];
+      byQuiz[a.quiz_id].push(a);
+    });
+
+    // ───── Hybrid eligibility (Invariant #35 · parallel to BTLI) ─────
+    // Single batch call computes eligibility for all visible Usbong quizzes
+    // at once. Returns Map<quiz.id, { eligible, reason, enrolled, dropIn, … }>.
+    // The cohort path checks enrollment in an active cohort whose program
+    // teaches this Usbong course_code (via cohort_programs.usbong_course_code,
+    // Session 5 migration). The attendance path is preserved as a fallback.
+    let eligMap;
+    try {
+      eligMap = await MultiplyShared.usbong.eligibilityForMany(MEMBER.memberId, quizzes, {});
+    } catch(eEli){
+      console.warn('usbong eligibilityForMany threw, falling open:', eEli);
+      eligMap = new Map();
+      quizzes.forEach(q => eligMap.set(q.id, {
+        eligible: true, reason: 'no_gate', enrolled: false, dropIn: true, cohortIds: [], programNames: []
+      }));
+    }
+
+    // Render each quiz card
+    const list = document.getElementById('usbongQuizzesList');
+    list.innerHTML = '';
+    quizzes.forEach(q => {
+      const att = byQuiz[q.id] || [];
+      const counted = att.filter(a => a.counts_for_grade);
+      const bestScore = counted.reduce((m, a) => Math.max(m, a.score || 0), 0);
+      const passed = counted.some(a => a.passed);
+      const attemptCount = att.length;
+
+      const elig = eligMap.get(q.id) || { eligible: false, reason: 'blocked', enrolled: false, dropIn: false };
+      const unlocked = !!elig.eligible;
+      const dropIn = !!elig.dropIn;
+
+      let badgeHtml = '';
+      let actionHtml = '';
+      let cardBg = '#fff';
+      let leftBar = '#cdd6e0';
+      let dropInPill = '';
+
+      // Drop-in pill: same semantics as BTLI surface — eligible by attendance
+      // only, quiet signal for discipler to back-fill enrollment.
+      if (unlocked && dropIn) {
+        dropInPill = `<span title="Not enrolled in a cohort for this course — using attendance fallback." style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(184,136,42,.12);color:#b8882a;border:1px solid rgba(184,136,42,.35);letter-spacing:.04em;text-transform:uppercase;margin-left:6px;vertical-align:1.5px;">Drop-in</span>`;
+      }
+
+      if (!unlocked) {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#f0f0f0;color:#888;letter-spacing:.04em;">🔒 LOCKED</span>`;
+        actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
+          <span class="en-text">Get enrolled or have attendance logged to unlock.</span>
+          <span class="tl-text">Mag-enroll o pa-log ng attendance para mabuksan.</span>
+        </div>`;
+        cardBg = '#f8f9fb';
+      } else if (passed) {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#dcf5e3;color:#1a5a30;letter-spacing:.04em;">✓ PASSED · ${bestScore}%</span>`;
+        leftBar = '#2a5c40';
+        actionHtml = `<button onclick="_openUsbongQuiz('${q.course_code}',${q.lesson_number})" style="padding:.55rem 1rem;background:transparent;color:#2a5c40;border:1.5px solid #2a5c40;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+          <span class="en-text">${attemptCount < 3 ? 'Improve Score' : 'Practice Again'}</span>
+          <span class="tl-text">${attemptCount < 3 ? 'Itaas ang Score' : 'Practice ulit'}</span>
+        </button>`;
+      } else if (attemptCount > 0) {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#fdf6e8;color:#b8882a;letter-spacing:.04em;">${attemptCount}/3 ATTEMPTS · BEST ${bestScore}%</span>`;
+        leftBar = '#b8882a';
+        const labelEn = attemptCount < 3 ? 'Try Again' : 'Practice (no grade change)';
+        const labelTl = attemptCount < 3 ? 'Subukan ulit' : 'Practice (walang epekto)';
+        actionHtml = `<button onclick="_openUsbongQuiz('${q.course_code}',${q.lesson_number})" style="padding:.55rem 1rem;background:#b8882a;color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+          <span class="en-text">${labelEn}</span>
+          <span class="tl-text">${labelTl}</span>
+        </button>`;
+      } else {
+        badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#eaf3ec;color:#2a5c40;letter-spacing:.04em;">📝 NOT YET TAKEN</span>`;
+        leftBar = '#2a5c40';
+        actionHtml = `<button onclick="_openUsbongQuiz('${q.course_code}',${q.lesson_number})" style="padding:.55rem 1rem;background:#2a5c40;color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+          <span class="en-text">Take Quiz</span>
+          <span class="tl-text">Kunin ang Quiz</span>
+        </button>`;
+      }
+
+      const card = document.createElement('div');
+      card.style.cssText = `background:${cardBg};border:1px solid var(--border,#cdd6e0);border-left:4px solid ${leftBar};border-radius:9px;padding:.85rem 1rem;`;
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.45rem;">
+          <div style="flex:1;">
+            <div style="font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:#b8882a;margin-bottom:.15rem;">
+              ${q.course_code} · Lesson ${q.lesson_number}${dropInPill}
+            </div>
+            <div style="font-size:14.5px;font-weight:600;color:#1a1612;line-height:1.3;">${_esc(q.lesson_title)}</div>
+          </div>
+          <div>${badgeHtml}</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;">${actionHtml}</div>
+      `;
+      list.appendChild(card);
+    });
+
+  } catch (e) {
+    console.error('renderUsbongQuizzes failed', e);
+    document.getElementById('usbongQuizzesList').innerHTML = `
+      <div style="background:#fdf0ee;border:1px solid #e6b8b5;color:#7a2624;border-radius:9px;padding:.85rem;font-size:13px;line-height:1.55;">
+        <span class="en-text">Couldn't load quizzes. Please refresh.</span>
+        <span class="tl-text">Hindi mai-load ang quizzes. Pakirefresh.</span>
+      </div>
+    `;
+  }
+}
+
+function _openUsbongQuiz(course, lesson){
+  window.open(`usbong_quiz_player.html?course=${encodeURIComponent(course)}&lesson=${encodeURIComponent(lesson)}`, '_blank');
 }
 
 function _esc(s){
