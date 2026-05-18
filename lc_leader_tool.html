@@ -2277,13 +2277,21 @@ async function openProposeTransfer(){
   if(!modal){
     modal = document.createElement('div');
     modal.id = 'proposeTransferModal';
-    modal.className = 'lessons-overlay';
+    // Inline fixed-overlay positioning — matches the established MLT modal
+    // pattern (see e.g. ministry attendance modal). Centers the panel in
+    // the viewport regardless of scroll position. display toggled in
+    // openProposeTransfer / closeProposeTransfer.
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;';
+    // Click outside the panel closes the modal
+    modal.addEventListener('click', (ev) => {
+      if(ev.target === modal) closeProposeTransfer();
+    });
     modal.innerHTML = `
-      <div class="lessons-panel" style="max-width:480px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:480px;margin:auto;overflow:hidden">
         <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)">
           <div style="font-size:18px">🔀</div>
           <div style="font-weight:800;font-size:15px;flex:1">Propose Transfer</div>
-          <button onclick="closeProposeTransfer()" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+          <button onclick="closeProposeTransfer()" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px">✕</button>
         </div>
         <div style="padding:16px 18px">
           <div style="font-size:12px;color:var(--muted);margin-bottom:4px">MEMBER</div>
@@ -2316,9 +2324,11 @@ async function openProposeTransfer(){
     document.body.appendChild(modal);
   }
 
-  // Populate fields
+  // Populate fields. Per Invariant #46 (discipler = LCL), fall back from
+  // facilitator_name → discipler_name → lc_group → none.
   document.getElementById('ptMemberName').textContent = mem.name;
-  document.getElementById('ptCurrentLcl').textContent = mem.facilitator_name || mem.lc_group || '— No current LCL —';
+  document.getElementById('ptCurrentLcl').textContent =
+    mem.facilitator_name || mem.discipler_name || mem.lc_group || '— No current shepherd —';
 
   // Default date to today (Manila-safe per Invariant #12)
   const today = new Date();
@@ -2326,16 +2336,17 @@ async function openProposeTransfer(){
   document.getElementById('ptDate').value = ymd;
   document.getElementById('ptReason').value = '';
 
-  modal.classList.add('open');
+  modal.style.display = 'flex';
 
-  // Async populate destination LCL dropdown (Invariant #45 pool)
+  // Async populate destination shepherd dropdown (Invariant #45 pool).
+  // Exclude current shepherd (whether by facilitator_id or discipler_id).
   try{
     const lcls = await MultiplyShared.transfers.listEligibleDestinationLCLs();
-    // Filter out the current LCL from the dropdown
-    const choices = (lcls||[]).filter(l => l.id !== mem.facilitator_id);
+    const currentShepherdId = mem.facilitator_id || mem.discipler_id;
+    const choices = (lcls||[]).filter(l => l.id !== currentShepherdId);
     const sel = document.getElementById('ptToLcl');
     if(!choices.length){
-      sel.innerHTML = '<option value="">⚠ No eligible destination LCLs</option>';
+      sel.innerHTML = '<option value="">⚠ No eligible destination shepherds</option>';
       return;
     }
     sel.innerHTML = '<option value="">— Select destination shepherd —</option>' +
@@ -2344,7 +2355,7 @@ async function openProposeTransfer(){
         return `<option value="${l.id}">${MultiplyShared.escapeHTML(l.name)} (${l.level_name})${MultiplyShared.escapeHTML(tag)}</option>`;
       }).join('');
   }catch(e){
-    console.error('Failed to load LCLs:', e);
+    console.error('Failed to load shepherds:', e);
     document.getElementById('ptToLcl').innerHTML = '<option value="">⚠ Error loading shepherds</option>';
     toast('Failed to load destination list: '+e.message,'error');
   }
@@ -2352,7 +2363,7 @@ async function openProposeTransfer(){
 
 function closeProposeTransfer(){
   const m = document.getElementById('proposeTransferModal');
-  if(m) m.classList.remove('open');
+  if(m) m.style.display = 'none';
 }
 
 async function submitProposeTransfer(){
