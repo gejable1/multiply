@@ -7296,31 +7296,7 @@ function _llRenderEditor(){
           </div>
 
           <div id="llGrantsSection" style="${l.audience==='cohort_only' ? '' : 'display:none'};margin-top:.85rem;padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
-            <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:.5rem">Grant access to:</div>
-            ${!l.id ? `
-              <div style="font-size:11.5px;color:var(--muted);font-style:italic;line-height:1.5">
-                Save the lesson first, then you can grant access to specific batches, programs, or individuals.
-              </div>
-            ` : `
-              <div id="llGrantsList">${_llRenderGrants(l.id, grants)}</div>
-              <div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)">
-                <div style="font-size:11.5px;color:var(--ink);font-weight:700;margin-bottom:.25rem">＋ Add a new grant</div>
-                <div style="font-size:11px;color:var(--muted);font-style:italic;line-height:1.45;margin-bottom:.5rem">
-                  Pick a target below and tap <strong style="color:var(--green);font-style:normal">＋ Add this grant</strong> — each grant saves instantly. The Save lesson button at the bottom does NOT save grants.
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-top:.4rem">
-                <select id="llGrantType" onchange="_llRefreshGrantTargetOptions()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
-                  <option value="cohort">A batch</option>
-                  <option value="program">A whole program</option>
-                  <option value="member">A specific member</option>
-                </select>
-                <select id="llGrantTarget" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
-                  ${_llRenderGrantTargetOptions('cohort')}
-                </select>
-                <button onclick="_llAddGrant('${l.id}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;white-space:nowrap">＋ Add this grant</button>
-              </div>
-            `}
+            ${_llRenderGrantsInner(l, grants)}
           </div>
         </div>
 
@@ -7522,9 +7498,64 @@ function _llRefreshGrantTargetOptions(){
 
 function _llOnAudienceChange(val){
   const sec = document.getElementById('llGrantsSection');
-  if(sec){
-    sec.style.display = (val === 'cohort_only') ? '' : 'none';
+  if(!sec) return;
+
+  // 1. Toggle wrapper visibility based on the new audience selection
+  sec.style.display = (val === 'cohort_only') ? '' : 'none';
+
+  // 2. When switching TO cohort_only, re-render the inner content from
+  //    current editing state. This is the fix for a bug where the inner
+  //    content was baked at initial editor render — if the user opened
+  //    the editor with audience != 'cohort_only' and then switched the
+  //    dropdown to 'cohort_only', the inner content stayed stale
+  //    (often as the "Save the lesson first..." placeholder even for
+  //    already-saved lessons). Re-rendering from current state on every
+  //    switch keeps the picker honest. No-op cost when switching away.
+  if(val === 'cohort_only'){
+    const l = _lessonState.editing;
+    if(l){
+      const grants = l.id ? (_lessonState.grants[l.id] || []) : [];
+      sec.innerHTML = _llRenderGrantsInner(l, grants);
+    }
   }
+}
+
+// Inner content of the #llGrantsSection wrapper. Extracted so the
+// dropdown handler can re-render it on audience-change without
+// rebuilding the whole editor (which would lose textarea focus/cursor).
+// Two states:
+//   - Unsaved lesson (!l.id): friendly "save first" placeholder
+//   - Saved lesson: the full grants list + add-grant controls
+function _llRenderGrantsInner(l, grants){
+  if(!l.id){
+    return `
+      <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:.5rem">Grant access to:</div>
+      <div style="font-size:11.5px;color:var(--muted);font-style:italic;line-height:1.55">
+        💾 Tap <strong style="color:var(--green);font-style:normal">Save lesson</strong> at the bottom first — then reopen this lesson to pick specific batches, programs, or individuals.
+      </div>
+    `;
+  }
+  return `
+    <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:.5rem">Grant access to:</div>
+    <div id="llGrantsList">${_llRenderGrants(l.id, grants)}</div>
+    <div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)">
+      <div style="font-size:11.5px;color:var(--ink);font-weight:700;margin-bottom:.25rem">＋ Add a new grant</div>
+      <div style="font-size:11px;color:var(--muted);font-style:italic;line-height:1.45;margin-bottom:.5rem">
+        Pick a target below and tap <strong style="color:var(--green);font-style:normal">＋ Add this grant</strong> — each grant saves instantly. The Save lesson button at the bottom does NOT save grants.
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-top:.4rem">
+      <select id="llGrantType" onchange="_llRefreshGrantTargetOptions()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
+        <option value="cohort">A batch</option>
+        <option value="program">A whole program</option>
+        <option value="member">A specific member</option>
+      </select>
+      <select id="llGrantTarget" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:var(--ink)">
+        ${_llRenderGrantTargetOptions('cohort')}
+      </select>
+      <button onclick="_llAddGrant('${l.id}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;white-space:nowrap">＋ Add this grant</button>
+    </div>
+  `;
 }
 
 async function _llAddGrant(lessonId){
