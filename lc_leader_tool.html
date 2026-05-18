@@ -794,6 +794,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="att-type-pill" data-type="Sunday School" onclick="selectAttType(this)">Sunday School</div>
       <div class="att-type-pill" data-type="Prayer Meeting" onclick="selectAttType(this)">Prayer Meeting</div>
       <div class="att-type-pill" data-type="BTLI" onclick="selectAttType(this)">BTLI</div>
+      <div class="att-type-pill" data-type="Pre-Pipeline" onclick="selectAttType(this)">Pre-Pipeline</div>
       <div class="att-type-pill" data-type="Youth Gathering" onclick="selectAttType(this)">Youth Gathering</div>
       <div class="att-type-pill" data-type="Team Building" onclick="selectAttType(this)">Team Building</div>
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
@@ -822,6 +823,30 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <option value="">— Pick the batch —</option>
       </select>
       <div id="attBtliBatchHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Only members enrolled in the chosen batch can be marked present.</div>
+    </div>
+    <!-- Pre-Pipeline (Usbong) lesson picker — shown only when event_type === 'Pre-Pipeline'.
+         Parallel to the BTLI lesson picker per Invariant #50. event_name is
+         constructed identically:
+           "${course_code} · L${lesson_number} · ${lesson_title}"  (U+00B7 middle dot)
+         Required-on-save when Pre-Pipeline is selected. -->
+    <div id="attUsbongLessonRow" style="display:none;margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--green);border-radius:var(--r-sm);">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin-bottom:6px;">🌱 Which Pre-Pipeline Lesson?</div>
+      <select id="attUsbongLessonSelect" onchange="onUsbongLessonChange()" style="width:100%;padding:9px 12px;font-size:14px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;color:var(--text);outline:none;cursor:pointer;">
+        <option value="">— Pick the lesson —</option>
+      </select>
+      <div id="attUsbongLessonHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Pick the specific Pre-Pipeline lesson (Usbong / Usad / Unlad). This unlocks the comprehension quiz for everyone marked present.</div>
+    </div>
+    <!-- Pre-Pipeline (Usbong) batch picker — Session 5 parallel to BTLI's.
+         Shown only once a Pre-Pipeline lesson is selected. Derives course_code
+         from the picked lesson and populates with active cohorts of programs
+         teaching that course (Pastor-owned + LCL's own). Only enrolled
+         members become the attendance roster. -->
+    <div id="attUsbongBatchRow" style="display:none;margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--green);border-radius:var(--r-sm);">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin-bottom:6px;">🌿 Which Batch?</div>
+      <select id="attUsbongBatchSelect" onchange="onUsbongBatchChange()" style="width:100%;padding:9px 12px;font-size:14px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;color:var(--text);outline:none;cursor:pointer;">
+        <option value="">— Pick the batch —</option>
+      </select>
+      <div id="attUsbongBatchHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Only members enrolled in the chosen Pre-Pipeline batch can be marked present.</div>
     </div>
   </div>
   <!-- "Already saved" banner — populated by loadExistingAttendance(); hidden when nothing on file -->
@@ -1023,6 +1048,27 @@ let selectedBtliBatchId = null;    // id of chosen cohort
 let _btliBatchRoster = null;       // member rows of the chosen batch, sorted
                                    // When non-null AND selectedAttType === 'BTLI',
                                    // renderAttList draws from this instead of myMembers.
+
+// Pre-Pipeline (Usbong) lesson picker state (Session 5 · May 18, 2026)
+// Parallel to BTLI's lesson picker per Invariant #50. When
+// selectedAttType === 'Pre-Pipeline', the leader must pick a specific
+// lesson; on save we write event_type='Pre-Pipeline' and
+// event_name='Usbong 1 · L1 · Sino Ang Diyos?' (matching Invariant #30).
+let _usbongQuizzes = null;            // cached fetch of active usbong_quizzes rows
+let _usbongQuizzesLoading = false;
+let selectedUsbongQuizId = null;      // id of chosen usbong_quizzes row
+let selectedUsbongEventName = '';     // computed "Usbong 1 · L1 · Sino Ang Diyos?" string
+
+// Pre-Pipeline (Usbong) batch picker state — parallel to BTLI's C3b block.
+// Once a lesson is selected, we derive course_code and load matching
+// active cohorts. The chosen batch's active members become the roster.
+let _usbongBatchesForCourse = null;   // array of cohort rows, populated per course_code
+let _usbongBatchesLoading = false;
+let selectedUsbongBatchId = null;     // id of chosen cohort
+let _usbongBatchRoster = null;        // member rows of the chosen batch, sorted
+                                      // When non-null AND selectedAttType === 'Pre-Pipeline',
+                                      // renderAttList draws from this instead of myMembers.
+
 let filterStr = '';
 let allSelected = false;
 
@@ -2714,6 +2760,9 @@ function _currentAttRoster(){
   if (selectedAttType === 'BTLI' && Array.isArray(_btliBatchRoster) && _btliBatchRoster.length > 0) {
     return _btliBatchRoster;
   }
+  if (selectedAttType === 'Pre-Pipeline' && Array.isArray(_usbongBatchRoster) && _usbongBatchRoster.length > 0) {
+    return _usbongBatchRoster;
+  }
   return myMembers || [];
 }
 
@@ -2740,6 +2789,20 @@ function showAttendance(){
   if (_btliBatchRow) _btliBatchRow.style.display = 'none';
   const _btliBatchSelEl = document.getElementById('attBtliBatchSelect');
   if (_btliBatchSelEl) _btliBatchSelEl.innerHTML = '<option value="">— Pick the batch —</option>';
+  // Pre-Pipeline (Usbong) state reset — Session 5 parallel to BTLI's.
+  selectedUsbongQuizId = null;
+  selectedUsbongEventName = '';
+  const _usbongSel = document.getElementById('attUsbongLessonSelect');
+  if (_usbongSel) _usbongSel.value = '';
+  const _usbongRow = document.getElementById('attUsbongLessonRow');
+  if (_usbongRow) _usbongRow.style.display = (selectedAttType === 'Pre-Pipeline') ? 'block' : 'none';
+  selectedUsbongBatchId = null;
+  _usbongBatchRoster = null;
+  _usbongBatchesForCourse = null;
+  const _usbongBatchRow = document.getElementById('attUsbongBatchRow');
+  if (_usbongBatchRow) _usbongBatchRow.style.display = 'none';
+  const _usbongBatchSelEl = document.getElementById('attUsbongBatchSelect');
+  if (_usbongBatchSelEl) _usbongBatchSelEl.innerHTML = '<option value="">— Pick the batch —</option>';
   attendanceState = {};
   _currentAttRoster().forEach(m=>{ attendanceState[m.id]=false; });
   allSelected = false;
@@ -2874,6 +2937,28 @@ function selectAttType(el){
       const sel = document.getElementById('attBtliLessonSelect');
       if (sel) sel.value = '';
       const batchSel = document.getElementById('attBtliBatchSelect');
+      if (batchSel) batchSel.innerHTML = '<option value="">— Pick the batch —</option>';
+    }
+  }
+  // Show/hide Pre-Pipeline (Usbong) lesson picker — Session 5 parallel to BTLI's.
+  const usbongRow = document.getElementById('attUsbongLessonRow');
+  const usbongBatchRow = document.getElementById('attUsbongBatchRow');
+  if (usbongRow) {
+    if (selectedAttType === 'Pre-Pipeline') {
+      usbongRow.style.display = 'block';
+      ensureUsbongQuizzesLoaded();
+      if (usbongBatchRow) usbongBatchRow.style.display = 'none';
+    } else {
+      usbongRow.style.display = 'none';
+      if (usbongBatchRow) usbongBatchRow.style.display = 'none';
+      selectedUsbongQuizId = null;
+      selectedUsbongEventName = '';
+      selectedUsbongBatchId = null;
+      _usbongBatchRoster = null;
+      _usbongBatchesForCourse = null;
+      const sel = document.getElementById('attUsbongLessonSelect');
+      if (sel) sel.value = '';
+      const batchSel = document.getElementById('attUsbongBatchSelect');
       if (batchSel) batchSel.innerHTML = '<option value="">— Pick the batch —</option>';
     }
   }
@@ -3018,6 +3103,155 @@ function onBtliBatchChange(){
   onAttContextChange();
 }
 
+// ═══════════════════════════════════════════════════════════════
+// PRE-PIPELINE (USBONG) ATTENDANCE PICKERS · Session 5 · May 18, 2026
+// ─────────────────────────────────────────────────────────────
+// Precise mirror of the BTLI attendance pickers above. Same UX,
+// same state shape, same save semantics — pointed at usbong_quizzes
+// + usbong_course_code instead of the BTLI tables per Invariant #50.
+// When MLT writes attendance with event_type='Pre-Pipeline' and
+// event_name='Usbong 1 · L1 · Sino Ang Diyos?', the Usbong eligibility
+// helper's substring-match attendance gate unlocks that L0 member's
+// Usbong quiz on MMT.
+// ═══════════════════════════════════════════════════════════════
+
+// Lazy-load active Usbong quizzes into the lesson picker.
+// Cached for the lifetime of the page; refresh on page reload.
+async function ensureUsbongQuizzesLoaded(){
+  const sel = document.getElementById('attUsbongLessonSelect');
+  if (!sel) return;
+  if (_usbongQuizzesLoading) return;
+  if (_usbongQuizzes !== null) return; // already loaded
+
+  _usbongQuizzesLoading = true;
+  try {
+    const { data, error } = await db
+      .from('usbong_quizzes')
+      .select('id,course_code,lesson_number,lesson_title')
+      .eq('is_active', true)
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+    if (error) throw error;
+    _usbongQuizzes = data || [];
+    // Populate select
+    sel.innerHTML = '<option value="">— Pick the lesson —</option>';
+    _usbongQuizzes.forEach(q => {
+      // event_name per Invariant #30: middle-dot U+00B7, single spaces
+      const eventName = `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`;
+      const opt = document.createElement('option');
+      opt.value = q.id;
+      opt.textContent = eventName;
+      opt.dataset.eventName = eventName;
+      // course_code needed by onUsbongLessonChange → batch picker loader.
+      opt.dataset.courseCode = q.course_code || '';
+      sel.appendChild(opt);
+    });
+    if (!_usbongQuizzes.length) {
+      sel.innerHTML = '<option value="">⚠ No active Pre-Pipeline lessons in the system</option>';
+    }
+  } catch (e) {
+    console.error('[usbong-lesson-load]', e);
+    sel.innerHTML = '<option value="">⚠ Could not load Pre-Pipeline lessons — try again</option>';
+    _usbongQuizzes = null; // allow retry
+  } finally {
+    _usbongQuizzesLoading = false;
+  }
+}
+
+function onUsbongLessonChange(){
+  const sel = document.getElementById('attUsbongLessonSelect');
+  if (!sel) return;
+  selectedUsbongQuizId = sel.value || null;
+  const chosen = sel.options[sel.selectedIndex];
+  selectedUsbongEventName = (chosen && chosen.dataset && chosen.dataset.eventName) || '';
+  // Derive course_code from the picked quiz and load matching batches.
+  const courseCode = (chosen && chosen.dataset && chosen.dataset.courseCode) || '';
+  _usbongLoadBatchesForCourse(courseCode);
+  // Reset any prior batch selection — different lesson may be in a
+  // different course's batch, and we don't want a stale roster.
+  selectedUsbongBatchId = null;
+  _usbongBatchRoster = null;
+  // If Pre-Pipeline lesson changes mid-form, reload existing attendance
+  // so we see the right set (different lesson on same day = different event_name).
+  onAttContextChange();
+}
+
+// Pre-Pipeline batch picker — load active cohorts teaching the given course.
+// Uses the shared.js helper with curriculum='usbong' (Session 5 generalization).
+async function _usbongLoadBatchesForCourse(courseCode){
+  const row = document.getElementById('attUsbongBatchRow');
+  const sel = document.getElementById('attUsbongBatchSelect');
+  const hint = document.getElementById('attUsbongBatchHint');
+  if (!row || !sel) return;
+  if (!courseCode) {
+    row.style.display = 'none';
+    sel.innerHTML = '<option value="">— Pick the batch —</option>';
+    _usbongBatchesForCourse = null;
+    return;
+  }
+  // Show the row + loading state
+  row.style.display = 'block';
+  sel.innerHTML = '<option value="">— loading batches… —</option>';
+  sel.disabled = true;
+  try {
+    const L = LEADER || {};
+    const actor = {
+      memberId: L.leaderId,
+      isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
+    };
+    // 3rd arg = curriculum: 'usbong' selects the usbong_course_code column.
+    const batches = await MultiplyShared.cohorts.listActiveByCourseCode(actor, courseCode, 'usbong');
+    _usbongBatchesForCourse = batches || [];
+    sel.disabled = false;
+    if (_usbongBatchesForCourse.length === 0) {
+      sel.innerHTML = '<option value="">⚠ No active batches for ' + MultiplyShared.escapeHTML(courseCode) + '</option>';
+      if (hint) hint.textContent = 'No active batches you can manage for ' + courseCode + '. Ask Pastor to set up a batch first.';
+      return;
+    }
+    sel.innerHTML = '<option value="">— Pick the batch —</option>' +
+      _usbongBatchesForCourse.map(c => {
+        const count = (c._members || []).length;
+        const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? '' : ' (other)');
+        return '<option value="' + c.id + '">' +
+          MultiplyShared.escapeHTML(c.name || '(unnamed)') + ' · ' +
+          count + ' enrolled' + MultiplyShared.escapeHTML(ownerTag) +
+          '</option>';
+      }).join('');
+    if (hint) hint.textContent = 'Only members enrolled in the chosen Pre-Pipeline batch can be marked present.';
+  } catch(e) {
+    console.error('_usbongLoadBatchesForCourse failed:', e);
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">⚠ Could not load batches</option>';
+    if (hint) hint.textContent = 'Could not load batches: ' + (e.message || e);
+    _usbongBatchesForCourse = null;
+  }
+}
+
+// LCL picked a specific Pre-Pipeline batch — set the roster from its enrolled members.
+function onUsbongBatchChange(){
+  const sel = document.getElementById('attUsbongBatchSelect');
+  if (!sel) return;
+  selectedUsbongBatchId = sel.value || null;
+  if (!selectedUsbongBatchId || !_usbongBatchesForCourse) {
+    _usbongBatchRoster = null;
+    onAttContextChange();
+    return;
+  }
+  const batch = _usbongBatchesForCourse.find(c => c.id === selectedUsbongBatchId);
+  if (!batch) {
+    _usbongBatchRoster = null;
+    onAttContextChange();
+    return;
+  }
+  // Map cohort_members → member rows (with name, level, lc_group).
+  // Sort alphabetically for stable scan order on mobile.
+  _usbongBatchRoster = (batch._members || [])
+    .map(cm => cm.members)
+    .filter(m => m && m.id)
+    .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+  onAttContextChange();
+}
+
 // Called when the leader changes the date or event type. If they have
 // unsaved toggles, warn before discarding (mirrors the back-button logic).
 function onAttContextChange(){
@@ -3060,6 +3294,12 @@ async function loadExistingAttendance(){
     if(banner){ banner.style.display='none'; banner.innerHTML=''; }
     return;
   }
+  // Same guard for Pre-Pipeline (Session 5).
+  if (type === 'Pre-Pipeline' && !selectedUsbongEventName){
+    console.log('[attendance-load] Pre-Pipeline selected but no lesson picked yet — abort');
+    if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+    return;
+  }
   const myToken = ++_attLoadToken;
 
   try {
@@ -3079,6 +3319,9 @@ async function loadExistingAttendance(){
       .in('member_id', memberIds);
     if (type === 'BTLI' && selectedBtliEventName) {
       q = q.eq('event_name', selectedBtliEventName);
+    }
+    if (type === 'Pre-Pipeline' && selectedUsbongEventName) {
+      q = q.eq('event_name', selectedUsbongEventName);
     }
     const { data, error } = await q;
 
@@ -3171,6 +3414,15 @@ function renderAttList(){
     list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.55">This batch has no active enrollees yet.<br><span style="font-size:11px">Enroll members from <strong>🎓 My Batches</strong> first.</span></div>';
     return;
   }
+  // Same empty-state messaging for Pre-Pipeline (Session 5).
+  if (selectedAttType === 'Pre-Pipeline' && !selectedUsbongBatchId) {
+    list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.55">Pick a Pre-Pipeline lesson and batch above to load the roster.</div>';
+    return;
+  }
+  if (selectedAttType === 'Pre-Pipeline' && selectedUsbongBatchId && roster.length === 0) {
+    list.innerHTML = '<div style="padding:24px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.55">This batch has no active enrollees yet.<br><span style="font-size:11px">Enroll members from <strong>🎓 My Batches</strong> first.</span></div>';
+    return;
+  }
   list.innerHTML = roster.map((mem, idx)=>{
     const present = attendanceState[mem.id];
     return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
@@ -3250,12 +3502,30 @@ async function saveAttendance(){
       return;
     }
   }
+  // Same guards for Pre-Pipeline (Session 5).
+  if (selectedAttType === 'Pre-Pipeline') {
+    if (!selectedUsbongQuizId || !selectedUsbongEventName) {
+      toast('Please pick the specific Pre-Pipeline lesson before saving.','error');
+      const sel = document.getElementById('attUsbongLessonSelect');
+      if (sel) sel.focus();
+      return;
+    }
+    if (!selectedUsbongBatchId) {
+      toast('Please pick the batch before saving Pre-Pipeline attendance.','error');
+      const sel = document.getElementById('attUsbongBatchSelect');
+      if (sel) sel.focus();
+      return;
+    }
+  }
 
   const leader        = currentLeader;
   const eventLcGroup  = leader?.lc_group || '';
   const loggedById    = leader?.id || null;
   const loggedBy      = leader?.name || 'Unknown';
-  const eventName     = (selectedAttType === 'BTLI') ? selectedBtliEventName : null;
+  // Derive event_name for BTLI and Pre-Pipeline; null for all other types.
+  let eventName = null;
+  if (selectedAttType === 'BTLI')         eventName = selectedBtliEventName;
+  else if (selectedAttType === 'Pre-Pipeline') eventName = selectedUsbongEventName;
 
   // C3b: roster is _btliBatchRoster for BTLI, myMembers otherwise.
   const rosterForSave = _currentAttRoster();
@@ -3281,15 +3551,15 @@ async function saveAttendance(){
 
   for (const row of rows) {
     // Check if a row already exists for this member + date + type.
-    // For BTLI, we also match on event_name so different lessons on the same
-    // day produce separate rows (rare, but supported).
+    // For BTLI and Pre-Pipeline, we also match on event_name so different
+    // lessons on the same day produce separate rows (rare, but supported).
     let q = db
       .from('attendance')
       .select('id')
       .eq('member_id', row.member_id)
       .eq('event_date', row.event_date)
       .eq('event_type', row.event_type);
-    if (row.event_type === 'BTLI' && row.event_name) {
+    if ((row.event_type === 'BTLI' || row.event_type === 'Pre-Pipeline') && row.event_name) {
       q = q.eq('event_name', row.event_name);
     }
     const { data: existing, error: selErr } = await q.maybeSingle();
