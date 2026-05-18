@@ -436,18 +436,29 @@
     myCohortRoles.forEach(cm => { cohortRoleMap[cm.cohort_id] = cm.role; });
 
     // Pre-fetch program ids for my cohorts (needed for program-level grant match)
-    // We can derive this from the cohorts table — but to avoid another query,
-    // we'll filter grants of type cohort_id first, then check program_id grants
-    // against cohorts we already know we're in.
-    // For program-level grants, we need to know which programs our cohorts belong to.
-    // Best: fetch the cohorts the user is in.
+    // We build TWO structures from the same fetch:
+    //   • myCohortPrograms (Set) — used for lesson-level access check (any of
+    //     my programs match a grant's program_id → lesson accessible)
+    //   • cohortProgramMap ({cohort_id → program_id}) — used for per-cohort
+    //     role scoping (which of MY cohorts SPECIFICALLY is in a granting
+    //     program). Fix for the role-leak bug logged May 18, 2026 (Session 6):
+    //     previously the role walk used myCohortPrograms-as-Set which lost the
+    //     per-cohort scoping. A user who was 'apprentice' in cohort A (program
+    //     X) and 'participant' in cohort B (program Y) would have ALL their
+    //     cohort roles promoted into the granting-cohorts list whenever ANY
+    //     of their programs matched ANY lesson's program grant — leaking the
+    //     apprentice rank into lessons granted to unrelated programs.
     let myCohortPrograms = new Set();
+    const cohortProgramMap = Object.create(null);
     if (myCohortIds.size > 0) {
       const cRes = await db.from('cohorts')
         .select('id, program_id')
         .in('id', Array.from(myCohortIds));
       if (cRes.error) throw cRes.error;
-      (cRes.data || []).forEach(c => myCohortPrograms.add(c.program_id));
+      (cRes.data || []).forEach(c => {
+        myCohortPrograms.add(c.program_id);
+        cohortProgramMap[c.id] = c.program_id;
+      });
     }
 
     // Compute per-lesson: do I have lesson-level access? if so, my role for it.
@@ -500,16 +511,23 @@
         bestRole = 'pastor';
       } else if (accessReason === 'cohort_grant' || accessReason === 'program_grant') {
         // Walk the user's cohorts that have access to this lesson; pick the highest role.
+        // PER-COHORT SCOPING (fixed May 18, 2026, Session 6): a cohort `cm` is
+        // a "granting cohort" only if EITHER (a) it appears directly in a
+        // lesson grant, OR (b) ITS OWN program (cohortProgramMap[cm.cohort_id])
+        // appears in a program-level grant. We no longer count a cohort as
+        // granting just because some OTHER cohort of the user's belongs to a
+        // matching program. This prevents role-rank leaks across unrelated
+        // curricula (e.g., user is 'apprentice' in LC Meeting cohort AND
+        // 'participant' in Usbong cohort — the apprentice rank must not flow
+        // into Usbong-only lessons).
         const grantingCohorts = [];
         const lessonGrants = grants.filter(g => g.lesson_id === l.id);
         myCohortRoles.forEach(cm => {
           const hasCohortGrant = lessonGrants.some(g => g.cohort_id === cm.cohort_id);
-          const cohortInProgramGrant = lessonGrants.some(g =>
-            g.program_id && myCohortPrograms.has(g.program_id)
+          const thisCohortsProgramId = cohortProgramMap[cm.cohort_id];
+          const cohortInProgramGrant = !!thisCohortsProgramId && lessonGrants.some(g =>
+            g.program_id && g.program_id === thisCohortsProgramId
           );
-          // A program-level grant covers all my cohorts in that program — but
-          // for simplicity, if ANY program-level grant matched my membership,
-          // count every active cohort role I have toward role-promotion.
           if (hasCohortGrant || cohortInProgramGrant) {
             grantingCohorts.push(cm);
           }
