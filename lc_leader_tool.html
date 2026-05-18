@@ -578,7 +578,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div class="section-title">Quick Actions</div>
   </div>
   <div class="quick-actions">
-    <div class="qa-btn" onclick="showScreen('screenMembers')">
+    <div class="qa-btn" onclick="openMyGroup()">
       <div class="qa-icon">👥</div>
       <div class="qa-label">My Group</div>
       <div class="qa-desc">View & manage members</div>
@@ -663,13 +663,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     </button>
   </div>
   <div class="filter-tabs">
-    <button class="ftab active" onclick="setFilter('all',this)">All</button>
-    <button class="ftab" onclick="setFilter('z1',this)">Zone 1 ✅</button>
-    <button class="ftab" onclick="setFilter('z2',this)">Zone 2 🔵</button>
-    <button class="ftab" onclick="setFilter('z3',this)">Zone 3 🟠</button>
-    <button class="ftab" onclick="setFilter('z4',this)">Zone 4 🔴</button>
-    <button class="ftab" onclick="setFilter('no_diag',this)">No Diag</button>
-    <button class="ftab" onclick="setFilter('transfer',this)">🔀 Transfer</button>
+    <button class="ftab active" data-f="all" onclick="setFilter('all',this)">All</button>
+    <button class="ftab" data-f="z1" onclick="setFilter('z1',this)">Zone 1 ✅</button>
+    <button class="ftab" data-f="z2" onclick="setFilter('z2',this)">Zone 2 🔵</button>
+    <button class="ftab" data-f="z3" onclick="setFilter('z3',this)">Zone 3 🟠</button>
+    <button class="ftab" data-f="z4" onclick="setFilter('z4',this)">Zone 4 🔴</button>
+    <button class="ftab" data-f="no_diag" onclick="setFilter('no_diag',this)">No Diag</button>
+    <button class="ftab" data-f="transfer" onclick="setFilter('transfer',this)">🔀 Transfer</button>
   </div>
   <div class="member-search">
     <input type="text" placeholder="Search members..." oninput="filterMembers(this.value)">
@@ -1594,15 +1594,30 @@ function setFilter(f, el){
   renderMemberList();
 }
 
+// Helper: programmatically activate a filter chip by data-f name.
+// Used by Home tile shortcuts so chip visual state stays in sync with
+// currentFilter. Robust to chip label/emoji changes.
+function _activateFilterChip(filterName){
+  document.querySelectorAll('#screenMembers .ftab').forEach(t => {
+    t.classList.toggle('active', t.dataset.f === filterName);
+  });
+}
+
+// Home → 👥 My Group tile. Resets filter to "All" on entry so the screen
+// always opens to a predictable state regardless of how it was last left.
+function openMyGroup(){
+  showScreen('screenMembers');
+  currentFilter = 'all';
+  _activateFilterChip('all');
+  renderMemberList();
+}
+
 // Home → 🔀 Transfers tile. Switches to My Group with Transfer chip
 // pre-applied. To propose a new transfer, tap any member → 🔀 Transfer.
 function openTransferActivity(){
   showScreen('screenMembers');
   currentFilter = 'transfer';
-  // Apply .active class to the Transfer chip
-  document.querySelectorAll('#screenMembers .ftab').forEach(t => {
-    t.classList.toggle('active', /Transfer/.test(t.textContent));
-  });
+  _activateFilterChip('transfer');
   renderMemberList();
   // One-time discovery hint
   setTimeout(() => toast('To propose a transfer, tap any member → 🔀 Transfer','success'), 250);
