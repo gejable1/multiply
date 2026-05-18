@@ -7462,6 +7462,35 @@ async function _batchesSaveCreate(){
       owner_id: L.leaderId
     }).select().single();
     if (error) throw error;
+
+    // Auto-enroll the LCL as 'teacher' in the batch they just created.
+    // Rationale (Session 6, May 18, 2026): an LCL creating a batch is doing
+    // it FOR their own disciples — they are the teacher of that group by
+    // design. owner_id alone marks administrative ownership; cohort_members
+    // with role='teacher' is what makes them the actual teacher (and what
+    // unlocks teacher-rank attachment access via shared.js role gate).
+    // We DO NOT fail the whole flow if this self-enroll fails — the batch
+    // already exists; surface a warning and continue so the LCL knows to
+    // self-enroll manually rather than ending up with a "ghost batch" with
+    // no teacher silently.
+    if (data && data.id && L.leaderId) {
+      const { error: selfErr } = await db.from('cohort_members').insert({
+        cohort_id: data.id,
+        member_id: L.leaderId,
+        role: 'teacher',
+        status: 'active'
+      });
+      if (selfErr) {
+        // Duplicate-key (23505) means a self-enroll row already exists
+        // (e.g., from a re-attempt or trigger) — that's fine, treat as success.
+        // Anything else: warn but don't abort.
+        const isDup = (selfErr.code === '23505') || /already exists|duplicate key|unique constraint/i.test(selfErr.message || '');
+        if (!isDup) {
+          toast('Batch created, but could not auto-enroll you as teacher: ' + (selfErr.message || selfErr) + ' — please enroll manually.', '⚠️');
+        }
+      }
+    }
+
     toast('✓ Batch created', 'success');
     // Reload everything and reopen the list
     await openMyBatches();
