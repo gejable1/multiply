@@ -7834,6 +7834,34 @@ async function _batchesEnrollOne(memberId, memberName){
 // card is accurate without the leader having to open the modal.
 // Fire-and-forget; the badge updates whenever this resolves.
 setTimeout(() => { try { prefetchAnnInboxCount(); } catch(e){} }, 2000);
+
+// ─────────────────────────────────────────────────────────────────
+// DATE INPUT — click-anywhere-to-open-picker
+// ─────────────────────────────────────────────────────────────────
+// Problem: Chrome's native ::-webkit-calendar-picker-indicator renders
+// a near-black calendar icon that is barely visible against MLT's dark
+// theme. CSS filters on shadow DOM are unreliable across browsers.
+// Solution: bypass the icon problem entirely by making the WHOLE input
+// clickable. Wherever the user clicks on the mm/dd/yyyy field, the
+// native picker opens. The 📅 in the field label tells them it's a
+// date field; the click target is now the entire input, not a tiny
+// hard-to-see icon.
+//
+// Uses showPicker() — Chrome 99+, Edge 99+, Samsung Internet 18+,
+// Safari 16+. Wrapped in try/catch because some browsers throw if the
+// input is focused programmatically before the user gesture; the click
+// gesture itself is the trigger here so it should always succeed.
+document.addEventListener('click', function(e){
+  const input = e.target.closest('input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]');
+  if (!input) return;
+  if (input.disabled || input.readOnly) return;
+  // Don't double-trigger if the user clicked the native indicator itself —
+  // that already opens the picker by default. Detect by checking if the
+  // click was in the rightmost ~30px (where the indicator sits).
+  const rect = input.getBoundingClientRect();
+  if (rect.right - e.clientX < 30) return;
+  try { input.showPicker && input.showPicker(); } catch(_){}
+});
 </script>
 </body>
 </html>
