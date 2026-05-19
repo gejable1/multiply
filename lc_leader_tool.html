@@ -1953,29 +1953,11 @@ function openMember(id){
   av.textContent = initials(mem.name);
   av.style.background = zd.bg; av.style.color = zd.color;
   document.getElementById('detailName').textContent = mem.name;
-
-  // Meta line — Level · LC Group · Contact
-  // For L2 LCLs viewing one of their own disciples currently at L0/L1,
-  // append a small "✎ change" link so they can flip L0↔L1 inline.
-  // Built as escaped innerHTML so the affordance can carry an onclick.
-  const esc = MultiplyShared.escapeHTML;
-  const lvlLabel = esc(LEVEL_NAMES[mem.pipeline_level]||'Pre-Pipeline');
-  const myLvl    = (currentLeader && currentLeader.pipeline_level) || 0;
-  const isMyDisciple = currentLeader && mem.discipler_id === currentLeader.id;
-  const memLvl   = mem.pipeline_level || 0;
-  const canChangeLevel = (myLvl === 2) && isMyDisciple && (memLvl <= 1);
-  const lvlBlock = canChangeLevel
-    ? `<span>${lvlLabel}</span>` +
-      `<a href="javascript:void(0)" onclick="openChangeLevel('${esc(mem.id)}')" ` +
-      `style="margin-left:6px;font-size:11px;color:var(--gold);text-decoration:none;` +
-      `border:1px solid var(--gold);border-radius:4px;padding:1px 6px;letter-spacing:.02em">✎ change</a>`
-    : lvlLabel;
-  const parts = [
-    lvlBlock,
-    mem.lc_group ? esc(mem.lc_group) : '',
-    mem.contact  ? esc(mem.contact)  : ''
-  ].filter(Boolean);
-  document.getElementById('detailMeta').innerHTML = parts.join(' · ');
+  document.getElementById('detailMeta').textContent = [
+    LEVEL_NAMES[mem.pipeline_level]||'Pre-Pipeline',
+    mem.lc_group||'',
+    mem.contact||''
+  ].filter(Boolean).join(' · ');
   document.getElementById('detailZoneDot').style.background = zd.color;
   document.getElementById('detailZoneLabel').textContent = zd.label;
   document.getElementById('detailZoneLabel').style.color = zd.color;
@@ -2060,6 +2042,13 @@ async function openChangeLevel(memberId){
 
     // Re-render the detail screen so the meta line + change-button refresh
     openMember(memberId);
+    // Re-open the Profile card (where the button lives) so the user sees the
+    // updated Pipeline cell without having to scroll + re-tap. openMember
+    // collapses every section to its default state, hence this small reopen.
+    setTimeout(() => {
+      const card = document.getElementById('profileCard_' + memberId);
+      if(card) card.classList.add('open');
+    }, 0);
   } catch(e){
     console.error('Change level failed:', e);
     toast('Error: ' + e.message, 'error');
@@ -2203,7 +2192,7 @@ function buildDetailSections(mem){
       </div>
     </div>`;
   } else {
-    html += `<div class="ds-card">
+    html += `<div class="ds-card" id="profileCard_${mem.id}">
       <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
         <div class="ds-icon">👤</div>
         <div class="ds-title">Profile</div>
@@ -2215,19 +2204,38 @@ function buildDetailSections(mem){
           📝 Send Profile Edit Link to Member
         </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        ${[
-          ['Pipeline', LEVEL_NAMES[mem.pipeline_level]||'—'],
-          ['Baptism', mem.baptism_date||'—'],
-          ['Enrolled', mem.enrolled_date||'—'],
-          ['Gifts', mem.spiritual_gifts||'—'],
-          ['Strengths', (mem.strengths_top5||[]).slice(0,2).join(', ')||'—'],
-          ['DISC', mem.disc_primary||'—'],
-          ['Love Language', mem.love_language_primary||'—'],
-          ['Discipler', mem.discipler_name||'—'],
-        ].map(([l,v])=>`<div style="background:var(--surface3);border-radius:8px;padding:8px 10px">
-          <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">${l}</div>
-          <div style="font-size:12px;font-weight:600">${v}</div>
-        </div>`).join('')}
+        ${(function(){
+          // ── LCL inline pipeline-level change affordance (Session 10) ──
+          // For L2 LCLs viewing one of their own disciples at L0/L1, surface
+          // a small ✎ change button in the Pipeline cell. Anyone else just
+          // sees the plain label. The button calls openChangeLevel() which
+          // re-validates the gate before persisting.
+          const _myLvl = (currentLeader && currentLeader.pipeline_level) || 0;
+          const _isMyDisciple = currentLeader && mem.discipler_id === currentLeader.id;
+          const _memLvl = mem.pipeline_level || 0;
+          const _canChangeLevel = (_myLvl === 2) && _isMyDisciple && (_memLvl <= 1);
+          const _pipelineExtra = _canChangeLevel
+            ? `<button onclick="event.stopPropagation();openChangeLevel('${mem.id}')" `
+              + `style="margin-top:6px;background:transparent;border:1px solid var(--gold);`
+              + `color:var(--gold);border-radius:6px;padding:3px 9px;font-family:inherit;`
+              + `font-size:10.5px;font-weight:600;letter-spacing:.02em;cursor:pointer">`
+              + `✎ change level</button>`
+            : '';
+          return [
+            ['Pipeline',     LEVEL_NAMES[mem.pipeline_level]||'—', _pipelineExtra],
+            ['Baptism',      mem.baptism_date||'—'],
+            ['Enrolled',     mem.enrolled_date||'—'],
+            ['Gifts',        mem.spiritual_gifts||'—'],
+            ['Strengths',    (mem.strengths_top5||[]).slice(0,2).join(', ')||'—'],
+            ['DISC',         mem.disc_primary||'—'],
+            ['Love Language',mem.love_language_primary||'—'],
+            ['Discipler',    mem.discipler_name||'—'],
+          ].map(([l,v,extra])=>`<div style="background:var(--surface3);border-radius:8px;padding:8px 10px">
+            <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">${l}</div>
+            <div style="font-size:12px;font-weight:600">${v}</div>
+            ${extra||''}
+          </div>`).join('');
+        })()}
         </div>
       </div>
     </div>`;
