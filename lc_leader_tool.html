@@ -1802,6 +1802,28 @@ function openAddMember(){
   document.getElementById('amDiscipler').value = currentLeader?.name     || '';
   document.getElementById('amEnrolled').value  = today;
   document.getElementById('amLevel').value     = '1'; // Team Member by default
+
+  // ── Pipeline-level cap for L2 LCLs (Session 10) ──────────────
+  // LCLs can only create new members at L0 (Pre-Pipeline) or L1 (Team Member).
+  // Creating an L2 (Leader) is pastoral promotion territory — that stays a
+  // Coach+/MD operation. L3+ viewers keep the full dropdown unchanged.
+  // The same cap is reasserted server-side on save (see saveNewMember).
+  (function _capLevelDropdown(){
+    const sel = document.getElementById('amLevel');
+    if(!sel) return;
+    const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
+    const isLcl = lvl === 2;
+    Array.from(sel.options).forEach(opt => {
+      if(opt.value === '2'){
+        opt.hidden = isLcl;
+        opt.disabled = isLcl;
+      }
+    });
+    // If somehow the current value is L2 and we're an LCL (e.g., the LCL
+    // returned to the form mid-edit), drop it back to L1.
+    if(isLcl && sel.value === '2') sel.value = '1';
+  })();
+
   showScreen('screenAddMember');
 }
 
@@ -1863,6 +1885,17 @@ async function saveNewMember(){
     if(!confirm(msg)) return;
   }
 
+  // ── Pipeline-level clamp (defense-in-depth) ──────────────
+  // The dropdown UI in openAddMember already hides L2 from L2 LCLs, but a
+  // determined user could re-enable the hidden option in DevTools. Re-cap
+  // here on save so an L2 LCL cannot create an L2 member by any path.
+  let levelInput = parseInt(document.getElementById('amLevel').value) || 0;
+  const myLvl = (currentLeader && currentLeader.pipeline_level) || 0;
+  if(myLvl === 2 && levelInput > 1){
+    console.warn('saveNewMember: L2 viewer attempted to create L'+levelInput+' member; clamping to L1');
+    levelInput = 1;
+  }
+
   const payload = {
     name,
     contact:        document.getElementById('amContact').value.trim()  || null,
@@ -1872,7 +1905,7 @@ async function saveNewMember(){
     baptism_date:   document.getElementById('amBaptism').value         || null,
     enrolled_date:  document.getElementById('amEnrolled').value        || null,
     lc_group:       document.getElementById('amLcGroup').value.trim()  || null,
-    pipeline_level: parseInt(document.getElementById('amLevel').value) || 0,
+    pipeline_level: levelInput,
     discipler_id:   currentLeader?.id   || null,
     discipler_name: currentLeader?.name || null,
     updated_at:     new Date().toISOString(),
@@ -1920,11 +1953,29 @@ function openMember(id){
   av.textContent = initials(mem.name);
   av.style.background = zd.bg; av.style.color = zd.color;
   document.getElementById('detailName').textContent = mem.name;
-  document.getElementById('detailMeta').textContent = [
-    LEVEL_NAMES[mem.pipeline_level]||'Pre-Pipeline',
-    mem.lc_group||'',
-    mem.contact||''
-  ].filter(Boolean).join(' · ');
+
+  // Meta line — Level · LC Group · Contact
+  // For L2 LCLs viewing one of their own disciples currently at L0/L1,
+  // append a small "✎ change" link so they can flip L0↔L1 inline.
+  // Built as escaped innerHTML so the affordance can carry an onclick.
+  const esc = MultiplyShared.escapeHTML;
+  const lvlLabel = esc(LEVEL_NAMES[mem.pipeline_level]||'Pre-Pipeline');
+  const myLvl    = (currentLeader && currentLeader.pipeline_level) || 0;
+  const isMyDisciple = currentLeader && mem.discipler_id === currentLeader.id;
+  const memLvl   = mem.pipeline_level || 0;
+  const canChangeLevel = (myLvl === 2) && isMyDisciple && (memLvl <= 1);
+  const lvlBlock = canChangeLevel
+    ? `<span>${lvlLabel}</span>` +
+      `<a href="javascript:void(0)" onclick="openChangeLevel('${esc(mem.id)}')" ` +
+      `style="margin-left:6px;font-size:11px;color:var(--gold);text-decoration:none;` +
+      `border:1px solid var(--gold);border-radius:4px;padding:1px 6px;letter-spacing:.02em">✎ change</a>`
+    : lvlLabel;
+  const parts = [
+    lvlBlock,
+    mem.lc_group ? esc(mem.lc_group) : '',
+    mem.contact  ? esc(mem.contact)  : ''
+  ].filter(Boolean);
+  document.getElementById('detailMeta').innerHTML = parts.join(' · ');
   document.getElementById('detailZoneDot').style.background = zd.color;
   document.getElementById('detailZoneLabel').textContent = zd.label;
   document.getElementById('detailZoneLabel').style.color = zd.color;
@@ -1937,6 +1988,82 @@ function openMember(id){
   _refreshTransferBtn(mem);
   // Show enroll button on the same visibility rule (C3a · May 18, 2026)
   _refreshEnrollBtn(mem);
+}
+
+// ─────────────────────────────────────────────────────────────
+// LCL inline pipeline-level change — L0 ↔ L1 only (Session 10)
+//
+// Pastor's call: an LCL (L2) can flip their own disciples between L0
+// (Pre-Pipeline) and L1 (Team Member). This is the operational tier —
+// "did this person finish Pre-Pipeline / earn Team Member status?" — which
+// the LCL is the natural person to mark.
+//
+// Hard limits (defense-in-depth — UI affordance is also gated):
+//   1. Viewer MUST be exactly L2 (LCL). L3+ uses MD for level edits.
+//   2. Target MUST be one of the viewer's own disciples (discipler_id match).
+//   3. Target's current level MUST be 0 or 1. L2+ is off-limits to LCL.
+//   4. Destination is the OTHER of {0,1} — pure toggle, no L2+ creation.
+// Promotion to L2+ (creating a new LCL) remains a pastoral act handled in MD.
+// ─────────────────────────────────────────────────────────────
+async function openChangeLevel(memberId){
+  const mem = myMembers.find(m => m.id === memberId);
+  if(!mem){ toast('Member not found','error'); return; }
+
+  // ── Gate re-check ───────────────────────────────────────
+  const myLvl = (currentLeader && currentLeader.pipeline_level) || 0;
+  if(myLvl !== 2){
+    toast('Only LCLs (Level 2) can change disciples\' pipeline level here.','error');
+    return;
+  }
+  if(mem.discipler_id !== currentLeader.id){
+    toast('You can only change the level of your own disciples.','error');
+    return;
+  }
+  const cur = mem.pipeline_level || 0;
+  if(cur > 1){
+    toast('This member is at Level ' + cur + ' — beyond LCL change range.','error');
+    return;
+  }
+
+  // ── Compute the toggle ──────────────────────────────────
+  const next = cur === 0 ? 1 : 0;
+  const curLabel  = LEVEL_NAMES[cur]  || 'Pre-Pipeline';
+  const nextLabel = LEVEL_NAMES[next] || 'Pre-Pipeline';
+  const direction = next > cur ? 'Promote' : 'Move back';
+  const msg = `${direction} ${mem.name}?\n\n` +
+              `  Currently: ${curLabel} (L${cur})\n` +
+              `  Change to: ${nextLabel} (L${next})\n\n` +
+              `This is for operational progress. Promotion to Leader (L2) ` +
+              `or higher is a pastoral act handled in MD.\n\n` +
+              `Tap OK to save, or Cancel.`;
+  if(!confirm(msg)) return;
+
+  // ── Persist ─────────────────────────────────────────────
+  try {
+    const { error } = await db.from('members')
+      .update({
+        pipeline_level: next,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', memberId);
+    if(error) throw error;
+
+    // Update local state so the UI reflects immediately without a full reload
+    mem.pipeline_level = next;
+    const ix = allMembers.findIndex(m => m.id === memberId);
+    if(ix >= 0) allMembers[ix].pipeline_level = next;
+    if(currentMember && currentMember.id === memberId){
+      currentMember.pipeline_level = next;
+    }
+
+    toast(`✓ ${mem.name} is now ${nextLabel}`,'success');
+
+    // Re-render the detail screen so the meta line + change-button refresh
+    openMember(memberId);
+  } catch(e){
+    console.error('Change level failed:', e);
+    toast('Error: ' + e.message, 'error');
+  }
 }
 
 function buildDetailSections(mem){
