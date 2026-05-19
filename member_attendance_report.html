@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Member Attendance Breakdown · MULTIPLY</title>
+<link rel="icon" href="favicon_300.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f7f5f0;
+  --surface:#ffffff;
+  --surface2:#f0ede5;
+  --surface3:#e8e3d4;
+  --border:#d8d2c4;
+  --border-strong:#b8b0a0;
+  --text:#1f2b24;
+  --text-dim:#475a4f;
+  --muted:#6b7a72;
+  --tertiary:#9aa49d;
+  --gold:#a07a28;
+  --gold-bg:#fdf6e8;
+  --green:#3d6b3a;
+  --green-bg:#ecfdf5;
+  --green-bright:#5a9551;
+  --warn:#a07a28;
+  --warn-bg:#fef7e0;
+  --red:#a04a3d;
+  --red-bg:#fde8e7;
+  --blue:#3d6b8c;
+  --blue-bg:#e6f1fb;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  visibility:hidden;
+}
+body.leader-authenticated{visibility:visible;}
+
+#leaderGateBlackout{
+  position:fixed;inset:0;background:var(--bg);z-index:99999;
+  display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;
+}
+
+/* ── TOPBAR ── */
+.topbar{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:14px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;
+}
+.topbar-title{font-size:17px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.topbar-meta{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.back-btn{
+  background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;
+  cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;
+}
+.back-btn:hover{background:var(--border);}
+
+.container{max-width:1100px;margin:0 auto;padding:18px 20px 40px;}
+
+/* ── FILTER BARS ── */
+.filter-bar{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+  margin-bottom:12px;
+}
+.filter-bar select,.filter-bar input[type="date"]{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:8px 11px;
+  font-family:inherit;
+  font-size:13px;
+  color:var(--text);
+  cursor:pointer;
+}
+.filter-bar select:focus,.filter-bar input[type="date"]:focus{outline:none;border-color:var(--green-bright);}
+.filter-bar input[type="date"]{color-scheme:light;}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 14px;border-radius:8px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  color:var(--text);
+  font-family:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;
+  transition:filter .12s,background .15s;
+}
+.btn:hover{background:var(--surface2);}
+.btn-primary{background:var(--green);color:#fff;border-color:var(--green);}
+.btn-primary:hover{filter:brightness(1.08);background:var(--green);}
+
+/* ── COLUMN-CHIP ROW ── */
+.chip-row{
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+  padding:8px 12px;
+  background:var(--surface2);
+  border-radius:8px;
+  margin-bottom:18px;
+}
+.chip-label{
+  font-size:11px;color:var(--muted);
+  font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-right:4px;
+}
+.chip{
+  font-size:11px;font-weight:600;
+  padding:5px 11px;border-radius:14px;
+  border:1px solid var(--border-strong);background:transparent;color:var(--muted);
+  font-family:inherit;cursor:pointer;
+  transition:background .12s,color .12s,border-color .12s;
+}
+.chip.on{background:var(--blue-bg);border-color:var(--blue);color:var(--blue);}
+.chip:hover:not(.on){background:var(--surface);}
+.chip-meta{margin-left:auto;font-size:11px;color:var(--muted);}
+
+/* ── SUMMARY CARDS ── */
+.summary-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;
+  margin-bottom:20px;
+}
+.summary-card{
+  background:var(--surface2);border-radius:10px;padding:14px 16px;
+}
+.summary-label{font-size:11.5px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+.summary-value{font-size:24px;font-weight:700;letter-spacing:-.01em;line-height:1.1;}
+.summary-value .unit{font-size:13px;color:var(--muted);font-weight:500;letter-spacing:0;}
+.summary-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+
+/* ── LCG CARDS ── */
+.lcg-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  margin-bottom:12px;
+  overflow:hidden;
+}
+.lcg-head{
+  padding:11px 16px;
+  background:var(--surface2);
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+  cursor:pointer;
+  user-select:none;
+}
+.lcg-head:hover{background:var(--surface3);}
+.lcg-head.collapsed{border-bottom:0;}
+.lcg-chev{font-size:14px;color:var(--muted);transition:transform .15s;flex-shrink:0;}
+.lcg-head.collapsed .lcg-chev{transform:rotate(-90deg);}
+.lcg-title{font-size:14px;font-weight:700;}
+.lcg-pill{
+  background:var(--blue-bg);color:var(--blue);
+  font-size:11px;padding:2px 8px;border-radius:8px;font-weight:600;
+}
+.lcg-summary{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;}
+
+.lcg-body{padding:0;}
+.lcg-card.collapsed .lcg-body{display:none;}
+
+/* ── TABLE ── */
+.table-scroll{overflow-x:auto;}
+table.members-tbl{
+  width:100%;border-collapse:collapse;font-size:12px;
+  min-width:760px;
+}
+.members-tbl thead tr{background:var(--surface2);}
+.members-tbl th{
+  text-align:left;padding:9px 8px;
+  font-weight:700;color:var(--muted);
+  font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+.members-tbl th.numcol{text-align:left;}
+.members-tbl th.othercol{text-align:center;}
+.members-tbl td{
+  padding:10px 8px;border-bottom:1px solid var(--border);
+  vertical-align:top;
+}
+.members-tbl tr:last-child td{border-bottom:0;}
+.members-tbl tr:hover td{background:rgba(0,0,0,.015);}
+
+.mem-cell{display:flex;align-items:center;gap:8px;min-width:140px;}
+.mem-av{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--surface2);color:var(--text-dim);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;flex-shrink:0;
+}
+.mem-av.lcl{background:var(--blue-bg);color:var(--blue);}
+.mem-name{font-weight:600;font-size:13px;line-height:1.25;}
+.mem-meta{font-size:10px;color:var(--muted);margin-top:1px;}
+
+.ratio-main{font-weight:700;font-size:13px;line-height:1.25;}
+.pct{font-size:10px;margin-left:3px;font-weight:600;}
+.pct.green{color:var(--green-bright);}
+.pct.amber{color:var(--warn);}
+.pct.red{color:var(--red);}
+.split{font-size:10px;color:var(--muted);margin-top:2px;}
+.dash{color:var(--tertiary);}
+
+.othersub{font-size:9.5px;color:var(--muted);margin-top:2px;font-style:italic;cursor:help;}
+
+/* ── LOADING / EMPTY ── */
+.state-card{
+  background:var(--surface);
+  border:1px dashed var(--border);
+  border-radius:12px;
+  padding:48px 20px;
+  text-align:center;
+  color:var(--muted);
+}
+.state-card .emoji{font-size:32px;margin-bottom:10px;}
+
+.footnote{
+  margin-top:20px;
+  font-size:11px;color:var(--muted);
+  font-style:italic;line-height:1.55;
+}
+
+/* Date inputs in date range row */
+.daterange{display:none;gap:6px;align-items:center;}
+.daterange.show{display:inline-flex;}
+.daterange-label{font-size:11px;color:var(--muted);font-weight:600;}
+
+</style>
+</head>
+<body>
+
+<div id="leaderGateBlackout">Checking session…</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js"></script>
+<script>
+// ─── Session gate ──────────────────────────────────────────────
+(function leaderGateBoot(){
+  if (!window.MultiplyShared) {
+    location.replace('leader_login.html');
+    return;
+  }
+  if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+  document.body.classList.add('leader-authenticated');
+  const blackout = document.getElementById('leaderGateBlackout');
+  if (blackout) blackout.remove();
+})();
+</script>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <span>📊</span>
+      <span>Member Attendance Breakdown</span>
+    </div>
+    <div class="topbar-meta" id="topMeta">Loading…</div>
+  </div>
+  <a href="#" id="backLink" class="back-btn">← Back</a>
+</div>
+
+<div class="container">
+
+  <!-- ── PRIMARY FILTERS ── -->
+  <div class="filter-bar">
+    <select id="rangeSel" onchange="onRangeChange()">
+      <option value="90">Last 90 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="quarter">This quarter</option>
+      <option value="custom">Custom range…</option>
+    </select>
+    <div class="daterange" id="customDates">
+      <span class="daterange-label">From</span>
+      <input type="date" id="dateFrom" onchange="loadReport()">
+      <span class="daterange-label">To</span>
+      <input type="date" id="dateTo" onchange="loadReport()">
+    </div>
+    <select id="scopeSel" onchange="renderReport()">
+      <option value="all">All LCGs (Pastor view)</option>
+      <option value="mine">My LCG only</option>
+    </select>
+    <select id="activeSel" onchange="renderReport()">
+      <option value="active">Active members only</option>
+      <option value="all">All (incl. inactive)</option>
+    </select>
+    <button class="btn" onclick="exportCSV()">⬇ CSV</button>
+    <button class="btn" onclick="loadReport()" title="Reload from database">🔄 Refresh</button>
+  </div>
+
+  <!-- ── COLUMN CHIPS ── -->
+  <div class="chip-row" id="chipRow">
+    <span class="chip-label">Columns</span>
+    <button class="chip on" data-col="sunday" onclick="toggleCol(this)">Sunday ✓</button>
+    <button class="chip on" data-col="prayer" onclick="toggleCol(this)">Prayer ✓</button>
+    <button class="chip on" data-col="lc"     onclick="toggleCol(this)">LC ✓</button>
+    <button class="chip on" data-col="btli"   onclick="toggleCol(this)">BTLI ✓</button>
+    <button class="chip on" data-col="prepip" onclick="toggleCol(this)">Pre-Pipeline ✓</button>
+    <button class="chip on" data-col="minis"  onclick="toggleCol(this)" title="When off, Ministry rows roll into Other">Ministry ✓</button>
+    <button class="chip on" data-col="other"  onclick="toggleCol(this)">Other ✓</button>
+    <span class="chip-meta" id="chipMeta">All columns shown</span>
+  </div>
+
+  <!-- ── SUMMARY CARDS ── -->
+  <div class="summary-grid" id="summaryGrid"></div>
+
+  <!-- ── REPORT BODY ── -->
+  <div id="reportBody">
+    <div class="state-card">
+      <div class="emoji">⏳</div>
+      <div>Loading attendance data…</div>
+    </div>
+  </div>
+
+  <div class="footnote" id="footnote"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// MEMBER ATTENDANCE BREAKDOWN REPORT
+// ─────────────────────────────────────────────────────────────
+// Per-member attendance across all event types, scoped to a date
+// window and LCG. Sunday + Prayer Meeting carry the in_person /
+// online split (attendance_mode column, Session 8 morning ship).
+// Each row shows attended/total with percentage for LC, BTLI,
+// Pre-Pipeline, and Ministry. "Other" is a raw count + breakdown
+// tooltip for heterogeneous low-frequency events.
+//
+// Standing rules baked in:
+//   #16 (Session 8): Statistical reports EXCLUDE test members
+//        AND guests (is_external_user=true) by default. The "All
+//        (incl. inactive)" toggle stays bound by this — Test +
+//        Guest never appear.
+//   Event-type to column mapping per pastoral conventions agreed
+//        Session 8 PM (every member has an LCG; LC weekly; BTLI
+//        twice/month per batch; Ministry presence-logged).
+// ═══════════════════════════════════════════════════════════════
+
+const db = MultiplyShared.getDB();
+
+const STATE = {
+  rows:          [],      // raw attendance rows for the window
+  members:       [],      // members table (filtered for Test+Guest)
+  leadersMap:    {},      // id → name (for LCG display name resolution)
+  range:         { from: null, to: null, label: '' },
+  cols:          { sunday:true, prayer:true, lc:true, btli:true, prepip:true, minis:true, other:true },
+  loading:       false,
+};
+
+// Event-type rollup classifier.
+// IMPORTANT: 'Sunday School' is intentionally OTHER, not Sunday.
+// Sunday column means "Sunday Service" only (the worship gathering).
+const KNOWN_TYPES = new Set([
+  'Sunday Service','Prayer Meeting','LC Meeting',
+  'BTLI','Pre-Pipeline',
+  'Sunday School','Youth Gathering','Team Building','Outing','Other'
+]);
+
+function classifyEvent(eventType){
+  switch(eventType){
+    case 'Sunday Service':   return 'sunday';
+    case 'Prayer Meeting':   return 'prayer';
+    case 'LC Meeting':       return 'lc';
+    case 'BTLI':             return 'btli';
+    case 'Pre-Pipeline':     return 'prepip';
+    case 'Sunday School':
+    case 'Youth Gathering':
+    case 'Team Building':
+    case 'Outing':
+    case 'Other':            return 'other';
+    default:
+      // Anything unrecognized = ministry (per pastoral convention).
+      // saveMinistryAttendance writes event_type = ministry name.
+      return 'minis';
+  }
+}
+
+// ─── Date range helpers ────────────────────────────────────────
+function ymd(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function computeRange(sel){
+  const today = new Date();
+  if (sel === '30'){
+    const from = new Date(today); from.setDate(from.getDate()-30);
+    return { from: ymd(from), to: ymd(today), label: 'Last 30 days' };
+  }
+  if (sel === '90'){
+    const from = new Date(today); from.setDate(from.getDate()-90);
+    return { from: ymd(from), to: ymd(today), label: 'Last 90 days' };
+  }
+  if (sel === 'quarter'){
+    const q = Math.floor(today.getMonth()/3);
+    const from = new Date(today.getFullYear(), q*3, 1);
+    return { from: ymd(from), to: ymd(today), label: 'This quarter' };
+  }
+  // custom
+  const f = document.getElementById('dateFrom').value;
+  const t = document.getElementById('dateTo').value;
+  return { from: f || ymd(today), to: t || ymd(today), label: 'Custom range' };
+}
+
+function onRangeChange(){
+  const sel = document.getElementById('rangeSel').value;
+  const cust = document.getElementById('customDates');
+  if (sel === 'custom'){
+    cust.classList.add('show');
+    if (!document.getElementById('dateFrom').value){
+      const today = new Date();
+      const ago = new Date(today); ago.setDate(ago.getDate()-90);
+      document.getElementById('dateFrom').value = ymd(ago);
+      document.getElementById('dateTo').value = ymd(today);
+    }
+  } else {
+    cust.classList.remove('show');
+  }
+  loadReport();
+}
+
+// ─── Column chips ──────────────────────────────────────────────
+function toggleCol(btn){
+  const key = btn.dataset.col;
+  STATE.cols[key] = !STATE.cols[key];
+  btn.classList.toggle('on', STATE.cols[key]);
+  btn.textContent = (key === 'prepip' ? 'Pre-Pipeline' :
+                     key === 'minis'  ? 'Ministry' :
+                     key.charAt(0).toUpperCase()+key.slice(1))
+                   + (STATE.cols[key] ? ' ✓' : '');
+  updateChipMeta();
+  renderReport();
+}
+
+function updateChipMeta(){
+  const shown = Object.values(STATE.cols).filter(Boolean).length;
+  const total = Object.keys(STATE.cols).length;
+  let msg = `${shown} of ${total} shown`;
+  if (!STATE.cols.minis && STATE.cols.other) msg = 'Ministry rolled into Other';
+  document.getElementById('chipMeta').textContent = msg;
+}
+
+// ─── Load ──────────────────────────────────────────────────────
+async function loadReport(){
+  if (STATE.loading) return;
+  STATE.loading = true;
+  document.getElementById('reportBody').innerHTML =
+    '<div class="state-card"><div class="emoji">⏳</div><div>Loading attendance data…</div></div>';
+
+  const sel = document.getElementById('rangeSel').value;
+  STATE.range = computeRange(sel);
+  document.getElementById('topMeta').textContent =
+    `${STATE.range.label} · ${STATE.range.from} → ${STATE.range.to}`;
+
+  try {
+    // 1) Members (filtered per Standing Rule #16: no Test, no Guest)
+    const { data: mems, error: mErr } = await db.from('members')
+      .select('id,name,lc_group,pipeline_level,is_facilitator,facilitator_role,is_test_member,is_external_user,discipler_id');
+    if (mErr) throw mErr;
+    STATE.members = (mems || []).filter(m => !m.is_test_member && !m.is_external_user);
+
+    // 2) Build leader-of-LCG resolution map.
+    // An LCG is named by lc_group (text). The leader is identified by
+    // is_facilitator=true within that lc_group (same pattern as LCAR).
+    STATE.leadersMap = {};
+    STATE.members.forEach(m => {
+      if (m.is_facilitator && m.lc_group){
+        const k = (m.lc_group || '').trim();
+        if (!STATE.leadersMap[k]) STATE.leadersMap[k] = m;
+      }
+    });
+
+    // 3) Attendance rows for the window — single query, no joins.
+    // We page through if the result set is huge (~10k+ rows), but
+    // for a 90-day window on a 170-member church, expect ~5-8k rows.
+    const { data: att, error: aErr } = await db.from('attendance')
+      .select('member_id,event_type,event_date,event_name,present,attendance_mode')
+      .gte('event_date', STATE.range.from)
+      .lte('event_date', STATE.range.to);
+    if (aErr) throw aErr;
+    STATE.rows = att || [];
+
+    renderReport();
+  } catch(e){
+    console.error('[member_attendance_report] load failed', e);
+    document.getElementById('reportBody').innerHTML =
+      `<div class="state-card"><div class="emoji">⚠️</div><div>Could not load: ${escHTML(e.message||String(e))}</div></div>`;
+  } finally {
+    STATE.loading = false;
+  }
+}
+
+// ─── Aggregation ───────────────────────────────────────────────
+// For each member, build:
+//   buckets: { sunday: {present, total, online_p, online_a}, ...,
+//              other: {present, total, breakdown: {event_type: present_count}} }
+// 'total' = COUNT(DISTINCT event_date+event_type+event_name) where the
+// member appears in attendance rows. 'present' = same with present=true.
+// We dedupe on the natural attendance composite key.
+function buildBuckets(){
+  const byMember = {};
+  // Seed every member so they appear even with zero attendance rows
+  STATE.members.forEach(m => {
+    byMember[m.id] = {
+      member: m,
+      sunday: emptyBucket(), prayer: emptyBucket(),
+      lc:     emptyBucket(), btli:   emptyBucket(),
+      prepip: emptyBucket(), minis:  emptyBucket(),
+      other:  emptyOther(),
+    };
+  });
+  STATE.rows.forEach(r => {
+    const m = byMember[r.member_id];
+    if (!m) return; // member excluded (Test/Guest) or removed since
+    let col = classifyEvent(r.event_type);
+    // Column-merge: Ministry rolls into Other when minis chip is off
+    if (col === 'minis' && !STATE.cols.minis) col = 'other';
+    if (col === 'other'){
+      m.other.total++;
+      if (r.present) m.other.present++;
+      const k = r.event_type || 'Unknown';
+      m.other.breakdown[k] = (m.other.breakdown[k] || 0);
+      if (r.present) m.other.breakdown[k]++;
+      m.other.breakdownTotals[k] = (m.other.breakdownTotals[k] || 0) + 1;
+    } else {
+      const b = m[col];
+      b.total++;
+      if (r.present) b.present++;
+      if ((col === 'sunday' || col === 'prayer')){
+        const mode = r.attendance_mode || 'in_person';
+        if (r.present){
+          if (mode === 'online') b.onlinePresent++;
+          else b.inPersonPresent++;
+        }
+      }
+      // Capture event_name detail for ministry rows so the tooltip can
+      // show "Worship Team 5/6" instead of just "5/6 in Ministry"
+      if (col === 'minis'){
+        const k = r.event_type;
+        b.breakdown[k] = b.breakdown[k] || { present:0, total:0 };
+        b.breakdown[k].total++;
+        if (r.present) b.breakdown[k].present++;
+      }
+    }
+  });
+  return byMember;
+}
+
+function emptyBucket(){
+  return { present:0, total:0, onlinePresent:0, inPersonPresent:0, breakdown:{} };
+}
+function emptyOther(){
+  return { present:0, total:0, breakdown:{}, breakdownTotals:{} };
+}
+
+// ─── Render ────────────────────────────────────────────────────
+function renderReport(){
+  if (!STATE.members.length){
+    document.getElementById('reportBody').innerHTML =
+      '<div class="state-card"><div class="emoji">📋</div><div>No active members to report on.</div></div>';
+    document.getElementById('summaryGrid').innerHTML = '';
+    return;
+  }
+  updateChipMeta();
+  const buckets = buildBuckets();
+  renderSummary(buckets);
+  renderLCGs(buckets);
+  renderFootnote();
+}
+
+function renderSummary(buckets){
+  // Member count + church-wide Sunday/Prayer denominators + Other total
+  const activeOnly = document.getElementById('activeSel').value === 'active';
+  // "Active vs all" toggle currently only affects LCG-rostered membership.
+  // Per Standing Rule #16, Test+Guest stay excluded in both modes.
+  // For now, no separate inactive flag exists — both modes show the same
+  // population. We surface that honestly in the sub-label.
+  const members = STATE.members;
+  // Count distinct event_dates in the window for Sunday / Prayer
+  const sundayDates = new Set(), prayerDates = new Set();
+  let otherTotal = 0;
+  STATE.rows.forEach(r => {
+    if (r.event_type === 'Sunday Service') sundayDates.add(r.event_date);
+    else if (r.event_type === 'Prayer Meeting') prayerDates.add(r.event_date);
+    else otherTotal++;
+  });
+  // Aggregate Sunday/Prayer averages across all members
+  let sumSundayPct = 0, cntSundayPct = 0, sumOnlineSun = 0, sumInPersonSun = 0;
+  let sumPrayerPct = 0, cntPrayerPct = 0, sumOnlinePr = 0, sumInPersonPr = 0;
+  members.forEach(m => {
+    const b = buckets[m.id];
+    if (b.sunday.total > 0){
+      sumSundayPct += (b.sunday.present / b.sunday.total) * 100;
+      cntSundayPct++;
+      sumOnlineSun += b.sunday.onlinePresent;
+      sumInPersonSun += b.sunday.inPersonPresent;
+    }
+    if (b.prayer.total > 0){
+      sumPrayerPct += (b.prayer.present / b.prayer.total) * 100;
+      cntPrayerPct++;
+      sumOnlinePr += b.prayer.onlinePresent;
+      sumInPersonPr += b.prayer.inPersonPresent;
+    }
+  });
+  const sunAvg = cntSundayPct ? Math.round(sumSundayPct / cntSundayPct) : 0;
+  const prAvg  = cntPrayerPct ? Math.round(sumPrayerPct / cntPrayerPct) : 0;
+  const sunTotalPresent = sumOnlineSun + sumInPersonSun;
+  const prTotalPresent  = sumOnlinePr + sumInPersonPr;
+  const sunOnlinePct = sunTotalPresent ? Math.round((sumOnlineSun/sunTotalPresent)*sunAvg) : 0;
+  const sunF2fPct    = Math.max(0, sunAvg - sunOnlinePct);
+  const prOnlinePct  = prTotalPresent  ? Math.round((sumOnlinePr/prTotalPresent)*prAvg) : 0;
+  const prF2fPct     = Math.max(0, prAvg - prOnlinePct);
+
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="summary-card">
+      <div class="summary-label">Members tracked</div>
+      <div class="summary-value">${members.length}</div>
+      <div class="summary-sub">${activeOnly ? 'active only' : 'all members'} · Test &amp; Guest excluded</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Sundays (${sundayDates.size})</div>
+      <div class="summary-value">${sunAvg}<span class="unit">% avg</span></div>
+      <div class="summary-sub">${sunF2fPct}% f2f · ${sunOnlinePct}% online</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Prayer Mtgs (${prayerDates.size})</div>
+      <div class="summary-value">${prAvg}<span class="unit">% avg</span></div>
+      <div class="summary-sub">${prF2fPct}% f2f · ${prOnlinePct}% online</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Other events logged</div>
+      <div class="summary-value">${otherTotal.toLocaleString()}</div>
+      <div class="summary-sub">LC · BTLI · Pre-Pipeline · Ministry · etc.</div>
+    </div>
+  `;
+}
+
+function renderLCGs(buckets){
+  // Group members by lc_group, leader-resolve for nicer display name
+  const scope = document.getElementById('scopeSel').value;
+  const groups = {};
+  STATE.members.forEach(m => {
+    const k = (m.lc_group || '').trim() || '(no LCG)';
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(m);
+  });
+
+  // Scope filter (My LCG only)
+  let groupKeys = Object.keys(groups);
+  if (scope === 'mine'){
+    const me = (window.LEADER && window.LEADER.leaderId)
+      ? STATE.members.find(m => m.id === window.LEADER.leaderId)
+      : null;
+    if (me && me.lc_group) groupKeys = [me.lc_group];
+    else groupKeys = [];
+  }
+  groupKeys.sort((a,b) => a.localeCompare(b));
+
+  if (!groupKeys.length){
+    document.getElementById('reportBody').innerHTML =
+      '<div class="state-card"><div class="emoji">📋</div><div>No LCGs match the current scope.</div></div>';
+    return;
+  }
+
+  const html = groupKeys.map((k, idx) => renderLCGCard(k, groups[k], buckets, idx === 0)).join('');
+  document.getElementById('reportBody').innerHTML = html;
+
+  // Wire up collapse toggles
+  document.querySelectorAll('.lcg-head').forEach(h => {
+    h.addEventListener('click', () => {
+      h.closest('.lcg-card').classList.toggle('collapsed');
+      h.classList.toggle('collapsed');
+    });
+  });
+}
+
+function renderLCGCard(lcgKey, members, buckets, firstOpen){
+  const leader = STATE.leadersMap[lcgKey];
+  const displayName = leader ? `${leader.name.split(/\s+/)[0]}'s LCG` : (lcgKey || '(unassigned)');
+  // LCG-level Sunday + Prayer aggregates
+  let sumSPct=0, cntS=0, sumPPct=0, cntP=0;
+  members.forEach(m => {
+    const b = buckets[m.id];
+    if (b.sunday.total){ sumSPct += b.sunday.present/b.sunday.total*100; cntS++; }
+    if (b.prayer.total){ sumPPct += b.prayer.present/b.prayer.total*100; cntP++; }
+  });
+  const sAvg = cntS ? Math.round(sumSPct/cntS) : 0;
+  const pAvg = cntP ? Math.round(sumPPct/cntP) : 0;
+
+  // Sort members: LCL first, then alphabetical
+  const sorted = [...members].sort((a,b) => {
+    if (a.is_facilitator && !b.is_facilitator) return -1;
+    if (!a.is_facilitator && b.is_facilitator) return 1;
+    return (a.name||'').localeCompare(b.name||'');
+  });
+
+  return `
+    <div class="lcg-card${firstOpen ? '' : ' collapsed'}">
+      <div class="lcg-head${firstOpen ? '' : ' collapsed'}">
+        <span class="lcg-chev">▼</span>
+        <span class="lcg-title">${escHTML(displayName)}</span>
+        <span class="lcg-pill">${members.length} active</span>
+        <span class="lcg-summary">Sun ${sAvg}% · PM ${pAvg}%</span>
+      </div>
+      <div class="lcg-body">
+        <div class="table-scroll">
+          ${renderMembersTable(sorted, buckets)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMembersTable(members, buckets){
+  const cols = STATE.cols;
+  // Build header
+  const headParts = ['<th>Member</th>'];
+  if (cols.sunday) headParts.push('<th>Sunday</th>');
+  if (cols.prayer) headParts.push('<th>Prayer&nbsp;Mtg</th>');
+  if (cols.lc)     headParts.push('<th>LC</th>');
+  if (cols.btli)   headParts.push('<th>BTLI</th>');
+  if (cols.prepip) headParts.push('<th>Pre-Pip</th>');
+  if (cols.minis)  headParts.push('<th>Ministry</th>');
+  if (cols.other)  headParts.push('<th class="othercol">Other</th>');
+
+  const rows = members.map(m => {
+    const b = buckets[m.id];
+    const cells = [`<td>${memberCell(m)}</td>`];
+    if (cols.sunday) cells.push(`<td>${ratioCell(b.sunday, true)}</td>`);
+    if (cols.prayer) cells.push(`<td>${ratioCell(b.prayer, true)}</td>`);
+    if (cols.lc)     cells.push(`<td>${ratioCell(b.lc, false)}</td>`);
+    if (cols.btli)   cells.push(`<td>${ratioCell(b.btli, false)}</td>`);
+    if (cols.prepip) cells.push(`<td>${ratioCell(b.prepip, false)}</td>`);
+    if (cols.minis)  cells.push(`<td>${ministryCell(b.minis)}</td>`);
+    if (cols.other)  cells.push(`<td style="text-align:center">${otherCell(b.other)}</td>`);
+    return `<tr>${cells.join('')}</tr>`;
+  }).join('');
+
+  return `
+    <table class="members-tbl">
+      <thead><tr>${headParts.join('')}</tr></thead>
+      <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">No members</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function memberCell(m){
+  const initials = (m.name||'').split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const isLCL = m.is_facilitator;
+  const role = isLCL ? (m.facilitator_role || 'LCL') : '';
+  const level = (m.pipeline_level != null) ? `L${m.pipeline_level}` : '';
+  const meta = [role, level].filter(Boolean).join(' · ');
+  return `
+    <div class="mem-cell">
+      <div class="mem-av ${isLCL?'lcl':''}">${escHTML(initials||'?')}</div>
+      <div>
+        <div class="mem-name">${escHTML(m.name||'(no name)')}</div>
+        ${meta?`<div class="mem-meta">${escHTML(meta)}</div>`:''}
+      </div>
+    </div>
+  `;
+}
+
+function ratioCell(b, showMode){
+  if (!b || b.total === 0) return '<span class="dash">—</span>';
+  const pct = Math.round((b.present / b.total) * 100);
+  const cls = pct >= 80 ? 'green' : pct >= 50 ? 'amber' : 'red';
+  const split = (showMode && (b.onlinePresent || b.inPersonPresent))
+    ? `<div class="split">🏛️${b.inPersonPresent} · 🌐${b.onlinePresent}</div>`
+    : '';
+  return `<div class="ratio-main">${b.present}/${b.total} <span class="pct ${cls}">${pct}%</span></div>${split}`;
+}
+
+function ministryCell(b){
+  if (!b || b.total === 0) return '<span class="dash">—</span>';
+  const pct = Math.round((b.present / b.total) * 100);
+  const cls = pct >= 80 ? 'green' : pct >= 50 ? 'amber' : 'red';
+  // Build breakdown tooltip
+  const items = Object.keys(b.breakdown || {}).sort();
+  const tooltipParts = items.map(k => `${k} ${b.breakdown[k].present}/${b.breakdown[k].total}`);
+  // Subtitle: show single ministry name if just one, else "N ministries"
+  let sub = '';
+  if (items.length === 1){
+    sub = items[0];
+  } else if (items.length > 1){
+    sub = `${items.length} ministries`;
+  }
+  return `<div class="ratio-main">${b.present}/${b.total} <span class="pct ${cls}">${pct}%</span></div>${sub?`<div class="othersub" title="${escAttr(tooltipParts.join(' · '))}">${escHTML(sub)}</div>`:''}`;
+}
+
+function otherCell(b){
+  if (!b || b.total === 0) return '<span class="dash">—</span>';
+  const kinds = Object.keys(b.breakdownTotals || {}).filter(k => b.breakdownTotals[k] > 0);
+  const tooltipParts = kinds.map(k => {
+    const totalKnown = b.breakdownTotals[k];
+    const presentKnown = b.breakdown[k] || 0;
+    return `${k} ${presentKnown}/${totalKnown}`;
+  });
+  const kindLabel = kinds.length === 1 ? '1 kind' : `${kinds.length} kinds`;
+  return `<div class="ratio-main">${b.present}/${b.total}</div><div class="othersub" title="${escAttr(tooltipParts.join(' · '))}">${escHTML(kindLabel)}</div>`;
+}
+
+function renderFootnote(){
+  const off = Object.entries(STATE.cols).filter(([k,v]) => !v).map(([k]) => k);
+  const parts = [];
+  parts.push('Denominators reflect sessions the member was rostered for (logged present OR absent).');
+  parts.push('"—" = no rostered sessions in window.');
+  parts.push('Test members and Guests are always excluded.');
+  if (!STATE.cols.minis && STATE.cols.other) parts.push('Ministry rows are rolled into Other.');
+  parts.push('Hover Ministry / Other cells for the breakdown.');
+  document.getElementById('footnote').textContent = parts.join(' · ');
+}
+
+// ─── CSV export ────────────────────────────────────────────────
+function exportCSV(){
+  const buckets = buildBuckets();
+  const lines = [];
+  const head = ['LCG','Member','Pipeline Level','Role',
+    'Sunday Present','Sunday Total','Sunday %','Sunday In-Person','Sunday Online',
+    'Prayer Present','Prayer Total','Prayer %','Prayer In-Person','Prayer Online',
+    'LC Present','LC Total','LC %',
+    'BTLI Present','BTLI Total','BTLI %',
+    'Pre-Pipeline Present','Pre-Pipeline Total','Pre-Pipeline %',
+    'Ministry Present','Ministry Total','Ministry %','Ministry Breakdown',
+    'Other Present','Other Total','Other Breakdown',
+  ];
+  lines.push(head.map(csvCell).join(','));
+  STATE.members.forEach(m => {
+    const b = buckets[m.id];
+    const lcg = (m.lc_group || '(no LCG)').trim();
+    const role = m.is_facilitator ? (m.facilitator_role || 'LCL') : '';
+    const row = [
+      lcg, m.name||'', m.pipeline_level ?? '', role,
+      b.sunday.present, b.sunday.total, pctOrBlank(b.sunday), b.sunday.inPersonPresent, b.sunday.onlinePresent,
+      b.prayer.present, b.prayer.total, pctOrBlank(b.prayer), b.prayer.inPersonPresent, b.prayer.onlinePresent,
+      b.lc.present, b.lc.total, pctOrBlank(b.lc),
+      b.btli.present, b.btli.total, pctOrBlank(b.btli),
+      b.prepip.present, b.prepip.total, pctOrBlank(b.prepip),
+      b.minis.present, b.minis.total, pctOrBlank(b.minis),
+        Object.keys(b.minis.breakdown).map(k => `${k} ${b.minis.breakdown[k].present}/${b.minis.breakdown[k].total}`).join(' | '),
+      b.other.present, b.other.total,
+        Object.keys(b.other.breakdownTotals).map(k => `${k} ${(b.other.breakdown[k]||0)}/${b.other.breakdownTotals[k]}`).join(' | '),
+    ];
+    lines.push(row.map(csvCell).join(','));
+  });
+
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `member_attendance_${STATE.range.from}_to_${STATE.range.to}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function pctOrBlank(b){
+  if (!b || b.total === 0) return '';
+  return Math.round((b.present / b.total) * 100);
+}
+
+function csvCell(v){
+  if (v == null) return '';
+  const s = String(v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+// ─── Utility ──────────────────────────────────────────────────
+function escHTML(s){
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s){ return escHTML(s); }
+
+// ─── Back-link wiring ──────────────────────────────────────────
+(function wireBack(){
+  const ref = document.referrer || '';
+  const back = document.getElementById('backLink');
+  if (!back) return;
+  if (ref && ref.includes('lc_leader_tool')){
+    back.href = 'lc_leader_tool.html';
+    back.textContent = '← MLT';
+  } else {
+    back.href = 'multiply_dashboard.html';
+    back.textContent = '← Dashboard';
+  }
+})();
+
+// ─── Init ──────────────────────────────────────────────────────
+loadReport();
+
+</script>
+</body>
+</html>

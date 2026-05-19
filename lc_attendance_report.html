@@ -553,7 +553,7 @@ async function loadReport(){
     //    Pull discipler_id + facilitator fields too — we now derive group membership
     //    from the LC Leader (canonical), not from the optional `lc_group` text field.
     const {data:allMembers, error:mErr} = await db.from('members')
-      .select('id,name,lc_group,pipeline_level,discipler_id,is_facilitator,facilitator_role,is_test_member');
+      .select('id,name,lc_group,pipeline_level,discipler_id,is_facilitator,facilitator_role,is_test_member,is_external_user');
     if(mErr) throw mErr;
 
     // ── 2. Pull attendance rows for the selected date + event ──
@@ -603,8 +603,12 @@ function buildGroups(allMembers, attRows){
   // count toward any LCG flock size, and their attendance rows don't
   // inflate the present-count. Filter at the source so the rest of the
   // function doesn't need to think about it.
-  const liveMembers = allMembers.filter(m => !m.is_test_member);
-  const testIds = new Set(allMembers.filter(m => m.is_test_member).map(m => m.id));
+  // Standing Rule #16 (Session 8, May 19, 2026): Statistical reports
+  // exclude both Test members AND Guests (is_external_user=true).
+  // Predicate kept inline so future Claude/Pastor sees the rule at the
+  // point of use, not buried in a memory.
+  const liveMembers = allMembers.filter(m => !m.is_test_member && !m.is_external_user);
+  const testIds = new Set(allMembers.filter(m => m.is_test_member || m.is_external_user).map(m => m.id));
   // Drop attendance rows belonging to test members so they don't bump
   // the present/absent tallies for any LCG.
   attRows = attRows.filter(r => !testIds.has(r.member_id));
