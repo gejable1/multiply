@@ -282,7 +282,7 @@ table.members-tbl{
       <input type="date" id="dateTo" onchange="loadReport()">
     </div>
     <select id="scopeSel" onchange="renderReport()">
-      <option value="all">All LCGs (Pastor view)</option>
+      <option value="all">All LCGs (Coach+ view)</option>
       <option value="mine">My LCG only</option>
     </select>
     <select id="activeSel" onchange="renderReport()">
@@ -352,6 +352,65 @@ const STATE = {
   cols:          { sunday:true, prayer:true, devo:true, lc:true, btli:true, prepip:true, minis:true, other:true },
   loading:       false,
 };
+
+// ─── Scope gating (Session 9, May 19 2026) ─────────────────────────
+//
+// MAR scope rules:
+//   - Pipeline Level >= 3 (Coach+, Director, Executive Leader, Pastor):
+//       can toggle between "All LCGs (Coach+ view)" and "My LCG only"
+//   - Pipeline Level == 2 (Leader / LCL):
+//       LOCKED to "My LCG only" — dropdown is hidden, scopeSel forced to
+//       'mine'. An LCL should not be browsing other leaders' flocks.
+//   - Anything else (shouldn't happen — gate is L2+ at quick-action level,
+//       but defensive): treated like Level 2 (locked to 'mine').
+//
+// This is the canonical scope source for all consumers — summary cards,
+// LCG render, and CSV export all read scope via _resolveScope() so the
+// three surfaces stay in lockstep. Bypassing this helper to read the
+// dropdown directly is a Session-8-shaped latent bug (CSV used to leak
+// church-wide data when LCL was in "My LCG only" view — fixed here).
+
+function _viewerCanSeeAllLCGs(){
+  const lvl = (window.LEADER && window.LEADER.leaderLevel) || 0;
+  return lvl >= 3;
+}
+
+function _resolveScope(){
+  if (!_viewerCanSeeAllLCGs()) return 'mine';
+  const el = document.getElementById('scopeSel');
+  return (el && el.value === 'mine') ? 'mine' : 'all';
+}
+
+// Return the leader-id whose LCG the current viewer "owns" — used as the
+// roster key when scope is 'mine'. Returns null if the viewer isn't an
+// LCL with a populated roster (newly-promoted L2 with zero disciples).
+function _myLcgLeaderId(){
+  const myId = (window.LEADER && window.LEADER.leaderId) || null;
+  if (!myId) return null;
+  return myId;
+}
+
+// Return the subset of STATE.members that fall within the resolved
+// scope. In 'all' scope, returns everyone. In 'mine' scope, returns
+// (a) the viewer themselves IF they're an LCL, AND (b) members whose
+// discipler_id points to the viewer.
+//
+// Why this matters: summary cards + CSV export used to iterate over
+// STATE.members unconditionally, leaking church-wide aggregates into
+// what the user thought was a scoped view. With this helper, all three
+// surfaces (summary, LCG list, CSV) honor the same scope.
+function _scopedMembers(){
+  if (_resolveScope() === 'all') return STATE.members;
+  const myId = _myLcgLeaderId();
+  if (!myId) return [];
+  // Members in my LCG = those whose discipler_id == my id, PLUS me if
+  // I'm an LCL (the LCG card shows the LCL's name as the header; flock
+  // is the disciples). Per Memory #17 the leader is NOT shown in their
+  // own LCG flock — but they ARE counted in summary totals because the
+  // "Members tracked" summary is honest about who's in scope: my flock
+  // and me. (If only flock were counted, a fresh L2 would see "0".)
+  return STATE.members.filter(m => m.discipler_id === myId || m.id === myId);
+}
 
 // Event-type rollup classifier.
 // IMPORTANT: 'Sunday School' is intentionally OTHER, not Sunday.
@@ -481,8 +540,15 @@ async function loadReport(){
 
   const sel = document.getElementById('rangeSel').value;
   STATE.range = computeRange(sel);
-  document.getElementById('topMeta').textContent =
-    `${STATE.range.label} · ${STATE.range.from} → ${STATE.range.to}`;
+  // topMeta = date-range info + (when scope is locked) a scope note.
+  // Coach+ viewers can see scope from the dropdown itself; we don't
+  // duplicate the note for them. L2 viewers get an explicit note so
+  // they know the report is intentionally scoped to their own LCG.
+  let metaText = `${STATE.range.label} · ${STATE.range.from} → ${STATE.range.to}`;
+  if (!_viewerCanSeeAllLCGs()) {
+    metaText += ` · Showing: My LCG only`;
+  }
+  document.getElementById('topMeta').textContent = metaText;
 
   try {
     // 1) Members (filtered per Standing Rule #16: no Test, no Guest)
@@ -640,7 +706,11 @@ function renderReport(){
 function renderSummary(buckets){
   // Member count + church-wide Sunday/Prayer/Devo denominators + Other total
   const activeOnly = document.getElementById('activeSel').value === 'active';
-  const members = STATE.members;
+  // Session 9: summary aggregates honor scope. Previously this used the
+  // unfiltered STATE.members, so "Members tracked: 170" stayed church-wide
+  // even when the LCG-list below was scoped to one LCG — a confusing UX
+  // and an accidental disclosure of church-wide aggregates to LCLs.
+  const members = _scopedMembers();
   // Count distinct event_dates in the window for Sunday / Prayer
   const sundayDates = new Set(), prayerDates = new Set();
   let otherTotal = 0;
@@ -723,7 +793,7 @@ function renderLCGs(buckets){
   // NOT shown in their own LCG roster — they ARE shown in their upline's
   // LCG where applicable (e.g. Jane appears as flock in Pastor's LCG,
   // but her own LCG card has only her L3 disciples).
-  const scope = document.getElementById('scopeSel').value;
+  const scope = _resolveScope();
 
   // Scope: which LCGs to render
   let leaderIds = Object.keys(STATE.lcgRoster);
@@ -747,9 +817,18 @@ function renderLCGs(buckets){
     ? leaderIds
     : leaderIds.filter(id => (STATE.lcgRoster[id] || []).length > 0);
 
+  // Empty-state message — pastoral wording when the viewer is a newly-
+  // commissioned L2 leader with zero disciples (Invariant #44 transient
+  // state). Coach+ with no matching LCGs gets the generic message.
   if (!cardLeaderIds.length){
-    document.getElementById('reportBody').innerHTML =
-      '<div class="state-card"><div class="emoji">📋</div><div>No LCGs match the current scope.</div></div>';
+    const isLockedToMine = !_viewerCanSeeAllLCGs();
+    const msg = isLockedToMine
+      ? `<div class="state-card"><div class="emoji">🌱</div>
+           <div style="font-weight:600;margin-bottom:.35rem">Walang disciples pa sa iyong LCG.</div>
+           <div style="font-size:13px;color:var(--muted);line-height:1.55">Habang nagtatalaga si Pastor ng mga miyembro sa iyong pag-aalaga, lalabas sila dito.</div>
+         </div>`
+      : '<div class="state-card"><div class="emoji">📋</div><div>No LCGs match the current scope.</div></div>';
+    document.getElementById('reportBody').innerHTML = msg;
     return;
   }
 
@@ -930,7 +1009,11 @@ function exportCSV(){
     'Other Present','Other Total','Other Breakdown',
   ];
   lines.push(head.map(csvCell).join(','));
-  STATE.members.forEach(m => {
+  // Session 9: CSV iterates over _scopedMembers() so the export honors
+  // the same scope as the on-screen view. Previously it iterated over
+  // STATE.members unconditionally — exporting church-wide data even
+  // when the user was looking at "My LCG only". Silent leak fixed.
+  _scopedMembers().forEach(m => {
     const b = buckets[m.id];
     // LCG display: use canonical pattern (Memory #17). Find this member's
     // LCG by walking up via discipler_id; the LCG row label uses lc_group
@@ -1003,6 +1086,25 @@ function escAttr(s){ return escHTML(s); }
 })();
 
 // ─── Init ──────────────────────────────────────────────────────
+
+// Apply scope gating before first load (Session 9). For viewers below
+// Coach (pipeline_level < 3), we hide the LCG-scope dropdown entirely
+// and force scope to 'mine'. This way the rest of the code can treat
+// scopeSel.value as the source of truth — when the dropdown is hidden,
+// the value stays at the locked 'mine' option.
+(function _applyScopeGate(){
+  const sel = document.getElementById('scopeSel');
+  if (!sel) return;
+  if (!_viewerCanSeeAllLCGs()){
+    sel.value = 'mine';
+    sel.style.display = 'none';
+    // Surface a small visible note in the topbar meta so the LCL knows
+    // the report is scoped to their own LCG (not a bug). Appended at
+    // first loadReport() once topMeta has content.
+    sel.setAttribute('data-locked-mine', '1');
+  }
+})();
+
 loadReport();
 
 </script>
