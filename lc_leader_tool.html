@@ -220,6 +220,24 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
 .att-name{font-size:14px;font-weight:600;flex:1;}
 .att-streak{font-size:11px;color:var(--muted);}
+
+/* Session 8 PM: per-row attendance-mode toggle (🏛️/🌐).
+   Only rendered for Sunday Service + Prayer Meeting rows. Dim by default
+   (in-person), brightens to gold-tinted when LCL flips it to online. */
+.att-mode-btn{
+  background:transparent;border:1px solid var(--border2);
+  border-radius:18px;padding:5px 9px;
+  font-size:14px;line-height:1;cursor:pointer;
+  color:var(--muted);
+  flex-shrink:0;
+  transition:background .12s, border-color .12s, color .12s;
+}
+.att-mode-btn:hover{background:var(--surface2);}
+.att-mode-btn.online{
+  background:rgba(212,160,86,.18);
+  border-color:var(--gold);
+  color:var(--gold);
+}
 .att-save-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);
   border-top:1px solid var(--border);padding:12px 16px calc(12px + env(safe-area-inset-bottom));
   display:flex;align-items:center;gap:10px;z-index:40;}
@@ -800,27 +818,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
       <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
     </div>
-
-    <!-- ── ATTENDANCE MODE TOGGLE ─────────────────────────────────
-         Session 8 (May 19, 2026): For Sunday Service and Prayer Meeting
-         (the two livestreamed gatherings), the LCL can flag attendance
-         as 'online' when the member presents a livestream receipt.
-         Default is 'in_person' (assumed face-to-face) — only flip to
-         'online' when the member is genuinely watching the livestream
-         from away. Hidden for all other event_types since they're
-         in-person by design.
-         Applies to the bulk attendance form and the per-member quick-
-         mark for Sunday Service (line 2255 region). -->
-    <div id="attModeRow" style="display:none;margin-top:10px">
-      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Attendance Mode</div>
-      <div class="att-date-row" id="attModeChoices">
-        <div class="att-type-pill selected" data-mode="in_person" onclick="selectAttMode(this)">🏛️ In person</div>
-        <div class="att-type-pill" data-mode="online" onclick="selectAttMode(this)">🌐 Online</div>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">
-        Default <strong>In person</strong>. Tap <strong>Online</strong> only for members who showed a livestream receipt.
-      </div>
-    </div>
     <!-- BTLI lesson picker — shown only when event_type === 'BTLI'.
          Per Invariant #30, event_name is constructed as:
            "${course_code} · L${lesson_number} · ${lesson_title}"  (U+00B7 middle dot)
@@ -1050,10 +1047,12 @@ let attendanceState = {};
 let currentFilter = 'all';
 let currentMember = null;
 let selectedAttType = 'Sunday Service';
-// Session 8 (May 19, 2026): attendance_mode — 'in_person' (default) or 'online'.
-// Only meaningful for Sunday Service + Prayer Meeting; other event types
-// ignore this field (server stores default 'in_person' regardless).
-let selectedAttMode = 'in_person';
+// Session 8 PM redesign (May 19, 2026): attendance_mode is per-member, not
+// per-form. attendanceModeState[memberId] = 'online' marks that member's
+// row as a livestream attendee for this save. Absence from the map means
+// the default 'in_person' applies. Cleared whenever the roster reloads or
+// event type changes. Only meaningful for Sunday Service + Prayer Meeting.
+let attendanceModeState = {};
 // BTLI lesson picker state (Priority B, May 16 → next session)
 // When selectedAttType === 'BTLI', the leader must pick a specific lesson.
 // The chosen quiz row is held in _btliQuizzes (lazy-loaded once per session),
@@ -2277,15 +2276,17 @@ async function logQuickAttendance(){
   // This atomically updates an existing absent→present row OR inserts a new
   // one, eliminating the duplicate-key error that occurred when a prior
   // `present:false` row existed (e.g. from a roll-call "mark all absent").
-  // Session 8: attendance_mode respects the current toggle since this path
-  // is hardcoded Sunday Service (a livestreamed gathering).
+  // Session 8 PM: attendance_mode reads the per-row flag for this member.
+  // Since this is the single-member quick-mark, the LCL would have flipped
+  // the 🌐 toggle on the row before tapping mark-present. Defaults in_person.
+  const memMode = attendanceModeState[currentMember.id] === 'online' ? 'online' : 'in_person';
   const { error } = await db.from('attendance').upsert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
     event_date:      targetSunday,                 // ← the Sunday, not today
     event_type:      'Sunday Service',
     present:         true,
-    attendance_mode: selectedAttMode || 'in_person',
+    attendance_mode: memMode,
     member_lc_group: currentMember.lc_group || '',
     member_zone:     currentMember.diagnostic_zone ?? null,
     member_level:    currentMember.pipeline_level ?? null,
@@ -2833,6 +2834,7 @@ function showAttendance(){
   if (_usbongBatchSelEl) _usbongBatchSelEl.innerHTML = '<option value="">— Pick the batch —</option>';
   attendanceState = {};
   _currentAttRoster().forEach(m=>{ attendanceState[m.id]=false; });
+  attendanceModeState = {};  // Session 8 PM: clear per-row mode flags on reset
   allSelected = false;
   attendanceDirty = false;
   // Reset banner before fetching
@@ -2878,6 +2880,7 @@ function _persistAttendanceDraft(){
       date:      document.getElementById('attDate')?.value || '',
       eventType: selectedAttType || 'Sunday Service',
       state:     attendanceState,
+      modeState: attendanceModeState,  // Session 8 PM: persist per-row mode flags
       savedAt:   Date.now()
     };
     localStorage.setItem(_ATT_DRAFT_KEY, JSON.stringify(payload));
@@ -2924,6 +2927,14 @@ function _recoverAttendanceDraft(){
       restoredCount++;
     }
   });
+  // Session 8 PM: restore per-row mode flags for still-in-scope members
+  if(payload.modeState){
+    Object.keys(payload.modeState).forEach(mid => {
+      if(mid in attendanceState && payload.modeState[mid] === 'online'){
+        attendanceModeState[mid] = 'online';
+      }
+    });
+  }
   if(restoredCount === 0){ _clearAttendanceDraft(); return false; }
   attendanceDirty = true; // it's unsaved work
   renderAttList();
@@ -2992,28 +3003,8 @@ function selectAttType(el){
   }
   onAttContextChange();
 
-  // ── Show/hide ATTENDANCE MODE toggle (Session 8) ─────────────────
-  // Only meaningful for the two livestreamed gatherings. Reset to
-  // 'in_person' default whenever the event type changes so we never
-  // carry a stale 'online' selection into an event that doesn't
-  // support it.
-  const modeRow = document.getElementById('attModeRow');
-  if (modeRow) {
-    const showsMode = (selectedAttType === 'Sunday Service' || selectedAttType === 'Prayer Meeting');
-    modeRow.style.display = showsMode ? 'block' : 'none';
-    selectedAttMode = 'in_person';
-    document.querySelectorAll('#attModeChoices .att-type-pill').forEach(p => {
-      p.classList.toggle('selected', p.dataset.mode === 'in_person');
-    });
-  }
-}
-
-// Session 8 (May 19, 2026): Attendance mode pill click handler.
-// Mirrors selectAttType's class-swap pattern.
-function selectAttMode(el){
-  document.querySelectorAll('#attModeChoices .att-type-pill').forEach(p => p.classList.remove('selected'));
-  el.classList.add('selected');
-  selectedAttMode = el.dataset.mode;
+  // Session 8 PM redesign: per-row mode toggles re-render via renderAttList
+  // when called downstream of event-type changes. No global mode row to manage.
 }
 
 // Lazy-load active BTLI quizzes into the lesson picker.
@@ -3318,6 +3309,7 @@ function onAttContextChange(){
   // C3b: also reset attendanceState for any roster (BTLI batch or LCG).
   attendanceState = {};
   _currentAttRoster().forEach(m=>{ attendanceState[m.id]=false; });
+  attendanceModeState = {};  // Session 8 PM: clear per-row mode flags
   attendanceDirty = false;
   renderAttList();
   loadExistingAttendance();
@@ -3364,7 +3356,7 @@ async function loadExistingAttendance(){
       return;
     }
     let q = db.from('attendance')
-      .select('member_id, present, logged_by, updated_at, created_at')
+      .select('member_id, present, logged_by, updated_at, created_at, attendance_mode')
       .eq('event_date', date)
       .eq('event_type', type)
       .in('member_id', memberIds);
@@ -3396,11 +3388,16 @@ async function loadExistingAttendance(){
       return;
     }
 
-    // Apply the present flags into attendanceState
+    // Apply the present flags into attendanceState. Session 8 PM: also
+    // restore per-row attendance_mode flags so the 🌐 toggles reflect
+    // the saved state when LCL re-opens the form to edit.
     let appliedCount = 0;
     data.forEach(row => {
       if(row.member_id in attendanceState){
         attendanceState[row.member_id] = !!row.present;
+        if(row.attendance_mode === 'online'){
+          attendanceModeState[row.member_id] = 'online';
+        }
         appliedCount++;
       }
     });
@@ -3476,11 +3473,21 @@ function renderAttList(){
   }
   list.innerHTML = roster.map((mem, idx)=>{
     const present = attendanceState[mem.id];
+    const isOnline = attendanceModeState[mem.id] === 'online';
+    // Session 8 PM: 🌐 per-row mode toggle — visible only for the two
+    // livestreamed gatherings. Default state is in-person (dim/off);
+    // tap to flip a specific member to online. Stops event propagation
+    // so the row's main toggle (present/absent) doesn't fire.
+    const showsMode = (selectedAttType === 'Sunday Service' || selectedAttType === 'Prayer Meeting');
+    const modeBtn = showsMode
+      ? `<button class="att-mode-btn ${isOnline?'online':''}" data-mid="${mem.id}" onclick="toggleAttMode(event, '${mem.id}')" title="${isOnline?'Watching online · tap to switch back to in-person':'In person · tap to mark as online (livestream)'}" aria-label="Toggle online attendance">${isOnline?'🌐':'🏛️'}</button>`
+      : '';
     return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
       <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
       <div class="att-name">${mem.name}</div>
       <div class="att-streak"></div>
+      ${modeBtn}
     </div>`;
   }).join('');
 
@@ -3514,6 +3521,34 @@ function toggleAtt(id){
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   document.getElementById('attCount').textContent = cnt+' present';
   // Persist draft so accidental tab death doesn't lose this work
+  _persistAttendanceDraft();
+}
+
+// Session 8 PM redesign (May 19, 2026): per-member online mode toggle.
+// Stops event propagation so the row's main click handler (toggleAtt)
+// doesn't also fire. Updates only that one row's button + the in-memory
+// map. Save logic reads attendanceModeState[memberId] === 'online' to
+// decide which rows get attendance_mode='online' on the upsert.
+function toggleAttMode(e, id){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  const isOnline = attendanceModeState[id] === 'online';
+  if(isOnline){
+    delete attendanceModeState[id]; // back to default in_person
+  } else {
+    attendanceModeState[id] = 'online';
+  }
+  attendanceDirty = true;
+  const nowOnline = attendanceModeState[id] === 'online';
+  // Update just the button without re-rendering the whole list (preserves focus,
+  // scroll, and any in-flight gestures).
+  const btn = document.querySelector('.att-mode-btn[data-mid="'+id+'"]');
+  if(btn){
+    btn.classList.toggle('online', nowOnline);
+    btn.textContent = nowOnline ? '🌐' : '🏛️';
+    btn.title = nowOnline
+      ? 'Watching online · tap to switch back to in-person'
+      : 'In person · tap to mark as online (livestream)';
+  }
   _persistAttendanceDraft();
 }
 
@@ -3580,12 +3615,15 @@ async function saveAttendance(){
 
   // C3b: roster is _btliBatchRoster for BTLI, myMembers otherwise.
   const rosterForSave = _currentAttRoster();
-  // Session 8: attendance_mode only meaningful for Sunday Service +
-  // Prayer Meeting. For other event types, force 'in_person' so the
-  // column has clean data regardless of stale state.
-  const modeForRow = (selectedAttType === 'Sunday Service' || selectedAttType === 'Prayer Meeting')
-    ? selectedAttMode
-    : 'in_person';
+  // Session 8 PM redesign: attendance_mode is per-member.
+  // - Only Sunday Service + Prayer Meeting honor the per-row flag
+  //   (other event types are in-person by design)
+  // - Default in_person; rows where the LCL tapped 🌐 carry 'online'
+  // - For absent rows, the mode still reflects the LCL's intent (kept
+  //   on the row in case Pastor reviews historical patterns even on
+  //   absent rows; harmless either way since absent rows don't affect
+  //   the report's online breakdown — only present+online does)
+  const isLivestreamEvent = (selectedAttType === 'Sunday Service' || selectedAttType === 'Prayer Meeting');
   const rows = rosterForSave.map(m => ({
     member_id:       m.id,
     member_name:     m.name,
@@ -3593,7 +3631,7 @@ async function saveAttendance(){
     event_type:      selectedAttType,
     event_name:      eventName,
     present:         !!attendanceState[m.id],
-    attendance_mode: modeForRow,
+    attendance_mode: (isLivestreamEvent && attendanceModeState[m.id] === 'online') ? 'online' : 'in_person',
     // ── enriched columns ──────────────────────────────
     member_lc_group: m.lc_group || '',
     member_zone:     m.diagnostic_zone ?? null,
