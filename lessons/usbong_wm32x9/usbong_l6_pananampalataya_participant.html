@@ -65,6 +65,14 @@ textarea:focus{outline:none;border-color:var(--green2);box-shadow:0 0 0 2px rgba
 .foot{text-align:center;padding:1.2rem 0 .5rem;font-size:11px;color:var(--muted);letter-spacing:.05em;}
 .foot-anchor{font-family:'Playfair Display',serif;font-style:italic;color:var(--green);font-size:12px;margin-top:4px;}
 @media(max-width:380px){html,body{font-size:14px;}.h-title{font-size:1.25rem;}}
+.font-bar{display:flex;justify-content:center;padding:.55rem .9rem .15rem;background:var(--paper);border-bottom:1px solid var(--border);}
+.font-toggle{display:inline-flex;align-items:center;gap:2px;background:var(--paper);border:1.5px solid var(--gold);border-radius:22px;padding:2px;box-shadow:0 1px 4px rgba(0,0,0,.05);}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:20px;color:var(--muted);transition:all .15s;padding:5px 10px;line-height:1;}
+.ft-btn.ft-minus{font-size:12px;}
+.ft-btn.ft-plus{font-size:15px;}
+.ft-btn:hover:not(:disabled){background:var(--gold-bg);color:var(--gold);}
+.ft-btn:disabled{opacity:.35;cursor:not-allowed;}
+.ft-label{font-size:10.5px;font-weight:700;color:var(--ink);padding:0 5px;min-width:34px;text-align:center;}
 </style>
 </head>
 <body>
@@ -79,6 +87,13 @@ textarea:focus{outline:none;border-color:var(--green2);box-shadow:0 0 0 2px rgba
   </div>
 </div>
 
+<div class="font-bar">
+  <div class="font-toggle" role="group" aria-label="Font size">
+    <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+    <span class="ft-label" id="ft-label">100%</span>
+    <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+  </div>
+</div>
 <div class="wrap">
 
 <div class="card">
@@ -263,6 +278,45 @@ function saveAll(){let n=0;KEYS.forEach(k=>{const els=document.querySelectorAll(
 document.addEventListener('input',e=>{if(e.target.dataset.key)localStorage.setItem(e.target.dataset.key,e.target.value);});
 document.addEventListener('change',e=>{if(e.target.type==='radio'&&e.target.dataset.key)localStorage.setItem(e.target.dataset.key,e.target.value);});
 loadAll();
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER
+// ─────────────────────────────────────────────────────────────────
+// Five steps via the "A−" / "A+" buttons. Uses CSS zoom — wide browser
+// support and scales the whole page proportionally. Default is 100%.
+// Persists per-document so the reader's preference sticks across
+// sessions. Same pattern as salvation_assurance_diagnostic.html and
+// the L1–L5 reference.
+// ═══════════════════════════════════════════════════════════════
+const FONT_KEY = 'usbong_l6_participant_fontscale';
+const FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40]; // 90% to 140%
+let _fontIdx = 1; // index into FONT_STEPS — default to 100%
+
+function applyFontScale() {
+  const scale = FONT_STEPS[_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_fontIdx <= 0);
+  if (up) up.disabled = (_fontIdx >= FONT_STEPS.length - 1);
+}
+
+function changeFontScale(direction) {
+  _fontIdx = Math.max(0, Math.min(FONT_STEPS.length - 1, _fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(FONT_KEY, String(_fontIdx)); } catch (e) {}
+}
+
+(function initFontScale() {
+  try {
+    const saved = parseInt(localStorage.getItem(FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < FONT_STEPS.length) _fontIdx = saved;
+  } catch (e) {}
+  applyFontScale();
+})();
+
 </script>
 </body>
 </html>

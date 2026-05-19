@@ -49,6 +49,13 @@ p{margin-bottom:.6rem;font-size:14px;}
 .sched-cell{background:white;border:1px solid var(--border);border-radius:7px;padding:.5rem .65rem;}
 .sched-cell strong{display:block;color:var(--green);font-size:11px;margin-bottom:3px;}
 @media(max-width:380px){html,body{font-size:14px;}.h-title{font-size:1.2rem;}.meta-grid{grid-template-columns:1fr;}.sched-grid{grid-template-columns:1fr;}}
+.font-toggle{display:inline-flex;align-items:center;gap:2px;background:rgba(255,255,255,.95);border:1px solid rgba(184,136,42,.55);border-radius:20px;padding:2px;margin-left:6px;vertical-align:middle;}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:18px;color:var(--muted);transition:all .15s;padding:4px 8px;line-height:1;}
+.ft-btn.ft-minus{font-size:11px;}
+.ft-btn.ft-plus{font-size:14px;}
+.ft-btn:hover:not(:disabled){background:var(--gold-bg);color:var(--gold);}
+.ft-btn:disabled{opacity:.35;cursor:not-allowed;}
+.ft-label{font-size:10px;font-weight:700;color:var(--ink);padding:0 4px;min-width:32px;text-align:center;}
 </style>
 </head>
 <body>
@@ -59,6 +66,11 @@ p{margin-bottom:.6rem;font-size:14px;}
   <div class="mode-toggle">
     <button class="mt-btn active" onclick="setMode('oneone')">1-on-1</button>
     <button class="mt-btn" onclick="setMode('small')">Small Group</button>
+  <div class="font-toggle" role="group" aria-label="Font size">
+    <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+    <span class="ft-label" id="ft-label">100%</span>
+    <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
+  </div>
   </div>
 </div>
 
@@ -279,6 +291,45 @@ function setMode(m){
   document.getElementById('dur-display').textContent = m==='oneone' ? '~60 min (1-on-1)' : '~80 min (Small Group)';
   window.scrollTo({top:0,behavior:'smooth'});
 }
+
+// ═══════════════════════════════════════════════════════════════
+// FONT SIZE SLIDER
+// ─────────────────────────────────────────────────────────────────
+// Five steps via the "A−" / "A+" buttons. Uses CSS zoom — wide browser
+// support and scales the whole page proportionally. Default is 100%.
+// Persists per-document so the reader's preference sticks across
+// sessions. Same pattern as salvation_assurance_diagnostic.html and
+// the L1–L5 reference.
+// ═══════════════════════════════════════════════════════════════
+const FONT_KEY = 'usbong_l10_facilitator_fontscale';
+const FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40]; // 90% to 140%
+let _fontIdx = 1; // index into FONT_STEPS — default to 100%
+
+function applyFontScale() {
+  const scale = FONT_STEPS[_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_fontIdx <= 0);
+  if (up) up.disabled = (_fontIdx >= FONT_STEPS.length - 1);
+}
+
+function changeFontScale(direction) {
+  _fontIdx = Math.max(0, Math.min(FONT_STEPS.length - 1, _fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(FONT_KEY, String(_fontIdx)); } catch (e) {}
+}
+
+(function initFontScale() {
+  try {
+    const saved = parseInt(localStorage.getItem(FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < FONT_STEPS.length) _fontIdx = saved;
+  } catch (e) {}
+  applyFontScale();
+})();
+
 </script>
 </body>
 </html>
