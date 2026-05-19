@@ -5846,21 +5846,40 @@ let _annDraft = {                   // current draft buffer
 };
 let _myAnnouncements = [];
 
-// ── Inbox state (May 14, 2026) ───────────────────────────────────
+// ── Inbox state (May 14, 2026 · expanded May 19, 2026 — Session 9) ──
 // MLT was originally announcements-author-only. Leaders are also
 // members of the church, so when Pastor publishes an announcement
 // to "All Members" or to a group the leader belongs to, they should
 // see it inside MLT — not have to switch to MMT. This block adds
 // receiver-side state mirroring what MMT already has.
 //
-// _annInbox            — published announcements matching this leader's audience
-// _annInboxAckedIds    — Set of ann ids the leader has already acked
-// _annInboxRetractions — retracted notices for things they acked previously
+// Session 9 (May 19, 2026): the inbox model is now 3-state per
+// (announcement, member) — UNREAD (no ack row), ACKNOWLEDGED (row
+// with state='acknowledged'; still visible in Active view but no
+// longer contributes to the badge), ARCHIVED (row with state=
+// 'archived'; visible only in the Archived sub-view).
+//
+// _annInbox            — published announcements matching this leader's
+//                        audience that are unread OR acknowledged.
+//                        Filtered by state when rendering.
+// _annInboxAcks        — Map<announcement_id, {state, acked_at}>. Replaces
+//                        the old _annInboxAckedIds Set since we now need
+//                        per-row state not just membership.
+// _annArchive          — Loaded on demand when Archived sub-view is opened.
+//                        Array of full announcement rows joined with their
+//                        archived acked_at timestamp.
+// _annInboxSubTab      — 'active' | 'archived'. Sub-toggle inside the
+//                        Inbox tab (Session 9).
+// _annInboxRetractions — retracted notices for things they acked previously.
+//                        Unchanged from May 14; retraction state is binary
+//                        (Got it = dismissed forever).
 // _leaderMemberRow     — cached full member row (audience matcher needs
 //                        ministry/2/3, discipler_id, is_preacher; the LEADER
 //                        session only has a subset — Invariant #21)
 let _annInbox = [];
-let _annInboxAckedIds = new Set();
+let _annInboxAcks = new Map();           // id → {state, acked_at}
+let _annArchive = [];                    // loaded on demand
+let _annInboxSubTab = 'active';          // 'active' | 'archived'
 let _annInboxRetractions = [];
 let _leaderMemberRow = null;
 let _annInboxUnreadCount = 0;       // for the quick-action badge
@@ -5889,9 +5908,13 @@ async function openAnnouncements(){
   // Load Mine + Inbox in parallel — both touch the announcements table
   // but with different filters, so they're safe to run concurrently.
   await Promise.all([_loadMyAnnouncements(), _loadInbox()]);
-  // If there's something unread waiting, open on Inbox; otherwise keep
-  // whatever tab the user last had open (or the default 'new').
-  if ((_annInbox.length + _annInboxRetractions.length) > 0 && _annTab === 'new') {
+  // If there's something truly unread waiting, open on Inbox tab. Note
+  // (Session 9): _annInbox now includes both unread and acknowledged items;
+  // we count only the unread for the auto-route decision so Pastor isn't
+  // pulled to Inbox just because of stale-acknowledged items.
+  const unreadForAutoRoute = _annInbox.filter(a => !_annInboxAcks.has(a.id)).length
+                           + _annInboxRetractions.length;
+  if (unreadForAutoRoute > 0 && _annTab === 'new') {
     _annTab = 'inbox';
   }
   _updateAnnQuickActionBadge();
@@ -5986,7 +6009,7 @@ async function _loadInbox(){
   try {
     await _loadLeaderMemberRow();
     if (!_leaderMemberRow) {
-      _annInbox = []; _annInboxAckedIds = new Set(); _annInboxRetractions = [];
+      _annInbox = []; _annInboxAcks = new Map(); _annInboxRetractions = [];
       _annInboxUnreadCount = 0;
       return;
     }
@@ -6002,11 +6025,16 @@ async function _loadInbox(){
       .limit(50);
     if (error) throw error;
 
-    // 2) My acks
+    // 2) My acks (now with state — Session 9). Build a Map keyed by
+    //    announcement_id so we can quickly check both presence (= acked
+    //    in some form) and the specific state ('acknowledged' vs 'archived').
     const {data: acks} = await db.from('announcement_acks')
-      .select('announcement_id')
+      .select('announcement_id,state,acked_at')
       .eq('member_id', LEADER.leaderId);
-    _annInboxAckedIds = new Set((acks || []).map(a => a.announcement_id));
+    _annInboxAcks = new Map();
+    (acks || []).forEach(a => {
+      _annInboxAcks.set(a.announcement_id, {state: a.state, acked_at: a.acked_at});
+    });
 
     // 3) Lazy preacher-flag lookup (only if some incoming uses roles=['preacher'])
     const needsPreacherFlag = (anns || []).some(a => a.audience_filter?.roles?.includes('preacher'));
@@ -6022,26 +6050,85 @@ async function _loadInbox(){
       }
     }
 
-    // 4) Match audience + not yet acked
+    // 4) Match audience + exclude ARCHIVED rows. Unread (no ack row) and
+    //    Acknowledged (ack row with state='acknowledged') both stay in
+    //    the Active view; the render layer distinguishes them visually.
     _annInbox = (anns || []).filter(a => {
-      if (_annInboxAckedIds.has(a.id)) return false;
+      const ack = _annInboxAcks.get(a.id);
+      if (ack && ack.state === 'archived') return false;
       return _annAudienceMatchesLeader(a.audience_filter, _leaderMemberRow);
     });
 
-    // 5) Retraction notices for things I acked previously
+    // 5) Retraction notices for things I acked previously (in either state).
+    //    Retractions are content-cancellation signals — they fire regardless
+    //    of whether the original was acknowledged or archived.
     await _loadInboxRetractions();
 
-    _annInboxUnreadCount = _annInbox.length + _annInboxRetractions.length;
+    // 6) Unread = inbox rows that have NO ack at all (acknowledged rows
+    //    don't count toward the badge — that's the whole point of the
+    //    acknowledged state).
+    const unread = _annInbox.filter(a => !_annInboxAcks.has(a.id)).length;
+    _annInboxUnreadCount = unread + _annInboxRetractions.length;
   } catch(e) {
     console.error('[announcements] inbox load failed:', e);
     _annInbox = []; _annInboxRetractions = []; _annInboxUnreadCount = 0;
   }
 }
 
+// Load the Archived view on demand. Fetches archived ack rows for this
+// leader (newest first) and joins them with the corresponding announcement
+// rows. We don't pre-fetch this on every modal open — the Archived
+// view is browsed less often than Active, so the on-demand load keeps
+// the common path fast.
+async function _loadArchive(){
+  try {
+    if (!LEADER || !LEADER.leaderId) {
+      _annArchive = [];
+      return;
+    }
+    // 1) Fetch archived ack rows for this leader (newest first)
+    const {data: archivedAcks, error: ackErr} = await db.from('announcement_acks')
+      .select('announcement_id,acked_at')
+      .eq('member_id', LEADER.leaderId)
+      .eq('state', 'archived')
+      .order('acked_at', {ascending: false})
+      .limit(100);
+    if (ackErr) throw ackErr;
+    if (!archivedAcks || !archivedAcks.length) {
+      _annArchive = [];
+      return;
+    }
+
+    // 2) Fetch the corresponding announcement rows
+    const annIds = archivedAcks.map(a => a.announcement_id);
+    const {data: anns, error: annErr} = await db.from('announcements')
+      .select('id,title,body,priority,published_at,author_name,status,retracted_at')
+      .in('id', annIds);
+    if (annErr) throw annErr;
+
+    // 3) Stitch — preserve archived_at sort order, attach archived_at
+    //    timestamp to each announcement for display.
+    const annMap = new Map((anns || []).map(a => [a.id, a]));
+    _annArchive = archivedAcks
+      .map(ack => {
+        const a = annMap.get(ack.announcement_id);
+        if (!a) return null;  // announcement deleted? skip
+        return {...a, _archivedAt: ack.acked_at};
+      })
+      .filter(Boolean);
+  } catch(e) {
+    console.error('[announcements] archive load failed:', e);
+    _annArchive = [];
+  }
+}
+
 async function _loadInboxRetractions(){
   try {
-    if (_annInboxAckedIds.size === 0) { _annInboxRetractions = []; return; }
-    const ackedArr = Array.from(_annInboxAckedIds);
+    if (_annInboxAcks.size === 0) { _annInboxRetractions = []; return; }
+    // Retractions are content-cancellation signals — they fire for both
+    // acknowledged AND archived acks. So we pull all acked ids regardless
+    // of state. (Session 9 update — was reading from _annInboxAckedIds Set.)
+    const ackedArr = Array.from(_annInboxAcks.keys());
     const {data: retracted, error} = await db.from('announcements')
       .select('id,title,retracted_at,retraction_reason,author_name')
       .eq('status', 'retracted')
@@ -6064,23 +6151,87 @@ async function _loadInboxRetractions(){
   }
 }
 
-// Ack an announcement from the leader's inbox. Same row shape MMT writes.
-async function _ackInboxAnnouncement(annId){
+// Set the state of an announcement ack from the leader's perspective.
+//
+//   newState='acknowledged' — first interaction: card stays in Active view
+//                              but no longer contributes to unread badge.
+//   newState='archived'    — file away: card moves to Archived view.
+//                              Idempotent: can be called from acknowledged → archived
+//                              or unread → archived (skipping ack).
+//
+// Uses upsert on the composite primary key (announcement_id, member_id)
+// so the same call works whether the row already exists (state transition)
+// or not (first ack). The DB CHECK constraint (Session 9 migration)
+// will reject any state value other than 'acknowledged' | 'archived'.
+async function _setAnnouncementState(annId, newState){
+  if (newState !== 'acknowledged' && newState !== 'archived') {
+    console.warn('[announcements] invalid newState:', newState);
+    return;
+  }
   try {
-    const {error} = await db.from('announcement_acks').insert({
+    const {error} = await db.from('announcement_acks').upsert({
       announcement_id: annId,
-      member_id: LEADER.leaderId
-    });
-    // duplicate is fine — leader may have already acked from MMT
-    if (error && !String(error.message).includes('duplicate')) throw error;
-    _annInboxAckedIds.add(annId);
-    _annInbox = _annInbox.filter(a => a.id !== annId);
-    _annInboxUnreadCount = _annInbox.length + _annInboxRetractions.length;
+      member_id: LEADER.leaderId,
+      state: newState,
+      acked_at: new Date().toISOString()
+    }, {onConflict: 'announcement_id,member_id'});
+    if (error) throw error;
+
+    // Update local state Map immediately so the re-render reflects truth
+    _annInboxAcks.set(annId, {state: newState, acked_at: new Date().toISOString()});
+
+    // If archived, drop from Active inbox array (it now belongs in Archived).
+    // If acknowledged, keep it in _annInbox but the render will style it
+    // differently based on the ack state.
+    if (newState === 'archived') {
+      _annInbox = _annInbox.filter(a => a.id !== annId);
+      // If Archived view is currently loaded, refresh it so the moved item appears
+      if (_annArchive.length > 0 || _annInboxSubTab === 'archived') {
+        await _loadArchive();
+      }
+    }
+
+    // Recompute unread badge: only inbox rows with no ack at all count
+    const unread = _annInbox.filter(a => !_annInboxAcks.has(a.id)).length;
+    _annInboxUnreadCount = unread + _annInboxRetractions.length;
     _renderAnnModal();
     _updateAnnQuickActionBadge();
   } catch(e) {
-    console.error('[announcements] ack failed:', e);
-    toast('Could not acknowledge. Try again.', 'error');
+    console.error('[announcements] setState failed:', e);
+    toast('Could not save. Try again.', 'error');
+  }
+}
+
+// Move an archived announcement back to the inbox in the 'acknowledged'
+// state — never back to 'unread'. The leader has clearly seen it (they
+// archived it once), so re-surfacing it as new noise would be wrong.
+async function _unarchiveAnnouncement(annId){
+  try {
+    const {error} = await db.from('announcement_acks').upsert({
+      announcement_id: annId,
+      member_id: LEADER.leaderId,
+      state: 'acknowledged',
+      acked_at: new Date().toISOString()
+    }, {onConflict: 'announcement_id,member_id'});
+    if (error) throw error;
+
+    _annInboxAcks.set(annId, {state: 'acknowledged', acked_at: new Date().toISOString()});
+
+    // Remove from the local archive array
+    const restored = _annArchive.find(a => a.id === annId);
+    _annArchive = _annArchive.filter(a => a.id !== annId);
+
+    // Add back into _annInbox IF it still matches audience + isn't expired.
+    // We could re-run the full _loadInbox query, but a single refresh is
+    // simpler and ensures consistency. Trade-off: one extra round-trip
+    // for a button click. Acceptable — unarchive is rare.
+    await _loadInbox();
+
+    _renderAnnModal();
+    _updateAnnQuickActionBadge();
+  } catch(e) {
+    console.error('[announcements] unarchive failed:', e);
+    toast('Could not restore. Try again.', 'error');
   }
 }
 
@@ -6092,7 +6243,9 @@ async function _dismissInboxRetraction(annId){
     });
     if (error && !String(error.message).includes('duplicate')) throw error;
     _annInboxRetractions = _annInboxRetractions.filter(r => r.id !== annId);
-    _annInboxUnreadCount = _annInbox.length + _annInboxRetractions.length;
+    // Unread badge: inbox rows with no ack + remaining retractions (Session 9)
+    const unread = _annInbox.filter(a => !_annInboxAcks.has(a.id)).length;
+    _annInboxUnreadCount = unread + _annInboxRetractions.length;
     _renderAnnModal();
     _updateAnnQuickActionBadge();
   } catch(e) {
@@ -6171,9 +6324,13 @@ function _renderAnnModal(){
   // Safety: if a non-author somehow lands on 'new' or 'mine', bounce to inbox
   if (!canAuthor && _annTab !== 'inbox') _annTab = 'inbox';
 
-  const inboxCount = _annInbox.length + _annInboxRetractions.length;
-  const inboxBadge = inboxCount > 0
-    ? ` <span style="background:#9a2727;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:9px;margin-left:3px;vertical-align:1px">${inboxCount > 9 ? '9+' : inboxCount}</span>`
+  // Top-tab Inbox badge: count UNREAD only (Session 9). Acknowledged
+  // items live in _annInbox but no longer contribute to the badge —
+  // that's the whole point of the acknowledged state.
+  const unreadForBadge = _annInbox.filter(a => !_annInboxAcks.has(a.id)).length
+                       + _annInboxRetractions.length;
+  const inboxBadge = unreadForBadge > 0
+    ? ` <span style="background:#9a2727;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:9px;margin-left:3px;vertical-align:1px">${unreadForBadge > 9 ? '9+' : unreadForBadge}</span>`
     : '';
 
   const inboxTabBtn = `
@@ -6446,6 +6603,44 @@ function _annAfterRenderMine(){
 // home-screen pin — just an inline list with ack buttons).
 // ─────────────────────────────────────────────────────────────────
 function _renderAnnInboxList(){
+  // ── Active/Archived sub-toggle (Session 9) ─────────────────────────
+  // Always rendered at top of Inbox view, even when both lists are empty,
+  // so the leader can switch between views. Counts shown inline.
+  const activeCount = _annInbox.length + _annInboxRetractions.length;
+  const archivedCount = _annInboxAcks
+    ? Array.from(_annInboxAcks.values()).filter(v => v.state === 'archived').length
+    : 0;
+
+  const subToggle = `
+    <div style="display:flex;gap:.4rem;margin-bottom:.75rem;background:#f5f0e8;padding:3px;border-radius:999px;">
+      <button onclick="_annSetInboxSubTab('active')"
+        style="flex:1;padding:.5rem .35rem;background:${_annInboxSubTab==='active'?'#fff':'transparent'};
+               color:${_annInboxSubTab==='active'?'#1a1612':'#6b5f4f'};
+               border:none;border-radius:999px;
+               font-weight:${_annInboxSubTab==='active'?'700':'500'};font-size:12px;cursor:pointer;
+               box-shadow:${_annInboxSubTab==='active'?'0 1px 3px rgba(0,0,0,.08)':'none'};">
+        🔥 Active${activeCount > 0 ? ` (${activeCount})` : ''}
+      </button>
+      <button onclick="_annSetInboxSubTab('archived')"
+        style="flex:1;padding:.5rem .35rem;background:${_annInboxSubTab==='archived'?'#fff':'transparent'};
+               color:${_annInboxSubTab==='archived'?'#1a1612':'#6b5f4f'};
+               border:none;border-radius:999px;
+               font-weight:${_annInboxSubTab==='archived'?'700':'500'};font-size:12px;cursor:pointer;
+               box-shadow:${_annInboxSubTab==='archived'?'0 1px 3px rgba(0,0,0,.08)':'none'};">
+        📁 Archived${archivedCount > 0 ? ` (${archivedCount})` : ''}
+      </button>
+    </div>
+  `;
+
+  // Route to the appropriate sub-view
+  if (_annInboxSubTab === 'archived') {
+    return subToggle + _renderAnnArchiveList();
+  }
+  return subToggle + _renderAnnActiveList();
+}
+
+// Active sub-view: shows unread + acknowledged announcements + retractions.
+function _renderAnnActiveList(){
   if (_annInbox.length === 0 && _annInboxRetractions.length === 0) {
     return `
       <div style="text-align:center;padding:2.5rem 1rem;color:#6b5f4f;">
@@ -6478,7 +6673,11 @@ function _renderAnnInboxList(){
     </div>
   `).join('');
 
-  // Inbox announcements — pinned-style cards, priority-aware
+  // Inbox announcements — pinned-style cards, priority-aware. Each card now
+  // renders in one of two states (Session 9):
+  //   UNREAD       → two buttons: ✓ Acknowledge (gold) + 📁 Archive (muted)
+  //   ACKNOWLEDGED → one button: 📁 Archive, with a small marker showing
+  //                    "✓ Acknowledged · <when>" above the buttons
   const annsHtml = _annInbox.map(a => {
     const isUrgent      = a.priority === 'urgent';
     const isCelebration = a.priority === 'celebration';
@@ -6495,8 +6694,37 @@ function _renderAnnInboxList(){
       : isCelebration
         ? '<span style="background:#7a5800;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px;">🎉 CELEBRATE</span>'
         : '';
+
+    const ack = _annInboxAcks.get(a.id);
+    const isAcknowledged = ack && ack.state === 'acknowledged';
+
+    // Acknowledged marker — small status line above the buttons.
+    // Only renders when the leader has already acknowledged this card.
+    const ackMarker = isAcknowledged ? `
+        <div style="display:inline-block;font-size:10.5px;color:#2a6c40;background:#eef6f1;
+                    padding:3px 9px;border-radius:8px;margin-bottom:.5rem;font-weight:600;">
+          ✓ Acknowledged · ${_annRelTime(ack.acked_at)}
+        </div>` : '';
+
+    // Button row: two buttons when unread, one when acknowledged.
+    const buttons = isAcknowledged
+      ? `<button onclick="_setAnnouncementState('${a.id}','archived')"
+          style="background:#fff;color:#6b5f4f;border:1px solid #c0b8a8;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+          📁 Archive
+        </button>`
+      : `<div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+          <button onclick="_setAnnouncementState('${a.id}','acknowledged')"
+            style="background:var(--gold);color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+            ✓ Acknowledge
+          </button>
+          <button onclick="_setAnnouncementState('${a.id}','archived')"
+            style="background:#fff;color:#6b5f4f;border:1px solid #c0b8a8;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+            📁 Archive
+          </button>
+        </div>`;
+
     return `
-      <div style="background:${bg};border:${border};border-radius:12px;padding:.95rem 1rem;margin-bottom:.65rem;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+      <div style="background:${bg};border:${border};border-radius:12px;padding:.95rem 1rem;margin-bottom:.65rem;box-shadow:0 1px 3px rgba(0,0,0,.06);${isAcknowledged?'opacity:.85;':''}">
         <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;flex-wrap:wrap;">
           ${priorityLabel}
           <span style="font-size:10.5px;color:#6b5f4f;margin-left:auto;">${_annEscapeHTML(a.author_name || '')} · ${_annFmt(a.published_at)}</span>
@@ -6505,15 +6733,96 @@ function _renderAnnInboxList(){
           ${_annEscapeHTML(a.title)}
         </div>
         <div style="font-size:12.5px;color:#3a3028;line-height:1.6;margin-bottom:.7rem;white-space:pre-wrap;">${_annEscapeHTML(a.body)}</div>
-        <button onclick="_ackInboxAnnouncement('${a.id}')"
-          style="background:var(--gold);color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
-          ✓ Got it
-        </button>
+        ${ackMarker}
+        ${buttons}
       </div>
     `;
   }).join('');
 
   return retractionsHtml + annsHtml;
+}
+
+// Archived sub-view: shows announcements the leader has filed away.
+// Each card has a single ↩ Unarchive button which returns the item to
+// the Active view in the 'acknowledged' state (never back to 'unread').
+function _renderAnnArchiveList(){
+  if (_annArchive.length === 0) {
+    return `
+      <div style="text-align:center;padding:2.5rem 1rem;color:#6b5f4f;">
+        <div style="font-size:36px;margin-bottom:.5rem;">📁</div>
+        <div style="font-size:13.5px;font-weight:600;color:#1a1612;margin-bottom:.3rem;">Archive is empty</div>
+        <div style="font-size:12px;line-height:1.55;max-width:280px;margin:0 auto;">
+          Announcements you archive will land here. Use the 📁 Archive button on a card to file it away.
+        </div>
+      </div>`;
+  }
+
+  return _annArchive.map(a => {
+    // Retracted-while-archived: surface a small badge so the leader knows
+    // this announcement was withdrawn after they archived it.
+    const wasRetracted = a.status === 'retracted';
+    const retractedBadge = wasRetracted
+      ? '<span style="background:#9a2727;color:#fff;padding:2px 7px;border-radius:7px;font-size:9.5px;font-weight:700;letter-spacing:.4px;margin-left:.3rem;">🚫 RETRACTED</span>'
+      : '';
+
+    const isUrgent      = a.priority === 'urgent';
+    const isCelebration = a.priority === 'celebration';
+    const priorityLabel = isUrgent
+      ? '<span style="background:#9a2727;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px;">🔥 URGENT</span>'
+      : isCelebration
+        ? '<span style="background:#7a5800;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;letter-spacing:.5px;">🎉 CELEBRATE</span>'
+        : '';
+
+    return `
+      <div style="background:#faf8f3;border:1px solid #e2d8cc;border-radius:12px;padding:.85rem 1rem;margin-bottom:.55rem;">
+        <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem;flex-wrap:wrap;">
+          ${priorityLabel}
+          ${retractedBadge}
+          <span style="font-size:10.5px;color:#6b5f4f;margin-left:auto;">📁 ${_annRelTime(a._archivedAt)}</span>
+        </div>
+        <div style="font-weight:700;font-size:13.5px;color:#1a1612;margin-bottom:.3rem;line-height:1.35;">
+          ${_annEscapeHTML(a.title)}
+        </div>
+        <div style="font-size:12px;color:#3a3028;line-height:1.55;margin-bottom:.65rem;white-space:pre-wrap;">${_annEscapeHTML(a.body)}</div>
+        <button onclick="_unarchiveAnnouncement('${a.id}')"
+          style="background:#fff;color:#6b5f4f;border:1px solid #c0b8a8;padding:6px 14px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;">
+          ↩ Unarchive
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+// Switch between Active and Archived sub-views inside the Inbox tab.
+// Lazy-loads the archive on first switch to keep the common path fast.
+async function _annSetInboxSubTab(t){
+  _annInboxSubTab = t;
+  if (t === 'archived' && _annArchive.length === 0) {
+    // Show loading state immediately, then load
+    _renderAnnModal();
+    await _loadArchive();
+  }
+  _renderAnnModal();
+}
+
+// Relative time helper for the inbox/archive views.
+// Gives "2 min ago" / "3 hr ago" / "yesterday" / "Mar 15" depending on age.
+function _annRelTime(iso){
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  const diff = Date.now() - t;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' hr ago';
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'yesterday';
+  if (d < 7) return d + ' days ago';
+  // Fall back to short date
+  const dt = new Date(iso);
+  return dt.toLocaleDateString(undefined, {month:'short', day:'numeric'});
 }
 
 // Local HTML escaper — MultiplyShared.escapeHTML works, but we keep a
