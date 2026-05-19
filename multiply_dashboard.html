@@ -1424,8 +1424,13 @@ const LeaderScope = MultiplyShared.makeLeaderScope(() => members);
 // Update the count badges in the view-tabs UI.
 function updateScopeCounts(){
   const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
-  // Exclude both admin-flag types from scope counts (matches LeaderScope.apply default).
-  const isHidden = m => m.is_test_member || m.is_external_user;
+  // Test-data containment (Session 10) — mirror the Members table rule:
+  // if viewer is a test member, count their test fixture flock; otherwise
+  // exclude test+guest from the scope counts so they don't inflate.
+  // (Subject-based exception in _shouldHideTest doesn't apply here — the
+  //  scope tabs are not inside any specific member's modal.)
+  const hideTest = !_viewerIsTestMember();
+  const isHidden = m => hideTest && (m.is_test_member || m.is_external_user);
   set('scopeCountDisciples', LeaderScope.getDirect().filter(m=>!isHidden(m)).length);
   set('scopeCountTree',      LeaderScope.getTree().filter(m=>!isHidden(m)).length);
   set('scopeCountMinistry',  LeaderScope.getMinistry().filter(m=>!isHidden(m)).length);
@@ -2137,19 +2142,68 @@ function rOvExtras(){
 // ═══════════════════════════════════════════════════════════════
 let _dpScope = 'direct';
 
+// ─────────────────────────────────────────────────────────────
+// Test-data containment (Session 10 — mirrors MLT's pattern)
+//
+// THE RULE in three lines:
+//   1. By default, test members + guests are hidden from statistical
+//      and pastoral-context surfaces (member modal DISCIPLES tab,
+//      bulk-assign candidate pool, etc.).
+//   2. If the VIEWER is a test member, test data becomes visible to
+//      them — they're inside the test universe smoke-testing as an LCL.
+//   3. If the SUBJECT being inspected (eid) is a test member, test data
+//      becomes visible in that modal — Pastor explicitly opening a test
+//      record's modal is signaling intent to inspect it.
+//
+// The Members screen (administrative discovery surface) is NOT affected —
+// it shows all members with their test/guest pills so Pastor can always
+// find and click into a test record from there.
+//
+// Statistical reports (MAR, LCG Pulse, etc.) have their OWN strict rule
+// (Memory #16) — they exclude test+guest regardless of viewer. Do not
+// import _shouldHideTest into reports without explicit pastoral review.
+// ─────────────────────────────────────────────────────────────
+function _viewerIsTestMember(){
+  const myId = (window.LEADER && window.LEADER.leaderId) || null;
+  if(!myId) return false;
+  const me = members.find(m => m.id === myId);
+  return !!(me && me.is_test_member);
+}
+
+function _shouldHideTest(){
+  // (1) Test viewer → don't hide (they're smoke-testing as an LCL)
+  if(_viewerIsTestMember()) return false;
+  // (2) Subject of the open modal is a test record → don't hide
+  //     (Pastor inspecting a test fixture's flock needs to see it)
+  if(eid){
+    const subject = members.find(m => m.id === eid);
+    if(subject && subject.is_test_member) return false;
+  }
+  // Default: hide test + guest
+  return true;
+}
+
 // Direct disciples of any given member id (not tied to LeaderScope which
-// is bound to the logged-in leader).
+// is bound to the logged-in leader). Applies containment rule above.
 function _disciplesDirect(rootId){
   if(!rootId) return [];
-  return members.filter(m => m.discipler_id === rootId);
+  const hideTest = _shouldHideTest();
+  return members.filter(m => {
+    if(m.discipler_id !== rootId) return false;
+    if(hideTest && (m.is_test_member || m.is_external_user)) return false;
+    return true;
+  });
 }
 
 // Recursive tree of any given member id, with cycle protection.
+// Applies containment rule above.
 function _disciplesTree(rootId){
   if(!rootId) return [];
+  const hideTest = _shouldHideTest();
   const byDiscipler = new Map();
   members.forEach(m => {
     if(!m.discipler_id) return;
+    if(hideTest && (m.is_test_member || m.is_external_user)) return;
     if(!byDiscipler.has(m.discipler_id)) byDiscipler.set(m.discipler_id, []);
     byDiscipler.get(m.discipler_id).push(m);
   });
@@ -2309,6 +2363,9 @@ function _getUnassignedMembers(){
   // Members with no discipler AND who aren't themselves LC Leaders
   // (LC Leaders shouldn't be assigned via this bulk widget — use the
   // discipler dropdown for those edge cases).
+  // Test-data containment (Session 10): hide test+guest unless the
+  // viewer or subject is a test record — see _shouldHideTest above.
+  const hideTest = _shouldHideTest();
   return members.filter(m => {
     if(m.id === eid) return false;          // can't disciple self
     if(_isLCLeader(m)) return false;         // skip flagged leaders
@@ -2317,6 +2374,7 @@ function _getUnassignedMembers(){
       // Has a name-only discipler (legacy data) — still considered "assigned"
       return false;
     }
+    if(hideTest && (m.is_test_member || m.is_external_user)) return false;
     return true;
   });
 }
