@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lesson Quiz Editor · MULTIPLY</title>
+<link rel="icon" href="favicon_300.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d1f17;
+  --surface:#152920;
+  --surface2:#1c3329;
+  --border:#2a4538;
+  --text:#e8efea;
+  --muted:#8aa39a;
+  --gold:#d4b572;
+  --gold-dim:#a18d52;
+  --green:#5e7d52;
+  --green-bright:#7fa66f;
+  --red:#c96a5a;
+  --blue:#5a87b0;
+  --warn:#d4a056;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  visibility:hidden;
+}
+body.leader-authenticated{visibility:visible;}
+
+/* Gate blackout (matches MD/MLT pattern) */
+#leaderGateBlackout{
+  position:fixed;inset:0;background:#0d1f17;z-index:99999;
+  display:flex;align-items:center;justify-content:center;color:#8aa39a;font-size:13px;
+}
+
+.topbar{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:14px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;
+}
+.topbar-title{
+  font-size:17px;font-weight:800;letter-spacing:-.01em;
+  display:flex;align-items:center;gap:10px;
+}
+.topbar-meta{font-size:11.5px;color:var(--muted);font-weight:500;}
+.back-btn{
+  background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);
+  padding:7px 13px;border-radius:8px;
+  font-size:12px;font-weight:600;
+  cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;
+}
+.back-btn:hover{background:var(--border);}
+
+.container{
+  max-width:980px;margin:0 auto;padding:20px;
+}
+
+/* Table toggle */
+.toggle-row{
+  display:flex;gap:8px;margin-bottom:18px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;padding:6px;
+}
+.toggle-btn{
+  flex:1;padding:11px 16px;border:none;background:transparent;
+  color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;
+  border-radius:7px;transition:background .15s,color .15s;
+  font-family:inherit;
+}
+.toggle-btn.active{
+  background:var(--green);color:#fff;
+}
+.toggle-btn:hover:not(.active){
+  background:var(--surface2);color:var(--text);
+}
+
+/* Picker row */
+.picker-row{
+  display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:18px;align-items:end;
+}
+@media(max-width:540px){
+  .picker-row{grid-template-columns:1fr;}
+}
+.field-label{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:6px;display:block;
+}
+select.quiz-picker,input.text-input,textarea.text-input{
+  width:100%;
+  background:var(--surface2);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:10px 12px;
+  font-size:13.5px;
+  font-family:inherit;
+  line-height:1.5;
+}
+select.quiz-picker{cursor:pointer;}
+textarea.text-input{resize:vertical;min-height:80px;line-height:1.6;}
+input.text-input:focus,select.quiz-picker:focus,textarea.text-input:focus{
+  outline:none;border-color:var(--green-bright);
+}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 16px;border-radius:8px;
+  border:none;cursor:pointer;
+  font-size:13px;font-weight:700;
+  font-family:inherit;
+  transition:filter .12s,background .15s;
+}
+.btn:hover{filter:brightness(1.08);}
+.btn:disabled{opacity:.5;cursor:not-allowed;filter:none;}
+.btn-primary{background:var(--green);color:#fff;}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-warn{background:var(--warn);color:#1a1208;}
+
+.editor-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:18px 20px;
+  margin-bottom:14px;
+}
+.editor-card-title{
+  font-size:14px;font-weight:800;
+  margin:0 0 14px 0;
+  display:flex;align-items:center;gap:8px;
+}
+.editor-card-title .pill{
+  font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  background:var(--surface2);color:var(--muted);
+  padding:2px 7px;border-radius:5px;
+}
+.field-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:600px){.field-grid-2{grid-template-columns:1fr;}}
+
+.field-row{margin-bottom:14px;}
+.field-row:last-child{margin-bottom:0;}
+.helper{
+  font-size:11px;color:var(--muted);
+  margin-top:5px;line-height:1.5;
+}
+.helper code{
+  background:var(--surface2);padding:1px 5px;border-radius:3px;
+  font-family:monospace;font-size:11px;color:var(--gold);
+}
+
+/* Toggle switch for is_active */
+.switch-row{display:flex;align-items:center;gap:10px;}
+.switch{
+  position:relative;display:inline-block;width:42px;height:24px;
+  flex-shrink:0;
+}
+.switch input{opacity:0;width:0;height:0;}
+.slider{
+  position:absolute;cursor:pointer;inset:0;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:24px;transition:.2s;
+}
+.slider:before{
+  position:absolute;content:"";height:16px;width:16px;
+  left:3px;top:50%;transform:translateY(-50%);
+  background:var(--muted);border-radius:50%;transition:.2s;
+}
+.switch input:checked + .slider{background:var(--green);border-color:var(--green);}
+.switch input:checked + .slider:before{transform:translate(18px,-50%);background:#fff;}
+.switch-label{font-size:13px;font-weight:600;}
+
+.action-bar{
+  display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;
+  padding:14px 0 4px;
+  border-top:1px solid var(--border);margin-top:6px;
+}
+@media(max-width:540px){
+  .action-bar{justify-content:stretch;}
+  .action-bar .btn{flex:1;}
+}
+
+.empty-state{
+  text-align:center;padding:50px 20px;
+  background:var(--surface);
+  border:1px dashed var(--border);
+  border-radius:12px;
+  color:var(--muted);
+}
+.empty-state .emoji{font-size:32px;margin-bottom:10px;}
+
+.toast-host{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  z-index:9999;pointer-events:none;
+}
+.toast{
+  background:var(--surface);
+  border:1px solid var(--border);
+  color:var(--text);
+  padding:11px 18px;border-radius:10px;
+  font-size:13px;font-weight:600;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  display:flex;align-items:center;gap:8px;
+  animation:toastIn .25s ease-out;
+}
+.toast.success{border-color:var(--green-bright);}
+.toast.warn{border-color:var(--warn);}
+.toast.err{border-color:var(--red);}
+@keyframes toastIn{
+  from{opacity:0;transform:translateY(8px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+.phase2-stub{
+  background:var(--surface2);
+  border:1px dashed var(--border);
+  border-radius:10px;padding:16px;
+  color:var(--muted);font-size:12.5px;line-height:1.6;
+}
+.phase2-stub strong{color:var(--gold);}
+
+.dirty-indicator{
+  display:none;
+  color:var(--warn);font-size:11px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;
+}
+.dirty-indicator.visible{display:inline-flex;align-items:center;gap:4px;}
+
+</style>
+</head>
+<body>
+
+<div id="leaderGateBlackout">Checking session…</div>
+
+<script src="multiply_shared.js"></script>
+<script>
+// ─── Session gate (matches MD/MLT pattern) ─────────────────────
+(function leaderGateBoot(){
+  if (!window.MultiplyShared) {
+    location.replace('leader_login.html');
+    return;
+  }
+  if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+  // Pastor-only page
+  const L = window.LEADER || {};
+  const PASTOR_LEVEL = MultiplyShared.PASTOR_LEVEL || 5;
+  if ((L.leaderLevel || 0) < PASTOR_LEVEL) {
+    alert('Lesson Quiz Editor is restricted to Pastor-level access.');
+    location.replace('multiply_dashboard.html');
+    return;
+  }
+  document.body.classList.add('leader-authenticated');
+  const blackout = document.getElementById('leaderGateBlackout');
+  if (blackout) blackout.remove();
+})();
+</script>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div>
+    <div class="topbar-title">
+      <span>📝</span>
+      <span>Lesson Quiz Editor</span>
+      <span id="dirtyIndicator" class="dirty-indicator">● Unsaved changes</span>
+    </div>
+    <div class="topbar-meta">Direct table editor for Usbong &amp; BTLI lesson quizzes · Pastor-only</div>
+  </div>
+  <a href="multiply_dashboard.html" class="back-btn">← Dashboard</a>
+</div>
+
+<div class="container">
+
+  <!-- ── TABLE TOGGLE ── -->
+  <div class="toggle-row" role="tablist" aria-label="Quiz table">
+    <button class="toggle-btn active" id="tabUsbong" onclick="switchTable('usbong')" role="tab" aria-selected="true">
+      🌱 Usbong Quizzes
+    </button>
+    <button class="toggle-btn" id="tabBtli" onclick="switchTable('btli')" role="tab" aria-selected="false">
+      🎓 BTLI Quizzes
+    </button>
+  </div>
+
+  <!-- ── QUIZ ROW PICKER ── -->
+  <div class="picker-row">
+    <div>
+      <label class="field-label" for="quizPicker">Select Quiz</label>
+      <select id="quizPicker" class="quiz-picker" onchange="onQuizPickerChange()">
+        <option value="">— Loading… —</option>
+      </select>
+    </div>
+    <div style="align-self:end">
+      <button class="btn btn-secondary" onclick="reloadList()" title="Refresh list from database">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <!-- ── EDITOR HOST ── -->
+  <div id="editorHost">
+    <div class="empty-state">
+      <div class="emoji">📋</div>
+      <div>Pick a quiz above to edit, or refresh the list.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-host" id="toastHost"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// LESSON QUIZ EDITOR — Phase 1
+// ═══════════════════════════════════════════════════════════════
+// Unified editor for usbong_quizzes + btli_quizzes (Family A — both
+// share an identical 15-column schema). Library quizzes have a
+// different bilingual model (column-level _en/_tl pairs) and are
+// edited via the in-MD Library Quiz Builder, not here.
+//
+// Phase 1 (this build): flat-field editor for all columns EXCEPT
+//   the `questions` JSONB. Pastor can edit lesson_title, passing_score,
+//   intro_text, outro_pass_text, outro_fail_text, attendance_event_name_pattern,
+//   and toggle is_active. Course_code and lesson_number are read-only
+//   identifiers (changing them is a structural move, not an edit).
+//
+// Phase 2 (next session): questions JSONB editor with question cards,
+//   bilingual EN/TL stems, MC option editor, TF answer toggle, reorder/
+//   delete/add. Stubbed in this build with a clear marker.
+//
+// Direct-table-as-source-of-truth — no parser layer, no bulk-import
+// format, just the actual stored columns in editable inputs.
+// ═══════════════════════════════════════════════════════════════
+
+const db = MultiplyShared.getDB();
+
+const STATE = {
+  table: 'usbong',           // 'usbong' | 'btli'
+  list: [],                  // [{id,course_code,lesson_number,lesson_title,is_active}]
+  selectedId: null,
+  selected: null,            // full row
+  draft: null,               // working copy for edit
+  dirty: false,
+  saving: false,
+};
+
+const TABLE_MAP = {
+  usbong: { table: 'usbong_quizzes', label: '🌱 Usbong' },
+  btli:   { table: 'btli_quizzes',   label: '🎓 BTLI' },
+};
+
+// ─── Toast helper ──────────────────────────────────────────────
+function toast(msg, kind){
+  const host = document.getElementById('toastHost');
+  if (!host) return;
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.textContent = msg;
+  host.appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = '0';
+    t.style.transition = 'opacity .25s';
+    setTimeout(() => t.remove(), 280);
+  }, 2400);
+}
+
+// ─── Dirty tracking ────────────────────────────────────────────
+function setDirty(d){
+  STATE.dirty = !!d;
+  const el = document.getElementById('dirtyIndicator');
+  if (el) el.classList.toggle('visible', !!d);
+}
+
+// Warn on unload if dirty
+window.addEventListener('beforeunload', (e) => {
+  if (STATE.dirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+// ─── Table toggle ──────────────────────────────────────────────
+function switchTable(which){
+  if (STATE.dirty) {
+    if (!confirm('You have unsaved changes. Discard and switch tables?')) return;
+    setDirty(false);
+  }
+  STATE.table = which;
+  STATE.selectedId = null;
+  STATE.selected = null;
+  STATE.draft = null;
+  document.getElementById('tabUsbong').classList.toggle('active', which === 'usbong');
+  document.getElementById('tabUsbong').setAttribute('aria-selected', which === 'usbong');
+  document.getElementById('tabBtli').classList.toggle('active', which === 'btli');
+  document.getElementById('tabBtli').setAttribute('aria-selected', which === 'btli');
+  renderEditor();
+  loadList();
+}
+
+// ─── Load list ─────────────────────────────────────────────────
+async function loadList(){
+  const tbl = TABLE_MAP[STATE.table].table;
+  const picker = document.getElementById('quizPicker');
+  picker.innerHTML = '<option value="">— Loading… —</option>';
+  try {
+    const { data, error } = await db.from(tbl)
+      .select('id, course_code, lesson_number, lesson_title, is_active')
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+    if (error) throw error;
+    STATE.list = data || [];
+    renderPickerOptions();
+  } catch (e) {
+    picker.innerHTML = '<option value="">— Error loading —</option>';
+    toast('Could not load quiz list: ' + (e.message || e), 'err');
+    console.error('[lesson_quiz_editor] loadList error', e);
+  }
+}
+
+function renderPickerOptions(){
+  const picker = document.getElementById('quizPicker');
+  if (!STATE.list.length) {
+    picker.innerHTML = '<option value="">— No quizzes in this table —</option>';
+    return;
+  }
+  const opts = ['<option value="">— Pick a quiz —</option>'];
+  // Group by course_code for readability
+  const byCourse = {};
+  STATE.list.forEach(r => {
+    const cc = r.course_code || '(no course_code)';
+    if (!byCourse[cc]) byCourse[cc] = [];
+    byCourse[cc].push(r);
+  });
+  Object.keys(byCourse).sort().forEach(cc => {
+    opts.push(`<optgroup label="${escHTML(cc)}">`);
+    byCourse[cc].forEach(r => {
+      const inactive = !r.is_active ? ' · inactive' : '';
+      const ln = (r.lesson_number != null) ? `L${r.lesson_number} · ` : '';
+      const label = `${ln}${escHTML(r.lesson_title || '(untitled)')}${inactive}`;
+      const sel = (r.id === STATE.selectedId) ? ' selected' : '';
+      opts.push(`<option value="${r.id}"${sel}>${label}</option>`);
+    });
+    opts.push('</optgroup>');
+  });
+  picker.innerHTML = opts.join('');
+}
+
+function escHTML(s){
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Picker change ─────────────────────────────────────────────
+async function onQuizPickerChange(){
+  const id = document.getElementById('quizPicker').value;
+  if (!id) {
+    STATE.selectedId = null;
+    STATE.selected = null;
+    STATE.draft = null;
+    renderEditor();
+    return;
+  }
+  if (STATE.dirty) {
+    if (!confirm('You have unsaved changes. Discard and switch quizzes?')) {
+      // revert picker to previous selection
+      document.getElementById('quizPicker').value = STATE.selectedId || '';
+      return;
+    }
+    setDirty(false);
+  }
+  STATE.selectedId = id;
+  await loadFullRow(id);
+}
+
+async function loadFullRow(id){
+  const tbl = TABLE_MAP[STATE.table].table;
+  try {
+    const { data, error } = await db.from(tbl).select('*').eq('id', id).single();
+    if (error) throw error;
+    STATE.selected = data;
+    STATE.draft = { ...data };
+    renderEditor();
+  } catch (e) {
+    toast('Could not load quiz: ' + (e.message || e), 'err');
+    console.error('[lesson_quiz_editor] loadFullRow error', e);
+  }
+}
+
+// ─── Reload list (manual refresh) ──────────────────────────────
+async function reloadList(){
+  if (STATE.dirty) {
+    if (!confirm('You have unsaved changes. Discard and refresh?')) return;
+    setDirty(false);
+    STATE.selectedId = null;
+    STATE.selected = null;
+    STATE.draft = null;
+    renderEditor();
+  }
+  await loadList();
+  toast('List refreshed', 'success');
+}
+
+// ─── Render editor ─────────────────────────────────────────────
+function renderEditor(){
+  const host = document.getElementById('editorHost');
+  if (!STATE.draft) {
+    host.innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">📋</div>
+        <div>Pick a quiz above to edit, or refresh the list.</div>
+      </div>
+    `;
+    return;
+  }
+  const d = STATE.draft;
+  const qCount = Array.isArray(d.questions) ? d.questions.length : 0;
+  const tableLabel = TABLE_MAP[STATE.table].label;
+
+  host.innerHTML = `
+    <!-- ── IDENTIFIERS (read-only) ── -->
+    <div class="editor-card">
+      <h3 class="editor-card-title">
+        Identifiers
+        <span class="pill">Read-only</span>
+      </h3>
+      <div class="field-grid-2">
+        <div class="field-row">
+          <label class="field-label">Course Code</label>
+          <input class="text-input" type="text" value="${escHTML(d.course_code || '')}" readonly disabled>
+          <div class="helper">e.g. <code>USBONG-1</code> · used to group lessons across a curriculum book</div>
+        </div>
+        <div class="field-row">
+          <label class="field-label">Lesson Number</label>
+          <input class="text-input" type="text" value="${d.lesson_number != null ? d.lesson_number : ''}" readonly disabled>
+          <div class="helper">Sequence within the course</div>
+        </div>
+      </div>
+      <div class="helper" style="margin-top:8px">
+        💡 To change a course_code or lesson_number, edit the row directly in SQL — these are structural identifiers, not content.
+      </div>
+    </div>
+
+    <!-- ── METADATA ── -->
+    <div class="editor-card">
+      <h3 class="editor-card-title">Metadata <span class="pill">${tableLabel}</span></h3>
+
+      <div class="field-row">
+        <label class="field-label" for="fldTitle">Lesson Title</label>
+        <input id="fldTitle" class="text-input" type="text" value="${escHTML(d.lesson_title || '')}"
+          oninput="onFieldChange('lesson_title', this.value)">
+      </div>
+
+      <div class="field-grid-2">
+        <div class="field-row">
+          <label class="field-label" for="fldPassScore">Passing Score (%)</label>
+          <input id="fldPassScore" class="text-input" type="number" min="0" max="100"
+            value="${d.passing_score != null ? d.passing_score : 70}"
+            oninput="onFieldChange('passing_score', parseInt(this.value)||0)">
+          <div class="helper">Default 70. Disciple must score ≥ this to pass.</div>
+        </div>
+        <div class="field-row">
+          <label class="field-label">Active?</label>
+          <div class="switch-row" style="margin-top:6px">
+            <label class="switch">
+              <input type="checkbox" id="fldActive" ${d.is_active ? 'checked' : ''}
+                onchange="onFieldChange('is_active', this.checked)">
+              <span class="slider"></span>
+            </label>
+            <span class="switch-label" id="fldActiveLabel">${d.is_active ? 'Active — visible to disciples' : 'Inactive — hidden from disciples'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label" for="fldAttPattern">Attendance Event Name Pattern</label>
+        <input id="fldAttPattern" class="text-input" type="text" value="${escHTML(d.attendance_event_name_pattern || '')}"
+          oninput="onFieldChange('attendance_event_name_pattern', this.value)">
+        <div class="helper">Eligibility gate — soft-attendance match. e.g. <code>usbong 1 · l1</code> or <code>btli 1 · l3</code></div>
+      </div>
+    </div>
+
+    <!-- ── INTRO & OUTRO TEXTS ── -->
+    <div class="editor-card">
+      <h3 class="editor-card-title">Intro &amp; Outro</h3>
+
+      <div class="field-row">
+        <label class="field-label" for="fldIntro">Intro Text</label>
+        <textarea id="fldIntro" class="text-input" rows="3"
+          oninput="onFieldChange('intro_text', this.value)">${escHTML(d.intro_text || '')}</textarea>
+        <div class="helper">Shown before the disciple starts the quiz.</div>
+      </div>
+
+      <div class="field-grid-2">
+        <div class="field-row">
+          <label class="field-label" for="fldOutroPass">Outro — Pass</label>
+          <textarea id="fldOutroPass" class="text-input" rows="3"
+            oninput="onFieldChange('outro_pass_text', this.value)">${escHTML(d.outro_pass_text || '')}</textarea>
+          <div class="helper">Shown when disciple passes.</div>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="fldOutroFail">Outro — Fail</label>
+          <textarea id="fldOutroFail" class="text-input" rows="3"
+            oninput="onFieldChange('outro_fail_text', this.value)">${escHTML(d.outro_fail_text || '')}</textarea>
+          <div class="helper">Shown when disciple does not pass.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── QUESTIONS (Phase 2 stub) ── -->
+    <div class="editor-card">
+      <h3 class="editor-card-title">
+        Questions
+        <span class="pill">${qCount} item${qCount === 1 ? '' : 's'}</span>
+      </h3>
+      <div class="phase2-stub">
+        <strong>Phase 2 — coming next session.</strong><br>
+        This editor currently saves the flat fields above (lesson_title, passing_score, intro/outro texts, attendance pattern, is_active). The <code>questions</code> JSONB is preserved unchanged on save — your existing questions are safe.<br><br>
+        For now, to edit questions: edit the seed SQL or use the existing bulk import flow. The Phase 2 editor will show each question as an editable card (EN/TL stems, MC option editor with correct-flag, TF answer toggle, reorder/delete/add).
+      </div>
+    </div>
+
+    <!-- ── ACTION BAR ── -->
+    <div class="action-bar">
+      <button class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveEdit()">💾 Save Changes</button>
+    </div>
+  `;
+}
+
+// ─── Field change handler ──────────────────────────────────────
+function onFieldChange(key, value){
+  if (!STATE.draft) return;
+  STATE.draft[key] = value;
+  setDirty(true);
+  // Update the is_active label inline if it's that field
+  if (key === 'is_active') {
+    const lbl = document.getElementById('fldActiveLabel');
+    if (lbl) lbl.textContent = value ? 'Active — visible to disciples' : 'Inactive — hidden from disciples';
+  }
+}
+
+// ─── Cancel ────────────────────────────────────────────────────
+function cancelEdit(){
+  if (!STATE.dirty) {
+    // Nothing to undo — just close the editor
+    STATE.draft = null;
+    STATE.selected = null;
+    STATE.selectedId = null;
+    document.getElementById('quizPicker').value = '';
+    renderEditor();
+    return;
+  }
+  if (!confirm('Discard unsaved changes?')) return;
+  // Revert draft to the last loaded copy
+  STATE.draft = { ...STATE.selected };
+  setDirty(false);
+  renderEditor();
+}
+
+// ─── Save ──────────────────────────────────────────────────────
+async function saveEdit(){
+  if (!STATE.draft || !STATE.selectedId) return;
+  if (STATE.saving) return;
+  STATE.saving = true;
+  const btn = document.getElementById('saveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  const tbl = TABLE_MAP[STATE.table].table;
+  const d = STATE.draft;
+
+  // Build payload — ONLY editable Phase 1 fields. Identifiers and
+  // questions JSONB are NOT touched, so the existing questions are
+  // preserved exactly as they were.
+  const payload = {
+    lesson_title: (d.lesson_title || '').trim() || null,
+    passing_score: (d.passing_score != null && !isNaN(d.passing_score)) ? d.passing_score : 70,
+    intro_text: d.intro_text || null,
+    outro_pass_text: d.outro_pass_text || null,
+    outro_fail_text: d.outro_fail_text || null,
+    attendance_event_name_pattern: (d.attendance_event_name_pattern || '').trim() || null,
+    is_active: !!d.is_active,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Optional: stamp updated_by if available
+  const L = window.LEADER || {};
+  if (L.leaderId) payload.updated_by = L.leaderId;
+
+  try {
+    const { data, error } = await db.from(tbl)
+      .update(payload)
+      .eq('id', STATE.selectedId)
+      .select()
+      .single();
+    if (error) throw error;
+    STATE.selected = data;
+    STATE.draft = { ...data };
+    setDirty(false);
+    toast('✓ Saved', 'success');
+    // Refresh the list so the picker label reflects new title/active state
+    await loadList();
+    renderEditor();
+  } catch (e) {
+    toast('Save failed: ' + (e.message || e), 'err');
+    console.error('[lesson_quiz_editor] save error', e);
+  } finally {
+    STATE.saving = false;
+    const b = document.getElementById('saveBtn');
+    if (b) { b.disabled = false; b.textContent = '💾 Save Changes'; }
+  }
+}
+
+// ─── Init ──────────────────────────────────────────────────────
+loadList();
+
+</script>
+
+</body>
+</html>
