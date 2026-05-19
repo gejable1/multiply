@@ -396,6 +396,33 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .empty-sub{font-size:13px;color:var(--muted);}
 
 .sep{height:1px;background:var(--border);margin:0 16px;}
+
+/* ── DATE INPUT — calendar picker icon visibility on dark theme ──
+   Native <input type="date"> renders a near-black calendar icon by default,
+   barely visible against MLT's dark surfaces. color-scheme:dark tells the
+   browser to render the native picker chrome (including the calendar icon)
+   in dark-mode tones. The webkit filter is a belt-and-suspenders fallback
+   for engines that don't honor color-scheme on the picker indicator.
+   Applies globally so every current and future date input gets it for free. */
+input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]{
+  color-scheme: dark;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator{
+  filter: invert(0.85) brightness(1.1);
+  cursor: pointer;
+  opacity: 0.9;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover,
+input[type="week"]::-webkit-calendar-picker-indicator:hover{
+  opacity: 1;
+}
 </style>
 </head>
 <body>
@@ -7452,12 +7479,22 @@ async function _batchesSaveCreate(){
 
   const L = LEADER || {};
   try {
+    // Default status to 'active' for LCL-created batches.
+    // Rationale (Session 8, May 19, 2026): MLT batches are LCL self-led
+    // training groups, often with rolling enrollment (L0 disciples come in
+    // continuously from EOLO and invites). The 'forming' status is meaningful
+    // for Pastor-created cohort programs where the leader gathers a quorum
+    // before formally starting — but for LCL self-led batches, there's no
+    // quorum to wait for. Default to 'active' so the LCL can begin meeting
+    // and logging attendance immediately. Pastor-created MD batches still
+    // default to 'forming' (unchanged) since that flow honors the cohort
+    // formation lifecycle.
     const { data, error } = await db.from('cohorts').insert({
       program_id: programId,
       name,
       start_date: startD,
       end_date: endD,
-      status: 'forming',
+      status: 'active',
       notes,
       owner_id: L.leaderId
     }).select().single();
