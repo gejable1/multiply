@@ -240,6 +240,114 @@ input.text-input:focus,select.quiz-picker:focus,textarea.text-input:focus{
 }
 .dirty-indicator.visible{display:inline-flex;align-items:center;gap:4px;}
 
+/* ── Questions editor ── */
+.q-card{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:14px 16px;
+  margin-bottom:10px;
+}
+.q-card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:10px;flex-wrap:wrap;
+}
+.q-card-title{
+  font-size:11px;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:8px;
+}
+.q-type-pill{
+  font-size:10px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;
+  padding:2px 7px;border-radius:5px;
+}
+.q-type-pill.mc{background:rgba(126,166,111,.18);color:var(--green-bright);}
+.q-type-pill.tf{background:rgba(90,135,176,.18);color:var(--blue);}
+.q-actions{display:flex;gap:5px;}
+.q-icon-btn{
+  background:transparent;border:1px solid var(--border);
+  color:var(--muted);
+  width:28px;height:28px;border-radius:6px;
+  cursor:pointer;font-size:13px;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s,border-color .12s;
+}
+.q-icon-btn:hover{background:var(--border);color:var(--text);}
+.q-icon-btn.danger:hover{background:var(--red);color:#fff;border-color:var(--red);}
+.q-icon-btn:disabled{opacity:.3;cursor:not-allowed;}
+.q-icon-btn:disabled:hover{background:transparent;color:var(--muted);}
+
+.q-stem-row{margin-bottom:10px;}
+.q-stem-row textarea{
+  width:100%;background:var(--bg);color:var(--text);
+  border:1px solid var(--border);border-radius:7px;
+  padding:8px 10px;font-family:inherit;font-size:13px;line-height:1.5;
+  resize:vertical;min-height:50px;
+}
+.q-stem-row textarea:focus{outline:none;border-color:var(--green-bright);}
+.q-stem-label{
+  font-size:10.5px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);
+  display:block;margin-bottom:4px;
+}
+
+.q-options{margin-top:6px;}
+.q-option{
+  display:grid;grid-template-columns:auto 1fr 1fr auto;gap:8px;align-items:start;
+  padding:8px;border-radius:7px;
+  background:var(--bg);
+  border:1px solid var(--border);
+  margin-bottom:6px;
+}
+.q-option.correct{
+  border-color:var(--green-bright);
+  background:rgba(126,166,111,.07);
+}
+@media(max-width:600px){
+  .q-option{grid-template-columns:auto 1fr auto;}
+  .q-option > .q-opt-tl{grid-column:1 / -1;margin-left:30px;}
+}
+.q-option input[type="radio"]{
+  margin-top:8px;
+  accent-color:var(--green-bright);
+  cursor:pointer;
+}
+.q-option input[type="text"]{
+  background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);border-radius:5px;
+  padding:6px 9px;font-family:inherit;font-size:12.5px;
+  width:100%;
+}
+.q-option input[type="text"]:focus{outline:none;border-color:var(--green-bright);}
+
+.q-tf-row{
+  display:flex;gap:8px;margin-top:8px;
+}
+.q-tf-opt{
+  flex:1;padding:10px 14px;border-radius:7px;
+  border:1px solid var(--border);background:var(--bg);
+  cursor:pointer;display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:600;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.q-tf-opt input[type="radio"]{
+  accent-color:var(--green-bright);
+  cursor:pointer;
+}
+.q-tf-opt.selected{
+  border-color:var(--green-bright);
+  background:rgba(126,166,111,.10);
+  color:var(--text);
+}
+
+.q-empty{
+  text-align:center;padding:24px 16px;
+  border:1px dashed var(--border);
+  border-radius:10px;
+  color:var(--muted);font-size:13px;
+}
+
 </style>
 </head>
 <body>
@@ -567,7 +675,7 @@ function renderEditor(){
           <input id="fldPassScore" class="text-input" type="number" min="0" max="100"
             value="${d.passing_score != null ? d.passing_score : 70}"
             oninput="onFieldChange('passing_score', parseInt(this.value)||0)">
-          <div class="helper">Default 70. Disciple must score ≥ this to pass.</div>
+          <div class="helper">Default 70. ⚠️ Changing this affects <em>future</em> attempts. Existing attempts keep their pass/fail status, but new attempts will be judged against the new threshold.</div>
         </div>
         <div class="field-row">
           <label class="field-label">Active?</label>
@@ -583,10 +691,9 @@ function renderEditor(){
       </div>
 
       <div class="field-row">
-        <label class="field-label" for="fldAttPattern">Attendance Event Name Pattern</label>
-        <input id="fldAttPattern" class="text-input" type="text" value="${escHTML(d.attendance_event_name_pattern || '')}"
-          oninput="onFieldChange('attendance_event_name_pattern', this.value)">
-        <div class="helper">Eligibility gate — soft-attendance match. e.g. <code>usbong 1 · l1</code> or <code>btli 1 · l3</code></div>
+        <label class="field-label" for="fldAttPattern">Attendance Event Name Pattern <span style="font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--surface2);color:var(--muted);padding:2px 7px;border-radius:5px;margin-left:6px;vertical-align:1px">Read-only</span></label>
+        <input id="fldAttPattern" class="text-input" type="text" value="${escHTML(d.attendance_event_name_pattern || '')}" readonly disabled>
+        <div class="helper">⚠️ Eligibility gate — matches attendance rows recorded with this exact pattern. Changing it after attendance has been logged would invalidate disciples' historical eligibility. To change it, edit the row directly in SQL with full awareness of downstream impact.</div>
       </div>
     </div>
 
@@ -617,16 +724,21 @@ function renderEditor(){
       </div>
     </div>
 
-    <!-- ── QUESTIONS (Phase 2 stub) ── -->
+    <!-- ── QUESTIONS — Phase 2 editor ── -->
     <div class="editor-card">
       <h3 class="editor-card-title">
         Questions
         <span class="pill">${qCount} item${qCount === 1 ? '' : 's'}</span>
       </h3>
-      <div class="phase2-stub">
-        <strong>Phase 2 — coming next session.</strong><br>
-        This editor currently saves the flat fields above (lesson_title, passing_score, intro/outro texts, attendance pattern, is_active). The <code>questions</code> JSONB is preserved unchanged on save — your existing questions are safe.<br><br>
-        For now, to edit questions: edit the seed SQL or use the existing bulk import flow. The Phase 2 editor will show each question as an editable card (EN/TL stems, MC option editor with correct-flag, TF answer toggle, reorder/delete/add).
+      <div class="helper" style="margin:-6px 0 14px 0">
+        Bilingual EN/TL. Each MC question needs exactly one option marked correct. Changes save when you click <strong>💾 Save Changes</strong> below.
+      </div>
+      <div id="questionsList">
+        ${renderQuestionsList(d.questions || [])}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="addQuestion('mc')">+ Add Multiple Choice</button>
+        <button class="btn btn-secondary" onclick="addQuestion('tf')">+ Add True/False</button>
       </div>
     </div>
 
@@ -648,6 +760,265 @@ function onFieldChange(key, value){
     const lbl = document.getElementById('fldActiveLabel');
     if (lbl) lbl.textContent = value ? 'Active — visible to disciples' : 'Inactive — hidden from disciples';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// QUESTIONS EDITOR — Phase 2
+// ═══════════════════════════════════════════════════════════════
+// JSONB shape (verified from a live usbong_quizzes row, May 19, 2026):
+//   MC: { type:"mc", question_en, question_tl, options:[{en,tl,correct}, ...] }
+//   TF: { type:"tf", question_en, question_tl, correct:bool }
+// We mutate STATE.draft.questions in-place and re-render the questions
+// list only (not the whole editor — preserves focus on flat fields).
+
+function renderQuestionsList(questions){
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return '<div class="q-empty">No questions yet. Use the buttons below to add one.</div>';
+  }
+  return questions.map((q, idx) => renderQuestionCard(q, idx, questions.length)).join('');
+}
+
+function renderQuestionCard(q, idx, total){
+  const type = q.type === 'tf' ? 'tf' : 'mc';
+  const typeLabel = type === 'tf' ? 'True / False' : 'Multiple Choice';
+  const stemEn = q.question_en || '';
+  const stemTl = q.question_tl || '';
+
+  let bodyHTML = '';
+  if (type === 'mc') {
+    const options = Array.isArray(q.options) ? q.options : [];
+    bodyHTML = `
+      <div class="q-stem-label" style="margin-top:8px">Options (mark exactly one correct)</div>
+      <div class="q-options">
+        ${options.map((opt, oIdx) => `
+          <div class="q-option ${opt.correct ? 'correct' : ''}">
+            <input type="radio" name="qCorrect_${idx}" ${opt.correct ? 'checked' : ''}
+              onchange="setMCCorrect(${idx}, ${oIdx})" title="Mark as correct">
+            <input type="text" class="q-opt-en" placeholder="Option ${oIdx+1} (English)"
+              value="${escHTML(opt.en || '')}"
+              oninput="setMCOption(${idx}, ${oIdx}, 'en', this.value)">
+            <input type="text" class="q-opt-tl" placeholder="Tagalog (optional)"
+              value="${escHTML(opt.tl || '')}"
+              oninput="setMCOption(${idx}, ${oIdx}, 'tl', this.value)">
+            <button class="q-icon-btn danger" onclick="removeMCOption(${idx}, ${oIdx})"
+              ${options.length <= 2 ? 'disabled title="At least 2 options required"' : 'title="Remove option"'}>×</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-secondary" style="margin-top:6px;padding:6px 12px;font-size:12px"
+        onclick="addMCOption(${idx})">+ Add Option</button>
+    `;
+  } else {
+    const isTrue = q.correct === true;
+    const isFalse = q.correct === false;
+    bodyHTML = `
+      <div class="q-stem-label" style="margin-top:8px">Correct Answer</div>
+      <div class="q-tf-row">
+        <label class="q-tf-opt ${isTrue ? 'selected' : ''}">
+          <input type="radio" name="qTfCorrect_${idx}" ${isTrue ? 'checked' : ''}
+            onchange="setTFCorrect(${idx}, true)">
+          ✓ True
+        </label>
+        <label class="q-tf-opt ${isFalse ? 'selected' : ''}">
+          <input type="radio" name="qTfCorrect_${idx}" ${isFalse ? 'checked' : ''}
+            onchange="setTFCorrect(${idx}, false)">
+          ✗ False
+        </label>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="q-card" data-q-idx="${idx}">
+      <div class="q-card-header">
+        <div class="q-card-title">
+          Question ${idx+1}
+          <span class="q-type-pill ${type}">${typeLabel}</span>
+        </div>
+        <div class="q-actions">
+          <button class="q-icon-btn" onclick="moveQuestion(${idx}, -1)"
+            ${idx === 0 ? 'disabled' : ''} title="Move up">↑</button>
+          <button class="q-icon-btn" onclick="moveQuestion(${idx}, 1)"
+            ${idx === total - 1 ? 'disabled' : ''} title="Move down">↓</button>
+          <button class="q-icon-btn danger" onclick="deleteQuestion(${idx})" title="Delete question">🗑</button>
+        </div>
+      </div>
+      <div class="q-stem-row">
+        <label class="q-stem-label">Question (English)</label>
+        <textarea oninput="setStem(${idx}, 'en', this.value)" placeholder="Enter the question in English">${escHTML(stemEn)}</textarea>
+      </div>
+      <div class="q-stem-row">
+        <label class="q-stem-label">Question (Tagalog)</label>
+        <textarea oninput="setStem(${idx}, 'tl', this.value)" placeholder="I-Tagalog ang tanong">${escHTML(stemTl)}</textarea>
+      </div>
+      ${bodyHTML}
+    </div>
+  `;
+}
+
+function reRenderQuestions(){
+  const host = document.getElementById('questionsList');
+  if (!host || !STATE.draft) return;
+  const qs = STATE.draft.questions || [];
+  host.innerHTML = renderQuestionsList(qs);
+  // Update the count pill in the card title
+  const allCards = document.querySelectorAll('.editor-card-title .pill');
+  // The questions card title is the last .pill inside an editor-card whose title contains "Questions"
+  document.querySelectorAll('.editor-card').forEach(card => {
+    const title = card.querySelector('.editor-card-title');
+    if (title && /Questions/.test(title.textContent)) {
+      const pill = title.querySelector('.pill');
+      if (pill) pill.textContent = `${qs.length} item${qs.length === 1 ? '' : 's'}`;
+    }
+  });
+}
+
+function markQuestionsDirty(){
+  setDirty(true);
+}
+
+// ─── Stem editing (EN/TL) ──────────────────────────────────────
+function setStem(idx, lang, value){
+  if (!STATE.draft || !STATE.draft.questions || !STATE.draft.questions[idx]) return;
+  const key = lang === 'tl' ? 'question_tl' : 'question_en';
+  STATE.draft.questions[idx][key] = value;
+  markQuestionsDirty();
+  // No re-render here — we don't want to clobber the textarea the user is typing in
+}
+
+// ─── MC option editing ─────────────────────────────────────────
+function setMCOption(qIdx, oIdx, lang, value){
+  const q = STATE.draft?.questions?.[qIdx];
+  if (!q || !Array.isArray(q.options) || !q.options[oIdx]) return;
+  const key = lang === 'tl' ? 'tl' : 'en';
+  q.options[oIdx][key] = value;
+  markQuestionsDirty();
+}
+
+function setMCCorrect(qIdx, oIdx){
+  const q = STATE.draft?.questions?.[qIdx];
+  if (!q || !Array.isArray(q.options)) return;
+  q.options.forEach((opt, i) => { opt.correct = (i === oIdx); });
+  markQuestionsDirty();
+  reRenderQuestions(); // re-render to update the .correct visual highlight
+}
+
+function addMCOption(qIdx){
+  const q = STATE.draft?.questions?.[qIdx];
+  if (!q || !Array.isArray(q.options)) return;
+  if (q.options.length >= 6) {
+    toast('Max 6 options per question', 'warn');
+    return;
+  }
+  q.options.push({ en: '', tl: '', correct: false });
+  markQuestionsDirty();
+  reRenderQuestions();
+}
+
+function removeMCOption(qIdx, oIdx){
+  const q = STATE.draft?.questions?.[qIdx];
+  if (!q || !Array.isArray(q.options)) return;
+  if (q.options.length <= 2) {
+    toast('At least 2 options required', 'warn');
+    return;
+  }
+  const wasCorrect = q.options[oIdx]?.correct;
+  q.options.splice(oIdx, 1);
+  // If we removed the correct option, mark the first remaining one as correct
+  if (wasCorrect && !q.options.some(o => o.correct)) {
+    q.options[0].correct = true;
+  }
+  markQuestionsDirty();
+  reRenderQuestions();
+}
+
+// ─── TF answer editing ─────────────────────────────────────────
+function setTFCorrect(qIdx, val){
+  const q = STATE.draft?.questions?.[qIdx];
+  if (!q) return;
+  q.correct = !!val;
+  markQuestionsDirty();
+  reRenderQuestions(); // update visual selected state
+}
+
+// ─── Question-level operations ─────────────────────────────────
+function addQuestion(type){
+  if (!STATE.draft) return;
+  if (!Array.isArray(STATE.draft.questions)) STATE.draft.questions = [];
+  if (type === 'tf') {
+    STATE.draft.questions.push({
+      type: 'tf',
+      question_en: '',
+      question_tl: '',
+      correct: true,
+    });
+  } else {
+    STATE.draft.questions.push({
+      type: 'mc',
+      question_en: '',
+      question_tl: '',
+      options: [
+        { en: '', tl: '', correct: true },
+        { en: '', tl: '', correct: false },
+        { en: '', tl: '', correct: false },
+        { en: '', tl: '', correct: false },
+      ],
+    });
+  }
+  markQuestionsDirty();
+  reRenderQuestions();
+  // Scroll the new card into view
+  setTimeout(() => {
+    const cards = document.querySelectorAll('.q-card');
+    const last = cards[cards.length - 1];
+    if (last) last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+}
+
+function deleteQuestion(idx){
+  if (!STATE.draft?.questions?.[idx]) return;
+  const q = STATE.draft.questions[idx];
+  const label = q.question_en ? `"${q.question_en.slice(0, 60)}${q.question_en.length > 60 ? '…' : ''}"` : `Question ${idx+1}`;
+  if (!confirm(`Delete ${label}?\n\nThis cannot be undone unless you Cancel without saving.`)) return;
+  STATE.draft.questions.splice(idx, 1);
+  markQuestionsDirty();
+  reRenderQuestions();
+}
+
+function moveQuestion(idx, dir){
+  if (!STATE.draft?.questions) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= STATE.draft.questions.length) return;
+  const arr = STATE.draft.questions;
+  [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+  markQuestionsDirty();
+  reRenderQuestions();
+}
+
+// ─── Validation before save ────────────────────────────────────
+function validateQuestions(questions){
+  if (!Array.isArray(questions)) return null; // empty array or missing is fine
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const label = `Question ${i+1}`;
+    if (!q || typeof q !== 'object') return `${label}: malformed entry`;
+    if (q.type !== 'mc' && q.type !== 'tf') return `${label}: unknown type "${q.type}" (must be mc or tf)`;
+    if (!q.question_en || !q.question_en.trim()) return `${label}: English question text is required`;
+    if (q.type === 'mc') {
+      if (!Array.isArray(q.options) || q.options.length < 2) return `${label}: needs at least 2 options`;
+      const correctCount = q.options.filter(o => o && o.correct).length;
+      if (correctCount === 0) return `${label}: mark exactly one option as correct`;
+      if (correctCount > 1) return `${label}: only one option can be marked correct (found ${correctCount})`;
+      // Every option needs at least English text
+      for (let j = 0; j < q.options.length; j++) {
+        const opt = q.options[j];
+        if (!opt || !opt.en || !opt.en.trim()) return `${label}, Option ${j+1}: English text is required`;
+      }
+    } else { // tf
+      if (q.correct !== true && q.correct !== false) return `${label}: pick True or False as the correct answer`;
+    }
+  }
+  return null;
 }
 
 // ─── Cancel ────────────────────────────────────────────────────
@@ -672,6 +1043,15 @@ function cancelEdit(){
 async function saveEdit(){
   if (!STATE.draft || !STATE.selectedId) return;
   if (STATE.saving) return;
+
+  // Validate questions before saving — surface problems clearly so Pastor
+  // can fix them, rather than silently shipping a broken quiz JSONB.
+  const validationErr = validateQuestions(STATE.draft.questions);
+  if (validationErr) {
+    toast('⚠️ ' + validationErr, 'warn');
+    return;
+  }
+
   STATE.saving = true;
   const btn = document.getElementById('saveBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -679,19 +1059,24 @@ async function saveEdit(){
   const tbl = TABLE_MAP[STATE.table].table;
   const d = STATE.draft;
 
-  // Build payload — ONLY editable Phase 1 fields. Identifiers and
-  // questions JSONB are NOT touched, so the existing questions are
-  // preserved exactly as they were.
+  // Build payload — ONLY editable Phase 1 fields. Identifiers, the
+  // attendance_event_name_pattern (a structural eligibility key per
+  // Invariant #53), and the questions JSONB are NOT touched in this
+  // editor, so existing data is preserved.
   const payload = {
     lesson_title: (d.lesson_title || '').trim() || null,
     passing_score: (d.passing_score != null && !isNaN(d.passing_score)) ? d.passing_score : 70,
     intro_text: d.intro_text || null,
     outro_pass_text: d.outro_pass_text || null,
     outro_fail_text: d.outro_fail_text || null,
-    attendance_event_name_pattern: (d.attendance_event_name_pattern || '').trim() || null,
     is_active: !!d.is_active,
     updated_at: new Date().toISOString(),
   };
+
+  // Also save questions JSONB if it was edited in Phase 2
+  if (Array.isArray(d.questions)) {
+    payload.questions = d.questions;
+  }
 
   // Optional: stamp updated_by if available
   const L = window.LEADER || {};
