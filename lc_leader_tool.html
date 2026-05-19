@@ -6281,6 +6281,52 @@ function _updateAnnQuickActionBadge(){
   } else if (badge) {
     badge.remove();
   }
+
+  // Session 9 (May 19, 2026) — Home-screen badge via Web App Badging API.
+  // Fires only on installed PWA + supported launcher. Silent no-op everywhere
+  // else (older Android phones, browser tabs, unsupported launchers). The
+  // in-app quick-action badge above is the universal fallback so leaders
+  // on phones without OS-badge support still get the visual cue inside MLT.
+  _updateAppBadge();
+}
+
+// Web App Badging API hook — paints the unread count on the PWA's home-
+// screen icon. Honest support reality:
+//   ✓ iOS 16.4+ Safari PWA           — reliable
+//   ✓ Pixel / stock Android Chrome PWA — works
+//   ✓ Recent Samsung One UI          — mostly works
+//   ⚠ Xiaomi/MIUI, Realme, OnePlus   — inconsistent by version
+//   ✗ Older Android / non-installed   — silent no-op
+//
+// When unsupported, the try/catch swallows the failure and the in-app
+// quick-action badge (rendered above) carries the visual load.
+//
+// Note on iOS quirk: iOS auto-clears the home-screen badge when the user
+// opens the PWA. We re-apply it on visibilitychange (see listener below)
+// so the badge reflects truth as soon as the leader switches back to MLT.
+async function _updateAppBadge() {
+  try {
+    if ('setAppBadge' in navigator) {
+      if (_annInboxUnreadCount > 0) {
+        await navigator.setAppBadge(_annInboxUnreadCount);
+      } else {
+        await navigator.clearAppBadge();
+      }
+    }
+  } catch (e) {
+    // Silent — older browsers / unsupported launchers just don't badge.
+    // The in-app quick-action badge stays correct regardless.
+  }
+}
+
+// When the leader switches back to MLT (or the OS un-suspends it),
+// re-apply the home-screen badge from the latest count. This handles the
+// iOS auto-clear quirk and also covers the case where the badge got out
+// of sync with reality (e.g., another tab acked an item).
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) _updateAppBadge();
+  });
 }
 
 // Prefetch the inbox count once on page load so the badge is correct
