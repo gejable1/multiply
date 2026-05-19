@@ -233,6 +233,14 @@ tbody td.mono{font-family:'DM Mono',monospace;font-size:11.5px;}
       </select>
     </div>
     <div class="cb-group">
+      <span class="cb-label">Mode</span>
+      <select class="cb-select" id="filterMode" title="Session 8: filter by attendance_mode (in_person / online). Only Sunday Service + Prayer Meeting rows carry a meaningful distinction.">
+        <option value="">All</option>
+        <option value="in_person">🏛️ In person</option>
+        <option value="online">🌐 Online</option>
+      </select>
+    </div>
+    <div class="cb-group">
       <span class="cb-label">LC Group</span>
       <input type="search" class="cb-input" id="filterLc" placeholder="filter by LC group..." style="min-width:160px">
     </div>
@@ -326,7 +334,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filterFrom').value = r.from;
   document.getElementById('filterTo').value   = r.to;
   // Live filtering (no need to refetch — filter in-memory)
-  ['filterType','filterLc','filterMember'].forEach(id => {
+  ['filterType','filterMode','filterLc','filterMember'].forEach(id => {
     document.getElementById(id).addEventListener('input', applyFilters);
     document.getElementById(id).addEventListener('change', applyFilters);
   });
@@ -352,7 +360,7 @@ async function loadAttendance(){
 
   try{
     const {data, error} = await db.from('attendance')
-      .select('id,member_id,member_name,present,event_date,event_type,event_name,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,source,confirmed_by,confirmed_at,disputed,dispute_reason,pastor_resolved,pastor_decision,nudge_count')
+      .select('id,member_id,member_name,present,event_date,event_type,event_name,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,source,confirmed_by,confirmed_at,disputed,dispute_reason,pastor_resolved,pastor_decision,nudge_count,attendance_mode')
       .gte('event_date', from)
       .lte('event_date', to)
       .order('event_date', {ascending:false})
@@ -370,11 +378,13 @@ async function loadAttendance(){
 
 function applyFilters(){
   const type   = document.getElementById('filterType').value.toLowerCase().trim();
+  const mode   = document.getElementById('filterMode').value.toLowerCase().trim();
   const lcQ    = document.getElementById('filterLc').value.toLowerCase().trim();
   const memQ   = document.getElementById('filterMember').value.toLowerCase().trim();
 
   _filteredRows = _allRows.filter(r => {
     if(type && (r.event_type||'').toLowerCase() !== type) return false;
+    if(mode && ((r.attendance_mode||'in_person').toLowerCase() !== mode)) return false;
     if(lcQ){
       const lc = ((r.event_lc_group||r.member_lc_group||'')+'').toLowerCase();
       if(!lc.includes(lcQ)) return false;
@@ -451,6 +461,13 @@ function renderTable(){
                           : r.event_type === 'Sunday Service' ? 'sun' : 'other';
           const presBadge = r.present ? 'present' : 'absent';
           const presLabel = r.present ? '✓ Present' : '✗ Absent';
+          // Session 8: 🌐 Online badge — only meaningful for Sunday Service +
+          // Prayer Meeting rows where the LCL deliberately flagged a livestream
+          // attendance. Defaults to '' so historical rows and other event_types
+          // render unchanged.
+          const modeBadge = (r.attendance_mode === 'online')
+            ? ` <span style="background:#e7eef7;color:#1e4d80;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;" title="Online attendance — member watched livestream">🌐 online</span>`
+            : '';
           const created = r.created_at ? new Date(r.created_at).toLocaleString('en-PH', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
           // Source + state badges (added for self-attest visibility)
           const src = r.source || 'lcl_logged';
@@ -481,7 +498,7 @@ function renderTable(){
               <td class="muted" style="font-size:11.5px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.event_name||'')}">${escapeHtml(r.event_name||'—')}</td>
               <td>${escapeHtml(lc)}</td>
               <td>${escapeHtml(r.member_name||'—')}</td>
-              <td><span class="badge ${presBadge}">${presLabel}</span>${stateBadge}</td>
+              <td><span class="badge ${presBadge}">${presLabel}</span>${modeBadge}${stateBadge}</td>
               <td><span style="color:${srcColor};font-weight:700;font-size:11px;">${srcIcon} ${srcLbl}</span></td>
               <td class="muted">${escapeHtml(r.logged_by||'—')}</td>
               <td class="muted mono">${escapeHtml(created)}</td>

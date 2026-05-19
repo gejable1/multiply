@@ -558,7 +558,7 @@ async function loadReport(){
 
     // ── 2. Pull attendance rows for the selected date + event ──
     const {data:attRows, error:aErr} = await db.from('attendance')
-      .select('member_id,member_name,present,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,updated_at')
+      .select('member_id,member_name,present,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,updated_at,attendance_mode')
       .eq('event_date', date)
       .eq('event_type', eventType);
     if(aErr) throw aErr;
@@ -708,12 +708,17 @@ function buildGroups(allMembers, attRows){
     if(!memberInCurrentFlock) return;
 
     if(!matchedLeader.attResolved){
-      matchedLeader.attResolved = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null};
+      matchedLeader.attResolved = {present:0, absent:0, total:0, presentOnline:0, loggedBy:null, loggedAt:null};
     }
     const bag = matchedLeader.attResolved;
     if(r.present) bag.present++;
     else bag.absent++;
     bag.total++;
+    // Session 8: count online attendances among the present.
+    // Only meaningful when event_type is Sunday Service or Prayer Meeting;
+    // for other event_types the value is always 0 since the mode defaults
+    // to in_person.
+    if(r.present && r.attendance_mode === 'online') bag.presentOnline++;
     if(!bag.loggedBy && r.logged_by){
       bag.loggedBy = r.logged_by;
       bag.loggedAt = r.created_at || r.updated_at;
@@ -748,6 +753,7 @@ function buildGroups(allMembers, attRows){
       const card = {
         displayName, leaderName,
         present: att.present,
+        presentOnline: att.presentOnline || 0,
         total: denominator,
         pct,
         loggedBy: att.loggedBy,
@@ -873,7 +879,7 @@ function renderReport(report, date, eventType){
             </div>
             <div class="champion-stat">
               <div class="champion-pct">100%</div>
-              <div class="champion-count">${c.present} / ${c.total}</div>
+              <div class="champion-count">${c.present} / ${c.total}${c.presentOnline ? ` <span style="display:inline-block;background:rgba(94,135,176,.15);color:#1e4d80;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:3px;vertical-align:2px" title="${c.presentOnline} attended online (livestream)">🌐 ${c.presentOnline}</span>` : ''}</div>
             </div>
           </div>
         `).join('')}
@@ -900,7 +906,7 @@ function renderReport(report, date, eventType){
             </div>
             <div class="runner-bar-wrap">
               <div class="runner-bar-track"><div class="runner-bar-fill" style="width:${r.pct}%"></div></div>
-              <div class="runner-bar-meta"><span>${r.present} of ${r.total}</span><span>${r.total - r.present} absent</span></div>
+              <div class="runner-bar-meta"><span>${r.present} of ${r.total}${r.presentOnline ? ` <span style="display:inline-block;background:rgba(94,135,176,.15);color:#1e4d80;font-size:9px;font-weight:700;padding:1px 5px;border-radius:7px;margin-left:3px" title="${r.presentOnline} attended online (livestream)">🌐 ${r.presentOnline}</span>` : ''}</span><span>${r.total - r.present} absent</span></div>
             </div>
             <div class="runner-pct">${r.pct}%</div>
           </div>

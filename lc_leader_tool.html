@@ -800,6 +800,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
       <div class="att-type-pill" data-type="Other" onclick="selectAttType(this)">Other</div>
     </div>
+
+    <!-- ── ATTENDANCE MODE TOGGLE ─────────────────────────────────
+         Session 8 (May 19, 2026): For Sunday Service and Prayer Meeting
+         (the two livestreamed gatherings), the LCL can flag attendance
+         as 'online' when the member presents a livestream receipt.
+         Default is 'in_person' (assumed face-to-face) — only flip to
+         'online' when the member is genuinely watching the livestream
+         from away. Hidden for all other event_types since they're
+         in-person by design.
+         Applies to the bulk attendance form and the per-member quick-
+         mark for Sunday Service (line 2255 region). -->
+    <div id="attModeRow" style="display:none;margin-top:10px">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Attendance Mode</div>
+      <div class="att-date-row" id="attModeChoices">
+        <div class="att-type-pill selected" data-mode="in_person" onclick="selectAttMode(this)">🏛️ In person</div>
+        <div class="att-type-pill" data-mode="online" onclick="selectAttMode(this)">🌐 Online</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">
+        Default <strong>In person</strong>. Tap <strong>Online</strong> only for members who showed a livestream receipt.
+      </div>
+    </div>
     <!-- BTLI lesson picker — shown only when event_type === 'BTLI'.
          Per Invariant #30, event_name is constructed as:
            "${course_code} · L${lesson_number} · ${lesson_title}"  (U+00B7 middle dot)
@@ -1029,6 +1050,10 @@ let attendanceState = {};
 let currentFilter = 'all';
 let currentMember = null;
 let selectedAttType = 'Sunday Service';
+// Session 8 (May 19, 2026): attendance_mode — 'in_person' (default) or 'online'.
+// Only meaningful for Sunday Service + Prayer Meeting; other event types
+// ignore this field (server stores default 'in_person' regardless).
+let selectedAttMode = 'in_person';
 // BTLI lesson picker state (Priority B, May 16 → next session)
 // When selectedAttType === 'BTLI', the leader must pick a specific lesson.
 // The chosen quiz row is held in _btliQuizzes (lazy-loaded once per session),
@@ -2252,12 +2277,15 @@ async function logQuickAttendance(){
   // This atomically updates an existing absent→present row OR inserts a new
   // one, eliminating the duplicate-key error that occurred when a prior
   // `present:false` row existed (e.g. from a roll-call "mark all absent").
+  // Session 8: attendance_mode respects the current toggle since this path
+  // is hardcoded Sunday Service (a livestreamed gathering).
   const { error } = await db.from('attendance').upsert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
     event_date:      targetSunday,                 // ← the Sunday, not today
     event_type:      'Sunday Service',
     present:         true,
+    attendance_mode: selectedAttMode || 'in_person',
     member_lc_group: currentMember.lc_group || '',
     member_zone:     currentMember.diagnostic_zone ?? null,
     member_level:    currentMember.pipeline_level ?? null,
@@ -2963,6 +2991,29 @@ function selectAttType(el){
     }
   }
   onAttContextChange();
+
+  // ── Show/hide ATTENDANCE MODE toggle (Session 8) ─────────────────
+  // Only meaningful for the two livestreamed gatherings. Reset to
+  // 'in_person' default whenever the event type changes so we never
+  // carry a stale 'online' selection into an event that doesn't
+  // support it.
+  const modeRow = document.getElementById('attModeRow');
+  if (modeRow) {
+    const showsMode = (selectedAttType === 'Sunday Service' || selectedAttType === 'Prayer Meeting');
+    modeRow.style.display = showsMode ? 'block' : 'none';
+    selectedAttMode = 'in_person';
+    document.querySelectorAll('#attModeChoices .att-type-pill').forEach(p => {
+      p.classList.toggle('selected', p.dataset.mode === 'in_person');
+    });
+  }
+}
+
+// Session 8 (May 19, 2026): Attendance mode pill click handler.
+// Mirrors selectAttType's class-swap pattern.
+function selectAttMode(el){
+  document.querySelectorAll('#attModeChoices .att-type-pill').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedAttMode = el.dataset.mode;
 }
 
 // Lazy-load active BTLI quizzes into the lesson picker.
@@ -3529,6 +3580,12 @@ async function saveAttendance(){
 
   // C3b: roster is _btliBatchRoster for BTLI, myMembers otherwise.
   const rosterForSave = _currentAttRoster();
+  // Session 8: attendance_mode only meaningful for Sunday Service +
+  // Prayer Meeting. For other event types, force 'in_person' so the
+  // column has clean data regardless of stale state.
+  const modeForRow = (selectedAttType === 'Sunday Service' || selectedAttType === 'Prayer Meeting')
+    ? selectedAttMode
+    : 'in_person';
   const rows = rosterForSave.map(m => ({
     member_id:       m.id,
     member_name:     m.name,
@@ -3536,6 +3593,7 @@ async function saveAttendance(){
     event_type:      selectedAttType,
     event_name:      eventName,
     present:         !!attendanceState[m.id],
+    attendance_mode: modeForRow,
     // ── enriched columns ──────────────────────────────
     member_lc_group: m.lc_group || '',
     member_zone:     m.diagnostic_zone ?? null,
