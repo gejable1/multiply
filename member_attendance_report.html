@@ -298,6 +298,7 @@ table.members-tbl{
     <span class="chip-label">Columns</span>
     <button class="chip on" data-col="sunday" onclick="toggleCol(this)">Sunday ✓</button>
     <button class="chip on" data-col="prayer" onclick="toggleCol(this)">Prayer ✓</button>
+    <button class="chip on" data-col="devo"   onclick="toggleCol(this)" title="Daily devotional reflection — denominator is period days minus Sundays">Devotional ✓</button>
     <button class="chip on" data-col="lc"     onclick="toggleCol(this)">LC ✓</button>
     <button class="chip on" data-col="btli"   onclick="toggleCol(this)">BTLI ✓</button>
     <button class="chip on" data-col="prepip" onclick="toggleCol(this)">Pre-Pipeline ✓</button>
@@ -348,7 +349,7 @@ const STATE = {
   members:       [],      // members table (filtered for Test+Guest)
   leadersMap:    {},      // id → name (for LCG display name resolution)
   range:         { from: null, to: null, label: '' },
-  cols:          { sunday:true, prayer:true, lc:true, btli:true, prepip:true, minis:true, other:true },
+  cols:          { sunday:true, prayer:true, devo:true, lc:true, btli:true, prepip:true, minis:true, other:true },
   loading:       false,
 };
 
@@ -368,6 +369,7 @@ function classifyEvent(eventType){
     case 'LC Meeting':       return 'lc';
     case 'BTLI':             return 'btli';
     case 'Pre-Pipeline':     return 'prepip';
+    case 'devotional':       return 'devo';   // lowercase per MMT convention
     case 'Sunday School':
     case 'Youth Gathering':
     case 'Team Building':
@@ -378,6 +380,28 @@ function classifyEvent(eventType){
       // saveMinistryAttendance writes event_type = ministry name.
       return 'minis';
   }
+}
+
+// Count Sundays in a date range (inclusive). Used to derive the
+// Devotional denominator: period_days - sundays_in_period.
+// Pastoral convention (Session 8): devotionals are expected daily
+// EXCEPT Sundays. A 90-day window with 13 Sundays → denominator 77.
+function countSundaysInRange(fromYmd, toYmd){
+  const from = new Date(fromYmd + 'T00:00:00');
+  const to   = new Date(toYmd   + 'T00:00:00');
+  let count = 0;
+  const d = new Date(from);
+  while (d <= to){
+    if (d.getDay() === 0) count++;  // 0 = Sunday
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
+function countDaysInRange(fromYmd, toYmd){
+  const from = new Date(fromYmd + 'T00:00:00');
+  const to   = new Date(toYmd   + 'T00:00:00');
+  return Math.round((to - from) / 86400000) + 1; // inclusive
 }
 
 // ─── Date range helpers ────────────────────────────────────────
@@ -433,6 +457,7 @@ function toggleCol(btn){
   btn.classList.toggle('on', STATE.cols[key]);
   btn.textContent = (key === 'prepip' ? 'Pre-Pipeline' :
                      key === 'minis'  ? 'Ministry' :
+                     key === 'devo'   ? 'Devotional' :
                      key.charAt(0).toUpperCase()+key.slice(1))
                    + (STATE.cols[key] ? ' ✓' : '');
   updateChipMeta();
@@ -466,14 +491,37 @@ async function loadReport(){
     if (mErr) throw mErr;
     STATE.members = (mems || []).filter(m => !m.is_test_member && !m.is_external_user);
 
-    // 2) Build leader-of-LCG resolution map.
-    // An LCG is named by lc_group (text). The leader is identified by
-    // is_facilitator=true within that lc_group (same pattern as LCAR).
-    STATE.leadersMap = {};
+    // 2) Build LCG groupings — per Memory #17 (LCG grouping rule, Session 8).
+    // Group BY LCL ID, not lc_group text. An LCL = is_facilitator=true OR
+    // facilitator_role non-null. Disciples are assigned via discipler_id.
+    // Leaders are NOT counted in their own LCG (they're facilitators, not
+    // flock); they ARE counted in their upline's LCG (where their own
+    // discipler_id points). lc_group text is just a display label.
+    STATE.leadersMap = {};   // id → leader member object
+    STATE.lcgRoster  = {};   // leader_id → array of member objects (their flock)
+    STATE.unassigned = [];   // members whose discipler_id doesn't match any LCL
+
     STATE.members.forEach(m => {
-      if (m.is_facilitator && m.lc_group){
-        const k = (m.lc_group || '').trim();
-        if (!STATE.leadersMap[k]) STATE.leadersMap[k] = m;
+      if (m.is_facilitator || m.facilitator_role){
+        STATE.leadersMap[m.id] = m;
+        if (!STATE.lcgRoster[m.id]) STATE.lcgRoster[m.id] = [];
+      }
+    });
+
+    STATE.members.forEach(m => {
+      const did = m.discipler_id;
+      if (did && STATE.leadersMap[did]){
+        // Edge: leader self-disciples → treat as orphan (would double-count)
+        if (did === m.id){
+          STATE.unassigned.push(m);
+          return;
+        }
+        STATE.lcgRoster[did].push(m);
+      } else if (!(m.is_facilitator || m.facilitator_role)){
+        // Only disciples land in 'unassigned'. A leader without a discipler
+        // is just an upline leader (Pastoral Staff etc.) — their own LCG
+        // is already created above.
+        STATE.unassigned.push(m);
       }
     });
 
@@ -505,12 +553,20 @@ async function loadReport(){
 // member appears in attendance rows. 'present' = same with present=true.
 // We dedupe on the natural attendance composite key.
 function buildBuckets(){
+  // Devotional denominator: period_days − Sundays. Same for every member.
+  // (Pastoral convention: devotionals are daily-except-Sunday.)
+  const devoDenominator = Math.max(0,
+    countDaysInRange(STATE.range.from, STATE.range.to) -
+    countSundaysInRange(STATE.range.from, STATE.range.to)
+  );
+
   const byMember = {};
   // Seed every member so they appear even with zero attendance rows
   STATE.members.forEach(m => {
     byMember[m.id] = {
       member: m,
       sunday: emptyBucket(), prayer: emptyBucket(),
+      devo:   { present: 0, total: devoDenominator },  // total is fixed; present counts up
       lc:     emptyBucket(), btli:   emptyBucket(),
       prepip: emptyBucket(), minis:  emptyBucket(),
       other:  emptyOther(),
@@ -522,6 +578,12 @@ function buildBuckets(){
     let col = classifyEvent(r.event_type);
     // Column-merge: Ministry rolls into Other when minis chip is off
     if (col === 'minis' && !STATE.cols.minis) col = 'other';
+    if (col === 'devo'){
+      // Devotional: only count present (no absent rows are ever written).
+      // total is the fixed period_days − Sundays denominator set at seed.
+      if (r.present) m.devo.present++;
+      return;
+    }
     if (col === 'other'){
       m.other.total++;
       if (r.present) m.other.present++;
@@ -576,12 +638,8 @@ function renderReport(){
 }
 
 function renderSummary(buckets){
-  // Member count + church-wide Sunday/Prayer denominators + Other total
+  // Member count + church-wide Sunday/Prayer/Devo denominators + Other total
   const activeOnly = document.getElementById('activeSel').value === 'active';
-  // "Active vs all" toggle currently only affects LCG-rostered membership.
-  // Per Standing Rule #16, Test+Guest stay excluded in both modes.
-  // For now, no separate inactive flag exists — both modes show the same
-  // population. We surface that honestly in the sub-label.
   const members = STATE.members;
   // Count distinct event_dates in the window for Sunday / Prayer
   const sundayDates = new Set(), prayerDates = new Set();
@@ -589,11 +647,17 @@ function renderSummary(buckets){
   STATE.rows.forEach(r => {
     if (r.event_type === 'Sunday Service') sundayDates.add(r.event_date);
     else if (r.event_type === 'Prayer Meeting') prayerDates.add(r.event_date);
-    else otherTotal++;
+    else if (r.event_type !== 'devotional') otherTotal++;
   });
-  // Aggregate Sunday/Prayer averages across all members
+  // Devotional denominator (period days minus Sundays) — same for all members
+  const devoDenom = Math.max(0,
+    countDaysInRange(STATE.range.from, STATE.range.to) -
+    countSundaysInRange(STATE.range.from, STATE.range.to)
+  );
+  // Aggregate Sunday/Prayer/Devo averages across all members
   let sumSundayPct = 0, cntSundayPct = 0, sumOnlineSun = 0, sumInPersonSun = 0;
   let sumPrayerPct = 0, cntPrayerPct = 0, sumOnlinePr = 0, sumInPersonPr = 0;
+  let sumDevoPct = 0, cntDevoPct = 0;
   members.forEach(m => {
     const b = buckets[m.id];
     if (b.sunday.total > 0){
@@ -608,9 +672,14 @@ function renderSummary(buckets){
       sumOnlinePr += b.prayer.onlinePresent;
       sumInPersonPr += b.prayer.inPersonPresent;
     }
+    if (b.devo.total > 0){
+      sumDevoPct += (b.devo.present / b.devo.total) * 100;
+      cntDevoPct++;
+    }
   });
-  const sunAvg = cntSundayPct ? Math.round(sumSundayPct / cntSundayPct) : 0;
-  const prAvg  = cntPrayerPct ? Math.round(sumPrayerPct / cntPrayerPct) : 0;
+  const sunAvg  = cntSundayPct ? Math.round(sumSundayPct / cntSundayPct) : 0;
+  const prAvg   = cntPrayerPct ? Math.round(sumPrayerPct / cntPrayerPct) : 0;
+  const devoAvg = cntDevoPct   ? Math.round(sumDevoPct   / cntDevoPct)   : 0;
   const sunTotalPresent = sumOnlineSun + sumInPersonSun;
   const prTotalPresent  = sumOnlinePr + sumInPersonPr;
   const sunOnlinePct = sunTotalPresent ? Math.round((sumOnlineSun/sunTotalPresent)*sunAvg) : 0;
@@ -630,9 +699,14 @@ function renderSummary(buckets){
       <div class="summary-sub">${sunF2fPct}% f2f · ${sunOnlinePct}% online</div>
     </div>
     <div class="summary-card">
-      <div class="summary-label">Prayer Mtgs (${prayerDates.size})</div>
+      <div class="summary-label">Prayer (${prayerDates.size})</div>
       <div class="summary-value">${prAvg}<span class="unit">% avg</span></div>
       <div class="summary-sub">${prF2fPct}% f2f · ${prOnlinePct}% online</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Devotional (${devoDenom} days)</div>
+      <div class="summary-value">${devoAvg}<span class="unit">% avg</span></div>
+      <div class="summary-sub">daily reflection · Sundays excluded</div>
     </div>
     <div class="summary-card">
       <div class="summary-label">Other events logged</div>
@@ -643,33 +717,45 @@ function renderSummary(buckets){
 }
 
 function renderLCGs(buckets){
-  // Group members by lc_group, leader-resolve for nicer display name
+  // Per Memory #17 (LCG grouping rule, Session 8): use STATE.lcgRoster
+  // (keyed by leader.id), NOT lc_group text. Display name uses lc_group
+  // text if set, else `${leader.firstName}'s LCG`. Leaders themselves are
+  // NOT shown in their own LCG roster — they ARE shown in their upline's
+  // LCG where applicable (e.g. Jane appears as flock in Pastor's LCG,
+  // but her own LCG card has only her L3 disciples).
   const scope = document.getElementById('scopeSel').value;
-  const groups = {};
-  STATE.members.forEach(m => {
-    const k = (m.lc_group || '').trim() || '(no LCG)';
-    if (!groups[k]) groups[k] = [];
-    groups[k].push(m);
+
+  // Scope: which LCGs to render
+  let leaderIds = Object.keys(STATE.lcgRoster);
+  if (scope === 'mine'){
+    const myId = (window.LEADER && window.LEADER.leaderId) || null;
+    if (myId && STATE.lcgRoster[myId]) leaderIds = [myId];
+    else leaderIds = [];
+  }
+
+  // Sort LCGs: by display name (alphabetical)
+  leaderIds.sort((a, b) => {
+    const nameA = lcgDisplayName(STATE.leadersMap[a]);
+    const nameB = lcgDisplayName(STATE.leadersMap[b]);
+    return nameA.localeCompare(nameB);
   });
 
-  // Scope filter (My LCG only)
-  let groupKeys = Object.keys(groups);
-  if (scope === 'mine'){
-    const me = (window.LEADER && window.LEADER.leaderId)
-      ? STATE.members.find(m => m.id === window.LEADER.leaderId)
-      : null;
-    if (me && me.lc_group) groupKeys = [me.lc_group];
-    else groupKeys = [];
-  }
-  groupKeys.sort((a,b) => a.localeCompare(b));
+  // Hide empty LCGs from the rendered list (an LCL with zero disciples in
+  // window is uninformative); they still exist in data but don't clutter.
+  // EXCEPTION: in "My LCG only" scope, always show even if empty.
+  const cardLeaderIds = (scope === 'mine')
+    ? leaderIds
+    : leaderIds.filter(id => (STATE.lcgRoster[id] || []).length > 0);
 
-  if (!groupKeys.length){
+  if (!cardLeaderIds.length){
     document.getElementById('reportBody').innerHTML =
       '<div class="state-card"><div class="emoji">📋</div><div>No LCGs match the current scope.</div></div>';
     return;
   }
 
-  const html = groupKeys.map((k, idx) => renderLCGCard(k, groups[k], buckets, idx === 0)).join('');
+  const html = cardLeaderIds.map((leaderId, idx) =>
+    renderLCGCard(leaderId, STATE.lcgRoster[leaderId] || [], buckets, idx === 0)
+  ).join('');
   document.getElementById('reportBody').innerHTML = html;
 
   // Wire up collapse toggles
@@ -681,13 +767,22 @@ function renderLCGs(buckets){
   });
 }
 
-function renderLCGCard(lcgKey, members, buckets, firstOpen){
-  const leader = STATE.leadersMap[lcgKey];
-  const displayName = leader ? `${leader.name.split(/\s+/)[0]}'s LCG` : (lcgKey || '(unassigned)');
+function lcgDisplayName(leader){
+  if (!leader) return '(unassigned)';
+  const lcg = (leader.lc_group || '').trim();
+  if (lcg) return lcg;
+  const first = (leader.name || '').split(/\s+/)[0] || leader.name || '(LCL)';
+  return `${first}'s LCG`;
+}
+
+function renderLCGCard(leaderId, members, buckets, firstOpen){
+  const leader = STATE.leadersMap[leaderId];
+  const displayName = lcgDisplayName(leader);
   // LCG-level Sunday + Prayer aggregates
   let sumSPct=0, cntS=0, sumPPct=0, cntP=0;
   members.forEach(m => {
     const b = buckets[m.id];
+    if (!b) return;
     if (b.sunday.total){ sumSPct += b.sunday.present/b.sunday.total*100; cntS++; }
     if (b.prayer.total){ sumPPct += b.prayer.present/b.prayer.total*100; cntP++; }
   });
@@ -724,6 +819,7 @@ function renderMembersTable(members, buckets){
   const headParts = ['<th>Member</th>'];
   if (cols.sunday) headParts.push('<th>Sunday</th>');
   if (cols.prayer) headParts.push('<th>Prayer&nbsp;Mtg</th>');
+  if (cols.devo)   headParts.push('<th>Devotional</th>');
   if (cols.lc)     headParts.push('<th>LC</th>');
   if (cols.btli)   headParts.push('<th>BTLI</th>');
   if (cols.prepip) headParts.push('<th>Pre-Pip</th>');
@@ -735,6 +831,7 @@ function renderMembersTable(members, buckets){
     const cells = [`<td>${memberCell(m)}</td>`];
     if (cols.sunday) cells.push(`<td>${ratioCell(b.sunday, true)}</td>`);
     if (cols.prayer) cells.push(`<td>${ratioCell(b.prayer, true)}</td>`);
+    if (cols.devo)   cells.push(`<td>${ratioCell(b.devo, false)}</td>`);
     if (cols.lc)     cells.push(`<td>${ratioCell(b.lc, false)}</td>`);
     if (cols.btli)   cells.push(`<td>${ratioCell(b.btli, false)}</td>`);
     if (cols.prepip) cells.push(`<td>${ratioCell(b.prepip, false)}</td>`);
@@ -746,7 +843,7 @@ function renderMembersTable(members, buckets){
   return `
     <table class="members-tbl">
       <thead><tr>${headParts.join('')}</tr></thead>
-      <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">No members</td></tr>'}</tbody>
+      <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">No members</td></tr>'}</tbody>
     </table>
   `;
 }
@@ -825,6 +922,7 @@ function exportCSV(){
   const head = ['LCG','Member','Pipeline Level','Role',
     'Sunday Present','Sunday Total','Sunday %','Sunday In-Person','Sunday Online',
     'Prayer Present','Prayer Total','Prayer %','Prayer In-Person','Prayer Online',
+    'Devotional Present','Devotional Total','Devotional %',
     'LC Present','LC Total','LC %',
     'BTLI Present','BTLI Total','BTLI %',
     'Pre-Pipeline Present','Pre-Pipeline Total','Pre-Pipeline %',
@@ -834,12 +932,22 @@ function exportCSV(){
   lines.push(head.map(csvCell).join(','));
   STATE.members.forEach(m => {
     const b = buckets[m.id];
-    const lcg = (m.lc_group || '(no LCG)').trim();
+    // LCG display: use canonical pattern (Memory #17). Find this member's
+    // LCG by walking up via discipler_id; the LCG row label uses lc_group
+    // if set, else `${leader.firstName}'s LCG`.
+    let lcgLabel = '(unassigned)';
+    const did = m.discipler_id;
+    if (did && STATE.leadersMap[did] && did !== m.id){
+      lcgLabel = lcgDisplayName(STATE.leadersMap[did]);
+    } else if (m.is_facilitator || m.facilitator_role){
+      lcgLabel = lcgDisplayName(m) + ' (self)';
+    }
     const role = m.is_facilitator ? (m.facilitator_role || 'LCL') : '';
     const row = [
-      lcg, m.name||'', m.pipeline_level ?? '', role,
+      lcgLabel, m.name||'', m.pipeline_level ?? '', role,
       b.sunday.present, b.sunday.total, pctOrBlank(b.sunday), b.sunday.inPersonPresent, b.sunday.onlinePresent,
       b.prayer.present, b.prayer.total, pctOrBlank(b.prayer), b.prayer.inPersonPresent, b.prayer.onlinePresent,
+      b.devo.present, b.devo.total, pctOrBlank(b.devo),
       b.lc.present, b.lc.total, pctOrBlank(b.lc),
       b.btli.present, b.btli.total, pctOrBlank(b.btli),
       b.prepip.present, b.prepip.total, pctOrBlank(b.prepip),
