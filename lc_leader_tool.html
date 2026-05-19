@@ -1096,16 +1096,22 @@ let _usbongBatchRoster = null;        // member rows of the chosen batch, sorted
 let filterStr = '';
 let allSelected = false;
 
-// ── Hide "+ Add Member" for non-executive leaders ──
-//    Pastor Gerry's call (May 2026): too many duplicate additions while
-//    LCLs are still learning. Restrict to Level 5 (Executive) for now.
+// ── Hide "+ Add Member" for non-leaders ──
+//    Originally restricted to L5 (Executive) per Pastor Gerry's May 2026
+//    call — too many duplicate additions while LCLs were learning. Reopened
+//    May 2026 (Session 10) to L2+ (Leader / LCL and above) now that:
+//      1. Discipler is auto-populated from the logged-in LCL (no more orphans
+//         when an LCL adds a member — see openAddMember + saveNewMember).
+//      2. A soft duplicate-name check fires on save (see _checkAddMemberDup
+//         inside saveNewMember). Filters out test members and guests per the
+//         standing exclusion rule.
 //    The DOM hide is convenience; openAddMember() also re-checks server-side.
 (function gateAddMemberButton(){
   const tryGate = ()=>{
     const btn = document.getElementById('addMemberBtn');
     if(!btn) return;
     const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
-    btn.style.display = lvl >= 5 ? '' : 'none';
+    btn.style.display = lvl >= 2 ? '' : 'none';
   };
   tryGate();
   setTimeout(tryGate, 500);
@@ -1773,13 +1779,14 @@ function renderMemberList(){
 // ADD MEMBER (Leader-initiated)
 // ═══════════════════════════════════════════════════════
 function openAddMember(){
-  // ── Executive-only gate (Pastor Gerry, May 2026) ─────────
-  // Adding members is restricted to Executive Leaders (Level 5) while
-  // LCLs are still learning the system — too many accidental duplicates.
-  // The button is also visually hidden via gateAddMemberButton(), this is
-  // defense-in-depth in case someone bypasses the DOM.
-  if(!currentLeader || (currentLeader.pipeline_level||0) < 5){
-    toast('Adding new members is paused — please ask Pastor Gerry to add them.', 'info');
+  // ── Leader-and-above gate ────────────────────────────────
+  // Reopened to L2+ (LCL and above) in Session 10. Originally L5-only
+  // (May 2026) due to duplicate-add concerns; now mitigated by:
+  //   • Discipler auto-fills from currentLeader (no orphan members)
+  //   • Soft dup-name check on save (see saveNewMember)
+  // Defense-in-depth — the button is also DOM-hidden by gateAddMemberButton.
+  if(!currentLeader || (currentLeader.pipeline_level||0) < 2){
+    toast('Adding members requires Leader access (Level 2+).', 'info');
     return;
   }
   const today = new Date().toISOString().split('T')[0];
@@ -1802,9 +1809,59 @@ function cancelAddMember(){
   showScreen('screenMembers');
 }
 
+// ─────────────────────────────────────────────────────────────
+// Soft duplicate-name check used by saveNewMember (Session 10).
+//
+// Scans allMembers (church-wide pool, already loaded into client state by
+// loadMyMembers) for case-insensitive exact name matches. Excludes test
+// members AND guests per the standing exclusion rule — if there's a
+// "Maria Santos" in the test fixtures or a one-time guest, that shouldn't
+// trigger a duplicate warning on a real LCL trying to enroll a new
+// "Maria Santos" disciple.
+//
+// Returns:
+//   { isDuplicate: false }                            — name is clear
+//   { isDuplicate: true,  existing: <memberRow> }     — match found
+//
+// The caller (saveNewMember) decides what to do with the result — currently
+// shows a native confirm() with the existing person's pastoral context
+// (level + LC group + discipler) so the LCL can make an informed call.
+// ─────────────────────────────────────────────────────────────
+function _checkAddMemberDup(name){
+  const needle = (name || '').trim().toLowerCase();
+  if(!needle) return { isDuplicate: false };
+  const pool = (allMembers || []).filter(m =>
+    !m.is_test_member && !m.is_external_user
+  );
+  const existing = pool.find(m =>
+    (m.name || '').trim().toLowerCase() === needle
+  );
+  return existing ? { isDuplicate: true, existing } : { isDuplicate: false };
+}
+
 async function saveNewMember(){
   const name = document.getElementById('amName').value.trim();
   if(!name){ toast('Name is required','error'); return; }
+
+  // ── Soft duplicate-name guard (Session 10) ────────────────
+  // If someone with this exact name already exists in the church (excluding
+  // test members and guests), surface a confirmation so the LCL can either
+  // (a) cancel and search the existing person, or (b) intentionally proceed
+  // (e.g., two real members really do share a name).
+  const dup = _checkAddMemberDup(name);
+  if(dup.isDuplicate){
+    const e = dup.existing;
+    const lvl = (LEVEL_NAMES && LEVEL_NAMES[e.pipeline_level || 0]) || 'Pre-Pipeline';
+    const lcg = e.lc_group ? `LC: ${e.lc_group}` : 'no LC group';
+    const disc = e.discipler_name ? `Discipler: ${e.discipler_name}` : 'no discipler on record';
+    const msg = `A member named "${e.name}" already exists.\n\n` +
+                `  • ${lvl}\n` +
+                `  • ${lcg}\n` +
+                `  • ${disc}\n\n` +
+                `Tap OK to add anyway (only if this is a different person),\n` +
+                `or Cancel to go back and check.`;
+    if(!confirm(msg)) return;
+  }
 
   const payload = {
     name,
