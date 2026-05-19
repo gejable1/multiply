@@ -399,32 +399,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 
 /* ── DATE INPUT — calendar picker icon visibility on dark theme ──
    The native ::-webkit-calendar-picker-indicator renders a near-black calendar
-   icon by default. Filtering it via `filter: invert()` is unreliable across
-   Chrome/Edge/Samsung Internet builds (sometimes the indicator is in a shadow
-   root that ignores parent filters; sometimes color-scheme:dark gets overridden).
-   The bulletproof approach: hide the native indicator and paint a custom
-   calendar SVG as the input's background-image. The whole input remains
-   clickable to open the native picker; we just guarantee what the user sees.
-   Applies globally so every current and future date input gets it for free. */
+   icon that is barely visible against MLT's dark surfaces. Approach: keep the
+   NATIVE indicator (so all its click and keyboard behavior is preserved) and
+   simply invert its colors with a CSS filter. invert(1) gives maximum contrast
+   for a black icon on a dark background. We don't replace it with a background
+   image because that creates click-routing problems where the visible icon
+   doesn't match the clickable hot zone. */
 input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]{
   color-scheme: dark;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2390e0c8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>") !important;
-  background-repeat: no-repeat !important;
-  background-position: right 10px center !important;
-  padding-right: 36px !important;
-  cursor: pointer;
 }
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="month"]::-webkit-calendar-picker-indicator,
 input[type="week"]::-webkit-calendar-picker-indicator{
-  position: absolute;
-  right: 0;
-  width: 32px;
-  height: 100%;
-  opacity: 0;
+  filter: invert(1);
+  opacity: 0.85;
   cursor: pointer;
+  padding: 4px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover,
+input[type="week"]::-webkit-calendar-picker-indicator:hover{
+  opacity: 1;
 }
 </style>
 </head>
