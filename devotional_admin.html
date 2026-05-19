@@ -845,9 +845,15 @@ function parseDevoText(rawText){
 
   // Section labels — emoji-tolerant. We strip leading emojis/punct/whitespace before
   // matching the canonical word.
+  //
+  // Passage label is special — both formats appear in the wild:
+  //   OLD (2025): "📜 Passage:" alone on its line, ref on next line
+  //   NEW (2026): "📜 Passage: Matthew 10:1–15 (NIV)" — label + ref on SAME line
+  // The passage regex below makes the ":<inline ref>" optional and captures it as
+  // group 1; parseChunk reads the group and uses it when present.
   const SECTION_LABEL_REGEXES = [
     { key:'story',       re: /^[^A-Za-z\n]*(?:Illustrative\s+Story|Story)\s*:?\s*$/gmi },
-    { key:'passage',     re: /^[^A-Za-z\n]*(?:Scripture\s+Passage|Passage|Scripture)\s*:?\s*$/gmi },
+    { key:'passage',     re: /^[^A-Za-z\n]*(?:Scripture\s+Passage|Passage|Scripture)\s*(?::\s*(.+?))?\s*$/gmi },
     { key:'explanation', re: /^[^A-Za-z\n]*Expository\s+Explanation\s*:?\s*$/gmi },
     { key:'response',    re: /^[^A-Za-z\n]*Response\s*:?\s*$/gmi },
     { key:'prayer',      re: /^[^A-Za-z\n]*Prayer\s*:?\s*$/gmi },
@@ -963,13 +969,18 @@ function parseChunk(chunk, titleFromDateLine, regs){
   // Strip "Week N" header lines (just remove them — keep surrounding text)
   chunk = chunk.replace(regs.WEEK_HEADER_RE, '');
 
-  // Find all section label positions
+  // Find all section label positions. For the `passage` key, capture group 1
+  // (if present) holds the inline ref from the new format ("📜 Passage: <ref>").
   const hits = [];
   for(const { key, re } of regs.SECTION_LABEL_REGEXES){
     const localRe = new RegExp(re.source, re.flags);
     let mm;
     while((mm = localRe.exec(chunk)) !== null){
-      hits.push({ key, start: mm.index, end: mm.index + mm[0].length });
+      const hit = { key, start: mm.index, end: mm.index + mm[0].length };
+      if(key === 'passage' && mm[1]){
+        hit.inlineRef = mm[1].trim();
+      }
+      hits.push(hit);
     }
   }
   hits.sort((a,b) => a.start - b.start);
@@ -978,16 +989,23 @@ function parseChunk(chunk, titleFromDateLine, regs){
     const h = hits[i];
     const nextStart = (i+1 < hits.length) ? hits[i+1].start : chunk.length;
     const body = cleanBody(chunk.substring(h.end, nextStart));
-    if(!body) continue;
     if(h.key === 'passage'){
-      const lines = body.split('\n').filter(ln => ln.trim());
-      if(lines.length){
-        out.scripture_ref = lines[0].trim();
-        out.scripture_text = lines.slice(1).join('\n').trim() || null;
-      } else {
-        out.scripture_text = body;
+      if(h.inlineRef){
+        // NEW format — ref is on the same line as the label.
+        // Body (the lines beneath) is the full quoted scripture text.
+        out.scripture_ref = h.inlineRef;
+        out.scripture_text = body || null;
+      } else if(body){
+        // OLD format — ref on the first body line, text on subsequent lines.
+        const lines = body.split('\n').filter(ln => ln.trim());
+        if(lines.length){
+          out.scripture_ref = lines[0].trim();
+          out.scripture_text = lines.slice(1).join('\n').trim() || null;
+        } else {
+          out.scripture_text = body;
+        }
       }
-    } else {
+    } else if(body){
       out[h.key] = body;
     }
   }
