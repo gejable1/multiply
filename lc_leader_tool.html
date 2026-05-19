@@ -2618,18 +2618,28 @@ async function openEnrollPicker(){
     // Wrap the member object for canEnroll (it expects { pipeline_level })
     const candidate = { id: mem.id, pipeline_level: mem.pipeline_level };
 
-    const eligible = (cohorts || []).filter(c => {
+    // Walk every visible cohort and bucket by eligibility outcome.
+    // This gives the renderer enough context to explain WHY batches don't appear
+    // (level mismatch is the most common reason — Session 10 UX improvement).
+    const eligible = [];
+    const levelMismatch = []; // {cohort, programLevel}
+    (cohorts || []).forEach(c => {
       const prog = c.cohort_programs;
-      if(!prog) return false;
-      if(prog.is_active === false) return false;
-      // Already in this program via another active cohort? Skip.
-      if(memberActiveProgramIds.has(c.program_id)) return false;
-      // Final permission gate
+      if(!prog) return; // no program row — skip silently
+      if(prog.is_active === false) return; // inactive program — skip silently
+      if(memberActiveProgramIds.has(c.program_id)) return; // already in another active cohort of same program — silent
       const perm = MultiplyShared.cohorts.canEnroll(actor, c, prog, candidate);
-      return perm.ok === true;
+      if(perm.ok === true){
+        eligible.push(c);
+      } else if(perm.reason && perm.reason.indexOf('Level mismatch') === 0){
+        // Track level-mismatched ones so the renderer can surface a helpful hint.
+        levelMismatch.push({ cohort: c, programLevel: prog.pipeline_level });
+      }
+      // Other reasons (e.g. "Not your cohort", "Member has no pipeline level yet")
+      // are intentionally not surfaced — they reflect rules the LCL can't act on.
     });
 
-    _renderEnrollPicker(mem, eligible);
+    _renderEnrollPicker(mem, eligible, { levelMismatch });
   } catch(e) {
     console.error('openEnrollPicker failed:', e);
     const body = document.getElementById('epBody');
@@ -2645,9 +2655,45 @@ async function openEnrollPicker(){
   }
 }
 
-function _renderEnrollPicker(mem, eligible){
+function _renderEnrollPicker(mem, eligible, meta){
   const body = document.getElementById('epBody');
   if(!body) return;
+
+  // ── Compute the level-mismatch hint (Session 10 UX) ──────────
+  // If batches exist that the member would qualify for at a different
+  // pipeline level, name them and tell the LCL exactly what would unlock
+  // them. Group by level so the message reads naturally regardless of how
+  // many programs sit at each level.
+  const lm = (meta && meta.levelMismatch) || [];
+  let lmHintHtml = '';
+  if(lm.length > 0){
+    const byLevel = {};
+    lm.forEach(({cohort, programLevel}) => {
+      const key = programLevel == null ? 'cross' : String(programLevel);
+      if(!byLevel[key]) byLevel[key] = [];
+      byLevel[key].push(cohort);
+    });
+    const levelKeys = Object.keys(byLevel).sort();
+    const levelParts = levelKeys.map(k => {
+      const n = byLevel[k].length;
+      const label = k === 'cross' ? 'cross-level' : 'L' + k;
+      return `<strong>${n}</strong> at ${label}`;
+    });
+    const memLvlLabel = mem.pipeline_level == null
+      ? 'has no pipeline level set yet'
+      : 'is at Level ' + mem.pipeline_level;
+    lmHintHtml = `
+      <div style="margin-top:12px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:8px;padding:10px 12px;font-size:11.5px;color:var(--text);line-height:1.55">
+        <div style="font-weight:700;color:#60a5fa;margin-bottom:4px">💡 Other batches exist at different levels</div>
+        <div style="color:var(--muted)">
+          ${MultiplyShared.escapeHTML(mem.name.split(' ')[0])} ${memLvlLabel}. There ${lm.length === 1 ? 'is' : 'are'} also
+          ${levelParts.join(' and ')} that would open up once their pipeline level advances.
+          ${(mem.pipeline_level || 0) <= 1
+            ? 'Use the <strong>✎ change level</strong> button on their Profile to mark progress.'
+            : 'Level changes beyond L1 are a pastoral act handled by Pastor in MD.'}
+        </div>
+      </div>`;
+  }
 
   if(!eligible || eligible.length === 0){
     body.innerHTML = `
@@ -2665,6 +2711,7 @@ function _renderEnrollPicker(mem, eligible){
           Create or open a batch via <strong>🎓 My Batches</strong> on the Home screen.
         </div>
       </div>
+      ${lmHintHtml}
       <div style="display:flex;gap:8px;margin-top:14px">
         <button onclick="closeEnrollPicker()" class="da-btn da-secondary" style="flex:1">Close</button>
       </div>`;
@@ -2705,6 +2752,7 @@ function _renderEnrollPicker(mem, eligible){
       <span style="font-size:11px;color:var(--muted);font-weight:500">· Level ${mem.pipeline_level == null ? '?' : mem.pipeline_level}</span></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:6px">ELIGIBLE BATCHES (${eligible.length})</div>
     <div style="max-height:50vh;overflow-y:auto">${rows}</div>
+    ${lmHintHtml}
     <div style="display:flex;gap:8px;margin-top:14px">
       <button onclick="closeEnrollPicker()" class="da-btn da-secondary" style="flex:1">Close</button>
     </div>
