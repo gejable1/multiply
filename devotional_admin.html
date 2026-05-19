@@ -456,6 +456,11 @@ body{
       <textarea id="fPrayer" rows="5" placeholder="Closing prayer for the day…"></textarea>
     </div>
 
+    <div class="field">
+      <label>📝 Weekly Summary <span style="color:var(--muted);font-weight:400;font-size:11px">(usually on Saturdays — closes the week's reading)</span></label>
+      <textarea id="fWeeklySummary" rows="6" placeholder="Recap of the week's devotionals plus a 'Next week…' lookahead. Leave blank for Mon–Fri entries."></textarea>
+    </div>
+
     <div class="edit-actions">
       <button class="btn danger sm" id="deleteBtn" onclick="confirmDelete()" style="display:none">🗑 Delete</button>
       <button class="btn" onclick="cancelEdit()">Cancel</button>
@@ -472,7 +477,9 @@ body{
       <br>• <strong>Plain:</strong> <code>May 1, 2025</code> with section labels like <code>Title:</code>, <code>Passage:</code>, <code>Prayer:</code>
       <br>• <strong>Decorated:</strong> <code>☀️ Friday, May 1, 2026: My Title</code> with emoji-prefixed labels like <code>🌱 Illustrative Story</code>, <code>📜 Passage</code>, <code>🙏 Prayer</code>
       <br><br>
-      <strong>Skipped automatically:</strong> "Week N" headers and "Weekly Summary" sections.
+      <strong>Skipped automatically:</strong> "Week N" header lines.
+      <br>
+      <strong>📝 Weekly Summary blocks</strong> (appearing after Saturday's Prayer) are captured and stored on that Saturday's entry — they render as a 6th section in MMT at week's close.
       <br>
       <strong>Tip:</strong> Copy entire pages/document as plain text. Section headers should be on their own lines.
     </div>
@@ -716,6 +723,7 @@ function openEdit(iso){
   document.getElementById('fExplanation').value = entry?.explanation || '';
   document.getElementById('fResponse').value    = entry?.response || '';
   document.getElementById('fPrayer').value      = entry?.prayer || '';
+  document.getElementById('fWeeklySummary').value = entry?.weekly_summary || '';
 
   // Show delete button only if editing existing
   document.getElementById('deleteBtn').style.display = entry ? '' : 'none';
@@ -740,6 +748,7 @@ async function saveEntry(){
     explanation:    val('fExplanation'),
     response:       val('fResponse'),
     prayer:         val('fPrayer'),
+    weekly_summary: val('fWeeklySummary'),
     author:         LEADER.leaderName || 'Pastor',
     updated_at:     new Date().toISOString()
   };
@@ -787,14 +796,19 @@ function confirmDelete(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BULK PASTE PARSER (v2 — handles BOTH formats)
+// BULK PASTE PARSER (v3 — handles BOTH formats + captures Weekly Summary)
 // ───────────────────────────────────────────────────────────────
 // Formats supported:
 //   OLD (2025): "May 1, 2025"          / "Title:"        / "Passage:"        / "Prayer:"
 //   NEW (2026): "☀️ Friday, May 1, 2026: Title here"     / "🌱 Illustrative Story" / "📜 Passage" / "🙏 Prayer"
 //
-// Skips entirely: "Week N" header lines, "Weekly Summary" sections.
-// Verified against both real PDFs by Python prototype before porting.
+// Skips entirely: "Week N" header lines.
+// Captures: "📝 Weekly Summary" blocks (text from the label up to the next
+//   date header or "Week N" divider) into out.weekly_summary. Stored on the
+//   immediately-preceding day's entry (typically Saturday). MMT renders this
+//   as a 6th section at week's close.
+// Verified against both real PDFs by Python prototype before porting;
+// June 2026 Matthew docx confirmed the 📝/🏁 shape for v3.
 // ═══════════════════════════════════════════════════════════════
 
 function parseBulk(){
@@ -918,7 +932,8 @@ function parseChunk(chunk, titleFromDateLine, regs){
     story: null,
     explanation: null,
     response: null,
-    prayer: null
+    prayer: null,
+    weekly_summary: null
   };
 
   // If no title yet, look for "Title: ..." line (old format)
@@ -927,9 +942,21 @@ function parseChunk(chunk, titleFromDateLine, regs){
     if(tm) out.title = tm[1].trim() || null;
   }
 
-  // Cut everything from "Weekly Summary" label onward (it always follows the day's prayer)
+  // Capture the "📝 Weekly Summary" block (it always follows the day's prayer).
+  // The block runs from the Weekly-Summary label line down to the end of the
+  // chunk (which is bounded by the next date header per parseDevoText's slicing).
+  // We strip any trailing "Week N" header that might have been included if the
+  // chunk slicing was generous, and we drop the label line itself.
   const ws = chunk.match(regs.WEEKLY_SUMMARY_RE);
   if(ws && ws.index !== undefined){
+    const labelEnd = ws.index + ws[0].length;
+    let summaryBlock = chunk.substring(labelEnd);
+    // Strip any leftover "Week N" header lines that may follow the summary
+    summaryBlock = summaryBlock.replace(regs.WEEK_HEADER_RE, '');
+    const cleaned = cleanBody(summaryBlock);
+    if(cleaned) out.weekly_summary = cleaned;
+    // Remove the captured portion (label + body) from the chunk so it doesn't
+    // bleed into prayer or other section detection below
     chunk = chunk.substring(0, ws.index);
   }
 
@@ -1008,10 +1035,13 @@ function renderPreview(){
     const dt = new Date(e.entry_date + 'T00:00:00');
     const dateLabel = dt.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
     const title = e.title || '<em style="color:var(--red)">missing title</em>';
+    const summaryBadge = e.weekly_summary
+      ? `<span style="display:inline-block;margin-left:8px;font-size:10.5px;background:rgba(46,125,107,.15);color:#2e7d6b;padding:1px 7px;border-radius:10px;font-weight:600;letter-spacing:.02em" title="Weekly summary captured">📝 summary</span>`
+      : '';
     return `
       <div class="preview-item">
         <div class="pi-date">${escapeHTML(dateLabel)}</div>
-        <div class="pi-title">${typeof e.title === 'string' ? escapeHTML(title) : title}</div>
+        <div class="pi-title">${typeof e.title === 'string' ? escapeHTML(title) : title}${summaryBadge}</div>
         <div class="pi-status ${pillClass}">${pillText}</div>
       </div>
     `;
@@ -1071,6 +1101,7 @@ async function bulkSave(replaceExisting){
       explanation:    e.explanation,
       response:       e.response,
       prayer:         e.prayer,
+      weekly_summary: e.weekly_summary,
       author:         LEADER.leaderName || 'Pastor',
       updated_at:     new Date().toISOString()
     };
