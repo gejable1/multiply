@@ -334,9 +334,11 @@ table.members-tbl{
 //
 // Standing rules baked in:
 //   #16 (Session 8): Statistical reports EXCLUDE test members
-//        AND guests (is_external_user=true) by default. The "All
-//        (incl. inactive)" toggle stays bound by this — Test +
-//        Guest never appear.
+//        AND guests (is_external_user=true) by default. MAR exception
+//        (Session 10): if the VIEWER is themselves a test record,
+//        test members ARE shown so they can smoke-test as an LCL.
+//        Guests stay excluded in both cases. The "All (incl. inactive)"
+//        toggle does not unlock test data — that's a separate axis.
 //   Event-type to column mapping per pastoral conventions agreed
 //        Session 8 PM (every member has an LCG; LC weekly; BTLI
 //        twice/month per batch; Ministry presence-logged).
@@ -373,6 +375,32 @@ const STATE = {
 function _viewerCanSeeAllLCGs(){
   const lvl = (window.LEADER && window.LEADER.leaderLevel) || 0;
   return lvl >= 3;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Test-data containment (Session 10 — explicit pastoral review of
+// Standing Rule #16 for MAR specifically).
+//
+// Rule: if the logged-in viewer is themselves a test record, MAR
+// includes test members in the data. Otherwise (Pastor, real LCL,
+// or anyone else) test+guest are hidden per Standing Rule #16.
+//
+// No inspection exception (unlike MD's modal containment). A report
+// is a statistical aggregation, not an inspection surface — if Pastor
+// needs to see a test LCL's MAR, the path is "log in as that test LCL",
+// matching the smoke-test workflow.
+//
+// Other reports (LACR, LCG Pulse) keep Standing Rule #16 strictly for
+// now — they were not part of this Session 10 review.
+//
+// Takes the freshly-fetched members array so we can resolve the viewer
+// without a second Supabase round-trip.
+// ─────────────────────────────────────────────────────────────
+function _viewerIsTestMember(allMembersRaw){
+  const myId = (window.LEADER && window.LEADER.leaderId) || null;
+  if (!myId) return false;
+  const me = (allMembersRaw || []).find(m => m.id === myId);
+  return !!(me && me.is_test_member);
 }
 
 function _resolveScope(){
@@ -551,11 +579,21 @@ async function loadReport(){
   document.getElementById('topMeta').textContent = metaText;
 
   try {
-    // 1) Members (filtered per Standing Rule #16: no Test, no Guest)
+    // 1) Members — Standing Rule #16 + Session 10 test-data containment.
+    //    Default: filter out test members AND guests.
+    //    Exception: if the viewer is a test record themselves (smoke-test
+    //    workflow), include test members so they can see their fixture flock.
+    //    Guests stay excluded in both cases (separate category, not part of
+    //    the smoke-test universe).
     const { data: mems, error: mErr } = await db.from('members')
       .select('id,name,lc_group,pipeline_level,is_facilitator,facilitator_role,is_test_member,is_external_user,discipler_id');
     if (mErr) throw mErr;
-    STATE.members = (mems || []).filter(m => !m.is_test_member && !m.is_external_user);
+    const includeTest = _viewerIsTestMember(mems);
+    STATE.members = (mems || []).filter(m => {
+      if (m.is_external_user) return false;
+      if (m.is_test_member && !includeTest) return false;
+      return true;
+    });
 
     // 2) Build LCG groupings — per Memory #17 (LCG grouping rule, Session 8).
     // Group BY LCL ID, not lc_group text. An LCL = is_facilitator=true OR
