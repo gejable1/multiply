@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTLI 1 · L5 · Pagharap sa Hirap · Slides</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1a2e3f;--green:#2a5c40;--green-light:#3d8a5e;--gold:#d4a838;--gold-bright:#f0c64a;--cream:#fdf6e8;--ink:#1a1612;--white:#fff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;background:#000;color:white;}
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden;}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;padding:5vh 6vw;text-align:center;}
+.slide.active{display:flex;}
+
+/* Variant palettes */
+.s-navy{background:linear-gradient(135deg,#1a2e3f 0%,#2a4456 100%);color:white;}
+.s-green{background:linear-gradient(135deg,#1f4830 0%,#2a5c40 100%);color:white;}
+.s-cream{background:var(--cream);color:var(--ink);}
+.s-gold{background:linear-gradient(135deg,#3a2e10 0%,#5a4818 100%);color:var(--cream);}
+.s-white{background:#fff;color:var(--ink);}
+
+.eyebrow{font-size:clamp(11px,1.4vw,16px);letter-spacing:.25em;text-transform:uppercase;font-weight:600;opacity:.55;margin-bottom:2vh;}
+.s-cream .eyebrow,.s-white .eyebrow{color:var(--green);opacity:1;}
+.s-gold .eyebrow{color:var(--gold-bright);opacity:1;}
+
+h1{font-family:'Playfair Display',serif;font-size:clamp(36px,6.5vw,90px);font-weight:700;line-height:1.1;margin-bottom:3vh;letter-spacing:-.02em;}
+h2{font-family:'Playfair Display',serif;font-size:clamp(28px,4.8vw,64px);font-weight:700;line-height:1.15;margin-bottom:2.5vh;}
+h3{font-family:'Playfair Display',serif;font-size:clamp(22px,3.5vw,44px);font-weight:700;line-height:1.2;margin-bottom:2vh;}
+.lead{font-size:clamp(16px,2.2vw,26px);font-weight:300;line-height:1.55;max-width:900px;opacity:.92;}
+.body-text{font-size:clamp(14px,1.8vw,22px);line-height:1.6;max-width:900px;}
+.verse{font-family:'Playfair Display',serif;font-style:italic;font-size:clamp(20px,3.2vw,40px);line-height:1.45;max-width:1000px;margin:2vh 0;}
+.verse-ref{font-size:clamp(11px,1.4vw,16px);letter-spacing:.2em;text-transform:uppercase;font-weight:600;opacity:.6;margin-top:1.5vh;}
+.gold-text{color:var(--gold-bright);}
+.s-cream .gold-text,.s-white .gold-text{color:#9a7820;}
+.green-text{color:var(--green-light);}
+.s-cream .green-text,.s-white .green-text{color:var(--green);}
+
+.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5vw;width:100%;max-width:1200px;margin-top:2vh;}
+.col-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:2.2vh 1.6vw;}
+.s-cream .col-card,.s-white .col-card{background:white;border:1px solid #e0d4b8;box-shadow:0 4px 18px rgba(0,0,0,.06);}
+.col-label{font-size:clamp(10px,1.1vw,13px);letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:1.2vh;}
+.col-card.trial .col-label{color:#e89c9c;}
+.col-card.test .col-label{color:#7fd49a;}
+.col-card.temp .col-label{color:#f0c66a;}
+.s-cream .col-card.trial .col-label{color:#a85a5a;}
+.s-cream .col-card.test .col-label{color:var(--green);}
+.s-cream .col-card.temp .col-label{color:#9a7820;}
+.col-from{font-size:clamp(12px,1.5vw,17px);font-weight:600;margin-bottom:1vh;}
+.col-verse{font-size:clamp(11px,1.35vw,15px);line-height:1.5;opacity:.85;font-style:italic;}
+
+.four-col{display:grid;grid-template-columns:repeat(2,1fr);gap:1.2vw;width:100%;max-width:1100px;margin-top:1.5vh;}
+.resp-card{background:rgba(255,255,255,.08);border-left:4px solid var(--gold);padding:1.6vh 1.6vw;border-radius:0 10px 10px 0;text-align:left;}
+.s-cream .resp-card,.s-white .resp-card{background:#fdf6e8;border-left-color:var(--green);}
+.resp-who{font-family:'Playfair Display',serif;font-size:clamp(16px,2.2vw,26px);font-weight:700;margin-bottom:.4vh;}
+.s-cream .resp-who,.s-white .resp-who{color:var(--green);}
+.resp-do{font-size:clamp(11px,1.3vw,15px);font-weight:700;letter-spacing:.08em;color:var(--gold-bright);margin-bottom:.8vh;}
+.s-cream .resp-do,.s-white .resp-do{color:#9a7820;}
+.resp-txt{font-size:clamp(12px,1.5vw,17px);line-height:1.5;opacity:.9;}
+
+.list-clean{list-style:none;text-align:left;max-width:800px;margin:2vh auto 0;}
+.list-clean li{font-size:clamp(15px,2vw,22px);line-height:1.5;padding:1vh 0;padding-left:2.2vw;position:relative;border-bottom:1px solid rgba(255,255,255,.1);}
+.s-cream .list-clean li,.s-white .list-clean li{border-bottom-color:rgba(0,0,0,.08);}
+.list-clean li::before{content:'';position:absolute;left:0;top:1.6vh;width:.8vw;height:.8vw;min-width:8px;min-height:8px;background:var(--gold);border-radius:50%;}
+.s-cream .list-clean li::before,.s-white .list-clean li::before{background:var(--green);}
+
+.badge{display:inline-block;background:var(--gold);color:var(--navy);padding:.6vh 1.3vw;border-radius:18px;font-size:clamp(11px,1.4vw,15px);font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2vh;}
+.s-cream .badge,.s-white .badge{background:var(--green);color:white;}
+
+.quote-block{max-width:1000px;text-align:center;}
+.quote-mark{font-family:'Playfair Display',serif;font-size:clamp(60px,8vw,120px);line-height:.5;color:var(--gold);opacity:.4;margin-bottom:1vh;}
+.s-cream .quote-mark,.s-white .quote-mark{color:var(--green);opacity:.5;}
+.quote-author{font-size:clamp(12px,1.6vw,18px);letter-spacing:.18em;text-transform:uppercase;font-weight:600;opacity:.65;margin-top:2.5vh;}
+
+.controls{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);padding:9px 16px;border-radius:24px;z-index:50;border:1px solid rgba(255,255,255,.1);}
+.ctrl-btn{background:none;border:none;color:white;font-size:18px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .15s;}
+.ctrl-btn:hover{background:rgba(255,255,255,.15);}
+.slide-num{color:rgba(255,255,255,.8);font-size:13px;font-weight:500;min-width:60px;text-align:center;}
+.notes-toggle{background:none;border:1px solid rgba(255,255,255,.25);color:white;font-size:11px;padding:5px 10px;border-radius:12px;cursor:pointer;}
+
+.notes-panel{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);width:min(92vw,800px);max-height:32vh;background:rgba(20,30,40,.95);backdrop-filter:blur(12px);color:#e0d4b8;border-radius:14px;padding:1.2rem 1.4rem;font-size:13.5px;line-height:1.65;border:1px solid rgba(212,168,56,.25);overflow-y:auto;display:none;z-index:45;}
+.notes-panel.show{display:block;}
+.notes-label{font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;color:var(--gold);margin-bottom:.5rem;}
+.notes-content{white-space:pre-wrap;}
+
+.movement-tag{position:absolute;top:24px;left:36px;font-size:clamp(10px,1.1vw,13px);letter-spacing:.22em;text-transform:uppercase;font-weight:700;opacity:.55;}
+.fruit-tag{position:absolute;top:24px;right:36px;font-size:clamp(10px,1.1vw,13px);letter-spacing:.18em;text-transform:uppercase;font-weight:600;opacity:.55;}
+.gold-pill{display:inline-block;background:rgba(212,168,56,.18);color:var(--gold-bright);padding:.4vh 1.1vw;border-radius:14px;font-size:clamp(11px,1.4vw,15px);font-weight:600;margin:0 .3vw;}
+.s-cream .gold-pill,.s-white .gold-pill{background:#fdf6e8;color:#9a7820;}
+
+.big-num{font-family:'Playfair Display',serif;font-size:clamp(80px,12vw,160px);font-weight:700;line-height:1;color:var(--gold);opacity:.92;}
+.s-cream .big-num,.s-white .big-num{color:var(--green);}
+
+.signature{position:absolute;bottom:18px;right:32px;font-size:11px;letter-spacing:.15em;opacity:.4;text-transform:uppercase;}
+
+.story-frame{max-width:1000px;text-align:left;padding:0 2vw;}
+.story-frame p{font-size:clamp(15px,1.95vw,22px);line-height:1.65;margin-bottom:1.5vh;}
+.story-frame .accent{color:var(--gold-bright);font-weight:600;}
+.s-cream .story-frame .accent,.s-white .story-frame .accent{color:#9a7820;}
+
+@media(orientation:portrait){
+.three-col,.four-col{grid-template-columns:1fr;}
+.movement-tag,.fruit-tag{font-size:9px;}
+}
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- SLIDE 1: TITLE -->
+<div class="slide active s-navy">
+  <div class="eyebrow">BTLI 1 · Lesson 5 · USAD-L5</div>
+  <h1>Pagharap<br>sa Hirap</h1>
+  <p class="lead gold-text" style="font-style:italic;margin-top:1vh;">Facing Hardship</p>
+  <p class="body-text" style="margin-top:5vh;opacity:.7;">Rosehill Christian Church · MULTIPLY</p>
+  <div class="signature">Pagtitiis · Patience</div>
+</div>
+
+<!-- SLIDE 2: OPENING VERSE -->
+<div class="slide s-green">
+  <div class="movement-tag">Pukaw</div>
+  <div class="fruit-tag">🌿 Patience · Pagtitiis</div>
+  <div class="eyebrow gold-text">Memory Verse</div>
+  <p class="verse">"Sa sanlibutan ay magkakaroon kayo ng kapighatian; ngunit laksan ninyo ang inyong loob, dinaig ko na ang sanlibutan."</p>
+  <p class="verse-ref">Juan 16:33</p>
+</div>
+
+<!-- SLIDE 3: OPENING QUESTION -->
+<div class="slide s-cream">
+  <div class="movement-tag green-text">Pukaw · Opening</div>
+  <h2>Base sa karanasan mo…</h2>
+  <p class="lead" style="margin-top:1vh;">May dulot bang pakinabang ang pagsubok at paghihirap sa isang tao?</p>
+  <p class="lead green-text" style="margin-top:3vh;font-weight:600;">Kung meron, ano?</p>
+  <p class="body-text" style="margin-top:4vh;opacity:.65;">— Pansamantalang pag-isipan; isa-isang sasagot.</p>
+</div>
+
+<!-- SLIDE 4: BUTTERFLY / TANAW -->
+<div class="slide s-navy">
+  <div class="movement-tag">Pukaw · Tanaw</div>
+  <div class="big-num">🦋</div>
+  <h3 style="margin-top:2vh;">Ang Cocoon at ang Gunting</h3>
+  <p class="lead" style="margin-top:1vh;max-width:850px;">Ang bata na hinati ang cocoon ng gunting para tulungan ang paru-paro… ay pinabilis nga ang pagkawala, pero pinatay ang lipad.</p>
+  <p class="body-text gold-text" style="margin-top:3vh;font-style:italic;">Ang pakikibaka sa pagkahubog ay <strong>hindi kaaway</strong> — ito ang nagbibigay ng lakas para lumipad.</p>
+</div>
+
+<!-- SLIDE 5: BIG IDEA -->
+<div class="slide s-gold">
+  <div class="movement-tag">Tuklas · Pangunahing Aral</div>
+  <div class="eyebrow">Big Idea</div>
+  <h2 style="font-style:italic;max-width:1100px;">"Hindi tao kung 'di pa nasaktan;<br>hindi buhay kung wala ng dinaranas na hirap."</h2>
+  <p class="lead" style="margin-top:4vh;color:var(--gold-bright);">Pero ang <strong>pag-USAD</strong> ay nakadepende sa <em>response</em>, <span style="opacity:.7;">hindi</span> sa <em>danas</em>.</p>
+</div>
+
+<!-- SLIDE 6: 3 TYPES FRAMEWORK -->
+<div class="slide s-navy">
+  <div class="movement-tag">Tuklas · 3-Type Discernment</div>
+  <h2>Tatlong Klase ng Hirap</h2>
+  <p class="body-text" style="margin-bottom:3vh;opacity:.75;">Iba ang tamang response sa bawat isa — kaya nakakatulong na malaman kung alin.</p>
+  <div class="three-col">
+    <div class="col-card trial">
+      <div class="col-label">⚡ Trial · Pagsubok</div>
+      <div class="col-from">Galing sa: <strong>dumaraing na sanlibutan</strong></div>
+      <p class="col-verse">"Ang buong sangnilikha ay naghihinagpis…" — Rom 8:22 · 1 Pet 4:12</p>
+    </div>
+    <div class="col-card test">
+      <div class="col-label">🎯 Test · Pagtitikim</div>
+      <div class="col-from">Galing sa: <strong>Dios</strong></div>
+      <p class="col-verse">"Sinubok ng Dios si Abraham…" — Gen 22:1</p>
+    </div>
+    <div class="col-card temp">
+      <div class="col-label">🐍 Temptation · Tukso</div>
+      <div class="col-from">Galing sa: <strong>diablo / laman</strong> — HINDI sa Dios</div>
+      <p class="col-verse">"Huwag sabihin ng sinuman, 'tinutukso ako ng Dios'…" — Sant 1:13</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 7: GREITENS QUOTE -->
+<div class="slide s-cream">
+  <div class="movement-tag green-text">Tuklas · Reflection</div>
+  <div class="quote-block">
+    <div class="quote-mark">"</div>
+    <p class="verse" style="font-style:italic;color:var(--ink);">Pain can break us or make us wiser. Suffering can destroy us or make us stronger.</p>
+    <p class="lead green-text" style="margin-top:2vh;font-weight:600;">Fear can cripple us, or it can make us more courageous.</p>
+    <p class="quote-author">— Eric Greitens, Resilience</p>
+  </div>
+</div>
+
+<!-- SLIDE 8: 4 BIBLICAL RESPONSES -->
+<div class="slide s-green">
+  <div class="movement-tag">Tuklas · Apat na Tugon</div>
+  <h2>Apat na Biblikal na Tugon</h2>
+  <p class="body-text" style="margin-bottom:2vh;opacity:.8;">Apat na tao. Apat na karanasan. Iisang fruit: <strong>Pagtitiis (hypomonē).</strong></p>
+  <div class="four-col">
+    <div class="resp-card">
+      <div class="resp-who">Job</div>
+      <div class="resp-do">Manatili at Sumamba</div>
+      <p class="resp-txt">"Hubad akong lumabas sa sinapupunan… Purihin ang pangalan ng Panginoon." — Job 1:20-21</p>
+    </div>
+    <div class="resp-card">
+      <div class="resp-who">Pablo</div>
+      <div class="resp-do">Umasa sa Biyaya</div>
+      <p class="resp-txt">"Sapat na sa iyo ang aking biyaya, sapagkat ang aking kapangyarihan ay nagiging sakdal sa kahinaan." — 2 Cor 12:9</p>
+    </div>
+    <div class="resp-card">
+      <div class="resp-who">Pedro</div>
+      <div class="resp-do">Sumunod at Magalak</div>
+      <p class="resp-txt">"Magalak kayo, sapagkat nakikibahagi kayo sa mga hirap ni Cristo." — 1 Pet 4:13</p>
+    </div>
+    <div class="resp-card">
+      <div class="resp-who">Jesus</div>
+      <div class="resp-do">Magtiwala at Sumuko</div>
+      <p class="resp-txt">"Ama ko, kung maaari, lumayo sa akin ang sarong ito; gayon man, hindi ang kalooban ko…" — Lucas 22:42</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 9: PATIENCE NAMED -->
+<div class="slide s-gold">
+  <div class="movement-tag">Tuklas · Character Anchor</div>
+  <div class="eyebrow">Galatians 5:22 · Bunga ng Espiritu</div>
+  <h1 class="gold-text">Pagtitiis</h1>
+  <p class="lead" style="margin-top:2vh;font-style:italic;">hypomonē — <span style="opacity:.85;">"to remain under"</span></p>
+  <p class="body-text" style="margin-top:4vh;max-width:900px;">Hindi lang ito kakayahang tiisin. Ito ang <strong class="gold-text">aktibong posture</strong> sa ilalim ng presyur — ang ginagawa mo habang nagpapatuloy ang hirap.</p>
+  <p class="body-text" style="margin-top:2vh;opacity:.75;">Job · Pablo · Pedro · Jesus — apat na bersyon ng iisang Pagtitiis.</p>
+</div>
+
+<!-- SLIDE 10: TALAKAY -->
+<div class="slide s-cream">
+  <div class="movement-tag green-text">Talakay · Group Sharing</div>
+  <h2>Talakayan</h2>
+  <ul class="list-clean">
+    <li><strong>I-share</strong> ang isang pagsubok na dinanas mo o ng malapit sa'yo. <em>(Max 2 sharers.)</em></li>
+    <li>Dumating ka na ba sa puntos kung saan napatanong ka sa Dios kung <strong>bakit?</strong></li>
+    <li><strong>Discernment drill:</strong> Isipin ang isang kasalukuyang hirap mo. <span class="gold-pill">Trial?</span> <span class="gold-pill">Test?</span> <span class="gold-pill">Temptation?</span></li>
+  </ul>
+  <p class="body-text" style="margin-top:3vh;opacity:.65;font-style:italic;">Safe space. Walang nakikinig na puwedeng mag-judge. Hindi ito problem-solving session — pakikinig ito.</p>
+</div>
+
+<!-- SLIDE 11: LEWIS MEGAPHONE -->
+<div class="slide s-navy">
+  <div class="movement-tag">Tugon · The Megaphone</div>
+  <div class="quote-block">
+    <div class="quote-mark">"</div>
+    <p class="verse">God whispers to us in our pleasures,<br>speaks in our conscience,<br>but <span class="gold-text">shouts in our pain</span>: it is His megaphone to rouse a deaf world.</p>
+    <p class="quote-author">— C.S. Lewis, The Problem of Pain</p>
+  </div>
+</div>
+
+<!-- SLIDE 12: SPAFFORD STORY -->
+<div class="slide s-gold">
+  <div class="movement-tag">Tugon · Kuwento ng Buhay</div>
+  <h3 class="gold-text" style="margin-bottom:3vh;">Horatio Spafford · 1828–1888</h3>
+  <div class="story-frame">
+    <p><span class="accent">1871</span> — Sinunog ng Great Chicago Fire ang mga properties niya.</p>
+    <p><span class="accent">1873</span> — Namatay ang 4-anyos na anak sa scarlet fever.</p>
+    <p><span class="accent">Nov 1873</span> — Naglakbay sa Europe ang asawa't apat na anak na babae. Nabangga ang barko; nalunod silang lahat. Pangalawang barko ang sinakyan niya. Sa exactong lugar ng pagkalunod… isinulat ang himno:</p>
+    <p style="font-family:'Playfair Display',serif;font-size:clamp(20px,3vw,32px);font-style:italic;color:var(--gold-bright);text-align:center;margin-top:3vh;">"When peace, like a river, attendeth my way…<br>It is well, it is well with my soul."</p>
+  </div>
+</div>
+
+<!-- SLIDE 13: IT IS WELL HYMN -->
+<div class="slide s-green">
+  <div class="movement-tag">Tugon · Awit ng Puso</div>
+  <div class="eyebrow">Hymn · Anthem Lights cover (Tagalog/English)</div>
+  <h2>"It Is Well with My Soul"</h2>
+  <p class="lead" style="margin-top:2vh;max-width:900px;opacity:.92;">Habang umaawit, maaaring isulat ang itinuturo sa iyo ng Dios sa kasalukuyang hirap — o ang panalangin mo para sa isang taong dumaranas ng hirap.</p>
+  <p class="body-text" style="margin-top:4vh;color:var(--gold-bright);">▶ YouTube: jcp6w4zaW7U</p>
+  <p class="body-text" style="margin-top:1vh;opacity:.7;font-style:italic;">Manghahawakan sa Dios — hindi sa pagkaunawa.</p>
+</div>
+
+<!-- SLIDE 14: DALHIN - 3 ACTIONS -->
+<div class="slide s-cream">
+  <div class="movement-tag green-text">Dalhin · Carry Home</div>
+  <h2>Tatlong Bagay sa Linggong Ito</h2>
+  <ul class="list-clean">
+    <li><strong>3-Trial Watch Journal</strong> · Lunes-Linggo. Bawat araw: pangalanan ang hirap, tagain (T/T/T), pangalanan ang response, isulat ang verse.</li>
+    <li><strong>EOLO bridge</strong> · I-reach out ang taong isinulat mo sa Tugon — chat/text/tawag, sa loob ng <strong>48 oras</strong>.</li>
+    <li><strong>Kabisaduhin</strong> · <em>Juan 16:33</em> bago ang susunod na lesson.</li>
+  </ul>
+  <p class="body-text gold-text" style="margin-top:3vh;font-style:italic;">Ang Pagtitiis ay nasa <em>pag-stay</em> — sa hirap mo, at sa hirap ng iba.</p>
+</div>
+
+<!-- SLIDE 15: PANGAKO KO -->
+<div class="slide s-navy">
+  <div class="movement-tag">Dalhin · Pangako Ko</div>
+  <div class="badge">Pangako Ko</div>
+  <h2 style="margin-bottom:3vh;">Isang Pangako, Malakas Sabihin</h2>
+  <p class="lead" style="max-width:850px;">Sa loob ng linggong ito, kapag dumating ang hirap…</p>
+  <p class="verse gold-text" style="margin-top:2vh;">"Mananatili ako.<br>Hindi ako tatakas.<br>Sasamba ako sa Dios kahit sa dilim."</p>
+  <p class="body-text" style="margin-top:3vh;opacity:.7;">— Sasabihin sa LCG; isasaksi ng kapatid.</p>
+</div>
+
+<!-- SLIDE 16: CLOSING / NEXT -->
+<div class="slide s-green">
+  <div class="movement-tag">Susunod na Hakbang</div>
+  <div class="eyebrow gold-text">L6 Preview</div>
+  <h2>Christian Fellowship</h2>
+  <p class="lead" style="margin-top:1vh;max-width:900px;">"Hindi mo kailangang harapin nang mag-isa ang hirap — may community ka."</p>
+  <p class="verse" style="margin-top:5vh;">"Sa sanlibutan ay magkakaroon kayo ng kapighatian;<br>ngunit laksan ninyo ang inyong loob, <span class="gold-text">dinaig ko na ang sanlibutan</span>."</p>
+  <p class="verse-ref">— Juan 16:33</p>
+  <div class="signature">Salamat, kapatid.</div>
+</div>
+
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <button class="ctrl-btn" onclick="prevSlide()" aria-label="Previous">‹</button>
+  <span class="slide-num"><span id="curNum">1</span>/<span id="totNum">16</span></span>
+  <button class="ctrl-btn" onclick="nextSlide()" aria-label="Next">›</button>
+  <button class="notes-toggle" onclick="toggleNotes()" id="notesBtn">Notes</button>
+</div>
+
+<div class="notes-panel" id="notesPanel">
+  <div class="notes-label">Speaker Notes</div>
+  <div class="notes-content" id="notesContent"></div>
+</div>
+
+<script>
+const NOTES = [
+  // 1 TITLE
+  "Welcome session. Set the tone: We are not here to fix anyone's hardship today. We are here to learn to FACE it well. Estimated 60 min total: PUKAW 8 · TUKLAS 15 · TALAKAY 12 · TUGON 15 · DALHIN 10. Memory verse: John 16:33. Character anchor: PATIENCE (Pagtitiis). Open in prayer asking for honest hearts and safe space.",
+
+  // 2 OPENING VERSE
+  "Read John 16:33 aloud — slowly. Note Jesus said 'magkakaroon' (will have) not 'baka magkaroon' (might have). Hardship is promised. But the second clause is also promised: 'dinaig ko na.' Past tense. Already won. This frames everything we'll discuss.",
+
+  // 3 OPENING QUESTION
+  "PUKAW (~3 of 8 min). Open with last week's L4 SRPIU follow-up first — 'Kumusta ang Pananalita / Pag-iisip / Sekswalidad watch ninyo?' — celebrate honest answers. Then transition: 'Now, totoo na holiness is hard. But may isa pang klase ng hirap — yung hindi mo pinili. Yan ang topic natin ngayon.' Let 2-3 share briefly. Don't force consensus.",
+
+  // 4 BUTTERFLY / TANAW
+  "TANAW story from USAD p.36. If possible, play YouTube pgtmlVqCKxc (Monarch butterfly time-lapse) for ~60 seconds. Then tell the bata-gunting story: a child saw a butterfly struggling in its cocoon and cut it open to help. The butterfly emerged — but never flew. The struggle WAS the strengthening. The pressure pushes the fluid into the wings. Spiritual application: hindi lahat ng kaginhawaan ay biyaya. Hindi lahat ng hirap ay sumpa.",
+
+  // 5 BIG IDEA
+  "TUKLAS opening. Read the Big Idea slowly. Pause. Then deliver the punch line: 'pag-USAD ay nakadepende sa response, HINDI sa danas.' This is the thesis of the entire lesson. Every storm is real. But every response is a CHOICE. The disciple cannot control the weather; can only choose the posture under it.",
+
+  // 6 THREE TYPES
+  "This is the load-bearing framework of TUKLAS. Walk through all three. EMPHASIS: the wrong diagnosis leads to the wrong response. If you treat a TEMPTATION like a TRIAL ('endure it patiently'), you fall. If you treat a TRIAL like a TEMPTATION ('this is from the devil so rebuke it'), you miss the formation. James 1:13 is critical: God does not tempt anyone. The devil tempts; God tests; the world wounds. Three different sources, three different responses.",
+
+  // 7 GREITENS QUOTE
+  "Eric Greitens — Navy SEAL turned author of 'Resilience.' Quote frames the next move. Pain itself is neutral; meaning is made by response. This is consistent with biblical theology: Romans 5:3-4 ('suffering produces perseverance') and James 1:2-4 ('the testing of your faith produces patience'). Patience is not innate — it's PRODUCED by trial that's faced well.",
+
+  // 8 FOUR RESPONSES
+  "Walk through each of the 4. (1) JOB - read Job 1:20-21 aloud; note the 5 verbs: lumuhod, sumamba, hinubad, hinubdan, sinabi. He didn't deny pain — he worshipped through it. (2) PAUL - the thorn was NOT removed; the grace was sufficient. The hardship didn't end; Paul got new strength inside it. (3) PETER - 'magalak kayo' is shocking. Not 'magtiis kayo.' REJOICE. Why? Because sharing Christ's sufferings. (4) JESUS - the ultimate model. He asked for the cup to pass. Then surrendered. Patience includes asking honestly + then surrendering wholly.",
+
+  // 9 PATIENCE NAMED
+  "Now we explicitly name what all 4 share: HYPOMONE — Greek for 'to remain under.' Not passive resignation. Active staying. Patience is what you DO while the hardship continues. This is the character anchor of L5. Connect back to L1-L4: prayer + bible + surrender + holiness — all these disciplines build the muscle that gets used HERE, under pressure.",
+
+  // 10 TALAKAY
+  "TALAKAY (~12 min). CRITICAL: facilitator must enforce safe-space rules BEFORE anyone shares: (1) no rushing to fix, (2) no 'I have a worse story' comparisons, (3) no advice unless asked, (4) what's shared here stays here. Use the safe-space framing card from facilitator guide. Limit to 2 sharers max — quality over quantity. Discernment drill is the load-bearing exercise: each person silently classifies one current hardship as T/T/T. Don't force them to share which one — just the classification.",
+
+  // 11 LEWIS MEGAPHONE
+  "TUGON opens with Lewis. Pause after 'shouts in our pain.' The point: God doesn't CAUSE the pain (per James 1:13) but He USES it — to get the attention of a deaf world (us included). The hardship is a megaphone, not the message. The message is: 'I AM HERE. STILL HERE.' Don't moralize the quote. Let it land.",
+
+  // 12 SPAFFORD STORY
+  "Spafford — tell slowly. Three losses: business (1871), son (1873), four daughters (Nov 1873). His wife Anna survived; the cable she sent him from Wales read just two words: 'Saved alone.' He sailed to meet her. The captain pointed out the spot where the Ville du Havre went down. Spafford wrote 'It Is Well' there — or shortly after. The hymn is not denial of grief. It is faith in the midst of grief. Both real at once.",
+
+  // 13 IT IS WELL HYMN
+  "Play Anthem Lights cover (YouTube jcp6w4zaW7U) — ~4 min. Display lyrics on screen if possible. Facilitator's call: sing along OR silent listen. While playing, participants write in the in-group GAWIN box: (a) what God is teaching you through current hardship, OR (b) prayer for someone you know in hardship + commitment to encourage that person this week. End with 60 sec silence after the hymn closes — no rushed transition.",
+
+  // 14 DALHIN - 3 ACTIONS
+  "DALHIN (~10 min). Three concrete carry-homes. Walk through each:\n(1) 3-Trial Watch — 7-day journal. Honor the rhythm: nightly is fine; morning + night is better.\n(2) EOLO bridge — 48 hours. Make it specific. 'I will message _____ by Saturday night.' Patience isn't only enduring my own pain — it's STAYING PRESENT with someone else's.\n(3) John 16:33 memorize — by next LCG.\nNote: end-of-lesson 1-10 snapshot in participant guide; revisit start vs end.",
+
+  // 15 PANGAKO KO
+  "Pangako Ko — Filipino disciple-making convention. Spoken commitment in front of witnesses binds the disciple socially in addition to spiritually. Each participant says the 3-line pangako aloud. Witness affirms with 'Amen' or 'I will pray for you, kapatid.' Don't make it long or theatrical — short and serious.",
+
+  // 16 CLOSING / NEXT
+  "Closing. Preview L6 — Christian Fellowship. The bridge: 'Hindi mo dapat haharapin ang hirap nang mag-isa. Yan ang topic next week — community as God's main way of carrying us through.' Close with John 16:33 recited together aloud. End with prayer of blessing — thank God for honest sharing, ask for strength for those carrying current hardship, dismiss in peace."
+];
+
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+document.getElementById('totNum').textContent = total;
+
+function showSlide(n){
+  slides.forEach(s=>s.classList.remove('active'));
+  current = (n+total)%total;
+  slides[current].classList.add('active');
+  document.getElementById('curNum').textContent = current+1;
+  document.getElementById('notesContent').textContent = NOTES[current] || '';
+}
+function nextSlide(){ showSlide(current+1); }
+function prevSlide(){ showSlide(current-1); }
+function toggleNotes(){
+  const panel = document.getElementById('notesPanel');
+  panel.classList.toggle('show');
+  document.getElementById('notesBtn').textContent = panel.classList.contains('show') ? 'Hide' : 'Notes';
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown') nextSlide();
+  if(e.key==='ArrowLeft'||e.key==='PageUp') prevSlide();
+  if(e.key==='Home') showSlide(0);
+  if(e.key==='End') showSlide(total-1);
+  if(e.key==='n'||e.key==='N') toggleNotes();
+});
+
+// Touch swipe
+let touchStartX=null;
+document.addEventListener('touchstart',e=>touchStartX=e.touches[0].clientX);
+document.addEventListener('touchend',e=>{
+  if(touchStartX===null) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if(Math.abs(dx)>50){ dx<0 ? nextSlide() : prevSlide(); }
+  touchStartX=null;
+});
+
+showSlide(0);
+</script>
+</body>
+</html>
