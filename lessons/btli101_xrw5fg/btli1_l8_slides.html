@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTLI 1 · L8 · Pagiging Tapat na Katiwala · Slides</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%232a5c40'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='54' font-weight='700' text-anchor='middle' fill='%23b8882a'%3ES%3C/text%3E%3C/svg%3E">
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ink: #1a2e22;
+    --paper: #fdfbf6;
+    --paper2: #f6f2e7;
+    --green: #2a5c40;
+    --green-deep: #1f4530;
+    --green-soft: #4a7d5e;
+    --gold: #b8882a;
+    --gold-soft: #d4a854;
+    --rose: #a04646;
+    --muted: #6b6253;
+    --line: #d8d0bd;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--paper); color: var(--ink); font-family: 'DM Sans', system-ui, sans-serif; overflow: hidden; }
+
+  /* SLIDE CONTAINER */
+  .slide {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 6vh 8vw;
+    text-align: center;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; }
+
+  /* 5-variant palette rotation per Invariant #74 spirit */
+  .slide.v1 { background: linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%); color: var(--paper); }
+  .slide.v2 { background: var(--paper); color: var(--ink); }
+  .slide.v3 { background: var(--paper2); color: var(--ink); }
+  .slide.v4 { background: linear-gradient(135deg, #d4a854 0%, #b8882a 100%); color: var(--green-deep); }
+  .slide.v5 { background: linear-gradient(135deg, #1f4530 0%, #143020 100%); color: var(--paper); }
+
+  /* Slide content layout */
+  .slide h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5.5vw, 4.2rem);
+    font-weight: 900;
+    margin: 0 0 .4em;
+    line-height: 1.05;
+    letter-spacing: -.01em;
+  }
+  .slide h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.5rem, 4vw, 3rem);
+    font-weight: 700;
+    margin: 0 0 .5em;
+    line-height: 1.1;
+  }
+  .slide h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.2rem, 2.8vw, 2.1rem);
+    font-weight: 700;
+    margin: 0 0 .4em;
+  }
+  .slide p {
+    font-size: clamp(1rem, 2vw, 1.4rem);
+    line-height: 1.5;
+    margin: .4em 0;
+    max-width: 90%;
+  }
+  .slide .eyebrow {
+    font-family: 'DM Sans', sans-serif;
+    font-size: clamp(.7rem, 1.2vw, 1rem);
+    font-weight: 700;
+    letter-spacing: .25em;
+    text-transform: uppercase;
+    margin-bottom: 1.5em;
+    opacity: .8;
+  }
+  .slide .subtitle {
+    font-style: italic;
+    font-size: clamp(.95rem, 1.8vw, 1.3rem);
+    opacity: .85;
+    margin-top: .2em;
+  }
+
+  .slide.v1 .eyebrow, .slide.v5 .eyebrow { color: var(--gold-soft); opacity: 1; }
+  .slide.v2 .eyebrow, .slide.v3 .eyebrow { color: var(--gold); opacity: 1; }
+  .slide.v4 .eyebrow { color: var(--green-deep); opacity: 1; }
+
+  /* Movement tag */
+  .movement-tag {
+    display: inline-block;
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(.85rem, 1.4vw, 1.1rem);
+    font-weight: 700;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    border: 2px solid;
+    padding: .4em 1em;
+    border-radius: 999px;
+    margin-bottom: 1.4em;
+  }
+  .slide.v1 .movement-tag, .slide.v5 .movement-tag { border-color: var(--gold-soft); color: var(--gold-soft); }
+  .slide.v2 .movement-tag, .slide.v3 .movement-tag { border-color: var(--green); color: var(--green); }
+  .slide.v4 .movement-tag { border-color: var(--green-deep); color: var(--green-deep); }
+
+  /* Verse box */
+  .verse-box {
+    background: rgba(255,255,255,.1);
+    border-left: 4px solid var(--gold-soft);
+    border-radius: 0 12px 12px 0;
+    padding: 1em 1.6em;
+    margin: 1em 0;
+    max-width: 80%;
+    font-style: italic;
+    font-family: 'Playfair Display', serif;
+    text-align: left;
+  }
+  .slide.v2 .verse-box, .slide.v3 .verse-box {
+    background: rgba(184, 136, 42, .1);
+    border-left-color: var(--gold);
+  }
+  .verse-ref {
+    display: block;
+    font-style: normal;
+    font-weight: 700;
+    color: var(--gold);
+    font-size: .85em;
+    margin-bottom: .3em;
+  }
+  .slide.v1 .verse-ref, .slide.v5 .verse-ref { color: var(--gold-soft); }
+
+  /* 4-box grid (Image-Pick slide) */
+  .grid-4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2em;
+    margin-top: 1.2em;
+    width: min(80%, 720px);
+  }
+  .grid-4 .gcell {
+    background: rgba(255,255,255,.08);
+    padding: 1em 1.2em;
+    border-radius: 12px;
+    border: 1.5px solid currentColor;
+    font-size: clamp(.95rem, 1.6vw, 1.15rem);
+    font-weight: 600;
+  }
+  .slide.v2 .grid-4 .gcell, .slide.v3 .grid-4 .gcell {
+    background: rgba(42, 92, 64, .06);
+    border-color: var(--green);
+    color: var(--green-deep);
+  }
+  .grid-4 .gicon { font-size: 1.6em; display: block; margin-bottom: .2em; }
+  .grid-4 .gsub { display: block; font-size: .75em; font-weight: 400; opacity: .8; margin-top: .3em; }
+
+  /* 4-P grid */
+  .fourp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.2em;
+    margin-top: 1em;
+    width: min(85%, 800px);
+  }
+  .fourp-cell {
+    background: rgba(184, 136, 42, .12);
+    border-left: 5px solid var(--gold);
+    border-radius: 10px;
+    padding: 1em 1.2em;
+    text-align: left;
+  }
+  .slide.v1 .fourp-cell, .slide.v5 .fourp-cell { background: rgba(255,255,255,.1); }
+  .fourp-cell .fp-letter {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--paper);
+    width: 1.8em; height: 1.8em;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 1.8em;
+    font-family: 'Playfair Display', serif;
+    font-weight: 900;
+    margin-right: .4em;
+  }
+  .fourp-cell .fp-title {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.15em;
+    vertical-align: middle;
+  }
+  .fourp-cell .fp-phrase {
+    display: block;
+    font-style: italic;
+    font-size: .85em;
+    opacity: .75;
+    margin-top: .4em;
+  }
+
+  /* Excuse list */
+  .excuse-list {
+    text-align: left;
+    width: min(80%, 720px);
+    margin-top: 1em;
+  }
+  .excuse-list .ex-item {
+    background: rgba(160, 70, 70, .08);
+    border-left: 3px solid var(--rose);
+    border-radius: 0 8px 8px 0;
+    padding: .6em 1em;
+    margin-bottom: .5em;
+    font-size: clamp(.92rem, 1.5vw, 1.1rem);
+    font-style: italic;
+  }
+  .excuse-list .ex-num {
+    font-weight: 700;
+    color: var(--rose);
+    margin-right: .4em;
+    font-style: normal;
+  }
+
+  /* Pangako Ko slide */
+  .pangako-block {
+    background: rgba(255,255,255,.1);
+    border: 2px solid var(--gold-soft);
+    border-radius: 16px;
+    padding: 1.6em 2em;
+    margin-top: 1.2em;
+    max-width: 80%;
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    text-align: left;
+  }
+  .pangako-block .pl {
+    font-size: clamp(1.05rem, 2vw, 1.5rem);
+    line-height: 1.6;
+    margin: .3em 0;
+  }
+
+  /* Two-column list */
+  .twocol {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.4em;
+    width: min(85%, 800px);
+    margin-top: 1em;
+    text-align: left;
+  }
+  .twocol .tc {
+    background: rgba(255,255,255,.08);
+    padding: 1em 1.2em;
+    border-radius: 10px;
+    border-top: 3px solid var(--gold-soft);
+  }
+  .slide.v2 .twocol .tc, .slide.v3 .twocol .tc {
+    background: rgba(42, 92, 64, .06);
+    border-top-color: var(--green);
+  }
+  .twocol .tc-title {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1em;
+    margin-bottom: .4em;
+  }
+  .twocol ul { margin: 0; padding-left: 1.2em; font-size: clamp(.85rem, 1.4vw, 1rem); }
+  .twocol li { margin: .2em 0; }
+
+  /* Big text emphasis */
+  .big-callout {
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: clamp(1.6rem, 4.5vw, 3.4rem);
+    font-weight: 900;
+    line-height: 1.1;
+    margin: .5em 0;
+    color: var(--gold);
+  }
+  .slide.v1 .big-callout, .slide.v5 .big-callout { color: var(--gold-soft); }
+
+  /* Numbered marker */
+  .slide-marker {
+    position: absolute;
+    bottom: 2vh; right: 2vw;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .15em;
+    opacity: .4;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+
+  /* L8: 3-pillar grid (single column stack, big) */
+  .pillar-stack { width:min(85%,800px); margin-top:1em; text-align:left; }
+  .pillar-row {
+    background: rgba(184,136,42,.12);
+    border-left:5px solid var(--gold);
+    border-radius:10px; padding:.8em 1.2em; margin-bottom:.7em;
+    display:flex; align-items:center; gap:.8em;
+  }
+  .slide.v1 .pillar-row, .slide.v5 .pillar-row { background: rgba(255,255,255,.1); }
+  .pillar-row .pn {
+    background:var(--gold); color:var(--paper);
+    width:1.8em; height:1.8em; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Playfair Display',serif; font-weight:900; flex-shrink:0;
+  }
+  .pillar-row .pt { font-family:'Playfair Display',serif; font-weight:700; font-size:1.15em; }
+  .pillar-row .ps { display:block; font-style:italic; opacity:.75; font-size:.8em; margin-top:.15em; }
+  /* L8: word chip cloud */
+  .chip-cloud { display:flex; flex-wrap:wrap; gap:.5em; justify-content:center; width:min(85%,760px); margin-top:1em; }
+  .chip-cloud .wc {
+    background: rgba(42,92,64,.08); border:1.5px solid var(--green);
+    color:var(--green-deep); border-radius:999px; padding:.35em .9em;
+    font-size:clamp(.85rem,1.4vw,1.05rem); font-weight:600;
+  }
+  .slide.v1 .chip-cloud .wc, .slide.v5 .chip-cloud .wc { background:rgba(255,255,255,.1); border-color:var(--gold-soft); color:var(--paper); }
+</style>
+
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     16 SLIDES · BTLI 1 · L8 · Pagiging Tapat na Katiwala
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<!-- SLIDE 1: Title -->
+<section class="slide v1 active">
+  <div class="eyebrow">BTLI 1 · Lesson 8 · Anchor → Cultivate</div>
+  <h1>Pagiging Tapat na Katiwala</h1>
+  <p class="subtitle">Stewardship — Paano Magiging Tapat na Katiwala ng Panginoon?</p>
+  <div class="slide-marker">1 / 16</div>
+</section>
+
+<!-- SLIDE 2: Memory Verse -->
+<section class="slide v2">
+  <div class="movement-tag">Memory Verse</div>
+  <div class="verse-box" style="max-width:78%;">
+    <span class="verse-ref">1 Corinto 4:2</span>
+    "Ang katiwala'y kailangang maging tapat sa kanyang Panginoon."
+  </div>
+  <div class="slide-marker">2 / 16</div>
+</section>
+
+<!-- SLIDE 3: PUKAW — Recall + Snapshot -->
+<section class="slide v3">
+  <div class="movement-tag">PUKAW · 8 min</div>
+  <h2>Tumingin Muna sa Salamin</h2>
+  <p>Pagbalik sa L7: kumusta ang 7-Sunday Watch? May naka-invite na ba?</p>
+  <p style="margin-top:1em;"><strong>1-10 Snapshot:</strong> gaano kang tapat na katiwala —
+     sa oras, talento, at pera?</p>
+  <p style="font-size:clamp(.85rem,1.4vw,1rem); opacity:.7; font-style:italic; margin-top:.5em;">
+    1 = "Asiong Aksaya" · 10 = tapat na tagapamahala
+  </p>
+  <div class="slide-marker">3 / 16</div>
+</section>
+
+<!-- SLIDE 4: Image-Pick -->
+<section class="slide v2">
+  <div class="movement-tag">PUKAW · Image-Pick</div>
+  <h3>Anong klaseng katiwala ka ngayon?</h3>
+  <div class="grid-4">
+    <div class="gcell"><span class="gicon">💸</span>Asiong Aksaya<span class="gsub">winawaldas ang biyaya</span></div>
+    <div class="gcell"><span class="gicon">🔒</span>Madamot na Vessel<span class="gsub">iniipon, hindi naibabahagi</span></div>
+    <div class="gcell"><span class="gicon">🌊</span>Bukas na Channel<span class="gsub">dumadaloy ang biyaya</span></div>
+    <div class="gcell"><span class="gicon">✎</span>Iba pa<span class="gsub">isulat sa workbook</span></div>
+  </div>
+  <div class="slide-marker">4 / 16</div>
+</section>
+
+<!-- SLIDE 5: Big Idea -->
+<section class="slide v5">
+  <div class="movement-tag">TUKLAS · 18 min</div>
+  <div class="big-callout">"Hindi ka owner —<br>manager ka."</div>
+  <p style="max-width:80%; margin-top:.5em;">
+    Ang tanging maisusukli ng isang katiwala sa kabutihan ng kanyang Panginoon ay
+    <strong>katapatan</strong>.
+  </p>
+  <div class="slide-marker">5 / 16</div>
+</section>
+
+<!-- SLIDE 6: Asiong Aksaya cold open -->
+<section class="slide v3">
+  <div class="movement-tag">Cold Open</div>
+  <h3>Si Nicolas Cage at ang "Asiong Aksaya"</h3>
+  <p>$40 milyon kada taon ang kita — ngayon, baon sa utang.</p>
+  <p style="margin-top:.4em;">Winaldas: 15 bahay, castle na 'di tinirhan, private island, yate,
+     bungo ng dinosaur. <em>Lahat ng pumasok, nilabas.</em></p>
+  <p style="margin-top:.6em; font-style:italic; opacity:.8;">
+    "Asiong Aksaya" — 'di marunong magpahalaga sa biyaya. Tanong: tapat nga ba akong katiwala?
+  </p>
+  <div class="slide-marker">6 / 16</div>
+</section>
+
+<!-- SLIDE 7: Andrew Murray -->
+<section class="slide v4">
+  <div class="movement-tag">Andrew Murray</div>
+  <div class="big-callout" style="color:var(--green-deep);">
+    "Ano'ng meron ka?"<br>
+    <span style="font-size:.7em;">vs.</span><br>
+    "Paano mo ito ginamit?"
+  </div>
+  <p style="max-width:80%; margin-top:.5em; color:var(--green-deep);">
+    Ang tanong ng mundo vs. ang tanong ni Kristo.
+  </p>
+  <div class="slide-marker">7 / 16</div>
+</section>
+
+<!-- SLIDE 8: The 3 Pillars overview -->
+<section class="slide v2">
+  <div class="movement-tag">Ang 3 Haligi</div>
+  <h3>May-ari ang Diyos → Ako ang manager → Bukas-palad akong nagbibigay</h3>
+  <div class="pillar-stack">
+    <div class="pillar-row"><span class="pn">1</span><span><span class="pt">Pundasyon</span><span class="ps">May-ari ang Diyos (Awit 24:1)</span></span></div>
+    <div class="pillar-row"><span class="pn">2</span><span><span class="pt">Pera</span><span class="ps">Alipin, hindi amo (Mat 6:24)</span></span></div>
+    <div class="pillar-row"><span class="pn">3</span><span><span class="pt">Pagbibigay</span><span class="ps">PUSO higit sa PURSIYENTO (2 Cor 9:7)</span></span></div>
+  </div>
+  <div class="slide-marker">8 / 16</div>
+</section>
+
+<!-- SLIDE 9: Pundasyon / Boom basag -->
+<section class="slide v5">
+  <div class="movement-tag">Haligi 1 · Pundasyon</div>
+  <div class="verse-box" style="max-width:80%;">
+    <span class="verse-ref">1 Corinto 4:7</span>
+    "Hindi ba't lahat ng nasa inyo'y ibinigay lamang sa inyo ng Diyos? Bakit ninyo ipinagyayabang
+    iyon na parang hindi kaloob?"
+  </div>
+  <div class="big-callout" style="font-size:clamp(1.4rem,4vw,2.8rem);">Boom basag!</div>
+  <p style="max-width:80%; opacity:.85;">Hindi ka owner — manager ka. Tapat ang inaasahan (1 Cor 4:2).</p>
+  <div class="slide-marker">9 / 16</div>
+</section>
+
+<!-- SLIDE 10: Pera -->
+<section class="slide v3">
+  <div class="movement-tag">Haligi 2 · Pera</div>
+  <h3>Alipin, hindi Amo</h3>
+  <p><strong>~2,000 verses</strong> tungkol sa pera · <strong>40% ng parables</strong> ni Jesus.</p>
+  <p style="margin-top:.5em;">"Masarap ang pera na <em>alipin</em> — delikado kapag ikaw na ang inaalila."</p>
+  <div class="verse-box" style="max-width:80%; margin-top:.8em;">
+    <span class="verse-ref">1 Timoteo 6:10</span>
+    Ang <em>pag-ibig</em> sa salapi (hindi ang salapi) ang ugat ng lahat ng kasamaan.
+  </div>
+  <div class="slide-marker">10 / 16</div>
+</section>
+
+<!-- SLIDE 11: Pagbibigay -->
+<section class="slide v2">
+  <div class="movement-tag">Haligi 3 · Pagbibigay</div>
+  <h3>Channel, huwag lang Vessel</h3>
+  <div class="verse-box" style="max-width:80%;">
+    <span class="verse-ref">2 Corinto 9:7</span>
+    "Ang bawat isa'y dapat magbigay ayon sa kanyang pasya, maluwag sa loob... iniibig ng Diyos
+    ang nagbibigay nang may kagalakan."
+  </div>
+  <p style="margin-top:.6em;">Tithe (10%) = starting line, hindi finish line.
+     Macedonian heart: bukas-palad sa kabila ng kahirapan (2 Cor 8:2-3).</p>
+  <div class="slide-marker">11 / 16</div>
+</section>
+
+<!-- SLIDE 12: PUSO vs PURSIYENTO callout -->
+<section class="slide v1">
+  <div class="movement-tag">Ang Puso ng Pagbibigay</div>
+  <div class="big-callout">Walang bilang ang iyong PISO<br>kung hindi kabilang ang iyong PUSO.</div>
+  <p style="max-width:80%; margin-top:.5em; opacity:.85;">
+    Para sa Diyos, mas mahalaga ang tamang <strong>PUSO</strong> kaysa tamang <strong>PURSIYENTO</strong>.
+  </p>
+  <div class="slide-marker">12 / 16</div>
+</section>
+
+<!-- SLIDE 13: TALAKAY -->
+<section class="slide v3">
+  <div class="movement-tag">TALAKAY · 12 min</div>
+  <h3>Dalawang Tanong</h3>
+  <div class="twocol">
+    <div class="tc">
+      <div class="tc-title">1 · Self-Grade</div>
+      <ul><li>1-10, anong grado sa financial stewardship mo? Bakit?</li></ul>
+    </div>
+    <div class="tc">
+      <div class="tc-title">2 · Ang P1-Milyon</div>
+      <ul><li>Kung may P1 milyon ka ngayon, paano mo gagamitin? (Honest!)</li></ul>
+    </div>
+  </div>
+  <p style="font-size:clamp(.8rem,1.3vw,.95rem); opacity:.7; font-style:italic; margin-top:.8em;">
+    Safe space: walang husgahan · posture ang usapan, hindi figures · ang dito ay nananatili dito.
+  </p>
+  <div class="slide-marker">13 / 16</div>
+</section>
+
+<!-- SLIDE 14: TUGON — Quiz + Word Art -->
+<section class="slide v2">
+  <div class="movement-tag">TUGON · 12 min</div>
+  <h3>Quiz, Bucket, at Word Art</h3>
+  <p>6-tanong na Financial Stewardship Quiz · optional Three-Bucket (Give · Save · Live) ·
+     piliin ang <strong>Top 3 areas</strong> + action steps.</p>
+  <div class="chip-cloud">
+    <span class="wc">Generosity</span><span class="wc">Tithing</span><span class="wc">Saving</span>
+    <span class="wc">Contentment</span><span class="wc">Debt</span><span class="wc">Time</span>
+    <span class="wc">Talent</span><span class="wc">Treasure</span><span class="wc">Hospitality</span>
+    <span class="wc">Mission Giving</span>
+  </div>
+  <div class="slide-marker">14 / 16</div>
+</section>
+
+<!-- SLIDE 15: Pangako Ko -->
+<section class="slide v1">
+  <div class="movement-tag">DALHIN · Pangako Ko</div>
+  <h2>Pangako Ko</h2>
+  <div class="pangako-block">
+    <div class="pl">Hindi ako owner — manager ako.</div>
+    <div class="pl">Hindi ko waldasin ang biyayang ipinagkatiwala sa akin.</div>
+    <div class="pl">Magiging channel ako ng biyaya, hindi vessel na nag-iipon lang.</div>
+    <div class="pl">Tapat na katiwala — sa oras, sa talento, sa pera.</div>
+  </div>
+  <p style="font-size:clamp(.85rem,1.4vw,1rem); opacity:.7; margin-top:1em; font-style:italic;">
+    Bigkasin nang malakas · "Saksi ka." · "Saksi ako."
+  </p>
+  <div class="slide-marker">15 / 16</div>
+</section>
+
+<!-- SLIDE 16: Susunod — L9 Evangelism -->
+<section class="slide v5">
+  <div class="movement-tag">L9 Preview · Susunod na Linggo</div>
+  <h2 style="color:var(--gold-soft);">Evangelism at Discipleship</h2>
+  <p style="max-width:80%; font-size:clamp(1rem,1.8vw,1.3rem); margin-top:.5em;">
+    Mula sa pamamahala ng biyaya → sa pinakamahalagang maibabahagi: ang Mabuting Balita.
+  </p>
+  <p style="margin-top:1.5em; font-style:italic; font-family:'Playfair Display',serif; font-size:clamp(.95rem,1.6vw,1.2rem); opacity:.7;">
+    "A student who is fully trained will be like their teacher." — Luke 6:40
+  </p>
+  <div class="slide-marker">16 / 16</div>
+</section>
+
+<!-- Speaker notes — one entry per slide -->
+<script>
+window.NOTES = [
+  // Slide 1: Title
+  "Bukas tayo sa BTLI 1 Lesson 8 — Pagiging Tapat na Katiwala (Stewardship). Source: USAD-L8 (4-movement TANAW/TUKLAS/TALAKAY/TUGON), na binalot sa BTLI 5-movement (PUKAW + DALHIN ay Claude-added per Invariant #76). Total 60 min. Character anchor: Generosity (hindi Galatians fruit — USAD broader virtues palette, Inv #75).",
+
+  // Slide 2: Memory verse
+  "Basahin nang sabay-sabay ang 1 Corinto 4:2. Ito ang verse na me-memorize sa loob ng linggo. Ang buong lesson ay umiikot sa salitang TAPAT — manager na tapat sa Panginoon.",
+
+  // Slide 3: PUKAW — recall + snapshot
+  "PUKAW step 1 (L7 callback, 1.5 min): 1-2 kapatid lang mag-share ng 7-Sunday Watch progress. Step 2 (1-10 snapshot, 2 min): para sa sarili lang, hindi shi-share ang numero. Watchout: huwag tanungin ang numero sa harap — humihiya kapag mababa.",
+
+  // Slide 4: Image-Pick
+  "PUKAW step 3 (Image-Pick, 4.5 min): pumili ng isa (Aksaya / Madamot / Channel / Iba pa), isulat ang reason. 2-3 min silent writing, tapos magpa-share ng 2-3. Critical: huwag i-shame ang pumili ng 'Aksaya' o 'Madamot' — affirm ang honesty. Kung na-shame, sarado ang puso para sa buong lesson.",
+
+  // Slide 5: Big Idea
+  "TUKLAS step 1 (4 min): i-land ang Big Idea — 'Hindi ka owner, manager ka.' Tapos transition sa Asiong Aksaya story. Ang core ng buong lesson nasa linyang ito.",
+
+  // Slide 6: Asiong Aksaya
+  "Ikuwento si Nicolas Cage — $40M/taon dating kita, ngayon baon sa utang dahil sa waldas. 'Dito sa Pinas, Asiong Aksaya ang tawag.' Hindi guilt-trip — mirror lang. Tanong: 'Tapat nga ba akong katiwala?'",
+
+  // Slide 7: Andrew Murray
+  "Ang Andrew Murray quote ang hinge papuntang 3 Haligi. Ang mundo: 'Ano'ng meron ka?' Si Kristo: 'Paano mo ito ginamit?' Ito ang shift mula sa ownership patungong stewardship. Pause pagkatapos basahin.",
+
+  // Slide 8: 3 Pillars overview
+  "I-preview ang 3 Haligi bilang daloy: May-ari ang Diyos → manager ako → bukas-palad akong nagbibigay. Sequential ito — hindi pwedeng tumalon sa Pagbibigay kung hindi pa na-establish ang Pundasyon. Tapos isa-isahin sa susunod na slides.",
+
+  // Slide 9: Pundasyon / Boom basag
+  "Haligi 1 (5 min): basahin/i-circle Awit 24:1, Deut 10:14, Roma 11:36 — sino ang May-ari? Ang Diyos. Lahat ay kaloob (Santiago 1:17). Tapos 1 Cor 4:7 — 'Boom basag!' I-land: hindi ka owner, manager ka; tapat ang inaasahan (1 Cor 4:2; Lucas 12:48).",
+
+  // Slide 10: Pera
+  "Haligi 2 (4 min): stats hook (~2,000 verses, 40% ng parables). 'Masarap ang pera na alipin, delikado kapag ikaw ang inaalila.' Hindi salapi ang masama — ang PAG-IBIG sa salapi (1 Tim 6:10). Watchout: huwag gawing fundraising o guilt. Frame: biyaya → pasasalamat → bukas-palad.",
+
+  // Slide 11: Pagbibigay
+  "Haligi 3 (4 min): 2 Cor 9:7 — ayon sa pasya, maluwag, may kagalakan. Tithe 10% = starting line, 'wag ma-stuck. Macedonian Christians (2 Cor 8:2-3) — bukas-palad sa kabila ng hirap. I-land: Channel, huwag lang Vessel.",
+
+  // Slide 12: PUSO vs PURSIYENTO
+  "Ang punch line ng buong Pagbibigay: 'Walang bilang ang iyong PISO kung hindi kabilang ang iyong PUSO.' Hayaang lumubog. Ito ang character anchor (Generosity) na nakatago sa puso, hindi sa porsyento.",
+
+  // Slide 13: TALAKAY
+  "TALAKAY (12 min): Step 1 safe-space reset (1 min, 3 rules). Step 2 Q1 self-grade (5 min). Step 3 Q2 P1-milyon (6 min) — hikayatin ang honest, hindi Sunday-school answer. Ang P1-milyon answer ay nagre-reveal ng tunay na puso sa pera. Obserbasyon lang, hindi paghatol.",
+
+  // Slide 14: TUGON
+  "TUGON (12 min): Step 1 6-tanong quiz silent (6 min) — hanapin ang ISANG malinaw na adjustment. Step 2 Three-Bucket optional (1.5 min) — kasangkapan, hindi formula. Step 3 Word Art Top-3 + action steps (4.5 min) — gawing specific + measurable. Dito lumalabas ang Generosity bilang kagalakan, hindi guilt.",
+
+  // Slide 15: Pangako Ko
+  "DALHIN step 4 (Pangako Ko, 2 min): tumayo ang lahat, sabay-sabay bigkasin nang malakas. Tapos sa katabi: 'Saksi ka.' Sumagot: 'Saksi ako.' Ang witness exchange ay Structural Motivation (Six Sources). Locked into LCG memory.",
+
+  // Slide 16: Susunod — L9
+  "DALHIN step 5 (end snapshot + L9 preview, 2 min): balikan ang 1-10 scale, ihambing sa PUKAW. Tapos: 'Susunod — L9 Evangelism at Discipleship. Mula sa pamamahala ng biyaya, sa pinakamahalagang maibabahagi: ang Mabuting Balita.' Optional closing video kung may oras (Nicolas Cage / financial downfall, per USAD)."
+];
+</script>
+
+<!-- Shared slides nav module per Invariant #74 -->
+<script src="../multiply_slides_nav.js?v=1" data-notes-label="BTLI 1 · L8"></script>
+
+</body>
+</html>
