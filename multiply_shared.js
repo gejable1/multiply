@@ -376,8 +376,9 @@
   // Canonical batch roles (cohort_members.role) — five values:
   //   'teacher'     — rank 2 (sees teacher+ attachments)
   //   'co-teacher'  — rank 2
-  //   'apprentice'  — rank 1 (apprentice+), promoted to rank 2 if cohort has
-  //                   a lesson-unlock row for this lesson
+  //   'apprentice'  — rank 1 (apprentice+). NOT promoted by lesson unlock —
+  //                   unlock is a participant-only gate (Session 14). What an
+  //                   apprentice sees is governed solely by role_required.
   //   'participant' — rank 0 (the disciple being trained; sees only 'all'
   //                   attachments — no facilitator material). Default role
   //                   on new enrollments. Added May 17, 2026.
@@ -387,8 +388,12 @@
     if (opts.batchRole === 'teacher')    return 2;
     if (opts.batchRole === 'co-teacher') return 2;
     if (opts.batchRole === 'apprentice') {
-      // Apprentice with cohort unlock for this lesson → promoted to teacher rank
-      return opts.cohortUnlockedForThisLesson ? 2 : 1;
+      // Session 14 (Pastor decision): an apprentice is ALWAYS rank 1. The lesson
+      // unlock is a PARTICIPANT-only gate — it must NOT promote apprentices to
+      // teacher-rank materials. What an apprentice sees is governed purely by
+      // role_required × their batch role, unlock or no unlock. (Previously this
+      // returned 2 when cohortUnlockedForThisLesson — that promotion is removed.)
+      return 1;
     }
     if (opts.batchRole === 'participant') return 0;
     if (opts.batchRole === 'observer')    return 0;
