@@ -6740,9 +6740,10 @@ function _coRenderUnlocksPanel(cohortId){
         <span style="color:var(--lighter);font-weight:400;font-size:10.5px">(${unlockedCount} of ${lessons.length} unlocked)</span>
       </summary>
       <div style="margin-top:.55rem;padding:.7rem .85rem;background:rgba(184,136,42,.06);border:1px solid rgba(184,136,42,.2);border-radius:8px;font-size:11px;color:var(--ink);line-height:1.6;margin-bottom:.65rem">
-        <strong>What this does:</strong> By default, apprentices in this batch see participant + slides + intern materials.
-        Unlocking a lesson here also gives them access to <strong>facilitator (teacher-level) materials for that lesson</strong>.
-        Use this when a cohort is ready to teach a specific lesson next.
+        <strong>What unlocking does:</strong>
+        <div style="margin-top:.35rem">• <strong>Participants</strong> can now open this lesson <em>and its quiz</em>. Until unlocked, they see both listed but 🔒 locked.</div>
+        <div style="margin-top:.2rem">• <strong>Apprentices</strong> additionally gain <strong>facilitator (teacher-level) materials</strong> for this lesson.</div>
+        <div style="margin-top:.2rem;color:var(--muted)">Teachers &amp; apprentices already see lessons the moment they're enrolled — this gate only holds participants. Use it when this batch is ready for the lesson next.</div>
       </div>
       ${lessons.map(l => {
         const unlocked = _coIsLessonUnlocked(cohortId, l.id);
@@ -6758,9 +6759,9 @@ function _coRenderUnlocksPanel(cohortId){
               ${unlocked && unlockedAt ? `<div style="font-size:10px;color:var(--green);margin-top:3px">🔓 Unlocked ${fmt(unlockedAt)}</div>` : ''}
             </div>
             ${unlocked
-              ? `<button onclick="_coRelock('${cohortId}', '${l.id}')" title="Relock — apprentices lose teacher-level access"
+              ? `<button onclick="_coRelock('${cohortId}', '${l.id}')" title="Relock — participants lose lesson + quiz access; apprentices lose teacher-level materials"
                   style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">🔒 Relock</button>`
-              : `<button onclick="_coUnlock('${cohortId}', '${l.id}')" title="Unlock — apprentices gain teacher-level access for this lesson"
+              : `<button onclick="_coUnlock('${cohortId}', '${l.id}')" title="Unlock — participants gain lesson + quiz access; apprentices gain teacher-level materials"
                   style="background:rgba(94,125,82,.18);color:var(--green);border:1px solid rgba(94,125,82,.4);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">🔓 Unlock</button>`}
           </div>
         `;
@@ -6772,7 +6773,7 @@ function _coRenderUnlocksPanel(cohortId){
 async function _coUnlock(cohortId, lessonId){
   const lesson = _cohortState.lessons.find(l => l.id === lessonId);
   const cohort = _cohortState.cohorts.find(c => c.id === cohortId);
-  if(!confirm(`🔓 Unlock teacher-level access?\n\nApprentices in "${cohort?.name}" will gain access to facilitator materials for:\n"${lesson?.title_en}"\n\nThey'll see this lesson's facilitator guide alongside their existing materials.`)) return;
+  if(!confirm(`🔓 Unlock "${lesson?.title_en}" for ${cohort?.name}?\n\n• Participants will be able to open this lesson AND its quiz.\n• Apprentices additionally gain the facilitator (teacher-level) materials.\n\n(Teachers & apprentices already see the lesson; this mainly releases it to participants.)`)) return;
 
   // upsert: cohort_lesson_unlocks_unique constraint on (cohort_id, lesson_id) means
   // a duplicate insert would fail. Use upsert to handle the case of re-unlocking
@@ -6796,7 +6797,7 @@ async function _coUnlock(cohortId, lessonId){
 
 async function _coRelock(cohortId, lessonId){
   const lesson = _cohortState.lessons.find(l => l.id === lessonId);
-  if(!confirm(`🔒 Relock?\n\nApprentices will lose teacher-level access to "${lesson?.title_en}". They'll still see participant/slides/intern materials.\n\nYou can unlock again anytime.`)) return;
+  if(!confirm(`🔒 Relock "${lesson?.title_en}"?\n\n• Participants will lose access to this lesson and its quiz (back to a locked badge).\n• Apprentices lose the facilitator materials but still see participant/slides/intern.\n\nYou can unlock again anytime.`)) return;
 
   try {
     // Delete the unlock row entirely (rather than null-ing unlocked_at) —

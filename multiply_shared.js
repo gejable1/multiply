@@ -577,12 +577,23 @@
         else lockedCount++;
       });
 
+      // ── Participant lesson-lock (Model X · Session 14) ──
+      // A participant sees the lesson LISTED but LOCKED until their batch has
+      // an unlock row for this lesson. Teachers / co-teachers / apprentices
+      // bypass this lock entirely (they see it open as soon as enrolled — the
+      // role_required attachment gate still governs WHICH materials they open).
+      // Pastor + non-cohort access reasons (lc_leaders, all_members, member_grant)
+      // are never participant-locked.
+      const participantLocked =
+        bestRole === 'participant' && !cohortUnlockedForThisLesson;
+
       result.push({
         lesson: l,
         role: bestRole,
         attachments: visibleAttachments,
         lockedAttachmentCount: lockedCount,
-        cohortUnlockedForThisLesson  // for UI hints
+        cohortUnlockedForThisLesson,  // for UI hints
+        participantLocked             // Model X — true => render locked badge, block open
       });
     }
 
@@ -1116,7 +1127,7 @@
       return [{
         cohort_id: c.id,
         cohort_name: c.name || '',
-        role: e.role,
+        role: e.role,                  // carried through for Model X participant-lock
         program_id: p.id,
         program_name: p.name || '',
         btli_course_code: p.btli_course_code
@@ -1142,6 +1153,36 @@
     return new Set((data || []).map(r => (r.event_name || '').toLowerCase()).filter(Boolean));
   }
 
+  // Internal: for a member's set of cohort_ids, fetch which (cohort_id, lesson_id)
+  // pairs are "live" unlocks. Returns a Set of keys `${cohort_id}::${lesson_id}`.
+  // An unlock is live if unlocked_at is set OR scheduled_for has passed.
+  // Used by the Model X participant quiz-lock (Session 14): a participant's quiz
+  // is gated by the SAME unlock row the lesson uses (linked via btli_quizzes.lesson_id).
+  async function _btliFetchUnlockKeys(cohortIds) {
+    const empty = new Set();
+    if (!Array.isArray(cohortIds) || cohortIds.length === 0) return empty;
+    const db = getDB();
+    if (!db) return empty;
+    const { data, error } = await db
+      .from('cohort_lesson_unlocks')
+      .select('cohort_id, lesson_id, unlocked_at, scheduled_for')
+      .in('cohort_id', cohortIds);
+    if (error) {
+      console.warn('_btliFetchUnlockKeys failed (failing open — no participant lock):', error);
+      return empty;  // fail open: if we can't read unlocks, don't lock anyone out
+    }
+    const now = Date.now();
+    const keys = new Set();
+    (data || []).forEach(u => {
+      const live = !!u.unlocked_at ||
+        (u.scheduled_for && new Date(u.scheduled_for).getTime() <= now);
+      if (live && u.cohort_id && u.lesson_id) {
+        keys.add(`${u.cohort_id}::${u.lesson_id}`);
+      }
+    });
+    return keys;
+  }
+
   // Public: eligibility for a single quiz.
   // `quiz` must include: course_code, attendance_event_name_pattern.
   // `opts` may include: isPastor (skips all checks).
@@ -1158,7 +1199,8 @@
       _btliFetchEnrollments(memberId),
       _btliFetchAttendedNames(memberId)
     ]);
-    return _btliComputeOne(quiz, enrollments, attendedNames);
+    const unlockKeys = await _btliFetchUnlockKeys(enrollments.map(e => e.cohort_id));
+    return _btliComputeOne(quiz, enrollments, attendedNames, unlockKeys);
   }
 
   // Public: eligibility for many quizzes at once (single batch fetch).
@@ -1185,14 +1227,19 @@
       _btliFetchEnrollments(memberId),
       _btliFetchAttendedNames(memberId)
     ]);
+    const unlockKeys = await _btliFetchUnlockKeys(enrollments.map(e => e.cohort_id));
     quizzes.forEach(q => {
-      out.set(q.id, _btliComputeOne(q, enrollments, attendedNames));
+      out.set(q.id, _btliComputeOne(q, enrollments, attendedNames, unlockKeys));
     });
     return out;
   }
 
   // Pure: given pre-fetched enrollments + attendance, decide for one quiz.
-  function _btliComputeOne(quiz, enrollments, attendedNames) {
+  // `unlockKeys` (Session 14, Model X): Set of `${cohort_id}::${lesson_id}` for
+  // live unlocks. Used to lock participants out of a quiz until their batch has
+  // unlocked the linked lesson. Staff roles (teacher/co-teacher/apprentice) bypass.
+  function _btliComputeOne(quiz, enrollments, attendedNames, unlockKeys) {
+    unlockKeys = unlockKeys || new Set();
     const courseCode = quiz.course_code || '';
     // Enrollment match: any enrollment whose program teaches this course_code
     const matchingEnrollments = enrollments.filter(e => e.btli_course_code === courseCode);
@@ -1209,6 +1256,33 @@
     const noGate = !pattern && !enrolled;  // quiz has no gate AND member is not enrolled
 
     if (enrolled) {
+      // ── Model X participant lesson-lock (Session 14) ──
+      // The quiz inherits its lesson's lock via btli_quizzes.lesson_id. A
+      // participant is locked out until their batch unlocks the linked lesson.
+      // Staff roles bypass. If the quiz has no lesson_id (unlinked), there is
+      // nothing to lock against — fall through to normal enrolled behavior.
+      const lessonId = quiz.lesson_id || null;
+      if (lessonId) {
+        // Among the cohorts that grant this course, is the member a participant
+        // in ALL of them with NO unlock, or is at least one cohort either staff
+        // or unlocked? "Open" wins if ANY matching enrollment is open.
+        const anyOpen = matchingEnrollments.some(e => {
+          const isStaff = e.role === 'teacher' || e.role === 'co-teacher' || e.role === 'apprentice';
+          if (isStaff) return true;  // staff bypass the lock
+          // participant (or observer/other): open only if this cohort unlocked the lesson
+          return unlockKeys.has(`${e.cohort_id}::${lessonId}`);
+        });
+        if (!anyOpen) {
+          return {
+            eligible: false,
+            reason: 'lesson_locked',
+            enrolled: true,                 // they ARE enrolled — just not yet unlocked
+            dropIn: false,
+            cohortIds: matchingEnrollments.map(e => e.cohort_id),
+            programNames: Array.from(new Set(matchingEnrollments.map(e => e.program_name).filter(Boolean)))
+          };
+        }
+      }
       return {
         eligible: true,
         reason: 'enrolled',

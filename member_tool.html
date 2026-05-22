@@ -8693,7 +8693,19 @@ function _mmtRenderLessonCard(row){
   const lessonNum = (l.lesson_number != null) ? ` · #${l.lesson_number}` : '';
 
   const atts = row.attachments || [];
-  const attHtml = atts.length === 0
+
+  // ── Model X participant lesson-lock (Session 14) ──
+  // A locked participant sees the lesson LISTED (title/meta/aim/scripture) but
+  // the materials are replaced by a locked notice and the role pill becomes a
+  // 🔒 LOCKED badge. Staff are never participantLocked (handled in shared.js).
+  const participantLocked = !!row.participantLocked;
+
+  const attHtml = participantLocked
+    ? `<div style="font-size:11.5px;color:var(--muted);font-style:italic;padding:.55rem .7rem;background:#f8f9fb;border:1px dashed var(--line);border-radius:8px;margin-top:.55rem">
+         🔒 <span class="en-text">Opens when your facilitator releases this lesson.</span>
+         <span class="tl-text">Bubukas kapag inilabas ito ng iyong facilitator.</span>
+       </div>`
+    : (atts.length === 0
     ? `<div style="font-size:11.5px;color:var(--muted);font-style:italic;padding:.5rem 0">
          <span class="en-text">No attachments available for your role yet.</span>
          <span class="tl-text">Wala pang attachment para sa iyong role.</span>
@@ -8707,7 +8719,14 @@ function _mmtRenderLessonCard(row){
              <span class="tl-text">${row.lockedAttachmentCount} ibang material${row.lockedAttachmentCount===1?'':'s'} hindi pa available para sa iyong role.</span>
            </div>
          ` : ''}
-       </div>`;
+       </div>`);
+
+  // When participant-locked, the corner badge becomes a LOCKED chip instead of
+  // the role pill (the role is still "participant" but the actionable state is
+  // "locked"). Staff keep their role pill + unlock badge as before.
+  const cornerBadge = participantLocked
+    ? `<span style="display:inline-flex;align-items:center;font-size:9.5px;background:#f0f0f0;color:#888;padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">🔒 Locked</span>`
+    : `<span style="display:inline-flex;align-items:center;font-size:9.5px;background:${roleLabels.bg};color:${roleLabels.col};padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">${roleLabels.label}</span>`;
 
   const unlockBadge = row.cohortUnlockedForThisLesson && row.role === 'apprentice'
     ? '<span style="font-size:9px;background:rgba(184,136,42,.22);color:var(--gold);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-left:5px">🔓 Unlocked</span>'
@@ -8724,7 +8743,7 @@ function _mmtRenderLessonCard(row){
           ${l.scripture_refs ? `<div style="font-size:11px;color:var(--gold);margin-top:5px;font-weight:600">📖 ${esc(l.scripture_refs)}</div>` : ''}
         </div>
         <div style="flex-shrink:0;text-align:right">
-          <span style="display:inline-flex;align-items:center;font-size:9.5px;background:${roleLabels.bg};color:${roleLabels.col};padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">${roleLabels.label}</span>
+          ${cornerBadge}
           ${unlockBadge}
         </div>
       </div>
@@ -8850,7 +8869,7 @@ async function renderBtliQuizzes(){
     // Fetch all active BTLI quizzes
     const { data: quizzes, error: qErr } = await db
       .from('btli_quizzes')
-      .select('id,course_code,lesson_number,lesson_title,passing_score,attendance_event_name_pattern')
+      .select('id,course_code,lesson_number,lesson_title,passing_score,attendance_event_name_pattern,lesson_id')
       .eq('is_active', true)
       .order('course_code', { ascending: true })
       .order('lesson_number', { ascending: true });
@@ -8927,10 +8946,19 @@ async function renderBtliQuizzes(){
 
       if (!unlocked) {
         badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#f0f0f0;color:#888;letter-spacing:.04em;">🔒 LOCKED</span>`;
-        actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
-          <span class="en-text">Get enrolled or have attendance logged to unlock.</span>
-          <span class="tl-text">Mag-enroll o pa-log ng attendance para mabuksan.</span>
-        </div>`;
+        // Model X (Session 14): a participant who IS enrolled but whose batch
+        // hasn't unlocked the linked lesson yet gets a warmer, accurate message.
+        if (elig.reason === 'lesson_locked') {
+          actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
+            <span class="en-text">Opens when your facilitator releases this lesson.</span>
+            <span class="tl-text">Bubukas kapag inilabas ito ng iyong facilitator.</span>
+          </div>`;
+        } else {
+          actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
+            <span class="en-text">Get enrolled or have attendance logged to unlock.</span>
+            <span class="tl-text">Mag-enroll o pa-log ng attendance para mabuksan.</span>
+          </div>`;
+        }
         cardBg = '#f8f9fb';
       } else if (passed) {
         badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#dcf5e3;color:#1a5a30;letter-spacing:.04em;">✓ PASSED · ${bestScore}%</span>`;
