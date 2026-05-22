@@ -5829,7 +5829,13 @@ function renderLcCard(){
     if(lcMeetingDay.meeting_time) mt += ' · ' + lcMeetingDay.meeting_time;
     metaParts.push(mt);
   }
-  metaParts.push(lcMembers.length + ' members');
+  // Count includes the viewer themselves (you + your LC family), so the
+  // number matches how people read it: "how many of us are in this LCG."
+  const lcCount = lcMembers.length + 1;
+  const isTl = document.body.classList.contains('lang-tl');
+  // Tagalog noun doesn't pluralize; English does.
+  const memberWord = isTl ? 'miyembro' : (lcCount === 1 ? 'member' : 'members');
+  metaParts.push(lcCount + ' ' + memberWord);
   metaEl.textContent = metaParts.join(' · ');
 }
 
@@ -5870,30 +5876,36 @@ function openLcDetail(){
     dBox.innerHTML = '<div class="lc-private-note">No discipler assigned yet.</div>';
   }
 
-  // Mates box
+  // Mates box — the viewer is always shown first (as "You"), then LC family.
   const mBox = document.getElementById('lcMatesBox');
-  if(!lcMembers.length){
-    mBox.innerHTML = '<div class="lc-private-note">' +
-      (document.body.classList.contains('lang-tl')
-        ? 'Walang ibang miyembro sa LC mo (o pinili nilang i-private).'
-        : 'No other members in your LC (or they chose to stay private).') +
-      '</div>';
-  } else {
-    mBox.innerHTML = lcMembers.map(m => {
-      const initials = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-      const tag = m.is_facilitator ? '<div class="mate-tag">LEADER</div>' : '';
-      const testTag = m.is_test_member
-        ? '<span style="background:#fde2d3;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em">🧪 TEST</span>'
-        : '';
-      return `
-        <div class="lc-mate">
-          <div class="mate-av">${MultiplyShared.escapeHTML(initials)}</div>
-          <div class="mate-name">${MultiplyShared.escapeHTML(m.name)}${testTag}</div>
-          ${tag}
-        </div>
-      `;
-    }).join('');
-  }
+  const meIsTl = document.body.classList.contains('lang-tl');
+  const meName = (memberRow.name || (meIsTl ? 'Ikaw' : 'You'));
+  const meInitials = (meName||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const youTag = `<div class="mate-tag" style="background:var(--gold);color:#fff">${meIsTl ? 'IKAW' : 'YOU'}</div>`;
+  const youRow = `
+    <div class="lc-mate">
+      <div class="mate-av">${MultiplyShared.escapeHTML(meInitials)}</div>
+      <div class="mate-name">${MultiplyShared.escapeHTML(meName)}</div>
+      ${youTag}
+    </div>
+  `;
+
+  const matesHtml = lcMembers.map(m => {
+    const initials = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const tag = m.is_facilitator ? '<div class="mate-tag">LEADER</div>' : '';
+    const testTag = m.is_test_member
+      ? '<span style="background:#fde2d3;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em">🧪 TEST</span>'
+      : '';
+    return `
+      <div class="lc-mate">
+        <div class="mate-av">${MultiplyShared.escapeHTML(initials)}</div>
+        <div class="mate-name">${MultiplyShared.escapeHTML(m.name)}${testTag}</div>
+        ${tag}
+      </div>
+    `;
+  }).join('');
+
+  mBox.innerHTML = youRow + matesHtml;
 
   document.getElementById('lcDetailBackdrop').classList.add('show');
 }
@@ -6790,22 +6802,123 @@ const SELF_ATTEST_WINDOW_DAYS = 7;
 const NUDGE_COOLDOWN_MIN = 60;       // 1 nudge per hour
 const NUDGE_MAX_PER_SERVICE = 3;     // max 3 nudges per attendance row
 
-let _attestEventTypes = null;        // cached system_settings.meta.attendance_event_types
+let _attestEventTypes = null;        // resolved attestable event types (see below)
 let _myDiscipler = null;             // cached {id, name, phone}
 let _recentAttestRows = [];          // last 7 days self-attests for this member
 
-// ─── Load event types from system_settings.meta ───
+// Lesson-attestable state — populated by _loadAttestableLessons().
+// Keyed by track event_type ('BTLI' / 'Pre-Pipeline'); each value is an
+// array of {event_name, lesson_number, lesson_title, course_code} for the
+// lessons this member is enrolled in AND has unlocked (reason==='enrolled').
+let _attestLessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
+let _attestLessonsLoaded = false;
+
+// ─── Canonical member-facing event list — mirrors MLT's attendance form ───
+// MLT's full list is: Sunday Service, LC Meeting, Sunday School, Prayer
+// Meeting, BTLI, Pre-Pipeline, Youth Gathering, Team Building, Outing, Other.
+// Per Pastor (Session this): the member-facing self-attest list echoes MLT
+// but drops "Other" (a leader catch-all, meaningless for self-attest).
+// BTLI + Pre-Pipeline are lesson-bearing: they show a lesson sub-picker and
+// are HIDDEN entirely when the member has no enrolled+unlocked lessons in
+// that track (the L0→Pre-Pipeline / L1+→BTLI enrollment rule means only one
+// of the two is ever populated for a given member).
+const ATTEST_EVENT_TYPES = [
+  { key:'Sunday Service', label_en:'Sunday Service', label_tl:'Sunday Service', icon:'⛪', typical_day:7 },
+  { key:'LC Meeting',     label_en:'LC Meeting',     label_tl:'LC Meeting',     icon:'🏠', typical_day:7 },
+  { key:'Sunday School',  label_en:'Sunday School',  label_tl:'Sunday School',  icon:'📖', typical_day:7 },
+  { key:'Prayer Meeting', label_en:'Prayer Meeting', label_tl:'Prayer Meeting', icon:'🙏', typical_day:3 },
+  { key:'BTLI',           label_en:'BTLI',           label_tl:'BTLI',           icon:'📚', typical_day:7, lesson:true },
+  { key:'Pre-Pipeline',   label_en:'Pre-Pipeline',   label_tl:'Pre-Pipeline',   icon:'🌱', typical_day:7, lesson:true },
+  { key:'Youth Gathering',label_en:'Youth Gathering',label_tl:'Youth Gathering',icon:'🔥', typical_day:7 },
+  { key:'Team Building',  label_en:'Team Building',  label_tl:'Team Building',  icon:'🤝', typical_day:7 },
+  { key:'Outing',         label_en:'Outing',         label_tl:'Outing',         icon:'🌄', typical_day:7 }
+];
+
+// ─── Resolve which event types to show this member ───
+// Plain events always show. Lesson events (BTLI / Pre-Pipeline) show ONLY
+// when the member has at least one enrolled+unlocked lesson in that track.
 async function _loadAttestEventTypes(){
   if (_attestEventTypes) return _attestEventTypes;
-  try {
-    const {data} = await db.from('system_settings').select('meta').eq('id', 1).limit(1);
-    const meta = (data && data[0] && data[0].meta) || {};
-    _attestEventTypes = Array.isArray(meta.attendance_event_types) ? meta.attendance_event_types : [];
-  } catch(e) {
-    console.error('[self-attest] event types load failed:', e);
-    _attestEventTypes = [];
-  }
+  await _loadAttestableLessons();
+  _attestEventTypes = ATTEST_EVENT_TYPES.filter(et => {
+    if (!et.lesson) return true;                       // plain event — always show
+    const list = _attestLessonsByType[et.key] || [];   // lesson event — only if attestable lessons exist
+    return list.length > 0;
+  }).map(et => ({
+    // Normalize to the shape the picker render consumes ({key,label,icon,typical_day,lesson})
+    key: et.key,
+    label: document.body.classList.contains('lang-tl') ? et.label_tl : et.label_en,
+    label_en: et.label_en, label_tl: et.label_tl,
+    icon: et.icon, typical_day: et.typical_day, lesson: !!et.lesson
+  }));
   return _attestEventTypes;
+}
+
+// ─── Load the member's enrolled + unlocked lessons (BTLI + Pre-Pipeline) ───
+// Reuses the SAME quiz-fetch + eligibilityForMany pattern as renderBtliQuizzes
+// / renderUsbongQuizzes (the "My Lessons" filter Pastor pointed to). A lesson
+// is attestable iff eligibility is enrolled AND unlocked (reason==='enrolled').
+// 'lesson_locked' (enrolled but batch hasn't released it) and any non-enrolled
+// reason (attendance / no_gate / blocked) are excluded — "only unlocked".
+// event_name is built EXACTLY as MLT does: `${course_code} · L${n} · ${title}`
+// with the U+00B7 middle dot (Invariant #53), so the quiz-gate fires identically.
+async function _loadAttestableLessons(){
+  if (_attestLessonsLoaded) return;
+  _attestLessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
+  if (!MEMBER || !MEMBER.memberId) { _attestLessonsLoaded = true; return; }
+
+  // BTLI
+  try {
+    const { data: bq } = await db.from('btli_quizzes')
+      .select('id,course_code,lesson_number,lesson_title,attendance_event_name_pattern,lesson_id')
+      .eq('is_active', true)
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+    if (Array.isArray(bq) && bq.length) {
+      let eligMap;
+      try { eligMap = await MultiplyShared.btli.eligibilityForMany(MEMBER.memberId, bq, {}); }
+      catch(e){ console.warn('[attest] btli eligibility threw:', e); eligMap = new Map(); }
+      bq.forEach(q => {
+        const el = eligMap.get(q.id);
+        // Enrolled AND unlocked only (Pastor's "only unlocked" rule).
+        if (el && el.enrolled === true && el.reason === 'enrolled') {
+          _attestLessonsByType['BTLI'].push({
+            event_name: `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`,
+            lesson_number: q.lesson_number,
+            lesson_title: q.lesson_title,
+            course_code: q.course_code
+          });
+        }
+      });
+    }
+  } catch(e) { console.warn('[attest] btli quizzes load failed:', e); }
+
+  // Pre-Pipeline (Usbong)
+  try {
+    const { data: uq } = await db.from('usbong_quizzes')
+      .select('id,course_code,lesson_number,lesson_title,attendance_event_name_pattern,lesson_id')
+      .eq('is_active', true)
+      .order('course_code', { ascending: true })
+      .order('lesson_number', { ascending: true });
+    if (Array.isArray(uq) && uq.length) {
+      let eligMap;
+      try { eligMap = await MultiplyShared.usbong.eligibilityForMany(MEMBER.memberId, uq, {}); }
+      catch(e){ console.warn('[attest] usbong eligibility threw:', e); eligMap = new Map(); }
+      uq.forEach(q => {
+        const el = eligMap.get(q.id);
+        if (el && el.enrolled === true && el.reason === 'enrolled') {
+          _attestLessonsByType['Pre-Pipeline'].push({
+            event_name: `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`,
+            lesson_number: q.lesson_number,
+            lesson_title: q.lesson_title,
+            course_code: q.course_code
+          });
+        }
+      });
+    }
+  } catch(e) { console.warn('[attest] usbong quizzes load failed:', e); }
+
+  _attestLessonsLoaded = true;
 }
 
 // ─── Load this member's discipler (for ping target) ───
@@ -6894,14 +7007,37 @@ async function renderAttestCard(){
   // Build picker buttons (one per event_type)
   const pickerRow = document.getElementById('attestPickerRow');
   if (pickerRow) {
+    const isTl = document.body.classList.contains('lang-tl');
     pickerRow.innerHTML = _attestEventTypes.map(et => {
       const targetDate = _attestLastTypicalDay(et.typical_day || 7);
-      const targetLbl = _attestFmtShort(targetDate);
+      // Resolve label fresh each render so language toggle is live.
+      const label = isTl ? (et.label_tl || et.label) : (et.label_en || et.label);
+      const labelEsc = MultiplyShared.escapeHTML(label);
+
+      // ── Lesson-bearing events (BTLI / Pre-Pipeline) ──
+      // These never show an "already attested" state on the pill itself —
+      // the member may attend several different lessons. Tapping opens a
+      // sub-picker of their enrolled+unlocked lessons.
+      if (et.lesson) {
+        const count = (_attestLessonsByType[et.key] || []).length;
+        const sub = isTl ? `${count} aralin` : `${count} lesson${count === 1 ? '' : 's'}`;
+        return `<button onclick="openAttestLessonPicker('${et.key}', ${et.typical_day || 7})"
+                  style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
+                         background:var(--cream); border:1px solid var(--line);
+                         border-radius:12px; cursor:pointer; font-size:12px;
+                         display:flex; align-items:center; gap:.4rem; justify-content:center;
+                         line-height:1.25; color:var(--ink);">
+                  <span style="font-size:15px;">${et.icon || '📍'}</span>
+                  <span style="font-weight:600;">${labelEsc}</span>
+                  <span style="font-size:10px;color:var(--muted);">· ${sub}</span>
+                </button>`;
+      }
+
+      // ── Plain events ──
       // Has the member already attested for this exact event+date?
       const existing = _recentAttestRows.find(r =>
         r.event_type === et.key && r.event_date === targetDate
       );
-      const labelEsc = MultiplyShared.escapeHTML(et.label);
 
       // ── Always show the attest button (never hidden by status pills) ──
       // Status pills now live in their own row below — they don't cover this
@@ -6932,7 +7068,7 @@ async function renderAttestCard(){
                 </button>`;
       }
       // Not yet attested — show "I'm here" button
-      return `<button onclick="memberSelfAttest('${et.key}', ${et.typical_day || 7})"
+      return `<button onclick="_pendingAttestEventName=null; memberSelfAttest('${et.key}', ${et.typical_day || 7})"
                 style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
                        background:var(--cream); border:1px solid var(--line);
                        border-radius:12px; cursor:pointer; font-size:12px;
@@ -6947,6 +7083,93 @@ async function renderAttestCard(){
   // Render the separate "recent activity" row underneath the buttons
   _renderAttestStatusRow();
 }
+
+// ── Lesson sub-picker (BTLI / Pre-Pipeline) ──────────────────────
+// Opens a modal listing the member's enrolled+unlocked lessons for the
+// chosen track. Picking one routes into the normal confirm/save flow with
+// the canonical event_name carried through, so the quiz-gate fires exactly
+// as it does when an LCL logs the lesson in MLT.
+function openAttestLessonPicker(eventTypeKey, typicalDay){
+  const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
+  const lessons = _attestLessonsByType[eventTypeKey] || [];
+
+  if (!lessons.length) {
+    // Shouldn't happen (pill is hidden when empty) — defensive.
+    showToast(lang === 'tl' ? 'Walang available na aralin.' : 'No available lessons.', false);
+    return;
+  }
+
+  let modal = document.getElementById('attestLessonModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'attestLessonModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:9999;padding:1rem;';
+    modal.innerHTML = `<div id="attestLessonBody" style="background:var(--paper);max-width:420px;width:100%;border-radius:14px;padding:1.25rem;max-height:80vh;overflow-y:auto;"></div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+
+  const targetDate = _attestLastTypicalDay(typicalDay || 7);
+  const title = lang === 'tl'
+    ? `Aling ${MultiplyShared.escapeHTML(eventTypeKey)} aralin?`
+    : `Which ${MultiplyShared.escapeHTML(eventTypeKey)} lesson?`;
+  const sub = lang === 'tl'
+    ? 'I-tap ang aralin na dinaluhan mo. Mga naka-enroll at bukas na aralin lang ang lalabas.'
+    : 'Tap the lesson you attended. Only your enrolled, unlocked lessons appear.';
+
+  const rows = lessons.map(L => {
+    // Already attested for THIS lesson event on the target date?
+    const existing = _recentAttestRows.find(r =>
+      r.event_type === eventTypeKey && r.event_name === L.event_name && r.event_date === targetDate
+    );
+    const lessonLabel = `L${L.lesson_number} · ${L.lesson_title}`;
+    if (existing) {
+      const stateIcon = existing.pastor_resolved
+        ? (existing.pastor_decision === 'confirmed' ? '✓' : '✕')
+        : (existing.disputed ? '⚠️' : (existing.confirmed_by ? '🟢' : '🟡'));
+      return `<button onclick="document.getElementById('attestLessonModal').style.display='none'; openAttestStatus('${existing.id}')"
+                style="display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;padding:.7rem .8rem;margin-bottom:.4rem;background:var(--cream);border:1px solid var(--line);border-radius:12px;cursor:pointer;font-size:13px;color:var(--ink);opacity:.6;">
+                <span style="flex:1;font-weight:600;">${MultiplyShared.escapeHTML(lessonLabel)}</span>
+                <span>${stateIcon}</span>
+              </button>`;
+    }
+    // escape the event_name for safe inline JS-string passing (single quotes)
+    const enJs = L.event_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<button onclick="_pickAttestLesson('${eventTypeKey}', ${typicalDay || 7}, '${enJs}')"
+              style="display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;padding:.7rem .8rem;margin-bottom:.4rem;background:var(--cream);border:1px solid var(--gold);border-radius:12px;cursor:pointer;font-size:13px;color:var(--ink);">
+              <span style="font-size:15px;">📚</span>
+              <span style="flex:1;font-weight:600;">${MultiplyShared.escapeHTML(lessonLabel)}</span>
+              <span style="color:var(--gold);">›</span>
+            </button>`;
+  }).join('');
+
+  document.getElementById('attestLessonBody').innerHTML = `
+    <h3 style="margin:0 0 .3rem;font-size:15px;">${title}</h3>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.45;margin-bottom:.9rem;">${sub}</div>
+    ${rows}
+    <button onclick="document.getElementById('attestLessonModal').style.display='none'"
+      style="width:100%;padding:.55rem;margin-top:.3rem;background:transparent;color:var(--muted);border:none;font-size:11.5px;cursor:pointer;">
+      ${lang==='tl'?'Kanselahin':'Cancel'}
+    </button>
+  `;
+  modal.style.display = 'flex';
+}
+
+// Member picked a specific lesson — close the sub-picker and run the normal
+// confirm flow, carrying the canonical event_name through via a pending var
+// (safer than threading the middot/apostrophe-bearing string through inline
+// onclick attributes across several modal layers).
+function _pickAttestLesson(eventTypeKey, typicalDay, eventName){
+  const m = document.getElementById('attestLessonModal');
+  if (m) m.style.display = 'none';
+  _pendingAttestEventName = eventName || null;
+  memberSelfAttest(eventTypeKey, typicalDay);
+}
+
+// Holds the canonical lesson event_name between picker and save. Null for
+// plain events (where event_name === event_type). Set ONLY by _pickAttestLesson,
+// read in _doSaveAttest, and cleared after every save attempt.
+let _pendingAttestEventName = null;
 
 // ── Recent activity row ──────────────────────────────────────────
 // Renders a compact list of the member's recent attestations underneath
@@ -7080,9 +7303,12 @@ function _confirmAndSaveAttest(eventTypeKey, typicalDay, targetDate){
     modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
     document.body.appendChild(modal);
   }
+  const promptName = _pendingAttestEventName
+    ? MultiplyShared.escapeHTML(_pendingAttestEventName)
+    : MultiplyShared.escapeHTML(eventTypeKey);
   const promptTxt = lang === 'tl'
-    ? `I-mark ang sarili mong present para sa ${MultiplyShared.escapeHTML(eventTypeKey)} sa ${targetLbl}?`
-    : `Mark yourself present for ${MultiplyShared.escapeHTML(eventTypeKey)} on ${targetLbl}?`;
+    ? `I-mark ang sarili mong present para sa ${promptName} sa ${targetLbl}?`
+    : `Mark yourself present for ${promptName} on ${targetLbl}?`;
   document.getElementById('attestConfirmBody').innerHTML = `
     <h3 style="margin:0 0 .8rem;font-size:15px;">${lang==='tl'?'Kumpirmahin':'Confirm'}</h3>
     <div style="font-size:13px;line-height:1.5;color:var(--ink);margin-bottom:1rem;">${promptTxt}</div>
@@ -7178,8 +7404,17 @@ async function _doSaveAttest(eventTypeKey, targetDate){
   const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
   const targetLbl = _attestFmtShort(targetDate);
 
+  // For lesson events (BTLI / Pre-Pipeline) the canonical event_name was set
+  // by the lesson sub-picker. For plain events it stays equal to the type.
+  // Capture + clear immediately so a stale value can never leak into a later
+  // plain-event save.
+  const lessonEventName = _pendingAttestEventName;
+  _pendingAttestEventName = null;
+  const eventName = lessonEventName || eventTypeKey;
+  const isLesson = !!lessonEventName;
+
   // Close any open modals
-  ['attestConfirmModal','attestDatePickerModal'].forEach(id => {
+  ['attestConfirmModal','attestDatePickerModal','attestLessonModal'].forEach(id => {
     const m = document.getElementById(id);
     if (m) m.style.display = 'none';
   });
@@ -7193,14 +7428,16 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     return;
   }
 
-  // Duplicate check
+  // Duplicate check. For lessons, two different lessons can share a date, so
+  // the dup key must include event_name; for plain events it stays (type,date).
   try {
-    const {data: existing} = await db.from('attendance')
+    let dupQ = db.from('attendance')
       .select('id, source, confirmed_by, present')
       .eq('member_id', MEMBER.memberId)
       .eq('event_type', eventTypeKey)
-      .eq('event_date', targetDate)
-      .limit(1);
+      .eq('event_date', targetDate);
+    if (isLesson) dupQ = dupQ.eq('event_name', eventName);
+    const {data: existing} = await dupQ.limit(1);
     if (existing && existing.length) {
       showToast(lang === 'tl' ? `Naka-mark ka na para sa ${targetLbl}` : `Already marked for ${targetLbl}`, false);
       await renderAttestCard();
@@ -7216,7 +7453,7 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     member_name:     memberRow.name,
     event_date:      targetDate,
     event_type:      eventTypeKey,
-    event_name:      eventTypeKey,
+    event_name:      eventName,
     present:         true,
     member_lc_group: memberRow.lc_group || null,
     member_zone:     memberRow.diagnostic_zone ?? null,
@@ -7234,8 +7471,9 @@ async function _doSaveAttest(eventTypeKey, targetDate){
 
   showToast(lang === 'tl' ? `✓ Naka-mark ka. Hihingiin namin ang confirmation ng leader mo.` : `✓ Logged. Asking your leader to confirm.`, false);
 
-  // Auto-fire initial nudge to LCL
-  await _fireNudge(inserted.id, eventTypeKey, targetDate, 'auto_initial');
+  // Auto-fire initial nudge to LCL — pass the human label (event_name) so the
+  // WhatsApp ping names the lesson, not just "BTLI".
+  await _fireNudge(inserted.id, eventName, targetDate, 'auto_initial');
 
   await renderAttestCard();
 }
