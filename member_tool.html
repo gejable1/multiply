@@ -2155,6 +2155,14 @@ body.lang-tl .tl-text{display:inline;}
       <div id="lcMatesBox">…</div>
     </div>
 
+    <div class="lc-detail-section">
+      <div class="lc-section-label">
+        <span class="en-text">LC ATTENDANCE</span>
+        <span class="tl-text">LC ATTENDANCE</span>
+      </div>
+      <div id="lcAttendanceBox">…</div>
+    </div>
+
     <button class="lc-detail-close" onclick="closeLcDetail()">
       <span class="en-text">Close</span>
       <span class="tl-text">Isara</span>
@@ -5907,7 +5915,177 @@ function openLcDetail(){
 
   mBox.innerHTML = youRow + matesHtml;
 
+  // LC attendance — collapsed summary by default; reset to "this month" each open.
+  _lcAttPeriod = 'month';
+  _lcAttExpanded = false;
+  _renderLcAttendance();
+
   document.getElementById('lcDetailBackdrop').classList.add('show');
+}
+
+// ── LC attendance report (member-facing, scoped to the member's LCG) ──────
+// "Team spirit alive" — echoes MLT's Attendance Report (per-member rate +
+// summary), but scoped to the viewer's own LCG and respecting share_with_lc
+// privacy + test/guest containment. The roster is the You-inclusive family:
+// the viewer plus lcMembers (already privacy- and test-filtered in
+// loadLcDetails). Read-only; no CSV (that stays a leader tool).
+let _lcAttPeriod = 'month';      // month | last30 | last90
+let _lcAttExpanded = false;
+
+function _lcAttRange(period){
+  const today = new Date();
+  const fmt = d => {
+    const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    return `${y}-${mo}-${da}`;
+  };
+  let from, to = fmt(today);
+  if(period === 'last30')      from = fmt(new Date(Date.now()-30*864e5));
+  else if(period === 'last90') from = fmt(new Date(Date.now()-90*864e5));
+  else /* month */             from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+  return { from, to };
+}
+
+function setLcAttPeriod(p){ _lcAttPeriod = p; _renderLcAttendance(); }
+function toggleLcAttExpanded(){ _lcAttExpanded = !_lcAttExpanded; _renderLcAttendance(); }
+
+async function _renderLcAttendance(){
+  const box = document.getElementById('lcAttendanceBox');
+  if(!box) return;
+  const isTl = document.body.classList.contains('lang-tl');
+
+  // Roster = the viewer + LC family (lcMembers is already privacy/test-filtered).
+  // Build {id, name} list; the viewer is included so the report reflects the
+  // whole LCG the way the count does.
+  const roster = [];
+  if(memberRow && memberRow.id) roster.push({ id: memberRow.id, name: memberRow.name });
+  (lcMembers || []).forEach(m => roster.push({ id: m.id, name: m.name }));
+  const rosterIds = roster.map(r => r.id);
+
+  if(!rosterIds.length){
+    box.innerHTML = `<div class="lc-private-note">${isTl?'Walang datos.':'No data.'}</div>`;
+    return;
+  }
+
+  // Period chips
+  const periods = [
+    ['month',  isTl?'Buwang Ito':'This Month'],
+    ['last30', isTl?'30 Araw':'Last 30'],
+    ['last90', isTl?'90 Araw':'Last 90']
+  ];
+  const chips = periods.map(([k,lbl]) =>
+    `<button onclick="setLcAttPeriod('${k}')" style="padding:.3rem .7rem;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid ${_lcAttPeriod===k?'var(--gold)':'var(--line)'};background:${_lcAttPeriod===k?'var(--gold)':'transparent'};color:${_lcAttPeriod===k?'#fff':'var(--muted)'};font-weight:600;">${lbl}</button>`
+  ).join('');
+
+  // Loading state on first paint
+  box.innerHTML = `
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem;">${chips}</div>
+    <div id="lcAttBody" style="font-size:12px;color:var(--muted);text-align:center;padding:.6rem;">
+      ${isTl?'Naglo-load…':'Loading…'}
+    </div>`;
+
+  // Fetch attendance for the roster in range
+  const range = _lcAttRange(_lcAttPeriod);
+  let rows = [];
+  try {
+    const { data, error } = await db.from('attendance')
+      .select('member_id,present,event_date,event_type')
+      .in('member_id', rosterIds)
+      .gte('event_date', range.from)
+      .lte('event_date', range.to);
+    if(error) throw error;
+    rows = data || [];
+  } catch(e){
+    console.warn('[lc-att] fetch failed:', e);
+    const body = document.getElementById('lcAttBody');
+    if(body) body.innerHTML = `<span style="color:var(--muted)">${isTl?'Hindi makuha ang datos ngayon.':'Could not load attendance right now.'}</span>`;
+    return;
+  }
+
+  // Per-member stats
+  const stats = {};
+  roster.forEach(r => { stats[r.id] = { present:0, absent:0, total:0, name:r.name }; });
+  rows.forEach(r => {
+    if(!stats[r.member_id]) return;
+    stats[r.member_id].total++;
+    if(r.present) stats[r.member_id].present++; else stats[r.member_id].absent++;
+  });
+
+  const totalPresent = rows.filter(r => r.present).length;
+  const totalAbsent  = rows.filter(r => !r.present).length;
+  const meetingKeys  = new Set(rows.map(r => r.event_date + '|' + r.event_type));
+  const totalMeetings = meetingKeys.size;
+
+  // LCG-wide rate = present / (present+absent) across the whole roster
+  const lcgRate = (totalPresent + totalAbsent) > 0
+    ? Math.round(totalPresent / (totalPresent + totalAbsent) * 100) : null;
+
+  // Per-member ranked by rate (desc), no-data members last
+  const ranked = roster.map(r => {
+    const s = stats[r.id];
+    const rate = s.total ? Math.round(s.present / s.total * 100) : null;
+    const isMe = r.id === (memberRow && memberRow.id);
+    return { ...s, id:r.id, rate, isMe };
+  }).sort((a,b) => {
+    if(a.rate === null && b.rate === null) return (a.name||'').localeCompare(b.name||'');
+    if(a.rate === null) return 1;
+    if(b.rate === null) return -1;
+    return b.rate - a.rate;
+  });
+
+  const body = document.getElementById('lcAttBody');
+  if(!body) return;
+
+  if(totalMeetings === 0){
+    body.style.cssText = '';
+    body.innerHTML = `<div style="text-align:center;padding:.8rem;color:var(--muted);font-size:12px;line-height:1.5;">
+      ${isTl?'Walang attendance sa panahong ito.':'No attendance recorded in this period.'}
+    </div>`;
+    return;
+  }
+
+  const rateColor = (rate) => rate === null ? 'var(--muted)'
+    : rate >= 80 ? '#1f6b3a' : rate >= 50 ? 'var(--gold)' : '#9a2727';
+
+  // Collapsed summary line — LCG rate + a tap-to-expand
+  const summaryLine = `
+    <div onclick="toggleLcAttExpanded()" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.5rem .2rem;">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:${rateColor(lcgRate)};">
+          ${lcgRate === null ? '—' : lcgRate + '%'} <span style="font-weight:500;color:var(--muted);font-size:11.5px;">${isTl?'LCG attendance':'LCG attendance'}</span>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:1px;">
+          ${totalMeetings} ${isTl?'pagtitipon':'meetings'} · ${totalPresent} ${isTl?'present':'present'} · ${totalAbsent} ${isTl?'absent':'absent'}
+        </div>
+      </div>
+      <span style="color:var(--gold);font-size:12px;">${_lcAttExpanded ? (isTl?'Itago ▴':'Hide ▴') : (isTl?'Tingnan ▾':'See all ▾')}</span>
+    </div>`;
+
+  // Per-member rows (only when expanded)
+  let memberRows = '';
+  if(_lcAttExpanded){
+    memberRows = '<div style="display:flex;flex-direction:column;gap:4px;margin-top:.5rem;">' +
+      ranked.map(m => {
+        const rate = m.rate;
+        const col = rateColor(rate);
+        const meTag = m.isMe ? `<span style="background:var(--gold);color:#fff;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em">${isTl?'IKAW':'YOU'}</span>` : '';
+        const detail = m.total === 0
+          ? (isTl?'Walang record':'No attendance logged')
+          : `${m.present} ${isTl?'present':'present'} · ${m.absent} ${isTl?'absent':'absent'} · ${m.total} ${isTl?'kabuuan':'total'}`;
+        return `<div style="background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:8px 11px;display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center;">
+          <div style="min-width:0;">
+            <div style="font-size:12.5px;font-weight:600;color:var(--ink);">${MultiplyShared.escapeHTML(m.name||'?')}${meTag}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:1px;">${detail}</div>
+          </div>
+          <div style="width:64px;height:6px;background:var(--line);border-radius:3px;overflow:hidden;">
+            <div style="width:${rate||0}%;height:100%;background:${col};"></div>
+          </div>
+          <div style="font-size:12.5px;font-weight:800;color:${col};min-width:38px;text-align:right;">${rate === null ? '—' : rate + '%'}</div>
+        </div>`;
+      }).join('') + '</div>';
+  }
+
+  body.style.cssText = '';
+  body.innerHTML = summaryLine + memberRows;
 }
 
 function closeLcDetail(e){
@@ -6108,6 +6286,11 @@ setLang = function(lang){
   try{ if(memberRow) renderLcCard(); }catch(e){}
   try{ if(memberRow) renderAnchorCard(); }catch(e){}
   try{ if(memberRow) renderDailyPrayer(); }catch(e){}
+  // Re-render the LC attendance report only if the detail sheet is open.
+  try{
+    const bd = document.getElementById('lcDetailBackdrop');
+    if(memberRow && bd && bd.classList.contains('show')) _renderLcAttendance();
+  }catch(e){}
 };
 
 // ═══════════════════════════════════════════════════════════════
