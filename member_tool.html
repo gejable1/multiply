@@ -2642,8 +2642,8 @@ function computeStreak(rows){
 // EOLO persons (name entered AND not yet "Responded" = step index 6).
 // Pure-local: no DB call, degrades gracefully offline.
 
-const EOLO_PRAYER_FALLBACK_EN = "the one You have placed on my heart";
-const EOLO_PRAYER_FALLBACK_TL = "ang taong inilagay Mo sa aking puso";
+const EOLO_PRAYER_FALLBACK_EN = "my EOLO";
+const EOLO_PRAYER_FALLBACK_TL = "EOLO ko";
 const EOLO_PRAYER_POOL = [
   {ref:"1 Timothy 2:1-4", en:"Father, You urge that prayers and intercessions be made for all people, for this is good and pleasing in Your sight, my Savior who desires everyone to be saved and to come to the knowledge of the truth. So I lift up {name} before You now. You do not wish that any should perish, and neither do I. Open {name}'s heart to the truth that is in Christ Jesus, the one Mediator between You and us, who gave Himself as a ransom for all. Let me not grow weary in praying, but let me labor in intercession until {name} comes home to You. Save {name}, Lord, for Your glory and for the joy that is set before me. (1 Timothy 2:1-4)", tl:"Ama, hinihimok Mo kaming manalangin at mamagitan para sa lahat ng tao, sapagkat ito'y mabuti at nakalulugod sa Iyong paningin, O aking Tagapagligtas na naghahangad na ang lahat ay maligtas at makaalam ng katotohanan. Kaya't itinataas ko si {name} sa harap Mo ngayon. Hindi Mo nais na mapahamak ang sinuman, at hindi ko rin nais. Buksan Mo ang puso ni {name} sa katotohanang nasa kay Cristo Jesus, ang nag-iisang Tagapamagitan sa pagitan Mo at namin, na nag-alay ng sarili bilang pantubos sa lahat. Huwag mo akong hayaang manlupaypay sa panalangin, kundi gawin akong masipag mamagitan hanggang umuwi si {name} sa Iyo. Iligtas Mo si {name}, Panginoon, para sa Iyong kaluwalhatian. (1 Timoteo 2:1-4)"},
   {ref:"Ezekiel 36:26", en:"Lord God, You promised to give a new heart and to put a new spirit within Your people. You said You would remove the heart of stone and give a heart of flesh. I bring {name} to You and ask for this very miracle. Where there is hardness, soften it. Where there is stone, give flesh that feels and responds to You. I cannot change {name}'s heart, but You can, for You are the God who makes all things new. Breathe Your Spirit into {name} and let cold indifference become warm surrender. Replace the stone with a heart that beats for You. I trust the promise You have made, and I hold {name} to it before Your throne. Do this work, Father, that {name} may live. (Ezekiel 36:26)", tl:"Panginoong Diyos, nangako Kang magbibigay ng bagong puso at maglalagay ng bagong espiritu sa Iyong bayan. Sinabi Mong aalisin Mo ang pusong bato at bibigyan ng pusong laman. Dinadala ko si {name} sa Iyo at hinihiling ang himalang ito. Kung saan may katigasan, palambutin Mo. Kung saan may bato, bigyan Mo ng laman na nakadarama at tumutugon sa Iyo. Hindi ko mababago ang puso ni {name}, ngunit kaya Mo, sapagkat Ikaw ang Diyos na gumagawa ng bago sa lahat ng bagay. Ihinga Mo ang Iyong Espiritu kay {name} at gawing maalab na pagsuko ang malamig na pagwawalang-bahala. Palitan Mo ang bato ng pusong tumitibok para sa Iyo. Nagtitiwala ako sa Iyong pangako. Gawin Mo ito, Ama, upang mabuhay si {name}. (Ezekiel 36:26)"},
@@ -5711,6 +5711,13 @@ function _hasLcg(){
             (memberRow && memberRow.discipler_id));
 }
 
+// Viewer-aware test containment (Invariant #69): a real member never sees
+// 🧪 test records; a test viewer does (for end-to-end smoke testing).
+// The viewer in MMT is always memberRow (the logged-in member).
+function _viewerIsTestMember(){
+  return !!(memberRow && memberRow.is_test_member);
+}
+
 async function loadLcDetails(){
   const hasGroupText = !!(memberRow.lc_group && memberRow.lc_group.trim());
   // Proceed if the member has EITHER an lc_group text OR a discipler (LCL).
@@ -5724,9 +5731,12 @@ async function loadLcDetails(){
 
   // Get all members in the same LCG. When lc_group text exists, group by it;
   // otherwise group by shared LCL (same discipler_id) per Invariant #59.
+  // NOTE: no pipeline_level filter — an LCL disciples their Pre-Pipeline
+  // (level 0) people too, and they are just as much LC family. The old
+  // `.gte('pipeline_level', 1)` silently dropped every Level-0 co-disciple.
   let q = db.from('members')
     .select('id,name,facilitator_role,is_facilitator,share_with_lc,is_test_member,discipler_name,discipler_id')
-    .gte('pipeline_level', 1);
+    .neq('is_external_user', true);
   if(hasGroupText){
     q = q.eq('lc_group', memberRow.lc_group);
   } else {
@@ -5735,9 +5745,9 @@ async function loadLcDetails(){
   const {data, error} = await q;
   if(error) throw error;
 
-  // Test members are kept in the list so they can be tested end-to-end.
-  // (They show with a 🧪 badge in the LC sheet so anyone viewing knows.)
-  const all = data || [];
+  // Test members are visible only to a test viewer (Invariant #69): a real
+  // member never sees 🧪 records in their LC family. Guests already excluded above.
+  const all = (data || []).filter(m => _viewerIsTestMember() || !m.is_test_member);
 
   // Fellow members = everyone in the LC except myself, AND who consented (share_with_lc !== false)
   // I always see myself implicitly. share_with_lc defaults to true.
@@ -5923,7 +5933,7 @@ async function loadCelebrationFeed(){
   // Group by lc_group text when present, else by shared LCL (discipler_id).
   let cq = db.from('members')
     .select('id,name,share_with_lc,is_test_member,pipeline_level,facilitator_role,spiritual_gifts,disc_primary,enneagram_type,love_language_primary,strengths_top5,conflict_primary,diagnostic_zone,updated_at')
-    .gte('pipeline_level', 1);
+    .neq('is_external_user', true);
   if(hasGroupText){
     cq = cq.eq('lc_group', memberRow.lc_group);
   } else {
@@ -5931,9 +5941,9 @@ async function loadCelebrationFeed(){
   }
   const {data: lcRows, error} = await cq;
   if(error) throw error;
-  // Test members included so their wins appear during end-to-end testing.
-  // Each celebration row gets a 🧪 badge if the member is a test member.
-  const all = lcRows || [];
+  // No pipeline_level gate (Pre-Pipeline LC family count too). Test members
+  // visible only to a test viewer per Invariant #69; guests excluded above.
+  const all = (lcRows || []).filter(m => _viewerIsTestMember() || !m.is_test_member);
   const recent_threshold_days = 21; // ~3 weeks of recent wins
   const cutoff = Date.now() - recent_threshold_days * 24*3600*1000;
 
