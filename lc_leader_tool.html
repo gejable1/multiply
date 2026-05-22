@@ -1917,10 +1917,31 @@ async function saveNewMember(){
 
     toast(`✅ ${name} added!`,'success');
 
-    // Add to local mentees list so they show up immediately
-    if(data) myMembers.unshift(data);
+    // ── Refetch from DB so the new member is the real, fully-scoped row ──
+    // Previously this did an optimistic `myMembers.unshift(data)`. That made
+    // the member appear briefly but it was NOT in allMembers, so the next
+    // refreshScopedMembers() (scope-tab switch, Home nav, transfer action,
+    // etc.) re-derived myMembers from allMembers and the new member vanished
+    // — which is exactly what made users think the save failed and add a
+    // duplicate. Refetching makes the DB the single source of truth: the row
+    // lands in allMembers, survives every re-scope, and is correctly placed
+    // in My Group. loadMyMembers() is awaited so the list is already rebuilt
+    // before we navigate (it internally calls refreshScopedMembers).
+    //
+    // Note: enterMyGroup() resets the filter to "All" on entry, but the user
+    // arrives here via showScreen (not enterMyGroup), so we reset the scope
+    // filter ourselves to guarantee the just-added member is visible and not
+    // hidden behind a stale sub-filter.
+    try { await loadMyMembers(); }
+    catch(e){ console.warn('post-add refetch failed; member is saved, list may be stale:', e); }
 
     setTimeout(()=>{
+      // Reset to the "All" filter chip so the just-added member can't be
+      // hidden behind a stale sub-filter (z1-z4 / no_diag / transfer).
+      // Mirrors what openMyGroup() does on tile entry.
+      currentFilter = 'all';
+      filterStr = '';
+      if (typeof _activateFilterChip === 'function') { try { _activateFilterChip('all'); } catch(_){} }
       showScreen('screenMembers');
       renderMemberList();
     }, 1200);
