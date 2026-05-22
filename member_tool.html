@@ -5688,17 +5688,51 @@ function fireConfetti(){
 // ═══════════════════════════════════════════════════════════════
 // LC GROUP — load fellow members, discipler info, schedule
 // ═══════════════════════════════════════════════════════════════
+// Canonical LCG display name (mirrors Invariant #59 lcgDisplayName):
+// use lc_group text if set, else fall back to "{Discipler's first name}'s LCG".
+// Returns null only when there is NEITHER an lc_group NOR a known discipler.
+function _lcgDisplayName(){
+  const lcg = (memberRow && memberRow.lc_group || '').trim();
+  if(lcg) return lcg;
+  // No lc_group text — fall back to the LCL (discipler) identity.
+  const dName = (lcDisciplerInfo && lcDisciplerInfo.name)
+    || (memberRow && memberRow.discipler_name) || '';
+  const first = (dName || '').trim().split(/\s+/)[0];
+  if(first) return `${first}'s LCG`;
+  return null;
+}
+
+// True when the member belongs to an LCG by EITHER an lc_group text value
+// OR an LCL relationship (discipler_id). Per Invariants #46 + #59, the
+// discipler IS the LCL, so a member with a discipler is in that LCL's group
+// even when the sparse lc_group text field is blank.
+function _hasLcg(){
+  return !!((memberRow && (memberRow.lc_group || '').trim()) ||
+            (memberRow && memberRow.discipler_id));
+}
+
 async function loadLcDetails(){
-  if(!memberRow.lc_group){
-    // No LC assigned — leave defaults
+  const hasGroupText = !!(memberRow.lc_group && memberRow.lc_group.trim());
+  // Proceed if the member has EITHER an lc_group text OR a discipler (LCL).
+  // Keying only off lc_group (the sparse text column) is exactly the
+  // anti-pattern Invariants #1 + #59 warn against — most members have a
+  // blank lc_group but a real discipler_id.
+  if(!hasGroupText && !memberRow.discipler_id){
+    // Truly no LCG and no LCL — leave defaults.
     return;
   }
 
-  // Get all members in same LC group
-  const {data, error} = await db.from('members')
-    .select('id,name,facilitator_role,is_facilitator,share_with_lc,is_test_member,discipler_name')
-    .eq('lc_group', memberRow.lc_group)
+  // Get all members in the same LCG. When lc_group text exists, group by it;
+  // otherwise group by shared LCL (same discipler_id) per Invariant #59.
+  let q = db.from('members')
+    .select('id,name,facilitator_role,is_facilitator,share_with_lc,is_test_member,discipler_name,discipler_id')
     .gte('pipeline_level', 1);
+  if(hasGroupText){
+    q = q.eq('lc_group', memberRow.lc_group);
+  } else {
+    q = q.eq('discipler_id', memberRow.discipler_id);
+  }
+  const {data, error} = await q;
   if(error) throw error;
 
   // Test members are kept in the list so they can be tested end-to-end.
@@ -5744,17 +5778,20 @@ async function loadLcDetails(){
     }
   }
 
-  // Try to load LC meeting day from lc_groups table if it exists
-  try{
-    const {data: lcg} = await db.from('lc_groups')
-      .select('name,meeting_day,meeting_time')
-      .eq('name', memberRow.lc_group)
-      .maybeSingle();
-    if(lcg){
-      lcMeetingDay = lcg;
+  // Try to load LC meeting day from lc_groups table if it exists.
+  // Only meaningful when an lc_group text name exists to match against.
+  if(hasGroupText){
+    try{
+      const {data: lcg} = await db.from('lc_groups')
+        .select('name,meeting_day,meeting_time')
+        .eq('name', memberRow.lc_group)
+        .maybeSingle();
+      if(lcg){
+        lcMeetingDay = lcg;
+      }
+    }catch(e){
+      // lc_groups table might not have these columns — non-fatal
     }
-  }catch(e){
-    // lc_groups table might not have these columns — non-fatal
   }
 }
 
@@ -5765,14 +5802,17 @@ function renderLcCard(){
   const btn = document.getElementById('lcCardBtn');
   if(!nameEl || !metaEl) return;
 
-  if(!memberRow.lc_group){
+  const displayName = _lcgDisplayName();
+  if(!displayName){
+    // Truly no LCG and no LCL — honest empty state.
     nameEl.textContent = '—';
     metaEl.innerHTML = '<span class="en-text">No LC group assigned yet</span><span class="tl-text">Wala pang LC group</span>';
     if(btn) btn.style.opacity = '0.6';
     return;
   }
+  if(btn) btn.style.opacity = '';
 
-  nameEl.textContent = memberRow.lc_group;
+  nameEl.textContent = displayName;
   let metaParts = [];
   if(lcMeetingDay && lcMeetingDay.meeting_day){
     let mt = lcMeetingDay.meeting_day;
@@ -5784,11 +5824,11 @@ function renderLcCard(){
 }
 
 function openLcDetail(){
-  if(!memberRow.lc_group){
+  if(!_hasLcg()){
     showToast('No LC group assigned yet');
     return;
   }
-  document.getElementById('lcDetailName').textContent = memberRow.lc_group;
+  document.getElementById('lcDetailName').textContent = _lcgDisplayName() || '—';
   let metaText = '';
   if(lcMeetingDay && lcMeetingDay.meeting_day){
     metaText = lcMeetingDay.meeting_day;
@@ -5869,7 +5909,10 @@ function normalizePHPhone(raw){
 // CELEBRATION FEED — synthesize wins from existing LC data
 // ═══════════════════════════════════════════════════════════════
 async function loadCelebrationFeed(){
-  if(!memberRow.lc_group){
+  const hasGroupText = !!(memberRow.lc_group && memberRow.lc_group.trim());
+  // Same LCG-resolution rule as loadLcDetails: proceed when the member has
+  // either an lc_group text OR an LCL (discipler_id), per Invariant #59.
+  if(!hasGroupText && !memberRow.discipler_id){
     celebrationWins = [];
     return;
   }
@@ -5877,10 +5920,16 @@ async function loadCelebrationFeed(){
 
   // Get LC member rows (we may already have them from loadLcDetails)
   // but we need full assessment columns + updated_at, so re-fetch with that.
-  const {data: lcRows, error} = await db.from('members')
+  // Group by lc_group text when present, else by shared LCL (discipler_id).
+  let cq = db.from('members')
     .select('id,name,share_with_lc,is_test_member,pipeline_level,facilitator_role,spiritual_gifts,disc_primary,enneagram_type,love_language_primary,strengths_top5,conflict_primary,diagnostic_zone,updated_at')
-    .eq('lc_group', memberRow.lc_group)
     .gte('pipeline_level', 1);
+  if(hasGroupText){
+    cq = cq.eq('lc_group', memberRow.lc_group);
+  } else {
+    cq = cq.eq('discipler_id', memberRow.discipler_id);
+  }
+  const {data: lcRows, error} = await cq;
   if(error) throw error;
   // Test members included so their wins appear during end-to-end testing.
   // Each celebration row gets a 🧪 badge if the member is a test member.
