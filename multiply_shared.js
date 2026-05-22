@@ -1094,7 +1094,11 @@
       .from('cohorts')
       .select('id, name, status, program_id')
       .in('id', cohortIds)
-      .eq('status', 'active');
+      // Session 14: 'active' AND 'forming' both count as "live" — keeps the quiz
+      // gate in lockstep with the lesson gate (fetchVisibleLessons applies NO
+      // cohort-status filter). Previously .eq('status','active') alone caused
+      // lesson-vs-quiz drift on forming batches (lesson opened, quiz stayed locked).
+      .in('status', ['active', 'forming']);
     if (cohRes.error) {
       console.warn('_btliFetchEnrollments: cohorts fetch failed (failing open):', cohRes.error);
       return [];
@@ -1383,7 +1387,9 @@
       .from('cohorts')
       .select('id, name, status, program_id')
       .in('id', cohortIds)
-      .eq('status', 'active');
+      // Session 14: match the BTLI gate — 'active' AND 'forming' both count as
+      // "live" so Usbong lesson/quiz gates stay in lockstep on forming batches.
+      .in('status', ['active', 'forming']);
     if (cohRes.error) {
       console.warn('_usbongFetchEnrollments: cohorts fetch failed (failing open):', cohRes.error);
       return [];
