@@ -12171,6 +12171,13 @@ function openPastorAnnComposer(existing){
   }
   modal.style.display = 'flex';
   _renderPastorAnnComposer();
+  // Prime the audience cache so chip labels (esp. virtual "lcl:<id>" groups)
+  // resolve to human names on first paint — e.g. when reopening a saved draft
+  // that already has LCG chips, before the picker has ever been opened. Fire-
+  // and-forget; re-render once it lands so any placeholder labels upgrade.
+  _ensureAudPickerCache().then(() => {
+    if (_pastorAnnDraft) _renderPastorAnnComposer();
+  }).catch(() => { /* chips fall back to safe placeholders */ });
 }
 
 function _renderPastorAnnComposer(){
@@ -12339,11 +12346,31 @@ function _renderAudienceChips(kind, ids){
     return '<span style="font-size:11px;color:var(--muted);font-style:italic;">none selected</span>';
   }
   return ids.map(id => {
+    // Resolve a HUMAN label for every chip kind — never show a raw internal id
+    // (Inv #87: human labels only, no slugs/uuids in visible text). The audience
+    // picker cache (_audPickerCache) holds the id→label maps; we fall back
+    // gracefully when it isn't loaded yet (e.g. a reopened draft before the
+    // picker has been opened) so a bare "lcl:<uuid>" is still prettified.
     let label = id;
     if (kind === 'member_ids') {
       const m = (_audPickerCache.members || []).find(x => x.id === id);
-      if (m) label = m.name;
-      else label = id.slice(0, 8) + '…';
+      label = m ? m.name : (String(id).slice(0, 8) + '…');
+    } else if (kind === 'lc_groups') {
+      const g = (_audPickerCache.lcGroups || []).find(x => x.id === id);
+      if (g) {
+        label = g.label;                              // real group name OR "Unassigned (LCL: <name>)"
+      } else if (String(id).startsWith('lcl:')) {
+        // Virtual LCL group but cache not ready — resolve the LCL's name if we
+        // can; otherwise show a friendly placeholder, never the uuid.
+        const lclId = String(id).slice(4);
+        const lcl = (_audPickerCache.members || []).find(x => x.id === lclId);
+        label = lcl ? `Unassigned (LCL: ${lcl.name})` : 'Unassigned LCG';
+      } else {
+        label = id;                                   // real groups use their name as the id, so this is already human
+      }
+    } else if (kind === 'ministries') {
+      const mn = (_audPickerCache.ministries || []).find(x => x.id === id);
+      label = mn ? mn.label : id;                     // ministries use their name as the id too
     }
     return `<span style="display:inline-flex;align-items:center;gap:.3rem;background:#fff;border:1px solid var(--gold);border-radius:999px;padding:.2rem .5rem .2rem .65rem;font-size:11px;color:var(--ink);">
       ${MultiplyShared.escapeHTML(label)}
