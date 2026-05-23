@@ -544,6 +544,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       Mark yourself present at events you attended. No one logs attendance for Pastoral Staff
       so this keeps your attendance record honest. 🙏
     </div>
+    <!-- Date field (Session 19): defaults to TODAY (the "tap while at the
+         event" rule, May 2026) but is pickable for backdating. Cream-styled
+         to match the card — the dark-theme .att-date-input vars would clash
+         on this light surface (same reason the buttons hardcode brown-on-cream). -->
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem;">
+      <label for="l5AttestDate" style="font-size:11.5px;font-weight:600;color:#7a5800;white-space:nowrap;">Date:</label>
+      <input type="date" id="l5AttestDate"
+             style="flex:1;min-width:0;background:#fffdf7;border:1px solid #d8c690;
+                    border-radius:var(--r-sm);padding:.5rem .6rem;color:#3a2c0a;
+                    font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;outline:none;">
+    </div>
     <div id="l5AttestPickerRow" style="display:flex;flex-wrap:wrap;gap:.45rem;">
       <!-- Buttons inserted by renderL5AttestCard() -->
     </div>
@@ -1503,43 +1514,103 @@ function renderHome(){
 // ═══════════════════════════════════════════════════════
 // L5 SELF-ATTEST  (Pastor + Pastoral Staff)
 // Walang nag-loglog para sa Level 5 leaders, kaya self-report.
-// Reads attendance_event_types from system_settings.meta.
+//
+// Session 19 (Inv #91): brought to parity with MMT's self-attest. Now uses
+// the SHARED canonical event list (MultiplyShared.attest.EVENT_TYPES — the
+// 9-event list, MLT minus "Other") instead of the partial
+// system_settings.meta.attendance_event_types config, and resolves
+// enrolled+unlocked attestable lessons via MultiplyShared.attest.
+// attestableLessons(LEADER.leaderId) so BTLI / Pre-Pipeline lesson pills
+// behave exactly like MMT. A date field (defaults to today, pickable for
+// backdating) feeds the upsert. UI stays per-file (Inv #56) — this is the
+// MLT cream-on-dark idiom, MMT keeps its own card. Write path is unchanged:
+// upsert on (member_id,event_type,event_date), member_id=LEADER.leaderId,
+// NO source / NO nudge — pastoral attendance is final.
 // ═══════════════════════════════════════════════════════
-let _l5EventTypes = null;
+let _l5EventTypes = null;            // resolved attestable event types (filtered)
 let _l5LastMarkedCache = {};
+let _l5LessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };  // attestable lessons
+let _l5LessonsLoaded = false;
+let _l5PendingEventName = null;      // canonical event_name for a lesson self-attest
 
+// Defensive fallback list — used only if a stale deployed shared.js predates
+// the attest namespace. Must stay byte-equal to MultiplyShared.attest.EVENT_TYPES.
+const _L5_EVENT_TYPES_FALLBACK = [
+  { key:'Sunday Service', label_en:'Sunday Service', label_tl:'Sunday Service', icon:'⛪', typical_day:7 },
+  { key:'LC Meeting',     label_en:'LC Meeting',     label_tl:'LC Meeting',     icon:'🏠', typical_day:7 },
+  { key:'Sunday School',  label_en:'Sunday School',  label_tl:'Sunday School',  icon:'📖', typical_day:7 },
+  { key:'Prayer Meeting', label_en:'Prayer Meeting', label_tl:'Prayer Meeting', icon:'🙏', typical_day:3 },
+  { key:'BTLI',           label_en:'BTLI',           label_tl:'BTLI',           icon:'📚', typical_day:7, lesson:true },
+  { key:'Pre-Pipeline',   label_en:'Pre-Pipeline',   label_tl:'Pre-Pipeline',   icon:'🌱', typical_day:7, lesson:true },
+  { key:'Youth Gathering',label_en:'Youth Gathering',label_tl:'Youth Gathering',icon:'🔥', typical_day:7 },
+  { key:'Team Building',  label_en:'Team Building',  label_tl:'Team Building',  icon:'🤝', typical_day:7 },
+  { key:'Outing',         label_en:'Outing',         label_tl:'Outing',         icon:'🌄', typical_day:7 }
+];
+
+// Load attestable lessons for the L5 leader (enrolled + unlocked only) via the
+// shared helper. Mirrors MMT's _loadAttestableLessons wrapper. Cached per session.
+async function _loadL5AttestableLessons(){
+  if (_l5LessonsLoaded) return;
+  _l5LessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
+  if (!LEADER || !LEADER.leaderId) { _l5LessonsLoaded = true; return; }
+  try {
+    const res = await MultiplyShared.attest.attestableLessons(LEADER.leaderId);
+    _l5LessonsByType = {
+      'BTLI': (res && Array.isArray(res['BTLI'])) ? res['BTLI'] : [],
+      'Pre-Pipeline': (res && Array.isArray(res['Pre-Pipeline'])) ? res['Pre-Pipeline'] : []
+    };
+  } catch(e) {
+    console.warn('[l5-attest] attestableLessons failed (degrading to no lessons):', e);
+    _l5LessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
+  }
+  _l5LessonsLoaded = true;
+}
+
+// Resolve which event types to show. Plain events always show; lesson events
+// (BTLI / Pre-Pipeline) show ONLY when the leader has ≥1 enrolled+unlocked
+// lesson in that track (the L0→Pre-Pipeline / L1+→BTLI rule means at most one
+// is populated). Each entry normalized to {key,label,icon,typical_day,lesson}.
 async function _loadL5EventTypes(){
   if (_l5EventTypes) return _l5EventTypes;
-  try {
-    const {data} = await db.from('system_settings').select('meta').eq('id', 1).limit(1);
-    const meta = (data && data[0] && data[0].meta) || {};
-    _l5EventTypes = Array.isArray(meta.attendance_event_types) ? meta.attendance_event_types : [];
-  } catch(e) {
-    console.error('Failed to load attendance_event_types:', e);
-    _l5EventTypes = [];
-  }
+  await _loadL5AttestableLessons();
+  const base = (window.MultiplyShared && MultiplyShared.attest && Array.isArray(MultiplyShared.attest.EVENT_TYPES))
+    ? MultiplyShared.attest.EVENT_TYPES
+    : _L5_EVENT_TYPES_FALLBACK;
+  // MLT UI is English-only (no lang-tl class), so label resolves to label_en.
+  _l5EventTypes = base.filter(et => {
+    if (!et.lesson) return true;
+    const list = _l5LessonsByType[et.key] || [];
+    return list.length > 0;
+  }).map(et => ({
+    key: et.key,
+    label: et.label_en,
+    icon: et.icon,
+    typical_day: et.typical_day,
+    lesson: !!et.lesson
+  }));
   return _l5EventTypes;
 }
 
-// Compute the most recent occurrence of a typical_day (1=Mon..7=Sun)
-// relative to today. If today IS that day, returns today.
-// Returns today's date as YYYY-MM-DD in the user's local timezone.
-//
-// Previously this returned "the most recent occurrence of typicalDay" (e.g.,
-// last Wednesday if the LC meets Wednesdays). Pastor changed the rule
-// May 2026: LC leaders tap "I'm here" while AT the event, not retrospectively.
-// Backdating is still available via the date-picker escape hatch.
-//
-// The typicalDay parameter is kept in the signature for backward compatibility
-// with existing call sites but is now ignored. Could be removed in a future cleanup.
-function _l5LastTypicalDay(typicalDay){
+// Today's date as YYYY-MM-DD in LOCAL time. (NOT toISOString — Manila is
+// UTC+8, so before 8 AM PHT toISOString() returns yesterday's UTC date.)
+// Per the May 2026 rule, L5 leaders tap "I'm here" while AT the event;
+// the date field defaults here but is pickable for backdating.
+function _l5Today(){
   const d = new Date();
-  // Local-date formatting (NOT toISOString) — Manila is UTC+8, so between
-  // midnight and 8 AM PHT, toISOString() returns yesterday's UTC date.
   const y = d.getFullYear();
   const mo = String(d.getMonth() + 1).padStart(2, '0');
   const da = String(d.getDate()).padStart(2, '0');
   return `${y}-${mo}-${da}`;
+}
+
+// Kept for backward-compat with any external caller; now just returns today.
+function _l5LastTypicalDay(typicalDay){ return _l5Today(); }
+
+// Read the chosen date from the field; fall back to today if missing/invalid.
+function _l5SelectedDate(){
+  const el = document.getElementById('l5AttestDate');
+  const v = el && el.value;
+  return (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : _l5Today();
 }
 
 function _l5FmtShort(dateStr){
@@ -1556,6 +1627,11 @@ async function renderL5AttestCard(){
   if (!isL5) { card.style.display = 'none'; return; }
   card.style.display = 'block';
 
+  // Default the date field to today (only if not already set, so a leader's
+  // backdated pick survives a re-render).
+  const dateEl = document.getElementById('l5AttestDate');
+  if (dateEl && !dateEl.value) dateEl.value = _l5Today();
+
   const types = await _loadL5EventTypes();
   const row = document.getElementById('l5AttestPickerRow');
   if (!row) return;
@@ -1565,13 +1641,25 @@ async function renderL5AttestCard(){
     return;
   }
 
-  // Render buttons
-  // Brown-on-cream palette to match the parent card (light cream gradient).
-  // Earlier these used var(--surface)/var(--text) which produced jarring
-  // dark buttons floating on cream. May 16, 2026 contrast fix.
+  // Render buttons. Brown-on-cream palette to match the parent card (light
+  // cream gradient). Lesson pills route to a sub-picker; plain pills mark
+  // directly. (May 16, 2026 contrast fix: hardcoded hex, not theme vars.)
   row.innerHTML = types.map(et => {
-    const targetDate = _l5LastTypicalDay(et.typical_day || 7);
-    return `<button onclick="l5MarkSelfPresent('${et.key}', ${et.typical_day || 7})"
+    if (et.lesson) {
+      const count = (_l5LessonsByType[et.key] || []).length;
+      return `<button onclick="_l5OpenLessonPicker('${et.key}')"
+                style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
+                       background:#fffdf7; border:1px solid var(--gold,#c9a227);
+                       border-radius:var(--r); cursor:pointer; font-size:12px;
+                       display:flex; align-items:center; gap:.4rem; justify-content:center;
+                       line-height:1.25; color:#3a2c0a;">
+          <span style="font-size:15px;">${et.icon || '✓'}</span>
+          <span style="font-weight:600;">${MultiplyShared.escapeHTML(et.label)}</span>
+          <span style="font-size:10px;color:#7a5800;">(${count})</span>
+          <span style="color:#7a5800;">›</span>
+        </button>`;
+    }
+    return `<button onclick="_l5PendingEventName=null; l5MarkSelfPresent('${et.key}')"
               style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
                      background:#fffdf7; border:1px solid #d8c690;
                      border-radius:var(--r); cursor:pointer; font-size:12px;
@@ -1584,6 +1672,56 @@ async function renderL5AttestCard(){
 
   // Refresh "last marked" status
   await _l5RefreshLastMarked();
+}
+
+// Lesson sub-picker — mirrors MMT's openAttestLessonPicker, MLT idiom.
+// Lists only the leader's enrolled+unlocked lessons for the track; picking
+// one stashes its canonical event_name in _l5PendingEventName and marks.
+function _l5OpenLessonPicker(eventTypeKey){
+  const lessons = _l5LessonsByType[eventTypeKey] || [];
+  if (!lessons.length) {
+    toast('No available lessons.', 'info');
+    return;
+  }
+  let modal = document.getElementById('l5LessonModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'l5LessonModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:9999;padding:1rem;';
+    modal.innerHTML = '<div id="l5LessonBody" style="background:linear-gradient(135deg,#fdfaf3,#f7f1e1);max-width:420px;width:100%;border-radius:14px;padding:1.25rem;max-height:80vh;overflow-y:auto;border:1px solid #e3d4a8;"></div>';
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  const rows = lessons.map(L => {
+    const lessonLabel = `L${L.lesson_number} · ${L.lesson_title}`;
+    // escape the event_name for safe inline JS-string passing (single quotes)
+    const enJs = L.event_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<button onclick="_l5PickLesson('${eventTypeKey}', '${enJs}')"
+              style="display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;
+                     padding:.7rem .8rem;margin-bottom:.4rem;background:#fffdf7;
+                     border:1px solid var(--gold,#c9a227);border-radius:12px;cursor:pointer;
+                     font-size:13px;color:#3a2c0a;">
+              <span style="font-size:15px;">📚</span>
+              <span style="flex:1;font-weight:600;">${MultiplyShared.escapeHTML(lessonLabel)}</span>
+              <span style="color:#7a5800;">›</span>
+            </button>`;
+  }).join('');
+  document.getElementById('l5LessonBody').innerHTML = `
+    <h3 style="margin:0 0 .3rem;font-size:15px;color:#3a2c0a;">Which ${MultiplyShared.escapeHTML(eventTypeKey)} lesson?</h3>
+    <div style="font-size:11.5px;color:#7a5800;line-height:1.45;margin-bottom:.9rem;">Tap the lesson you attended. Only your enrolled, unlocked lessons appear.</div>
+    ${rows}
+    <button onclick="document.getElementById('l5LessonModal').style.display='none'"
+      style="width:100%;padding:.55rem;margin-top:.3rem;background:transparent;color:#7a5800;border:none;font-size:11.5px;cursor:pointer;">
+      Cancel
+    </button>`;
+  modal.style.display = 'flex';
+}
+
+function _l5PickLesson(eventTypeKey, eventName){
+  _l5PendingEventName = eventName;
+  const modal = document.getElementById('l5LessonModal');
+  if (modal) modal.style.display = 'none';
+  l5MarkSelfPresent(eventTypeKey);
 }
 
 async function _l5RefreshLastMarked(){
@@ -1615,22 +1753,32 @@ async function _l5RefreshLastMarked(){
   }
 }
 
-async function l5MarkSelfPresent(eventTypeKey, typicalDay){
-  const targetDate = _l5LastTypicalDay(typicalDay || 7);
+// Mark the leader present. `eventTypeKey` is the attendance event_type. For
+// lesson events, _l5PendingEventName holds the canonical event_name (set by
+// _l5PickLesson); for plain events it's null. The date comes from the field
+// (defaults today, pickable). Read-and-clear _l5PendingEventName so a later
+// plain tap can't inherit a stale lesson name.
+async function l5MarkSelfPresent(eventTypeKey){
+  const eventName = _l5PendingEventName;   // null for plain events
+  _l5PendingEventName = null;              // consume immediately
+  const targetDate = _l5SelectedDate();
   const targetLbl = _l5FmtShort(targetDate);
+  const confirmWhat = eventName || eventTypeKey;
 
   // Confirm
-  if (!confirm(`Mark yourself present for ${eventTypeKey} on ${targetLbl}?`)) return;
+  if (!confirm(`Mark yourself present for ${confirmWhat} on ${targetLbl}?`)) return;
 
   // Pre-flight: skip if already marked present (UX polish only — the upsert
-  // below handles it correctly even without this check).
+  // below handles it correctly even without this check). For lesson events the
+  // dup-check must include event_name (two lessons can share a date — Inv #90).
   try {
-    const {data: existing} = await db.from('attendance')
-      .select('id, present')
+    let q = db.from('attendance')
+      .select('id, present, event_name')
       .eq('member_id', LEADER.leaderId)
       .eq('event_type', eventTypeKey)
-      .eq('event_date', targetDate)
-      .limit(1);
+      .eq('event_date', targetDate);
+    if (eventName) q = q.eq('event_name', eventName);
+    const {data: existing} = await q.limit(1);
     if (existing && existing.length && existing[0].present === true) {
       toast(`Already marked present for ${targetLbl}`, 'info');
       return;
@@ -1639,9 +1787,9 @@ async function l5MarkSelfPresent(eventTypeKey, typicalDay){
     console.warn('Pre-flight check failed; proceeding with upsert:', e);
   }
 
-  // Upsert against the unique constraint — atomically updates an existing
-  // absent row to present, or inserts a new one. No duplicate-key errors.
-  const {error} = await db.from('attendance').upsert({
+  // Build the row. event_name is set for lesson events (drives the quiz-gate,
+  // Inv #53/#89), omitted for plain events (matches the prior behavior).
+  const payload = {
     member_id:       LEADER.leaderId,
     member_name:     LEADER.leaderName || currentLeader?.name || 'Unknown',
     event_date:      targetDate,
@@ -1653,7 +1801,15 @@ async function l5MarkSelfPresent(eventTypeKey, typicalDay){
     event_lc_group:  '',
     logged_by:       LEADER.leaderName || currentLeader?.name || 'Self',
     logged_by_id:    LEADER.leaderId,
-  }, { onConflict: 'member_id,event_type,event_date' });
+  };
+  if (eventName) payload.event_name = eventName;
+
+  // Upsert against the unique constraint — atomically updates an existing
+  // absent row to present, or inserts a new one. No duplicate-key errors.
+  const {error} = await db.from('attendance').upsert(
+    payload,
+    { onConflict: 'member_id,event_type,event_date' }
+  );
   if (error) {
     toast('Error: ' + error.message, 'error');
     return;
