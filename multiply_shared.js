@@ -1563,6 +1563,156 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // SELF-ATTEST SHARED LOGIC (Session 19 · May 23, 2026 · Invariant #91)
+  // ─────────────────────────────────────────────────────────────────
+  // Extracted from MMT's Session-18 inline _loadAttestableLessons() so
+  // that BOTH MMT (member self-attest card) and MLT's L5 pastoral-staff
+  // "My Attendance" card resolve attestable lessons through ONE code
+  // path. Per Invariant #91: the LOGIC lives here; the UI (pills,
+  // sub-picker modal, date field, write path) stays per-file.
+  //
+  // "Attestable" = the member is ENROLLED in an active/forming cohort
+  // for the lesson's course AND the lesson is UNLOCKED for their batch
+  // — i.e. eligibility.enrolled === true && eligibility.reason ===
+  // 'enrolled'. Excluded: 'lesson_locked' (enrolled, batch hasn't
+  // released it), 'attendance' / 'no_gate' / 'blocked' (any non-enrolled
+  // reason). This is Pastor's explicit "only unlocked" rule (Inv #90).
+  //
+  // The event_name is built EXACTLY per Invariant #53:
+  //   `${course_code} · L${lesson_number} · ${lesson_title}`  (U+00B7)
+  // so a self-attest row fires the quiz-gate (Inv #35/#89) identically
+  // to an MLT-logged attendance row.
+  //
+  // BTLI ↔ 'BTLI' track, Usbong ↔ 'Pre-Pipeline' track. The L0→Pre-
+  // Pipeline / L1+→BTLI enrollment rule means only one of the two is
+  // ever populated for a given member, but the helper returns both keys
+  // (possibly empty) so callers can filter uniformly.
+  //
+  // Used by:
+  //   • member_tool.html → _loadAttestableLessons() thin wrapper
+  //   • lc_leader_tool.html → L5 self-attest card lesson sub-picker
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Canonical member/staff-facing self-attest event list. Single source
+  // of truth so MMT and MLT never drift (Inv #90 moved MMT off the
+  // partial system_settings.meta.attendance_event_types config; this
+  // replaces it for both consumers).
+  //
+  // This mirrors MLT's historical 10-event attendance form MINUS "Other"
+  // (a leader catch-all, meaningless for self-attest — Pastor's call,
+  // Inv #90). BTLI + Pre-Pipeline carry `lesson:true` — callers show a
+  // lesson sub-picker for these and HIDE the pill entirely when the
+  // member has no enrolled+unlocked lessons in that track.
+  //
+  // `key` doubles as the attendance `event_type` value written to the DB
+  // (and as the lesson-track key returned by attestableLessons()).
+  const ATTEST_EVENT_TYPES = [
+    { key: 'Sunday Service',  label_en: 'Sunday Service',  label_tl: 'Sunday Service',  icon: '⛪', typical_day: 7 },
+    { key: 'LC Meeting',      label_en: 'LC Meeting',      label_tl: 'LC Meeting',      icon: '🏠', typical_day: 7 },
+    { key: 'Sunday School',   label_en: 'Sunday School',   label_tl: 'Sunday School',   icon: '📖', typical_day: 7 },
+    { key: 'Prayer Meeting',  label_en: 'Prayer Meeting',  label_tl: 'Prayer Meeting',  icon: '🙏', typical_day: 3 },
+    { key: 'BTLI',            label_en: 'BTLI',            label_tl: 'BTLI',            icon: '📚', typical_day: 7, lesson: true },
+    { key: 'Pre-Pipeline',    label_en: 'Pre-Pipeline',    label_tl: 'Pre-Pipeline',    icon: '🌱', typical_day: 7, lesson: true },
+    { key: 'Youth Gathering', label_en: 'Youth Gathering', label_tl: 'Youth Gathering', icon: '🔥', typical_day: 7 },
+    { key: 'Team Building',   label_en: 'Team Building',   label_tl: 'Team Building',   icon: '🤝', typical_day: 7 },
+    { key: 'Outing',          label_en: 'Outing',          label_tl: 'Outing',          icon: '🌄', typical_day: 7 }
+  ];
+
+  // Internal: fetch active quizzes for one curriculum, run the right
+  // eligibility helper, and return the attestable (enrolled+unlocked)
+  // lessons as canonical event rows. Curriculum-generic per Invariant #52
+  // but the eligibility namespaces are deliberately separate (Inv #50),
+  // so we dispatch on `curriculum` rather than sharing query state.
+  //
+  // Returns: array of { event_name, lesson_number, lesson_title, course_code }
+  // Fails OPEN-as-empty: any error → [] (never throws to the caller; the
+  // self-attest card degrades to "no lessons" rather than breaking).
+  async function _attestFetchAttestableForCurriculum(memberId, curriculum) {
+    const _curriculum = (curriculum || 'btli').toLowerCase();
+    let tableName, eligibilityForMany;
+    if (_curriculum === 'btli') {
+      tableName = 'btli_quizzes';
+      eligibilityForMany = btliEligibilityForMany;
+    } else if (_curriculum === 'usbong') {
+      tableName = 'usbong_quizzes';
+      eligibilityForMany = usbongEligibilityForMany;
+    } else {
+      console.warn('_attestFetchAttestableForCurriculum: unknown curriculum', curriculum);
+      return [];
+    }
+    if (!memberId) return [];
+    const db = getDB();
+    if (!db) return [];
+
+    let quizzes = [];
+    try {
+      // NOTE: lesson_id is on the live table (added by the Session 14
+      // migration btli_quizzes_lesson_id_migration.sql, postdates the
+      // schema.json snapshot). It is needed by eligibilityForMany for the
+      // Model X participant lesson-lock (Inv #84). Mirrors MMT's deployed
+      // SELECT exactly.
+      const { data, error } = await db.from(tableName)
+        .select('id,course_code,lesson_number,lesson_title,attendance_event_name_pattern,lesson_id')
+        .eq('is_active', true)
+        .order('course_code', { ascending: true })
+        .order('lesson_number', { ascending: true });
+      if (error) {
+        console.warn('[attest] ' + tableName + ' load failed (failing open):', error);
+        return [];
+      }
+      quizzes = Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.warn('[attest] ' + tableName + ' load threw (failing open):', e);
+      return [];
+    }
+    if (!quizzes.length) return [];
+
+    let eligMap;
+    try {
+      eligMap = await eligibilityForMany(memberId, quizzes, {});
+    } catch (e) {
+      console.warn('[attest] ' + _curriculum + ' eligibility threw (failing open):', e);
+      return [];
+    }
+
+    const out = [];
+    quizzes.forEach(q => {
+      const el = eligMap.get(q.id);
+      // Enrolled AND unlocked only (Pastor's "only unlocked" rule, Inv #90).
+      if (el && el.enrolled === true && el.reason === 'enrolled') {
+        out.push({
+          event_name: `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`,
+          lesson_number: q.lesson_number,
+          lesson_title: q.lesson_title,
+          course_code: q.course_code
+        });
+      }
+    });
+    return out;
+  }
+
+  // Public: given a member ID, return their enrolled+unlocked attestable
+  // lessons per track. The single source of truth for both MMT and MLT's
+  // L5 self-attest lesson sub-picker (Invariant #91).
+  //
+  // Returns: { 'BTLI': [...], 'Pre-Pipeline': [...] } where each value is
+  // an array of { event_name, lesson_number, lesson_title, course_code }.
+  // Always returns both keys (possibly empty arrays). Never throws.
+  async function attestableLessons(memberId) {
+    const result = { 'BTLI': [], 'Pre-Pipeline': [] };
+    if (!memberId) return result;
+    // Run both curricula in parallel — they hit disjoint tables/programs
+    // (Inv #50) so there's no shared state to race on.
+    const [btli, usbong] = await Promise.all([
+      _attestFetchAttestableForCurriculum(memberId, 'btli'),
+      _attestFetchAttestableForCurriculum(memberId, 'usbong')
+    ]);
+    result['BTLI'] = btli;
+    result['Pre-Pipeline'] = usbong;
+    return result;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // COHORT PERMISSIONS + MLT HELPERS (Priority C2 · May 16, 2026)
   // ─────────────────────────────────────────────────────────────────
   // Ownership-based authorization for MLT enrollment self-service.
@@ -2319,6 +2469,14 @@
     usbong: {
       eligibilityFor: usbongEligibilityFor,
       eligibilityForMany: usbongEligibilityForMany
+    },
+    // Self-attest shared logic (Session 19 · May 23, 2026 — Invariant #91).
+    // Logic shared by MMT + MLT L5; UI stays per-file. attestableLessons
+    // returns { 'BTLI':[...], 'Pre-Pipeline':[...] } of enrolled+unlocked
+    // lessons; EVENT_TYPES is the canonical 9-event list (MLT minus "Other").
+    attest: {
+      attestableLessons,
+      EVENT_TYPES: ATTEST_EVENT_TYPES
     },
     // Cohort permissions + MLT helpers (Priority C2 · May 16, 2026)
     cohorts: {

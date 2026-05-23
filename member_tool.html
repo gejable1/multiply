@@ -6997,15 +6997,21 @@ let _attestLessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
 let _attestLessonsLoaded = false;
 
 // ─── Canonical member-facing event list — mirrors MLT's attendance form ───
-// MLT's full list is: Sunday Service, LC Meeting, Sunday School, Prayer
-// Meeting, BTLI, Pre-Pipeline, Youth Gathering, Team Building, Outing, Other.
-// Per Pastor (Session this): the member-facing self-attest list echoes MLT
-// but drops "Other" (a leader catch-all, meaningless for self-attest).
+// Session 19 (Inv #91): the canonical 9-event list now lives in shared.js as
+// MultiplyShared.attest.EVENT_TYPES (single source of truth so MMT/MLT never
+// drift — Inv #90). MLT's full list is: Sunday Service, LC Meeting, Sunday
+// School, Prayer Meeting, BTLI, Pre-Pipeline, Youth Gathering, Team Building,
+// Outing, Other. The member-facing list echoes MLT but drops "Other" (a
+// leader catch-all, meaningless for self-attest).
 // BTLI + Pre-Pipeline are lesson-bearing: they show a lesson sub-picker and
 // are HIDDEN entirely when the member has no enrolled+unlocked lessons in
 // that track (the L0→Pre-Pipeline / L1+→BTLI enrollment rule means only one
 // of the two is ever populated for a given member).
-const ATTEST_EVENT_TYPES = [
+//
+// The inline array below is a DEFENSIVE FALLBACK only — used if a stale
+// deployed shared.js predates the attest namespace. It must stay byte-equal
+// to MultiplyShared.attest.EVENT_TYPES.
+const _ATTEST_EVENT_TYPES_FALLBACK = [
   { key:'Sunday Service', label_en:'Sunday Service', label_tl:'Sunday Service', icon:'⛪', typical_day:7 },
   { key:'LC Meeting',     label_en:'LC Meeting',     label_tl:'LC Meeting',     icon:'🏠', typical_day:7 },
   { key:'Sunday School',  label_en:'Sunday School',  label_tl:'Sunday School',  icon:'📖', typical_day:7 },
@@ -7016,6 +7022,10 @@ const ATTEST_EVENT_TYPES = [
   { key:'Team Building',  label_en:'Team Building',  label_tl:'Team Building',  icon:'🤝', typical_day:7 },
   { key:'Outing',         label_en:'Outing',         label_tl:'Outing',         icon:'🌄', typical_day:7 }
 ];
+const ATTEST_EVENT_TYPES =
+  (window.MultiplyShared && MultiplyShared.attest && Array.isArray(MultiplyShared.attest.EVENT_TYPES))
+    ? MultiplyShared.attest.EVENT_TYPES
+    : _ATTEST_EVENT_TYPES_FALLBACK;
 
 // ─── Resolve which event types to show this member ───
 // Plain events always show. Lesson events (BTLI / Pre-Pipeline) show ONLY
@@ -7038,69 +7048,30 @@ async function _loadAttestEventTypes(){
 }
 
 // ─── Load the member's enrolled + unlocked lessons (BTLI + Pre-Pipeline) ───
-// Reuses the SAME quiz-fetch + eligibilityForMany pattern as renderBtliQuizzes
-// / renderUsbongQuizzes (the "My Lessons" filter Pastor pointed to). A lesson
-// is attestable iff eligibility is enrolled AND unlocked (reason==='enrolled').
-// 'lesson_locked' (enrolled but batch hasn't released it) and any non-enrolled
-// reason (attendance / no_gate / blocked) are excluded — "only unlocked".
-// event_name is built EXACTLY as MLT does: `${course_code} · L${n} · ${title}`
-// with the U+00B7 middle dot (Invariant #53), so the quiz-gate fires identically.
+// Session 19 (Inv #91): the resolution LOGIC now lives in shared.js as
+// MultiplyShared.attest.attestableLessons(memberId). This is a thin caching
+// wrapper around it — UI stays per-file (Inv #56). The helper returns
+// { 'BTLI':[...], 'Pre-Pipeline':[...] } of {event_name, lesson_number,
+// lesson_title, course_code}, where a lesson is included iff the member is
+// enrolled AND it's unlocked (eligibility reason==='enrolled') — Pastor's
+// "only unlocked" rule. event_name is canonical full-form with the U+00B7
+// middot (Inv #53) so the quiz-gate (Inv #35/#89) fires identically.
 async function _loadAttestableLessons(){
   if (_attestLessonsLoaded) return;
   _attestLessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
   if (!MEMBER || !MEMBER.memberId) { _attestLessonsLoaded = true; return; }
-
-  // BTLI
   try {
-    const { data: bq } = await db.from('btli_quizzes')
-      .select('id,course_code,lesson_number,lesson_title,attendance_event_name_pattern,lesson_id')
-      .eq('is_active', true)
-      .order('course_code', { ascending: true })
-      .order('lesson_number', { ascending: true });
-    if (Array.isArray(bq) && bq.length) {
-      let eligMap;
-      try { eligMap = await MultiplyShared.btli.eligibilityForMany(MEMBER.memberId, bq, {}); }
-      catch(e){ console.warn('[attest] btli eligibility threw:', e); eligMap = new Map(); }
-      bq.forEach(q => {
-        const el = eligMap.get(q.id);
-        // Enrolled AND unlocked only (Pastor's "only unlocked" rule).
-        if (el && el.enrolled === true && el.reason === 'enrolled') {
-          _attestLessonsByType['BTLI'].push({
-            event_name: `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`,
-            lesson_number: q.lesson_number,
-            lesson_title: q.lesson_title,
-            course_code: q.course_code
-          });
-        }
-      });
-    }
-  } catch(e) { console.warn('[attest] btli quizzes load failed:', e); }
-
-  // Pre-Pipeline (Usbong)
-  try {
-    const { data: uq } = await db.from('usbong_quizzes')
-      .select('id,course_code,lesson_number,lesson_title,attendance_event_name_pattern,lesson_id')
-      .eq('is_active', true)
-      .order('course_code', { ascending: true })
-      .order('lesson_number', { ascending: true });
-    if (Array.isArray(uq) && uq.length) {
-      let eligMap;
-      try { eligMap = await MultiplyShared.usbong.eligibilityForMany(MEMBER.memberId, uq, {}); }
-      catch(e){ console.warn('[attest] usbong eligibility threw:', e); eligMap = new Map(); }
-      uq.forEach(q => {
-        const el = eligMap.get(q.id);
-        if (el && el.enrolled === true && el.reason === 'enrolled') {
-          _attestLessonsByType['Pre-Pipeline'].push({
-            event_name: `${q.course_code} · L${q.lesson_number} · ${q.lesson_title}`,
-            lesson_number: q.lesson_number,
-            lesson_title: q.lesson_title,
-            course_code: q.course_code
-          });
-        }
-      });
-    }
-  } catch(e) { console.warn('[attest] usbong quizzes load failed:', e); }
-
+    const res = await MultiplyShared.attest.attestableLessons(MEMBER.memberId);
+    // Defensive shape-guard: the helper always returns both keys, but keep
+    // the local fallback so a malformed return can't break the picker.
+    _attestLessonsByType = {
+      'BTLI': (res && Array.isArray(res['BTLI'])) ? res['BTLI'] : [],
+      'Pre-Pipeline': (res && Array.isArray(res['Pre-Pipeline'])) ? res['Pre-Pipeline'] : []
+    };
+  } catch(e) {
+    console.warn('[attest] attestableLessons failed (degrading to no lessons):', e);
+    _attestLessonsByType = { 'BTLI': [], 'Pre-Pipeline': [] };
+  }
   _attestLessonsLoaded = true;
 }
 
