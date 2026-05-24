@@ -12326,7 +12326,7 @@ function _renderPastorAnnComposer(){
 // ─────────────────────────────────────────────────────────────────────
 // Opened from the composer's ＋ Pick buttons. Three picker types share
 // one modal that adapts based on `_audPickerKind`:
-//   'lc_groups'  → real LC Groups + virtual "Unassigned (LCL: ...)" groups
+//   'lc_groups'  → real LC Groups + virtual "{first name}'s LCG" groups
 //   'member_ids' → flat alphabetical list of all members, search bar
 //   'ministries' → flat list of distinct ministries from members table
 // All pickers: search filter + multi-select chips. Done button closes.
@@ -12358,13 +12358,13 @@ function _renderAudienceChips(kind, ids){
     } else if (kind === 'lc_groups') {
       const g = (_audPickerCache.lcGroups || []).find(x => x.id === id);
       if (g) {
-        label = g.label;                              // real group name OR "Unassigned (LCL: <name>)"
+        label = g.label;                              // real group name OR "{first name}'s LCG" (virtual)
       } else if (String(id).startsWith('lcl:')) {
         // Virtual LCL group but cache not ready — resolve the LCL's name if we
         // can; otherwise show a friendly placeholder, never the uuid.
         const lclId = String(id).slice(4);
         const lcl = (_audPickerCache.members || []).find(x => x.id === lclId);
-        label = lcl ? `Unassigned (LCL: ${lcl.name})` : 'Unassigned LCG';
+        label = lcl ? _lclLcgLabel(lcl.name) : 'an LCG';
       } else {
         label = id;                                   // real groups use their name as the id, so this is already human
       }
@@ -12424,6 +12424,14 @@ function _closeAudPicker(){
   _renderPastorAnnComposer();  // re-render composer with updated chips
 }
 
+// Build the "{first name}'s LCG" label for a virtual LCL group (Inv #59).
+// Uses the LCL's first name; handles a trailing "s" so we don't write "James's".
+function _lclLcgLabel(fullName){
+  const first = String(fullName || '').trim().split(/\s+/)[0] || 'LCL';
+  const poss = /s$/i.test(first) ? `${first}'` : `${first}'s`;
+  return `${poss} LCG`;
+}
+
 async function _ensureAudPickerCache(){
   if (_audPickerCache.members) return;
   try {
@@ -12435,7 +12443,10 @@ async function _ensureAudPickerCache(){
     if (error) throw error;
     _audPickerCache.members = members || [];
 
-    // Build LC Groups: real groups (from .lc_group) + virtual LCL-derived groups
+    // Build LC Groups: real groups (from .lc_group) + virtual LCL-derived groups.
+    // Virtual groups (the LCL's flock with no lc_group set) are labelled
+    // "{first name}'s LCG" per Inv #59's _lcgDisplayName fallback — same
+    // convention MMT/MLT use, so the picker + chip + member tools all agree.
     const realGroups = new Set();
     const virtualGroups = new Map();  // key = "lcl:<id>" → label
     _audPickerCache.members.forEach(m => {
@@ -12447,7 +12458,7 @@ async function _ensureAudPickerCache(){
         if (lcl) {
           const key = `lcl:${lcl.id}`;
           if (!virtualGroups.has(key)) {
-            virtualGroups.set(key, `Unassigned (LCL: ${lcl.name})`);
+            virtualGroups.set(key, _lclLcgLabel(lcl.name));
           }
         }
       }
