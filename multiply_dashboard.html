@@ -12463,10 +12463,14 @@ async function _ensureAudPickerCache(){
         }
       }
     });
+    // Combined A–Z list (Session 19): real + virtual groups interleaved and
+    // sorted together by display label, case-insensitive. A Pastor picks by
+    // name, not by whether a group is real or LCL-derived — so "Tonette's LCG"
+    // sorts under T regardless of type. No (virtual) tag is shown.
     _audPickerCache.lcGroups = [
-      ...Array.from(realGroups).sort().map(g => ({id: g, label: g, real: true})),
+      ...Array.from(realGroups).map(g => ({id: g, label: g, real: true})),
       ...Array.from(virtualGroups.entries()).map(([id, label]) => ({id, label, real: false}))
-    ];
+    ].sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
 
     // Build Ministries: distinct values from ministry / ministry2 / ministry3
     const minSet = new Set();
@@ -12537,23 +12541,26 @@ function _renderAudPickerListOnly(){
   const search = (_audPickerSearch || '').toLowerCase().trim();
 
   let listHtml;
+  let visibleItems = [];   // currently-filtered rows, for the filter-aware Select All
   if (_audPickerKind === 'lc_groups') {
     const items = (_audPickerCache.lcGroups || []).filter(g =>
       !search || g.label.toLowerCase().includes(search)
     );
+    visibleItems = items;
     listHtml = items.length === 0
       ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;">No LC groups match.</div>'
       : items.map(g => {
           const checked = selectedIds.has(String(g.id));
           return `<label style="display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-bottom:1px solid var(--border);cursor:pointer;${checked?'background:#fef9ed;':''}">
             <input type="checkbox" ${checked?'checked':''} onchange="_toggleAudPickerItem('${String(g.id).replace(/'/g,"\\'")}', this.checked)" style="width:18px;height:18px;cursor:pointer;">
-            <span style="flex:1;font-size:13px;color:var(--ink);font-weight:${g.real?'600':'500'};">${MultiplyShared.escapeHTML(g.label)}${!g.real?' <span style=\"font-size:10px;color:var(--muted);font-style:italic;\">(virtual)</span>':''}</span>
+            <span style="flex:1;font-size:13px;color:var(--ink);font-weight:600;">${MultiplyShared.escapeHTML(g.label)}</span>
           </label>`;
         }).join('');
   } else if (_audPickerKind === 'member_ids') {
     const items = (_audPickerCache.members || []).filter(m =>
       !search || m.name.toLowerCase().includes(search)
     );
+    visibleItems = items;
     listHtml = items.length === 0
       ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;">No members match.</div>'
       : items.map(m => {
@@ -12571,6 +12578,7 @@ function _renderAudPickerListOnly(){
     const items = (_audPickerCache.ministries || []).filter(g =>
       !search || g.label.toLowerCase().includes(search)
     );
+    visibleItems = items;
     listHtml = items.length === 0
       ? '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12px;">No ministries match.</div>'
       : items.map(g => {
@@ -12581,7 +12589,20 @@ function _renderAudPickerListOnly(){
           </label>`;
         }).join('');
   }
-  listWrap.innerHTML = listHtml;
+  // Filter-aware "Select all" header — toggles every currently-visible row.
+  // Checked only when ALL visible rows are already selected; indeterminate-ish
+  // partial state just shows unchecked. When a search is active it reads
+  // "Select all matching (N)" so it doubles as e.g. "select all Youth LCGs".
+  const visibleIds = visibleItems.map(it => String(it.id));
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+  const selectAllLabel = search ? `Select all matching (${visibleIds.length})` : `Select all (${visibleIds.length})`;
+  const selectAllHtml = visibleIds.length === 0 ? '' : `
+    <label style="display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-bottom:2px solid var(--border);cursor:pointer;background:#f3f3f3;position:sticky;top:0;z-index:1;">
+      <input type="checkbox" ${allVisibleSelected?'checked':''} onchange="_audPickerSelectAllVisible(this.checked)" style="width:18px;height:18px;cursor:pointer;">
+      <span style="flex:1;font-size:12.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;">${selectAllLabel}</span>
+    </label>`;
+  listWrap.innerHTML = selectAllHtml + listHtml;
+  listWrap.dataset.visibleIds = JSON.stringify(visibleIds);
 
   const selectedCount = selectedIds.size;
   footer.innerHTML = `
@@ -12604,6 +12625,30 @@ function _toggleAudPickerItem(id, checked){
     return _renderAudPicker();
   }
   _pastorAnnDraft.audience[key] = arr;
+  _renderAudPicker();
+}
+
+// Filter-aware Select All: add/remove every CURRENTLY-VISIBLE row (respecting
+// the search box) to/from the draft's selection for this picker kind. Visible
+// IDs are read from the list's dataset so this always matches what's on screen.
+function _audPickerSelectAllVisible(checked){
+  if (!_pastorAnnDraft) return;
+  const key = _audPickerKind;
+  const listWrap = document.getElementById('audPickerListWrap');
+  let visibleIds = [];
+  try { visibleIds = JSON.parse(listWrap?.dataset?.visibleIds || '[]'); } catch(e) { visibleIds = []; }
+  if (!visibleIds.length) return;
+  const cur = (_pastorAnnDraft.audience[key] || []).map(String);
+  if (checked) {
+    // Union — keep existing selections outside the current filter intact.
+    const merged = new Set(cur);
+    visibleIds.forEach(id => merged.add(String(id)));
+    _pastorAnnDraft.audience[key] = Array.from(merged);
+  } else {
+    // Remove only the visible ones; selections hidden by the filter stay.
+    const visSet = new Set(visibleIds.map(String));
+    _pastorAnnDraft.audience[key] = cur.filter(id => !visSet.has(String(id)));
+  }
   _renderAudPicker();
 }
 
