@@ -1322,20 +1322,17 @@ async function loadMyMembers(){
     refreshScopedMembers();
     updateScopeCountsMobile();
     renderHome();
-    // Session 21: weekly attendance habit gate (L2+ only, fail-soft).
-    // Runs once after the roster + home render so currentLeader/LEADER are ready.
-    runWeeklyAttendanceGate();
-    // Session 21: light the Announcements unread badge AT BOOT. Previously
-    // _loadInbox + _updateAnnQuickActionBadge ran only inside openAnnouncements(),
-    // so the badge never appeared until a leader had already opened the inbox —
-    // useless as a nudge. We now load it on startup (after renderHome paints the
-    // .qa-btn the badge anchors to). Non-blocking + fail-soft: a failure leaves
-    // the badge absent, never breaks boot. L2+ only (matches the inbox gate in
-    // openAnnouncements; lower levels aren't announcement authors/recipients here).
+    // Session 21: load the announcement inbox FIRST (lights the quick-action
+    // badge), THEN run the merged boot wall so it can include unread
+    // announcements alongside attendance. Both are L2+ only and fail-soft;
+    // neither blocks boot. The inbox load also paints the .qa-btn badge.
     if (LEADER && (LEADER.leaderLevel || 0) >= 2) {
       _loadInbox()
-        .then(() => _updateAnnQuickActionBadge())
-        .catch(e => console.warn('[announcements] boot badge load failed (non-fatal):', e));
+        .catch(e => { console.warn('[announcements] boot inbox load failed (non-fatal):', e); })
+        .finally(() => {
+          _updateAnnQuickActionBadge();
+          runWeeklyAttendanceGate();  // merged wall: attendance + unread announcements
+        });
     }
   } catch(e) {
     console.error('Could not load members:', e);
@@ -1484,27 +1481,84 @@ function _wagNowManila() {
   return new Date(now.getTime() + WAG_TZ_OFFSET_MIN * 60000);
 }
 
-// Given a Manila-shifted "now", return {sundayISO, wedISO, weekStartISO,
-// weekStartUTCISO} where the date strings are YYYY-MM-DD in Manila local
-// for the CURRENT week (week starts Sunday 00:00 Manila).
-function _wagWeekAnchors(nowManila) {
-  // Manila-local Y/M/D via UTC getters on the shifted date
-  const dow = nowManila.getUTCDay();              // 0=Sun … 6=Sat (Manila local)
-  // This week's Sunday = today minus dow days
-  const sunday = new Date(nowManila.getTime() - dow * 86400000);
-  // This week's Wednesday = Sunday + 3 days
-  const wed = new Date(sunday.getTime() + 3 * 86400000);
-  const fmt = (d) => d.toISOString().slice(0, 10);  // YYYY-MM-DD (Manila local Y/M/D)
-  // Week start (Sunday 00:00 Manila) as real UTC instant, for waiver expiry
-  const weekStartManilaMidnight = new Date(Date.UTC(
-    sunday.getUTCFullYear(), sunday.getUTCMonth(), sunday.getUTCDate(), 0, 0, 0));
-  // convert that Manila-midnight back to true UTC
-  const weekStartUTC = new Date(weekStartManilaMidnight.getTime() - WAG_TZ_OFFSET_MIN * 60000);
+// ── Service-window model (Session 21 retiming) ──────────────────
+// Pastor's spec (June 2026 examples):
+//   • Wednesday service 7PM → nag window opens Wed 10PM, closes next Wed 6PM
+//       (1h before the next 7PM service). Quiet gap Wed 6–10PM.
+//   • Sunday service 9AM → nag window opens Sun 12 noon, closes next Sun 8AM
+//       (1h before the next 9AM service). Quiet gap Sun 8AM–12 noon.
+// For each, we find the MOST RECENT occurrence of that weekday whose window
+// is currently open. Always backward-looking (fixes the "defaults forward"
+// bug). During the quiet gap the resolver returns null → that line is hidden.
+//
+// All math is in Manila wall-clock (UTC+8). We express a window edge as
+// "minutes-into-the-day" so 10PM = 1320, 6PM = 1080, noon = 720, 8AM = 480.
+
+const WAG_SERVICES = {
+  sunday:    { dow: 0, openMin: 12 * 60, closeMin: 8 * 60 },   // open Sun 12:00, close next Sun 08:00
+  wednesday: { dow: 3, openMin: 22 * 60, closeMin: 18 * 60 }   // open Wed 22:00, close next Wed 18:00
+};
+
+// Manila-local YYYY-MM-DD for a Manila-shifted date
+function _wagFmt(d) { return d.toISOString().slice(0, 10); }
+
+// Minutes-into-day (Manila local) for a Manila-shifted date
+function _wagMinOfDay(d) { return d.getUTCHours() * 60 + d.getUTCMinutes(); }
+
+// Resolve the active service date for one service config, given Manila "now".
+// Returns the Manila-local YYYY-MM-DD of the service whose nag window is OPEN
+// right now, or null if we're in the quiet gap (no active obligation).
+//
+// Logic: the candidate service is the most recent past/today occurrence of
+// `dow`. Its window is [that-day openMin → (that-day + 7d) closeMin]. If now
+// is inside that window, return it. If now is before the window opened today
+// (i.e. it's the service day but before openMin), the active obligation is the
+// PREVIOUS week's service — unless we're past its close (the quiet gap), in
+// which case null.
+function _wagActiveServiceDate(nowManila, svc) {
+  const dow = nowManila.getUTCDay();
+  const nowMin = _wagMinOfDay(nowManila);
+  // Most recent occurrence of svc.dow at or before today (Manila local date)
+  let backDays = (dow - svc.dow + 7) % 7;
+  const thisOccur = new Date(nowManila.getTime() - backDays * 86400000); // midnight-agnostic; date only
+  const prevOccur = new Date(thisOccur.getTime() - 7 * 86400000);
+
+  // Helper: is `now` within the window anchored at occurrence `occ`?
+  // window: open at occ-day openMin, close at (occ-day +7) closeMin.
+  function withinWindow(occ) {
+    const occDate = _wagFmt(occ);
+    const nowDate = _wagFmt(nowManila);
+    const closeOcc = new Date(occ.getTime() + 7 * 86400000);
+    const closeDate = _wagFmt(closeOcc);
+    // open edge
+    if (nowDate < occDate) return false;
+    if (nowDate === occDate && nowMin < svc.openMin) return false;
+    // close edge
+    if (nowDate > closeDate) return false;
+    if (nowDate === closeDate && nowMin >= svc.closeMin) return false;
+    return true;
+  }
+
+  if (withinWindow(thisOccur)) return _wagFmt(thisOccur);
+  if (withinWindow(prevOccur)) return _wagFmt(prevOccur);
+  return null;  // quiet gap — no active obligation for this service
+}
+
+// Convenience: resolve both service obligations + the rolling LC window.
+function _wagWindows(nowManila) {
   return {
-    sundayISO: fmt(sunday),
-    wedISO: fmt(wed),
-    weekStartUTCISO: weekStartUTC.toISOString()
+    sundayDate:   _wagActiveServiceDate(nowManila, WAG_SERVICES.sunday),
+    wedDate:      _wagActiveServiceDate(nowManila, WAG_SERVICES.wednesday)
   };
+}
+
+// Pretty date for alert text, e.g. "June 5". Input: Manila-local YYYY-MM-DD.
+function _wagPrettyDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  const months = ['January','February','March','April','May','June','July',
+    'August','September','October','November','December'];
+  return `${months[m - 1]} ${d}`;
 }
 
 // Rolling last-7-days window as a set of Manila-local YYYY-MM-DD strings.
@@ -1527,13 +1581,20 @@ function _wagLcgWaived(leaderId) {
   } catch (e) { return false; }
 }
 
-// Set the LCG waiver to expire at next Sunday 00:00 Manila (start of NEXT week).
+// Set the LCG waiver to expire at the next Sunday 00:00 Manila (start of the
+// next calendar week). Independent of the service-window logic — the LC waiver
+// is still a simple weekly reset per Pastor's original spec.
 function _wagSetLcgWaiver(leaderId) {
   try {
     const nowM = _wagNowManila();
-    const { weekStartUTCISO } = _wagWeekAnchors(nowM);
-    // next week's start = this week's start + 7 days
-    const nextSunUTC = new Date(new Date(weekStartUTCISO).getTime() + 7 * 86400000);
+    const dow = nowM.getUTCDay();                 // 0=Sun … 6 (Manila local)
+    // This week's Sunday (Manila-local date), then +7 days = next Sunday
+    const thisSunday = new Date(nowM.getTime() - dow * 86400000);
+    const nextSundayDate = _wagFmt(new Date(thisSunday.getTime() + 7 * 86400000));
+    // Convert that next-Sunday Manila-midnight to a real UTC instant
+    const [y, m, d] = nextSundayDate.split('-').map(Number);
+    const manilaMidnight = Date.UTC(y, m - 1, d, 0, 0, 0);
+    const nextSunUTC = new Date(manilaMidnight - WAG_TZ_OFFSET_MIN * 60000);
     localStorage.setItem(WAG_WAIVER_KEY_PREFIX + leaderId, nextSunUTC.toISOString());
   } catch (e) { /* non-fatal */ }
 }
@@ -1571,25 +1632,34 @@ async function _wagLoggedLcgRecently(leaderId, dateList) {
   } catch (e) { console.warn('_wagLoggedLcgRecently threw (fail-soft):', e); return null; }
 }
 
-// Compute which of the three checks are MISSING. Returns {missing:[...], errored:bool}.
-// A null from a query (infra error) is treated as "not missing" (fail-soft):
-// we never block on a check we couldn't actually read.
+// Compute which of the checks are MISSING. Returns {missing:[...], errored:bool}.
+// Each service line uses its resolved active date (or is HIDDEN if we're in the
+// quiet gap → resolver returned null). A null from a QUERY (infra error) is
+// treated as "not missing" (fail-soft): we never block on a check we couldn't
+// actually read. Labels carry the actual service date (e.g. "Sunday service —
+// June 5") so the leader knows exactly which meeting to log.
 async function _wagComputeMissing(leaderId) {
   const nowM = _wagNowManila();
-  const { sundayISO, wedISO } = _wagWeekAnchors(nowM);
+  const { sundayDate, wedDate } = _wagWindows(nowM);
   const last7 = _wagLast7Dates(nowM);
 
+  // Only query a service if its window is currently open (date != null).
   const [sun, wed, lcg] = await Promise.all([
-    _wagLoggedOnDate(leaderId, 'Sunday Service', sundayISO),
-    _wagLoggedOnDate(leaderId, 'Prayer Meeting', wedISO),
+    sundayDate ? _wagLoggedOnDate(leaderId, 'Sunday Service', sundayDate) : Promise.resolve('skip'),
+    wedDate    ? _wagLoggedOnDate(leaderId, 'Prayer Meeting', wedDate)     : Promise.resolve('skip'),
     _wagLoggedLcgRecently(leaderId, last7)
   ]);
 
+  // errored only counts checks we actually attempted (skip ≠ error)
   let errored = (sun === null || wed === null || lcg === null);
   const missing = [];
-  // Only push a check as "missing" when we got a definite false (not null).
-  if (sun === false) missing.push({ key: 'Sunday Service', label: 'Sunday service', date: sundayISO, waivable: false });
-  if (wed === false) missing.push({ key: 'Prayer Meeting', label: 'Wednesday (Prayer Meeting)', date: wedISO, waivable: false });
+  // Sunday: show only if window open (not 'skip') AND definitely not logged.
+  if (sun === false) {
+    missing.push({ key: 'Sunday Service', label: `Sunday service — ${_wagPrettyDate(sundayDate)}`, date: sundayDate, waivable: false });
+  }
+  if (wed === false) {
+    missing.push({ key: 'Prayer Meeting', label: `Wednesday service — ${_wagPrettyDate(wedDate)}`, date: wedDate, waivable: false });
+  }
   if (lcg === false && !_wagLcgWaived(leaderId)) {
     missing.push({ key: 'LC Meeting', label: 'LC meeting (this week)', date: null, waivable: true });
   }
@@ -1618,7 +1688,8 @@ function _wagHideModal() {
   if (m) m.style.display = 'none';
 }
 
-function _wagRenderModal(missing) {
+function _wagRenderModal(missing, unreadAnns) {
+  unreadAnns = unreadAnns || [];
   let modal = document.getElementById('wagModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -1626,14 +1697,16 @@ function _wagRenderModal(missing) {
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:10000;padding:1rem;';
     document.body.appendChild(modal);
   }
-  const lines = missing.map(item => {
+
+  // ── Attendance section ──
+  const attLines = missing.map(item => {
     const waiveBtn = item.waivable
       ? `<button onclick="_wagWaiveLcg()" style="margin-left:8px;padding:7px 12px;background:transparent;color:#9a9ab4;border:1px solid #3a3a4a;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">No LC meeting this week</button>`
       : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#22222c;border:1px solid #2e2e3c;border-left:3px solid #f87171;border-radius:10px;padding:12px 14px;margin-bottom:8px;flex-wrap:wrap;">
       <div style="flex:1;min-width:150px;">
         <div style="font-size:14px;font-weight:700;color:#f0f0f8;">${item.label}</div>
-        <div style="font-size:11.5px;color:#9a9ab4;margin-top:2px;">Not yet logged${item.date ? ' for ' + item.date : ''}.</div>
+        <div style="font-size:11.5px;color:#9a9ab4;margin-top:2px;">Not yet logged.</div>
       </div>
       <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
         <button onclick="_wagGoLog('${item.key}')" style="padding:7px 14px;background:#e8b84b;color:#1a1612;border:0;border-radius:8px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">Log it now</button>
@@ -1642,29 +1715,104 @@ function _wagRenderModal(missing) {
     </div>`;
   }).join('');
 
-  modal.innerHTML = `<div style="background:linear-gradient(180deg,#18181f,#0f0f13);max-width:440px;width:100%;border:1px solid #2e2e3c;border-radius:16px;padding:1.5rem 1.4rem;max-height:86vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5);">
-    <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#e8b84b;margin-bottom:6px;">This Week's Attendance</div>
-    <h2 style="font-size:22px;font-weight:800;color:#f0f0f8;margin:0 0 8px;line-height:1.2;">Tapusin natin 'to, kapatid 🙏</h2>
-    <p style="font-size:13.5px;color:#d4d4dc;line-height:1.55;margin:0 0 16px;">Logging attendance is how we shepherd well — and how your disciples' lessons unlock. Please log what's still missing this week:</p>
-    ${lines}
-    <button onclick="_wagHideModal()" style="width:100%;margin-top:10px;padding:11px;background:transparent;color:#9a9ab4;border:1px solid #2e2e3c;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">I'll do this later</button>
-    <p style="font-size:10.5px;color:#5a5a78;text-align:center;margin:10px 0 0;line-height:1.5;">This reminder returns until each item is logged. The week resets every Sunday.</p>
+  const attSection = missing.length > 0 ? `
+    <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#e8b84b;margin:4px 0 8px;">📋 This week's attendance</div>
+    ${attLines}` : '';
+
+  // ── Announcements section ──
+  const annLines = unreadAnns.map(a => {
+    const pr = (a.priority && String(a.priority).toLowerCase() === 'high');
+    const safeTitle = _wagEsc(a.title || 'Announcement');
+    const safeBody = _wagEsc((a.body || '').slice(0, 160)) + ((a.body || '').length > 160 ? '…' : '');
+    const author = a.author_name ? `<span style="color:#7a7a90;">· ${_wagEsc(a.author_name)}</span>` : '';
+    return `<div style="background:#22222c;border:1px solid #2e2e3c;border-left:3px solid ${pr ? '#f87171' : '#60a5fa'};border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:14px;font-weight:700;color:#f0f0f8;">${pr ? '🔴 ' : ''}${safeTitle} <span style="font-weight:600;font-size:11px;">${author}</span></div>
+          <div style="font-size:12px;color:#b8b8c4;margin-top:3px;line-height:1.45;">${safeBody}</div>
+        </div>
+        <button onclick="_wagAckAnnouncement('${a.id}')" style="padding:7px 14px;background:#2f7d4f;color:#fff;border:0;border-radius:8px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;flex-shrink:0;">✓ Acknowledge</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const annSection = unreadAnns.length > 0 ? `
+    <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#60a5fa;margin:${missing.length > 0 ? '16px' : '4px'} 0 8px;">📣 Unread announcements (${unreadAnns.length})</div>
+    ${annLines}` : '';
+
+  modal.innerHTML = `<div style="background:linear-gradient(180deg,#18181f,#0f0f13);max-width:460px;width:100%;border:1px solid #2e2e3c;border-radius:16px;padding:1.5rem 1.4rem;max-height:88vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+    <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#e8b84b;margin-bottom:6px;">Before you start</div>
+    <h2 style="font-size:22px;font-weight:800;color:#f0f0f8;margin:0 0 8px;line-height:1.2;">Sandali lang, kapatid 🙏</h2>
+    <p style="font-size:13.5px;color:#d4d4dc;line-height:1.55;margin:0 0 16px;">A couple of things need your attention this week. Logging attendance is how we shepherd well — and how your disciples' lessons unlock.</p>
+    ${attSection}
+    ${annSection}
+    <button onclick="_wagHideModal()" style="width:100%;margin-top:12px;padding:11px;background:transparent;color:#9a9ab4;border:1px solid #2e2e3c;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">I'll do this later</button>
+    <p style="font-size:10.5px;color:#5a5a78;text-align:center;margin:10px 0 0;line-height:1.5;">This reminder returns until each item is handled.</p>
   </div>`;
   modal.style.display = 'flex';
 }
 
-// Public entry: run the gate. L2+ only. Fail-soft on every error.
+// Minimal HTML-escape for announcement title/body in the boot wall.
+function _wagEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Acknowledge an announcement from the boot wall. Writes via the same
+// announcement_acks upsert as the inbox (Inv #65 canonical path), updates the
+// unread count + quick-action badge, then re-runs the gate so the line drops
+// off (and the wall closes if nothing else remains). Does NOT call
+// _renderAnnModal (the inbox modal isn't open here).
+async function _wagAckAnnouncement(annId) {
+  try {
+    const { error } = await db.from('announcement_acks').upsert({
+      announcement_id: annId,
+      member_id: LEADER.leaderId,
+      state: 'acknowledged',
+      acked_at: new Date().toISOString()
+    }, { onConflict: 'announcement_id,member_id' });
+    if (error) throw error;
+    // Reflect locally so the re-render + badge are correct without a full reload
+    if (typeof _annInboxAcks !== 'undefined' && _annInboxAcks instanceof Map) {
+      _annInboxAcks.set(annId, { state: 'acknowledged', acked_at: new Date().toISOString() });
+      const unread = _annInbox.filter(a => !_annInboxAcks.has(a.id)).length;
+      _annInboxUnreadCount = unread + (_annInboxRetractions ? _annInboxRetractions.length : 0);
+      _updateAnnQuickActionBadge();
+    }
+    runWeeklyAttendanceGate();  // re-render wall (or close it)
+  } catch (e) {
+    console.error('[announcements] boot-wall ack failed:', e);
+    if (typeof toast === 'function') toast('Could not save. Try again.', 'error');
+  }
+}
+
+// Public entry: run the merged boot wall. L2+ only. Fail-soft on every error.
+// Shows ONE modal with two sections — attendance + unread announcements — if
+// EITHER has items. Closes/stays hidden if both are clear.
 async function runWeeklyAttendanceGate() {
   try {
     if (!LEADER || !LEADER.leaderId) return;
     if ((LEADER.leaderLevel || 0) < 2) return;  // L2+ only
+
     const { missing, errored } = await _wagComputeMissing(LEADER.leaderId);
-    if (errored && missing.length === 0) {
-      // Couldn't read cleanly and nothing definite to show → stay silent.
-      return;
-    }
-    if (missing.length === 0) { _wagHideModal(); return; }
-    _wagRenderModal(missing);
+
+    // Unread announcements come from the already-loaded inbox (loaded at boot
+    // alongside this gate). Unread = inbox rows with no ack at all.
+    let unreadAnns = [];
+    try {
+      if (Array.isArray(_annInbox) && _annInboxAcks instanceof Map) {
+        unreadAnns = _annInbox.filter(a => !_annInboxAcks.has(a.id));
+      }
+    } catch (e) { unreadAnns = []; }
+
+    const nothingToShow = (missing.length === 0 && unreadAnns.length === 0);
+    if (nothingToShow) { _wagHideModal(); return; }
+    // If attendance read errored AND there's nothing definite to show on either
+    // side, stay silent (don't flash an empty wall on a transient outage).
+    if (errored && missing.length === 0 && unreadAnns.length === 0) return;
+
+    _wagRenderModal(missing, unreadAnns);
   } catch (e) {
     console.warn('runWeeklyAttendanceGate failed (fail-soft, no modal):', e);
   }
