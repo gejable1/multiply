@@ -9800,10 +9800,21 @@ async function renderUsbongQuizzes(){
 
       if (!unlocked) {
         badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#f0f0f0;color:#888;letter-spacing:.04em;">🔒 LOCKED</span>`;
-        actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
-          <span class="en-text">Get enrolled or have attendance logged to unlock.</span>
-          <span class="tl-text">Mag-enroll o pa-log ng attendance para mabuksan.</span>
-        </div>`;
+        // Model X for Usbong (Session 21): a participant who IS enrolled but
+        // whose batch hasn't unlocked the linked lesson yet gets the warmer,
+        // accurate message — mirrors the BTLI surface above. The generic line
+        // stays for the genuinely-not-enrolled / blocked case.
+        if (elig.reason === 'lesson_locked') {
+          actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
+            <span class="en-text">Opens when your facilitator releases this lesson.</span>
+            <span class="tl-text">Bubukas kapag inilabas ito ng iyong facilitator.</span>
+          </div>`;
+        } else {
+          actionHtml = `<div style="font-size:11.5px;color:var(--muted,#5a6655);font-style:italic;">
+            <span class="en-text">Get enrolled or have attendance logged to unlock.</span>
+            <span class="tl-text">Mag-enroll o pa-log ng attendance para mabuksan.</span>
+          </div>`;
+        }
         cardBg = '#f8f9fb';
       } else if (passed) {
         badgeHtml = `<span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:#dcf5e3;color:#1a5a30;letter-spacing:.04em;">✓ PASSED · ${bestScore}%</span>`;
