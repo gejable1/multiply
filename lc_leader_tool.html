@@ -1322,6 +1322,9 @@ async function loadMyMembers(){
     refreshScopedMembers();
     updateScopeCountsMobile();
     renderHome();
+    // Session 21: weekly attendance habit gate (L2+ only, fail-soft).
+    // Runs once after the roster + home render so currentLeader/LEADER are ready.
+    runWeeklyAttendanceGate();
   } catch(e) {
     console.error('Could not load members:', e);
     const stats = document.getElementById('statsRow');
@@ -1432,6 +1435,227 @@ function renderTransferAlerts(){
     <div class="ta-title">🔀 PENDING TRANSFERS (${pending.length})</div>
     ${rows}
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEEKLY ATTENDANCE GATE (Session 21 — habit-building, L2+ only)
+// ─────────────────────────────────────────────────────────────
+// A forceful-but-escapable boot modal that nudges L2+ leaders to log
+// the week's attendance THEY are responsible for. Three independent
+// checks, each satisfied by a row in `attendance` that THIS leader
+// personally logged (logged_by_id === me) with present=true:
+//
+//   • Sunday    → event_type 'Sunday Service', this week's Sunday (retrospective)
+//   • Wednesday → event_type 'Prayer Meeting',  this week's Wednesday (retrospective)
+//   • LC meeting→ event_type 'LC Meeting',       rolling last 7 days
+//
+// LC meeting is WAIVABLE ("No LC meeting this week") — suppresses that
+// one line for 7 days, expiring at the next Sunday 00:00 Manila. Sunday
+// and Wednesday have NO waiver. Each line is independent (clearing one
+// does not clear the others — Pastor's Q2). The modal is forceful (it
+// reappears each MLT open while items are missing) but has an "I'll do
+// this later" escape so a data-read bug can't lock out all 48 leaders
+// (Pastor's Q3 — fail-soft, sibling to the quiz-gate fail posture).
+//
+// Week boundary: Sunday 00:00 Manila (Asia/Manila, UTC+8). All date math
+// is done in Manila local time so "this week's Sunday" is unambiguous.
+// ═══════════════════════════════════════════════════════════════
+
+const WAG_TZ_OFFSET_MIN = 8 * 60;  // Asia/Manila = UTC+8 (no DST)
+const WAG_WAIVER_KEY_PREFIX = 'mlt_lcg_waiver_';  // + leaderId  → ISO expiry
+
+// Return a Date shifted into Manila wall-clock (so getUTCDay()/getUTCDate
+// read as Manila local). We work in this shifted space, then convert the
+// window edges back to real UTC ISO for the query.
+function _wagNowManila() {
+  const now = new Date();
+  return new Date(now.getTime() + WAG_TZ_OFFSET_MIN * 60000);
+}
+
+// Given a Manila-shifted "now", return {sundayISO, wedISO, weekStartISO,
+// weekStartUTCISO} where the date strings are YYYY-MM-DD in Manila local
+// for the CURRENT week (week starts Sunday 00:00 Manila).
+function _wagWeekAnchors(nowManila) {
+  // Manila-local Y/M/D via UTC getters on the shifted date
+  const dow = nowManila.getUTCDay();              // 0=Sun … 6=Sat (Manila local)
+  // This week's Sunday = today minus dow days
+  const sunday = new Date(nowManila.getTime() - dow * 86400000);
+  // This week's Wednesday = Sunday + 3 days
+  const wed = new Date(sunday.getTime() + 3 * 86400000);
+  const fmt = (d) => d.toISOString().slice(0, 10);  // YYYY-MM-DD (Manila local Y/M/D)
+  // Week start (Sunday 00:00 Manila) as real UTC instant, for waiver expiry
+  const weekStartManilaMidnight = new Date(Date.UTC(
+    sunday.getUTCFullYear(), sunday.getUTCMonth(), sunday.getUTCDate(), 0, 0, 0));
+  // convert that Manila-midnight back to true UTC
+  const weekStartUTC = new Date(weekStartManilaMidnight.getTime() - WAG_TZ_OFFSET_MIN * 60000);
+  return {
+    sundayISO: fmt(sunday),
+    wedISO: fmt(wed),
+    weekStartUTCISO: weekStartUTC.toISOString()
+  };
+}
+
+// Rolling last-7-days window as a set of Manila-local YYYY-MM-DD strings.
+function _wagLast7Dates(nowManila) {
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(nowManila.getTime() - i * 86400000);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;  // [today, …, today-6] in Manila local
+}
+
+// Is the LCG waiver currently active for this leader?
+function _wagLcgWaived(leaderId) {
+  try {
+    const raw = localStorage.getItem(WAG_WAIVER_KEY_PREFIX + leaderId);
+    if (!raw) return false;
+    const expiry = new Date(raw).getTime();
+    return Number.isFinite(expiry) && Date.now() < expiry;
+  } catch (e) { return false; }
+}
+
+// Set the LCG waiver to expire at next Sunday 00:00 Manila (start of NEXT week).
+function _wagSetLcgWaiver(leaderId) {
+  try {
+    const nowM = _wagNowManila();
+    const { weekStartUTCISO } = _wagWeekAnchors(nowM);
+    // next week's start = this week's start + 7 days
+    const nextSunUTC = new Date(new Date(weekStartUTCISO).getTime() + 7 * 86400000);
+    localStorage.setItem(WAG_WAIVER_KEY_PREFIX + leaderId, nextSunUTC.toISOString());
+  } catch (e) { /* non-fatal */ }
+}
+
+// Query: did THIS leader personally log a present row of event_type on a
+// given Manila-local date (Sunday/Wednesday checks)? Date is matched on the
+// stored event_date (which is a plain YYYY-MM-DD), so we compare strings.
+async function _wagLoggedOnDate(leaderId, eventType, dateISO) {
+  try {
+    const { data, error } = await db.from('attendance')
+      .select('id')
+      .eq('logged_by_id', leaderId)
+      .eq('event_type', eventType)
+      .eq('event_date', dateISO)
+      .eq('present', true)
+      .limit(1);
+    if (error) { console.warn('_wagLoggedOnDate failed (fail-soft):', error); return null; }
+    return (data && data.length > 0);
+  } catch (e) { console.warn('_wagLoggedOnDate threw (fail-soft):', e); return null; }
+}
+
+// Query: did THIS leader personally log a present LC Meeting row within the
+// rolling last-7-days window?
+async function _wagLoggedLcgRecently(leaderId, dateList) {
+  try {
+    const { data, error } = await db.from('attendance')
+      .select('event_date')
+      .eq('logged_by_id', leaderId)
+      .eq('event_type', 'LC Meeting')
+      .eq('present', true)
+      .in('event_date', dateList)
+      .limit(1);
+    if (error) { console.warn('_wagLoggedLcgRecently failed (fail-soft):', error); return null; }
+    return (data && data.length > 0);
+  } catch (e) { console.warn('_wagLoggedLcgRecently threw (fail-soft):', e); return null; }
+}
+
+// Compute which of the three checks are MISSING. Returns {missing:[...], errored:bool}.
+// A null from a query (infra error) is treated as "not missing" (fail-soft):
+// we never block on a check we couldn't actually read.
+async function _wagComputeMissing(leaderId) {
+  const nowM = _wagNowManila();
+  const { sundayISO, wedISO } = _wagWeekAnchors(nowM);
+  const last7 = _wagLast7Dates(nowM);
+
+  const [sun, wed, lcg] = await Promise.all([
+    _wagLoggedOnDate(leaderId, 'Sunday Service', sundayISO),
+    _wagLoggedOnDate(leaderId, 'Prayer Meeting', wedISO),
+    _wagLoggedLcgRecently(leaderId, last7)
+  ]);
+
+  let errored = (sun === null || wed === null || lcg === null);
+  const missing = [];
+  // Only push a check as "missing" when we got a definite false (not null).
+  if (sun === false) missing.push({ key: 'Sunday Service', label: 'Sunday service', date: sundayISO, waivable: false });
+  if (wed === false) missing.push({ key: 'Prayer Meeting', label: 'Wednesday (Prayer Meeting)', date: wedISO, waivable: false });
+  if (lcg === false && !_wagLcgWaived(leaderId)) {
+    missing.push({ key: 'LC Meeting', label: 'LC meeting (this week)', date: null, waivable: true });
+  }
+  return { missing, errored };
+}
+
+// Jump from the modal to the attendance screen, pre-selecting an event type.
+function _wagGoLog(eventType) {
+  _wagHideModal();
+  try {
+    showScreen('screenAttendance');
+    const pill = document.querySelector('.att-type-pill[data-type="' + eventType + '"]');
+    if (pill) selectAttType(pill);
+  } catch (e) { console.warn('_wagGoLog nav failed:', e); }
+}
+
+function _wagWaiveLcg() {
+  if (!LEADER || !LEADER.leaderId) return;
+  _wagSetLcgWaiver(LEADER.leaderId);
+  // Re-run the gate so the LCG line drops off; if nothing left, modal closes.
+  runWeeklyAttendanceGate();
+}
+
+function _wagHideModal() {
+  const m = document.getElementById('wagModal');
+  if (m) m.style.display = 'none';
+}
+
+function _wagRenderModal(missing) {
+  let modal = document.getElementById('wagModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'wagModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:10000;padding:1rem;';
+    document.body.appendChild(modal);
+  }
+  const lines = missing.map(item => {
+    const waiveBtn = item.waivable
+      ? `<button onclick="_wagWaiveLcg()" style="margin-left:8px;padding:7px 12px;background:transparent;color:#9a9ab4;border:1px solid #3a3a4a;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">No LC meeting this week</button>`
+      : '';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#22222c;border:1px solid #2e2e3c;border-left:3px solid #f87171;border-radius:10px;padding:12px 14px;margin-bottom:8px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:150px;">
+        <div style="font-size:14px;font-weight:700;color:#f0f0f8;">${item.label}</div>
+        <div style="font-size:11.5px;color:#9a9ab4;margin-top:2px;">Not yet logged${item.date ? ' for ' + item.date : ''}.</div>
+      </div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+        <button onclick="_wagGoLog('${item.key}')" style="padding:7px 14px;background:#e8b84b;color:#1a1612;border:0;border-radius:8px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">Log it now</button>
+        ${waiveBtn}
+      </div>
+    </div>`;
+  }).join('');
+
+  modal.innerHTML = `<div style="background:linear-gradient(180deg,#18181f,#0f0f13);max-width:440px;width:100%;border:1px solid #2e2e3c;border-radius:16px;padding:1.5rem 1.4rem;max-height:86vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+    <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#e8b84b;margin-bottom:6px;">This Week's Attendance</div>
+    <h2 style="font-size:22px;font-weight:800;color:#f0f0f8;margin:0 0 8px;line-height:1.2;">Tapusin natin 'to, kapatid 🙏</h2>
+    <p style="font-size:13.5px;color:#d4d4dc;line-height:1.55;margin:0 0 16px;">Logging attendance is how we shepherd well — and how your disciples' lessons unlock. Please log what's still missing this week:</p>
+    ${lines}
+    <button onclick="_wagHideModal()" style="width:100%;margin-top:10px;padding:11px;background:transparent;color:#9a9ab4;border:1px solid #2e2e3c;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">I'll do this later</button>
+    <p style="font-size:10.5px;color:#5a5a78;text-align:center;margin:10px 0 0;line-height:1.5;">This reminder returns until each item is logged. The week resets every Sunday.</p>
+  </div>`;
+  modal.style.display = 'flex';
+}
+
+// Public entry: run the gate. L2+ only. Fail-soft on every error.
+async function runWeeklyAttendanceGate() {
+  try {
+    if (!LEADER || !LEADER.leaderId) return;
+    if ((LEADER.leaderLevel || 0) < 2) return;  // L2+ only
+    const { missing, errored } = await _wagComputeMissing(LEADER.leaderId);
+    if (errored && missing.length === 0) {
+      // Couldn't read cleanly and nothing definite to show → stay silent.
+      return;
+    }
+    if (missing.length === 0) { _wagHideModal(); return; }
+    _wagRenderModal(missing);
+  } catch (e) {
+    console.warn('runWeeklyAttendanceGate failed (fail-soft, no modal):', e);
+  }
 }
 
 function renderHome(){
