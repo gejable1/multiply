@@ -1590,6 +1590,33 @@ body.lang-tl .tl-text{display:inline;}
         </div>
       </div>
 
+      <!-- Gentle devotional-reflection reminder (Session 21). Hidden by default;
+           shown by renderHome only when the member hasn't written a reflection
+           yesterday OR today. Dismissible; not a gate. -->
+      <div id="reflectionReminder" style="display:none;margin-top:12px;background:linear-gradient(180deg,rgba(212,184,75,.10),rgba(212,184,75,.04));border:1px solid rgba(212,184,75,.35);border-radius:14px;padding:14px 16px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div style="font-size:20px;line-height:1;">📝</div>
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:14px;color:var(--ink,#2a2a2a);">
+              <span class="en-text">A space for your heart</span>
+              <span class="tl-text">May puwang para sa iyong puso</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted,#6a6a6a);margin-top:3px;line-height:1.5;">
+              <span class="en-text">You haven't written a reflection lately. Even a sentence on what God is teaching you helps it take root. 🌱</span>
+              <span class="tl-text">Wala ka pang naisusulat na tugon kamakailan. Kahit isang pangungusap lang tungkol sa itinuturo sa'yo ng Diyos, nakatutulong na ito mag-ugat. 🌱</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              <button onclick="openDevoReader('today')" style="padding:8px 16px;background:var(--forest,#2f6d4f);color:#fff;border:0;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">
+                <span class="en-text">Reflect now</span><span class="tl-text">Magtala ngayon</span>
+              </button>
+              <button onclick="_dismissReflectionReminder()" style="padding:8px 14px;background:transparent;color:var(--muted,#6a6a6a);border:1px solid rgba(0,0,0,.12);border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+                <span class="en-text">Maybe later</span><span class="tl-text">Mamaya na lang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Browse this month link -->
       <button class="browse-month-btn" onclick="openBrowseMonth()" id="browseMonthBtn" style="display:none">
         📅 <span class="en-text">Browse this month</span><span class="tl-text">Tingnan buong buwan</span>
@@ -2496,6 +2523,7 @@ async function initMMT(){
     // surfaced in console.warn just like the original sequential code.
     const _loaders = [
       ['streak', loadDevoStreak],
+      ['reflection gap', loadReflectionGap],
       ['devo',   loadTodaysDevo],
       ['lc details', loadLcDetails],
       ['feed',   loadCelebrationFeed],
@@ -2642,6 +2670,58 @@ function computeStreak(rows){
   return streak;
 }
 
+// ───── Devotional reflection reminder (Session 21) ─────
+// Checks whether this member has written a devotional REFLECTION (non-empty
+// text in devotional_reflections) for YESTERDAY or TODAY. If neither has a
+// reflection, we surface a GENTLE, dismissible reminder on the home screen —
+// NOT a forceful gate (members are in a more tender place than leaders; a hard
+// block on a devotional habit can read as guilt rather than encouragement).
+//
+// Lookback semantics (Pastor's choice #2): remind ONLY if BOTH yesterday and
+// today are empty — so a member who already reflected yesterday morning is not
+// nagged, matching the gentleness of the streak logic. Blank/whitespace text
+// counts as "no reflection". Dates use the member's local device date (Manila
+// phone = Manila local), the same basis the devo card uses via _ymd().
+let _devoReflectionGap = false;  // true → show the reminder
+let _reflectionReminderDismissed = false;  // per-session "maybe later" dismiss
+
+// "Maybe later" — hide the reminder for this session only. It will return on
+// the member's next MMT open if they still haven't reflected (gentle, not nagging
+// within a single session). Intentionally NOT persisted: a fresh open is a fresh
+// gentle invitation, never a permanent silence.
+function _dismissReflectionReminder(){
+  _reflectionReminderDismissed = true;
+  const el = document.getElementById('reflectionReminder');
+  if (el) el.style.display = 'none';
+}
+
+async function loadReflectionGap(){
+  try{
+    if(!MEMBER || !MEMBER.memberId){ _devoReflectionGap = false; return; }
+    const _ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const today = new Date();
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const todayStr = _ymd(today);
+    const yestStr  = _ymd(yesterday);
+
+    const {data, error} = await db.from('devotional_reflections')
+      .select('entry_date, reflection')
+      .eq('member_id', MEMBER.memberId)
+      .in('entry_date', [todayStr, yestStr]);
+    if(error) throw error;
+
+    // A day "counts" only if it has a row with non-empty (trimmed) reflection text.
+    const hasReflection = (data || []).some(r =>
+      r.reflection && String(r.reflection).trim().length > 0);
+    // Gap (remind) only when NEITHER day has a real reflection.
+    _devoReflectionGap = !hasReflection;
+  }catch(e){
+    // Fail-soft: if we can't read, do NOT nag (never guilt on a read error).
+    console.warn('reflection-gap check failed (non-fatal, no reminder):', e);
+    _devoReflectionGap = false;
+  }
+}
+
 // ───── EOLO Prayer of the day (local pool — God's Word prayed back) ─────
 // 30-prayer pool. Each prays one passage back to God in the first person,
 // with {name} = one of the member's own EOLO persons woven in.
@@ -2764,6 +2844,13 @@ function renderHome(){
 
   // Render today's devotional anchor (today / Sunday / no-entry states)
   renderAnchorCard();
+
+  // Gentle reflection reminder (Session 21): show only if the member has no
+  // reflection yesterday OR today, and hasn't dismissed it this session.
+  const _rr = document.getElementById('reflectionReminder');
+  if (_rr) {
+    _rr.style.display = (_devoReflectionGap && !_reflectionReminderDismissed) ? '' : 'none';
+  }
 
   // Prayer of the day (EOLO — God's Word prayed back over an active EOLO name)
   renderDailyPrayer();
