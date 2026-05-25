@@ -1312,14 +1312,19 @@
       };
     }
     if (!pattern) {
-      // Quiz has no attendance gate at all — historically "always unlocked".
-      // We honor that to preserve the v1 escape hatch, but flag as drop-in
-      // so Pastor still sees who's taking ungated quizzes without enrollment.
+      // Quiz has no attendance gate AND member is not enrolled. Historically this
+      // returned eligible:true ("always unlocked") — the no_gate ESCAPE HATCH that
+      // let any unenrolled member into a misconfigured / NULL-pattern quiz (the
+      // Christine incident, Inv #89). HARDENED to fail-CLOSED (Session 20, Pastor's
+      // policy call): an access gate must lock OUT on misconfiguration, never IN.
+      // The reason stays 'no_gate' (distinct from 'blocked') so Pastor can tell a
+      // misconfigured quiz apart from a correctly-gated lockout in logs/UI; MMT's
+      // generic lock branch renders it the same as any other locked card.
       return {
-        eligible: true,
+        eligible: false,
         reason: 'no_gate',
         enrolled: false,
-        dropIn: true,
+        dropIn: false,
         cohortIds: [],
         programNames: []
       };
@@ -1540,14 +1545,19 @@
       };
     }
     if (!pattern) {
-      // Quiz has no attendance gate at all — historically "always unlocked".
-      // We honor that to preserve the v1 escape hatch, but flag as drop-in
-      // so Pastor still sees who's taking ungated quizzes without enrollment.
+      // Quiz has no attendance gate AND member is not enrolled. Historically this
+      // returned eligible:true ("always unlocked") — the no_gate ESCAPE HATCH that
+      // let any unenrolled member into a misconfigured / NULL-pattern quiz (the
+      // Christine incident, Inv #89). HARDENED to fail-CLOSED (Session 20, Pastor's
+      // policy call): an access gate must lock OUT on misconfiguration, never IN.
+      // The reason stays 'no_gate' (distinct from 'blocked') so Pastor can tell a
+      // misconfigured quiz apart from a correctly-gated lockout in logs/UI; MMT's
+      // generic lock branch renders it the same as any other locked card.
       return {
-        eligible: true,
+        eligible: false,
         reason: 'no_gate',
         enrolled: false,
-        dropIn: true,
+        dropIn: false,
         cohortIds: [],
         programNames: []
       };
