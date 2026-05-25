@@ -1606,17 +1606,54 @@
   //
   // `key` doubles as the attendance `event_type` value written to the DB
   // (and as the lesson-track key returned by attestableLessons()).
+  //
+  // `snap_day` (Session 19): JS getDay() weekday (0=Sun … 6=Sat) for events
+  // that recur on a FIXED church-wide day. Self-attest defaults the event date
+  // to the most-recent-past occurrence of this weekday (including today) so a
+  // member who taps "Sunday Service" on Monday gets last Sunday's date, not
+  // Monday's — fixing the day-late mis-dating bug. Events WITHOUT snap_day
+  // (LC Meeting day varies per group; Youth/Team Building/Outing are one-offs;
+  // BTLI/Pre-Pipeline lessons run on scheduled-but-variable days) default to
+  // today and rely on the visible date picker for correction.
+  //   • Sunday Service → Sunday (0)   • Sunday School → Sunday (0)
+  //   • Prayer Meeting → Wednesday (3)
   const ATTEST_EVENT_TYPES = [
-    { key: 'Sunday Service',  label_en: 'Sunday Service',  label_tl: 'Sunday Service',  icon: '⛪', typical_day: 7 },
+    { key: 'Sunday Service',  label_en: 'Sunday Service',  label_tl: 'Sunday Service',  icon: '⛪', typical_day: 7, snap_day: 0 },
     { key: 'LC Meeting',      label_en: 'LC Meeting',      label_tl: 'LC Meeting',      icon: '🏠', typical_day: 7 },
-    { key: 'Sunday School',   label_en: 'Sunday School',   label_tl: 'Sunday School',   icon: '📖', typical_day: 7 },
-    { key: 'Prayer Meeting',  label_en: 'Prayer Meeting',  label_tl: 'Prayer Meeting',  icon: '🙏', typical_day: 3 },
+    { key: 'Sunday School',   label_en: 'Sunday School',   label_tl: 'Sunday School',   icon: '📖', typical_day: 7, snap_day: 0 },
+    { key: 'Prayer Meeting',  label_en: 'Prayer Meeting',  label_tl: 'Prayer Meeting',  icon: '🙏', typical_day: 3, snap_day: 3 },
     { key: 'BTLI',            label_en: 'BTLI',            label_tl: 'BTLI',            icon: '📚', typical_day: 7, lesson: true },
     { key: 'Pre-Pipeline',    label_en: 'Pre-Pipeline',    label_tl: 'Pre-Pipeline',    icon: '🌱', typical_day: 7, lesson: true },
     { key: 'Youth Gathering', label_en: 'Youth Gathering', label_tl: 'Youth Gathering', icon: '🔥', typical_day: 7 },
     { key: 'Team Building',   label_en: 'Team Building',   label_tl: 'Team Building',   icon: '🤝', typical_day: 7 },
     { key: 'Outing',          label_en: 'Outing',          label_tl: 'Outing',          icon: '🌄', typical_day: 7 }
   ];
+
+  // Default event DATE for a self-attest of the given event type, as a local
+  // YYYY-MM-DD string (Session 19 · Inv #91). Fixes the day-late mis-dating
+  // bug: members tapping "Sunday Service" on Monday were recording Monday's
+  // date. For fixed-weekday events (snap_day present) this returns the most
+  // recent past occurrence of that weekday, INCLUDING today; for all others
+  // it returns today. Always a local-time date (never toISOString — Manila is
+  // UTC+8, so before 8 AM PHT toISOString() returns yesterday's UTC date).
+  // The caller still shows a visible/editable date so a member two Sundays
+  // late, or an off-schedule event, is one tap to correct (Option 3).
+  function _attestFmtLocalYMD(d){
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function defaultEventDate(eventTypeKey){
+    const today = new Date();
+    const et = ATTEST_EVENT_TYPES.find(e => e.key === eventTypeKey);
+    if (!et || typeof et.snap_day !== 'number') {
+      return _attestFmtLocalYMD(today);   // no fixed day → today
+    }
+    // Days to step back to the most recent occurrence of snap_day (0..6).
+    // delta 0 means today already IS that weekday → stay today.
+    const delta = (today.getDay() - et.snap_day + 7) % 7;
+    const snapped = new Date(today);
+    snapped.setDate(today.getDate() - delta);   // JS handles month/year underflow
+    return _attestFmtLocalYMD(snapped);
+  }
 
   // Internal: fetch active quizzes for one curriculum, run the right
   // eligibility helper, and return the attestable (enrolled+unlocked)
@@ -2476,7 +2513,8 @@
     // lessons; EVENT_TYPES is the canonical 9-event list (MLT minus "Other").
     attest: {
       attestableLessons,
-      EVENT_TYPES: ATTEST_EVENT_TYPES
+      EVENT_TYPES: ATTEST_EVENT_TYPES,
+      defaultEventDate
     },
     // Cohort permissions + MLT helpers (Priority C2 · May 16, 2026)
     cohorts: {

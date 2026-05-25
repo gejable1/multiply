@@ -6987,7 +6987,8 @@ const NUDGE_MAX_PER_SERVICE = 3;     // max 3 nudges per attendance row
 
 let _attestEventTypes = null;        // resolved attestable event types (see below)
 let _myDiscipler = null;             // cached {id, name, phone}
-let _recentAttestRows = [];          // last 7 days self-attests for this member
+let _recentAttestRows = [];          // last 14 days self-attests for this member
+let _leaderLoggedSlots = [];         // last 14 days non-self (lcl_logged etc.) rows — picker "by leader" state
 
 // Lesson-attestable state — populated by _loadAttestableLessons().
 // Keyed by track event_type ('BTLI' / 'Pre-Pipeline'); each value is an
@@ -7107,12 +7108,22 @@ async function _loadMyDiscipler(){
 // IMPORTANT: uses local-date construction (NOT toISOString) — Manila is UTC+8,
 // so toISOString() returns yesterday's date before 8 AM PHT and would cause
 // members opening MMT early-morning to log attendance with yesterday's date.
-function _attestLastTypicalDay(typicalDay){
+// Default event DATE for a self-attest, by event type. Session 19 (Inv #91):
+// now routes through MultiplyShared.attest.defaultEventDate so MMT + MLT's L5
+// card share ONE snapping rule. Fixed-weekday events (Sunday Service, Sunday
+// School, Prayer Meeting) snap to their most-recent-past occurrence; everything
+// else defaults to today. This fixes the day-late mis-dating bug (members
+// tapping "Sunday Service" on Monday were recording Monday). The visible date
+// picker still lets them correct it (Option 3). Falls back to local-today if a
+// stale shared.js predates the helper.
+function _attestDefaultDate(eventTypeKey){
+  try {
+    if (window.MultiplyShared && MultiplyShared.attest && typeof MultiplyShared.attest.defaultEventDate === 'function') {
+      return MultiplyShared.attest.defaultEventDate(eventTypeKey);
+    }
+  } catch(e) { /* fall through to today */ }
   const d = new Date();
-  const y  = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function _attestFmtShort(dateStr){
@@ -7129,6 +7140,12 @@ function _attestDaysAgo(dateStr){
 }
 
 // ─── Load recent self-attest rows (last 14 days, for status display) ───
+// ALSO loads leader-logged rows for the same window into a lightweight slot set
+// (`_leaderLoggedSlots`) so the home picker can render an honest
+// "✓ recorded by leader" state instead of inviting a tap that would just bounce
+// (Session 20, the Ana Carreon cross-source case). `_recentAttestRows` stays
+// self_attest-only so the pending-confirmation status row and openAttestStatus()
+// keep their exact current behavior.
 async function _loadRecentAttests(){
   try {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
@@ -7144,6 +7161,23 @@ async function _loadRecentAttests(){
   } catch(e) {
     console.error('[self-attest] recent rows load failed:', e);
     _recentAttestRows = [];
+  }
+  // Separate, lightweight load of leader-logged (non-self) rows for the picker.
+  // Failure here is non-fatal: worst case the button stays tappable and the
+  // dup-guard in _doSaveAttest catches the double anyway.
+  try {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const {data, error} = await db.from('attendance')
+      .select('event_date,event_type,event_name,source')
+      .eq('member_id', MEMBER.memberId)
+      .neq('source', 'self_attest')
+      .gte('event_date', cutoffStr);
+    if (error) throw error;
+    _leaderLoggedSlots = data || [];
+  } catch(e) {
+    console.warn('[self-attest] leader-logged slot load failed (non-fatal):', e);
+    _leaderLoggedSlots = [];
   }
 }
 
@@ -7163,7 +7197,7 @@ async function renderAttestCard(){
   if (pickerRow) {
     const isTl = document.body.classList.contains('lang-tl');
     pickerRow.innerHTML = _attestEventTypes.map(et => {
-      const targetDate = _attestLastTypicalDay(et.typical_day || 7);
+      const targetDate = _attestDefaultDate(et.key);
       // Resolve label fresh each render so language toggle is live.
       const label = isTl ? (et.label_tl || et.label) : (et.label_en || et.label);
       const labelEsc = MultiplyShared.escapeHTML(label);
@@ -7221,6 +7255,29 @@ async function renderAttestCard(){
                   <span style="font-size:11px;">${stateIcon}</span>
                 </button>`;
       }
+      // Not yet attested by the member — but did the LEADER already log this
+      // exact slot? (Session 20 cross-source case.) If so, show a quiet,
+      // non-inviting "✓ recorded by leader" state instead of an "I'm here"
+      // button, so the member isn't nudged to tap something that would only
+      // bounce. Leader log is authoritative; nothing for the member to do.
+      const byLeader = _leaderLoggedSlots.find(r =>
+        r.event_type === et.key && r.event_date === targetDate
+      );
+      if (byLeader) {
+        const lblBy = isTl ? 'naitala ng leader' : 'by leader';
+        return `<div
+                  style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
+                         background:var(--cream); border:1px solid var(--line);
+                         border-radius:12px; font-size:12px;
+                         display:flex; align-items:center; gap:.4rem; justify-content:center;
+                         line-height:1.25; color:var(--ink); opacity:.55; cursor:default;"
+                  title="${isTl ? 'Naitala na ng leader mo' : 'Already recorded by your leader'}">
+                  <span style="font-size:15px;">${et.icon || '📍'}</span>
+                  <span style="font-weight:600;">${labelEsc}</span>
+                  <span style="font-size:10px;color:var(--muted);white-space:nowrap;">· ${lblBy} ✓</span>
+                </div>`;
+      }
+
       // Not yet attested — show "I'm here" button
       return `<button onclick="_pendingAttestEventName=null; memberSelfAttest('${et.key}', ${et.typical_day || 7})"
                 style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
@@ -7263,7 +7320,7 @@ function openAttestLessonPicker(eventTypeKey, typicalDay){
     document.body.appendChild(modal);
   }
 
-  const targetDate = _attestLastTypicalDay(typicalDay || 7);
+  const targetDate = _attestDefaultDate(eventTypeKey);
   const title = lang === 'tl'
     ? `Aling ${MultiplyShared.escapeHTML(eventTypeKey)} aralin?`
     : `Which ${MultiplyShared.escapeHTML(eventTypeKey)} lesson?`;
@@ -7430,7 +7487,7 @@ function _attestMarkRejectionDismissed(){ /* no-op */ }
 //   2. Default day older than 7 days? → show date picker straight away
 async function memberSelfAttest(eventTypeKey, typicalDay){
   const lang = document.body.classList.contains('lang-tl') ? 'tl' : 'en';
-  const defaultDate = _attestLastTypicalDay(typicalDay || 7);
+  const defaultDate = _attestDefaultDate(eventTypeKey);
   const defaultAge = _attestDaysAgo(defaultDate);
 
   if (defaultAge > SELF_ATTEST_WINDOW_DAYS) {
@@ -7582,8 +7639,18 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     return;
   }
 
-  // Duplicate check. For lessons, two different lessons can share a date, so
-  // the dup key must include event_name; for plain events it stays (type,date).
+  // Duplicate check — SOURCE-AGNOSTIC (Inv #92 companion, Session 20).
+  // The UNIQUE key on attendance is (member_id,event_type,event_date) and IGNORES
+  // `source`, so a member self-attesting an event their LCL already logged
+  // (source='lcl_logged') would otherwise create a same-event+date double — the
+  // Ana Carreon case. We deliberately do NOT filter by source here so an existing
+  // row of ANY source blocks the insert. For lessons, two different lessons can
+  // share a date, so the dup key must include event_name; for plain events it
+  // stays (type,date).
+  //
+  // This guard FAILS CLOSED: if the check itself errors we abort rather than
+  // insert blindly, because a duplicate-guard that inserts-anyway on error is no
+  // guard at all. The member can simply tap again.
   try {
     let dupQ = db.from('attendance')
       .select('id, source, confirmed_by, present')
@@ -7593,12 +7660,30 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     if (isLesson) dupQ = dupQ.eq('event_name', eventName);
     const {data: existing} = await dupQ.limit(1);
     if (existing && existing.length) {
-      showToast(lang === 'tl' ? `Naka-mark ka na para sa ${targetLbl}` : `Already marked for ${targetLbl}`, false);
+      const row = existing[0];
+      const byLeader = row.source && row.source !== 'self_attest';
+      if (byLeader) {
+        // LCL log is authoritative — their record stands, no nudge needed.
+        // Honest, reassuring feedback: it's already counted (✓), nothing to do.
+        showToast(lang === 'tl'
+          ? `✓ Naitala na ito ng leader mo para sa ${targetLbl} — wala ka nang kailangang gawin.`
+          : `✓ Your leader already recorded this for ${targetLbl} — nothing more to do.`, false);
+      } else {
+        // Member's own earlier self-attest for the same slot.
+        showToast(lang === 'tl'
+          ? `Naka-mark ka na para sa ${targetLbl}`
+          : `Already marked for ${targetLbl}`, false);
+      }
       await renderAttestCard();
       return;
     }
   } catch(e) {
-    console.warn('[self-attest] dup check failed; proceeding:', e);
+    // FAIL CLOSED — do not insert when we couldn't verify uniqueness.
+    console.warn('[self-attest] dup check failed; aborting to avoid a double:', e);
+    showToast(lang === 'tl'
+      ? `Hindi ma-verify ngayon — pakisubukan ulit saglit.`
+      : `Couldn't verify just now — please try again in a moment.`, true);
+    return;
   }
 
   // Insert self-attest row

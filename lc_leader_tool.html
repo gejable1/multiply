@@ -550,7 +550,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
          on this light surface (same reason the buttons hardcode brown-on-cream). -->
     <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem;">
       <label for="l5AttestDate" style="font-size:11.5px;font-weight:600;color:#7a5800;white-space:nowrap;">Date:</label>
-      <input type="date" id="l5AttestDate"
+      <input type="date" id="l5AttestDate" onchange="_l5DateManuallySet = true;"
              style="flex:1;min-width:0;background:#fffdf7;border:1px solid #d8c690;
                     border-radius:var(--r-sm);padding:.5rem .6rem;color:#3a2c0a;
                     font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;outline:none;">
@@ -1606,6 +1606,34 @@ function _l5Today(){
 // Kept for backward-compat with any external caller; now just returns today.
 function _l5LastTypicalDay(typicalDay){ return _l5Today(); }
 
+// Default event DATE for an L5 self-attest, by event type. Session 19 (Inv #91):
+// routes through MultiplyShared.attest.defaultEventDate — the SAME snapping rule
+// MMT uses. Fixed-weekday events (Sunday Service, Sunday School, Prayer Meeting)
+// snap to their most-recent-past occurrence so tapping on Monday records last
+// Sunday, not Monday; other events default to today. Falls back to today if a
+// stale shared.js predates the helper.
+function _l5DefaultDate(eventTypeKey){
+  try {
+    if (window.MultiplyShared && MultiplyShared.attest && typeof MultiplyShared.attest.defaultEventDate === 'function') {
+      return MultiplyShared.attest.defaultEventDate(eventTypeKey);
+    }
+  } catch(e) { /* fall through */ }
+  return _l5Today();
+}
+
+// True once the leader has manually edited the date field — after that we never
+// auto-snap, so their explicit choice is respected. Reset when the card opens.
+let _l5DateManuallySet = false;
+
+// Snap the date field to the event's default UNLESS the leader manually set it.
+// Called at the start of each pill handler so the confirm dialog (which shows
+// the date) reflects the correct day.
+function _l5ApplySnap(eventTypeKey){
+  if (_l5DateManuallySet) return;
+  const el = document.getElementById('l5AttestDate');
+  if (el) el.value = _l5DefaultDate(eventTypeKey);
+}
+
 // Read the chosen date from the field; fall back to today if missing/invalid.
 function _l5SelectedDate(){
   const el = document.getElementById('l5AttestDate');
@@ -1628,9 +1656,11 @@ async function renderL5AttestCard(){
   card.style.display = 'block';
 
   // Default the date field to today (only if not already set, so a leader's
-  // backdated pick survives a re-render).
+  // backdated pick survives a re-render). Reset the manual-override flag each
+  // fresh open so tapping a fixed-day pill auto-snaps to its weekday (Inv #91).
   const dateEl = document.getElementById('l5AttestDate');
   if (dateEl && !dateEl.value) dateEl.value = _l5Today();
+  _l5DateManuallySet = false;
 
   const types = await _loadL5EventTypes();
   const row = document.getElementById('l5AttestPickerRow');
@@ -1678,6 +1708,7 @@ async function renderL5AttestCard(){
 // Lists only the leader's enrolled+unlocked lessons for the track; picking
 // one stashes its canonical event_name in _l5PendingEventName and marks.
 function _l5OpenLessonPicker(eventTypeKey){
+  _l5ApplySnap(eventTypeKey);   // snap date to this event's default (unless manually set)
   const lessons = _l5LessonsByType[eventTypeKey] || [];
   if (!lessons.length) {
     toast('No available lessons.', 'info');
@@ -1761,6 +1792,10 @@ async function _l5RefreshLastMarked(){
 async function l5MarkSelfPresent(eventTypeKey){
   const eventName = _l5PendingEventName;   // null for plain events
   _l5PendingEventName = null;              // consume immediately
+  // For plain-event pills, snap the date to this event's default (the lesson
+  // path already snapped in _l5OpenLessonPicker). Guarded by the manual-set
+  // flag inside _l5ApplySnap, so a leader's explicit date is never overridden.
+  if (!eventName) _l5ApplySnap(eventTypeKey);
   const targetDate = _l5SelectedDate();
   const targetLbl = _l5FmtShort(targetDate);
   const confirmWhat = eventName || eventTypeKey;
