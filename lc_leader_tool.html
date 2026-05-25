@@ -1325,6 +1325,18 @@ async function loadMyMembers(){
     // Session 21: weekly attendance habit gate (L2+ only, fail-soft).
     // Runs once after the roster + home render so currentLeader/LEADER are ready.
     runWeeklyAttendanceGate();
+    // Session 21: light the Announcements unread badge AT BOOT. Previously
+    // _loadInbox + _updateAnnQuickActionBadge ran only inside openAnnouncements(),
+    // so the badge never appeared until a leader had already opened the inbox —
+    // useless as a nudge. We now load it on startup (after renderHome paints the
+    // .qa-btn the badge anchors to). Non-blocking + fail-soft: a failure leaves
+    // the badge absent, never breaks boot. L2+ only (matches the inbox gate in
+    // openAnnouncements; lower levels aren't announcement authors/recipients here).
+    if (LEADER && (LEADER.leaderLevel || 0) >= 2) {
+      _loadInbox()
+        .then(() => _updateAnnQuickActionBadge())
+        .catch(e => console.warn('[announcements] boot badge load failed (non-fatal):', e));
+    }
   } catch(e) {
     console.error('Could not load members:', e);
     const stats = document.getElementById('statsRow');
