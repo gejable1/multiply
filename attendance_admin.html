@@ -450,6 +450,7 @@ function renderTable(){
           <th class="sortable" onclick="setSort('present')">Status${arrow('present')}</th>
           <th class="sortable" onclick="setSort('source')">Source${arrow('source')}</th>
           <th class="sortable" onclick="setSort('logged_by')">Logged By${arrow('logged_by')}</th>
+          <th>Actions</th>
           <th>Saved</th>
         </tr>
       </thead>
@@ -502,6 +503,7 @@ function renderTable(){
               <td><span style="color:${srcColor};font-weight:700;font-size:11px;">${srcIcon} ${srcLbl}</span></td>
               <td class="muted">${escapeHtml(r.logged_by||'—')}</td>
               <td class="muted mono">${escapeHtml(created)}</td>
+              <td><button class="btn secondary" style="padding:4px 10px;font-size:12px;" onclick="openEditRow('${r.id}')">✎ Edit</button></td>
             </tr>
           `;
         }).join('')}
@@ -640,7 +642,126 @@ function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g, ch =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
 }
+
+// ── Edit a single attendance row (Session 21) ──────────────────────
+let _editingId = null;
+
+function openEditRow(id){
+  const r = _allRows.find(x => x.id === id);
+  if(!r){ alert('Row not found — try refreshing.'); return; }
+  _editingId = id;
+  document.getElementById('editSubtitle').textContent =
+    `${r.member_name || 'Member'} · originally logged ${r.event_date || ''}`;
+  // event_type: if the stored value isn't one of our options, fall back to 'Other'
+  const typeSel = document.getElementById('editType');
+  const known = Array.from(typeSel.options).some(o => o.value === (r.event_type||''));
+  typeSel.value = known ? r.event_type : 'Other';
+  document.getElementById('editDate').value = r.event_date || '';
+  document.getElementById('editPresent').value = r.present ? 'true' : 'false';
+  document.getElementById('editName').value = r.event_name || '';
+  document.getElementById('editLcGroup').value = r.event_lc_group || '';
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditRow(){
+  document.getElementById('editModal').style.display = 'none';
+  _editingId = null;
+}
+
+async function saveEditRow(){
+  if(!_editingId) return;
+  const id = _editingId;
+  const newType = document.getElementById('editType').value;
+  const newDate = document.getElementById('editDate').value;
+  const newPresent = document.getElementById('editPresent').value === 'true';
+  const newName = document.getElementById('editName').value.trim();
+  const newLc = document.getElementById('editLcGroup').value.trim();
+
+  if(!newDate){ alert('Please set a date.'); return; }
+
+  const btn = document.getElementById('editSaveBtn');
+  btn.disabled = true; btn.textContent = '⏳ Saving…';
+
+  // Build the patch. source='pastor_admin' records that Pastor corrected this
+  // row (visible in the Source column). We deliberately do NOT touch member_id,
+  // logged_by_id, or any confirm/dispute/audit field.
+  const patch = {
+    event_type: newType,
+    event_date: newDate,
+    present: newPresent,
+    event_name: newName || null,
+    event_lc_group: newLc || null,
+    source: 'pastor_admin'
+  };
+
+  try{
+    const {error} = await db.from('attendance').update(patch).eq('id', id);
+    if(error) throw error;
+    // Update local cache so the table reflects the change without a refetch
+    const row = _allRows.find(x => x.id === id);
+    if(row){ Object.assign(row, patch); }
+    closeEditRow();
+    applyFilters();
+    btn.disabled = false; btn.textContent = '💾 Save changes';
+  } catch(e){
+    console.error('Edit save error:', e);
+    btn.disabled = false; btn.textContent = '💾 Save changes';
+    alert('Could not save: ' + e.message);
+  }
+}
 </script>
+
+<!-- ── Edit Attendance Row modal (Session 21) ──────────────────────
+     Corrects mis-logged rows in place. Scoped to safe correction fields:
+     event_type, event_date, present, event_name, event_lc_group. Does NOT
+     expose member_id / logged_by_id / source / audit fields — changing WHO a
+     row belongs to or WHO logged it would corrupt the weekly attendance gate
+     (which keys on logged_by_id) and the audit trail; for those, delete +
+     re-log is the correct path. On save we stamp source='pastor_admin' so the
+     correction is visible in the Source column. -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center;padding:1rem;">
+  <div style="background:#fff;max-width:460px;width:100%;border-radius:14px;padding:1.4rem 1.4rem 1.2rem;box-shadow:0 12px 40px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto;">
+    <div style="font-weight:800;font-size:18px;color:#1a1a1a;margin-bottom:4px;">✎ Edit Attendance Record</div>
+    <div id="editSubtitle" style="font-size:12.5px;color:#777;margin-bottom:16px;"></div>
+
+    <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">Event Type</label>
+    <select id="editType" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:12px;font-size:14px;">
+      <option value="Sunday Service">Sunday Service</option>
+      <option value="LC Meeting">LC Meeting</option>
+      <option value="Prayer Meeting">Prayer Meeting</option>
+      <option value="Sunday School">Sunday School</option>
+      <option value="Youth Gathering">Youth Gathering</option>
+      <option value="BTLI">BTLI</option>
+      <option value="Pre-Pipeline">Pre-Pipeline</option>
+      <option value="Team Building">Team Building</option>
+      <option value="Outing">Outing</option>
+      <option value="devotional">Daily devotional</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">Date</label>
+    <input type="date" id="editDate" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:12px;font-size:14px;">
+
+    <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">Status</label>
+    <select id="editPresent" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:12px;font-size:14px;">
+      <option value="true">✓ Present</option>
+      <option value="false">✗ Absent</option>
+    </select>
+
+    <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">Event Name <span style="font-weight:400;color:#999;">(optional)</span></label>
+    <input type="text" id="editName" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:12px;font-size:14px;" placeholder="e.g. Usbong 1 · L1 · Sino Ang Diyos?">
+
+    <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">LC Group <span style="font-weight:400;color:#999;">(optional)</span></label>
+    <input type="text" id="editLcGroup" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:6px;font-size:14px;">
+
+    <div style="font-size:11.5px;color:#999;margin-bottom:16px;line-height:1.5;">To change <em>which member</em> or <em>who logged</em> a row, delete it and re-log from MLT — those fields aren't editable here to protect the attendance gate and audit trail.</div>
+
+    <div style="display:flex;gap:8px;">
+      <button class="btn primary" id="editSaveBtn" onclick="saveEditRow()" style="flex:1;">💾 Save changes</button>
+      <button class="btn secondary" onclick="closeEditRow()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
