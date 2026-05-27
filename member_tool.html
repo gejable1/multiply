@@ -1590,33 +1590,6 @@ body.lang-tl .tl-text{display:inline;}
         </div>
       </div>
 
-      <!-- Gentle devotional-reflection reminder (Session 21). Hidden by default;
-           shown by renderHome only when the member hasn't written a reflection
-           yesterday OR today. Dismissible; not a gate. -->
-      <div id="reflectionReminder" style="display:none;margin-top:12px;background:linear-gradient(180deg,rgba(212,184,75,.10),rgba(212,184,75,.04));border:1px solid rgba(212,184,75,.35);border-radius:14px;padding:14px 16px;">
-        <div style="display:flex;align-items:flex-start;gap:10px;">
-          <div style="font-size:20px;line-height:1;">📝</div>
-          <div style="flex:1;">
-            <div style="font-weight:700;font-size:14px;color:var(--ink,#2a2a2a);">
-              <span class="en-text">A space for your heart</span>
-              <span class="tl-text">May puwang para sa iyong puso</span>
-            </div>
-            <div style="font-size:12.5px;color:var(--muted,#6a6a6a);margin-top:3px;line-height:1.5;">
-              <span class="en-text">You haven't written a reflection lately. Even a sentence on what God is teaching you helps it take root. 🌱</span>
-              <span class="tl-text">Wala ka pang naisusulat na tugon kamakailan. Kahit isang pangungusap lang tungkol sa itinuturo sa'yo ng Diyos, nakatutulong na ito mag-ugat. 🌱</span>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              <button onclick="openDevoReader('today')" style="padding:8px 16px;background:var(--forest,#2f6d4f);color:#fff;border:0;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">
-                <span class="en-text">Reflect now</span><span class="tl-text">Magtala ngayon</span>
-              </button>
-              <button onclick="_dismissReflectionReminder()" style="padding:8px 14px;background:transparent;color:var(--muted,#6a6a6a);border:1px solid rgba(0,0,0,.12);border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">
-                <span class="en-text">Maybe later</span><span class="tl-text">Mamaya na lang</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Browse this month link -->
       <button class="browse-month-btn" onclick="openBrowseMonth()" id="browseMonthBtn" style="display:none">
         📅 <span class="en-text">Browse this month</span><span class="tl-text">Tingnan buong buwan</span>
@@ -2685,14 +2658,57 @@ function computeStreak(rows){
 let _devoReflectionGap = false;  // true → show the reminder
 let _reflectionReminderDismissed = false;  // per-session "maybe later" dismiss
 
-// "Maybe later" — hide the reminder for this session only. It will return on
-// the member's next MMT open if they still haven't reflected (gentle, not nagging
-// within a single session). Intentionally NOT persisted: a fresh open is a fresh
-// gentle invitation, never a permanent silence.
+// Build + show the reflection reminder as a centered modal (styled like the MLT
+// attendance wall for cross-app consistency) — but GENTLE: prominent "Maybe
+// later", warm tone, no guilt. Created on demand and appended to <body>.
+function showReflectionReminderModal(){
+  let modal = document.getElementById('reflectionModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'reflectionModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9500;padding:1rem;';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `<div style="background:#fff;max-width:400px;width:100%;border-radius:18px;padding:1.6rem 1.4rem 1.3rem;box-shadow:0 12px 40px rgba(0,0,0,.28);text-align:center;">
+    <div style="font-size:34px;line-height:1;margin-bottom:8px;">📝</div>
+    <h2 style="font-size:20px;font-weight:800;color:var(--ink,#2a2a2a);margin:0 0 8px;line-height:1.25;">
+      <span class="en-text">A space for your heart</span><span class="tl-text">May puwang para sa iyong puso</span>
+    </h2>
+    <p style="font-size:13.5px;color:var(--muted,#6a6a6a);line-height:1.6;margin:0 0 18px;">
+      <span class="en-text">You haven't written a reflection lately. Even a sentence on what God is teaching you helps it take root. 🌱</span>
+      <span class="tl-text">Wala ka pang naisusulat na tugon kamakailan. Kahit isang pangungusap lang tungkol sa itinuturo sa'yo ng Diyos, nakatutulong na ito mag-ugat. 🌱</span>
+    </p>
+    <button onclick="_reflectNowFromModal()" style="width:100%;padding:13px;background:var(--forest,#2f6d4f);color:#fff;border:0;border-radius:11px;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:9px;">
+      <span class="en-text">Reflect now</span><span class="tl-text">Magtala ngayon</span>
+    </button>
+    <button onclick="_dismissReflectionReminder()" style="width:100%;padding:11px;background:transparent;color:var(--muted,#6a6a6a);border:1px solid rgba(0,0,0,.12);border-radius:11px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;">
+      <span class="en-text">Maybe later</span><span class="tl-text">Mamaya na lang</span>
+    </button>
+  </div>`;
+  modal.style.display = 'flex';
+}
+
+function _hideReflectionModal(){
+  const m = document.getElementById('reflectionModal');
+  if (m) m.style.display = 'none';
+}
+
+// "Reflect now" — close the modal and open today's devo reader (where the
+// reflection textarea lives). Mark dismissed-for-session so it won't re-pop
+// behind the reader.
+function _reflectNowFromModal(){
+  _reflectionReminderDismissed = true;
+  _hideReflectionModal();
+  try { openDevoReader('today'); } catch(e){ console.warn('openDevoReader failed:', e); }
+}
+
+// "Maybe later" — hide for this session only. It returns on the member's next
+// MMT open if they still haven't reflected (gentle, not nagging within a single
+// session). Intentionally NOT persisted: a fresh open is a fresh gentle
+// invitation, never a permanent silence.
 function _dismissReflectionReminder(){
   _reflectionReminderDismissed = true;
-  const el = document.getElementById('reflectionReminder');
-  if (el) el.style.display = 'none';
+  _hideReflectionModal();
 }
 
 async function loadReflectionGap(){
@@ -2845,11 +2861,12 @@ function renderHome(){
   // Render today's devotional anchor (today / Sunday / no-entry states)
   renderAnchorCard();
 
-  // Gentle reflection reminder (Session 21): show only if the member has no
-  // reflection yesterday OR today, and hasn't dismissed it this session.
-  const _rr = document.getElementById('reflectionReminder');
-  if (_rr) {
-    _rr.style.display = (_devoReflectionGap && !_reflectionReminderDismissed) ? '' : 'none';
+  // Gentle reflection reminder (Session 21): a modal styled like the MLT
+  // attendance wall, but gentle — prominent "Maybe later", no guilt. Shows only
+  // if the member has no reflection yesterday OR today, and hasn't dismissed it
+  // this session.
+  if (_devoReflectionGap && !_reflectionReminderDismissed) {
+    showReflectionReminderModal();
   }
 
   // Prayer of the day (EOLO — God's Word prayed back over an active EOLO name)
