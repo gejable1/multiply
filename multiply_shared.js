@@ -1460,77 +1460,8 @@
     return new Set((data || []).map(r => (r.event_name || '').toLowerCase()).filter(Boolean));
   }
 
-  // Internal: same as _btliFetchUnlockKeys — for a member's cohort_ids, fetch
-  // which (cohort_id, lesson_id) pairs are "live" unlocks. Returns a Set of
-  // keys `${cohort_id}::${lesson_id}`. An unlock is live if unlocked_at is set
-  // OR scheduled_for has passed. Used by the Model X participant lesson-lock,
-  // now extended to Usbong (Session 21 — the Juana leak: Usbong eligibility
-  // checked enrollment only and never consulted cohort_lesson_unlocks, so an
-  // enrolled participant saw ALL 10 quizzes open regardless of batch unlocks).
-  async function _usbongFetchUnlockKeys(cohortIds) {
-    const empty = new Set();
-    if (!Array.isArray(cohortIds) || cohortIds.length === 0) return empty;
-    const db = getDB();
-    if (!db) return empty;
-    const { data, error } = await db
-      .from('cohort_lesson_unlocks')
-      .select('cohort_id, lesson_id, unlocked_at, scheduled_for')
-      .in('cohort_id', cohortIds);
-    if (error) {
-      console.warn('_usbongFetchUnlockKeys failed (failing open — no participant lock):', error);
-      return empty;  // fail open: if we can't read unlocks, don't lock anyone out
-    }
-    const now = Date.now();
-    const keys = new Set();
-    (data || []).forEach(u => {
-      const live = !!u.unlocked_at ||
-        (u.scheduled_for && new Date(u.scheduled_for).getTime() <= now);
-      if (live && u.cohort_id && u.lesson_id) {
-        keys.add(`${u.cohort_id}::${u.lesson_id}`);
-      }
-    });
-    return keys;
-  }
-
-  // Internal: Usbong's quiz→lesson bridge. BTLI links a quiz to its lesson via
-  // a hard FK (btli_quizzes.lesson_id) and keys cohort_lesson_unlocks on it.
-  // usbong_quizzes has NO lesson_id column — but it DOES carry lesson_number,
-  // and pipeline_lessons carries (track, lesson_number). We resolve
-  //   lesson_number → pipeline_lessons.id   for the Usbong track
-  // and key the unlock check on that id. Confirmed 1:1 and unique May 25, 2026.
-  //
-  // ⚠️ TRACK STRING IS 'Usbong', NOT 'Pre-Pipeline'. The CURRICULUM is labelled
-  // 'Pre-Pipeline' in MMT and the attest layer, but pipeline_lessons.track
-  // stores the literal string 'Usbong' (verified: distinct tracks are
-  // BTLI / Teaching / Usbong). Do NOT "correct" this to 'Pre-Pipeline' — that
-  // matched zero rows in testing and would make every lesson resolve to NULL,
-  // which (per the fail-open posture below) silently RE-OPENS all quizzes. The
-  // label-vs-track distinction is a footgun; this is the canonical value.
-  //
-  // Returns a Map<lesson_number(int), pipeline_lessons.id>. Empty Map on error
-  // → callers treat unresolved lessons as "nothing to lock against" → enrolled
-  // open (matches BTLI's null-lesson_id fall-through). Fail-open is deliberate.
-  async function _usbongFetchLessonIdMap() {
-    const empty = new Map();
-    const db = getDB();
-    if (!db) return empty;
-    const { data, error } = await db
-      .from('pipeline_lessons')
-      .select('id, lesson_number, track')
-      .eq('track', 'Usbong');
-    if (error) {
-      console.warn('_usbongFetchLessonIdMap failed (failing open — no participant lock):', error);
-      return empty;
-    }
-    const map = new Map();
-    (data || []).forEach(r => {
-      if (r.lesson_number != null && r.id) map.set(Number(r.lesson_number), r.id);
-    });
-    return map;
-  }
-
   // Public: eligibility for a single Usbong quiz.
-  // `quiz` must include: course_code, attendance_event_name_pattern, lesson_number.
+  // `quiz` must include: course_code, attendance_event_name_pattern.
   // `opts` may include: isPastor (skips all checks).
   async function usbongEligibilityFor(memberId, quiz, opts) {
     opts = opts || {};
@@ -1545,11 +1476,7 @@
       _usbongFetchEnrollments(memberId),
       _usbongFetchAttendedNames(memberId)
     ]);
-    const [unlockKeys, lessonIdMap] = await Promise.all([
-      _usbongFetchUnlockKeys(enrollments.map(e => e.cohort_id)),
-      _usbongFetchLessonIdMap()
-    ]);
-    return _usbongComputeOne(quiz, enrollments, attendedNames, unlockKeys, lessonIdMap);
+    return _usbongComputeOne(quiz, enrollments, attendedNames);
   }
 
   // Public: eligibility for many quizzes at once (single batch fetch).
@@ -1575,26 +1502,14 @@
       _usbongFetchEnrollments(memberId),
       _usbongFetchAttendedNames(memberId)
     ]);
-    const [unlockKeys, lessonIdMap] = await Promise.all([
-      _usbongFetchUnlockKeys(enrollments.map(e => e.cohort_id)),
-      _usbongFetchLessonIdMap()
-    ]);
     quizzes.forEach(q => {
-      out.set(q.id, _usbongComputeOne(q, enrollments, attendedNames, unlockKeys, lessonIdMap));
+      out.set(q.id, _usbongComputeOne(q, enrollments, attendedNames));
     });
     return out;
   }
 
   // Pure: given pre-fetched enrollments + attendance, decide for one quiz.
-  // `unlockKeys` (Session 21): Set of `${cohort_id}::${lesson_id}` live unlocks.
-  // `lessonIdMap`: Map<lesson_number, pipeline_lessons.id> for the Usbong track.
-  // Together they implement the Model X participant lesson-lock for Usbong,
-  // mirroring _btliComputeOne. The only difference vs BTLI: BTLI keys on the
-  // quiz's hard lesson_id FK; Usbong resolves lesson_number → lesson_id via the
-  // map (usbong_quizzes has no lesson_id column).
-  function _usbongComputeOne(quiz, enrollments, attendedNames, unlockKeys, lessonIdMap) {
-    unlockKeys = unlockKeys || new Set();
-    lessonIdMap = lessonIdMap || new Map();
+  function _usbongComputeOne(quiz, enrollments, attendedNames) {
     const courseCode = quiz.course_code || '';
     // Enrollment match: any enrollment whose program teaches this course_code
     const matchingEnrollments = enrollments.filter(e => e.usbong_course_code === courseCode);
@@ -1610,33 +1525,6 @@
     }
 
     if (enrolled) {
-      // ── Model X participant lesson-lock (Session 21 — closes the Juana leak) ──
-      // Resolve this quiz's lesson via lesson_number → pipeline_lessons.id. If it
-      // resolves, a participant is locked out until their batch unlocks that
-      // lesson; staff roles (teacher/co-teacher/apprentice) bypass. If it does
-      // NOT resolve (lesson missing from pipeline_lessons, or the map failed to
-      // load), there is nothing to lock against — fall through to enrolled open,
-      // matching BTLI's null-lesson_id behavior. "Open" wins if ANY matching
-      // enrollment is staff or has unlocked the lesson.
-      const lessonNum = (quiz.lesson_number != null) ? Number(quiz.lesson_number) : null;
-      const lessonId = (lessonNum != null) ? (lessonIdMap.get(lessonNum) || null) : null;
-      if (lessonId) {
-        const anyOpen = matchingEnrollments.some(e => {
-          const isStaff = e.role === 'teacher' || e.role === 'co-teacher' || e.role === 'apprentice';
-          if (isStaff) return true;  // staff bypass the lock
-          return unlockKeys.has(`${e.cohort_id}::${lessonId}`);
-        });
-        if (!anyOpen) {
-          return {
-            eligible: false,
-            reason: 'lesson_locked',
-            enrolled: true,                 // they ARE enrolled — just not yet unlocked
-            dropIn: false,
-            cohortIds: matchingEnrollments.map(e => e.cohort_id),
-            programNames: Array.from(new Set(matchingEnrollments.map(e => e.program_name).filter(Boolean)))
-          };
-        }
-      }
       return {
         eligible: true,
         reason: 'enrolled',
@@ -1923,6 +1811,30 @@
       }
       if (parseInt(memLvl, 10) !== parseInt(program.pipeline_level, 10)) {
         return { ok: false, reason: 'Level mismatch (member L' + memLvl + ' vs program L' + program.pipeline_level + ')' };
+      }
+    }
+    // BTLI Zone-1 salvation-assurance gate (Session 21). BTLI participants must
+    // have a Zone 1 salvation-assurance diagnostic result — meaning they've BOTH
+    // taken the diagnostic AND landed in the assured tier (diagnostic_zone === 1;
+    // Zones 2-4 escalate toward needing pastoral care). Pastorally: a disciple
+    // should be assured of and showing the fruits of salvation before formal
+    // discipleship training, so we don't push the not-yet-assured through the
+    // pipeline (the LCL's job is debrief + remedial, then retake — the existing
+    // remedial loop is the path forward, not a bypass).
+    //
+    // SCOPE: BTLI programs ONLY (identified by btli_course_code). Usbong and
+    // other programs are untouched — new converts haven't done the diagnostic
+    // yet, which is the whole point of Usbong. This gate affects the MLT LCL
+    // enroll picker only; MD's _coAddRosterMember inserts directly into
+    // cohort_members WITHOUT calling canEnroll, so Pastor's override (incl.
+    // enrolling L2+ leaders as participants for re-formation) bypasses this.
+    if (program.btli_course_code) {
+      const zone = (candidate.diagnostic_zone == null) ? null : parseInt(candidate.diagnostic_zone, 10);
+      if (zone !== 1) {
+        return {
+          ok: false,
+          reason: 'Needs Zone 1 (member ' + (zone == null ? 'has no salvation-assurance diagnostic yet' : 'is Zone ' + zone) + ')'
+        };
       }
     }
     // Ownership check
