@@ -296,12 +296,12 @@ table.members-tbl{
   <!-- ── COLUMN CHIPS ── -->
   <div class="chip-row" id="chipRow">
     <span class="chip-label">Columns</span>
-    <button class="chip on" data-col="sunday" onclick="toggleCol(this)">Sunday ✓</button>
-    <button class="chip on" data-col="prayer" onclick="toggleCol(this)">Prayer ✓</button>
+    <button class="chip on" data-col="sunday" onclick="toggleCol(this)" title="Denominator = number of Sundays in the window">Sunday ✓</button>
+    <button class="chip on" data-col="prayer" onclick="toggleCol(this)" title="Prayer Meeting (Wednesday) — denominator = number of Wednesdays in the window">Prayer ✓</button>
     <button class="chip on" data-col="devo"   onclick="toggleCol(this)" title="Daily devotional reflection — denominator is period days minus Sundays">Devotional ✓</button>
-    <button class="chip on" data-col="lc"     onclick="toggleCol(this)">LC ✓</button>
-    <button class="chip on" data-col="btli"   onclick="toggleCol(this)">BTLI ✓</button>
-    <button class="chip on" data-col="prepip" onclick="toggleCol(this)">Pre-Pipeline ✓</button>
+    <button class="chip on" data-col="lc"     onclick="toggleCol(this)" title="LC Meeting — denominator = sessions rostered (present or absent)">LC ✓</button>
+    <button class="chip on" data-col="btli"   onclick="toggleCol(this)" title="Denominator = number of BTLI lessons held in the window">BTLI ✓</button>
+    <button class="chip on" data-col="prepip" onclick="toggleCol(this)" title="Denominator = number of Pre-Pipeline lessons held in the window">Pre-Pipeline ✓</button>
     <button class="chip on" data-col="minis"  onclick="toggleCol(this)" title="When off, Ministry rows roll into Other">Ministry ✓</button>
     <button class="chip on" data-col="other"  onclick="toggleCol(this)">Other ✓</button>
     <span class="chip-meta" id="chipMeta">All columns shown</span>
@@ -473,16 +473,38 @@ function classifyEvent(eventType){
 // Devotional denominator: period_days - sundays_in_period.
 // Pastoral convention (Session 8): devotionals are expected daily
 // EXCEPT Sundays. A 90-day window with 13 Sundays → denominator 77.
-function countSundaysInRange(fromYmd, toYmd){
+// Count how many of a given weekday (0=Sun … 6=Sat) fall in [from,to] inclusive.
+// Local-time dates (the YMD strings are Manila-local), so no UTC drift.
+function countWeekdayInRange(fromYmd, toYmd, dow){
   const from = new Date(fromYmd + 'T00:00:00');
   const to   = new Date(toYmd   + 'T00:00:00');
   let count = 0;
   const d = new Date(from);
   while (d <= to){
-    if (d.getDay() === 0) count++;  // 0 = Sunday
+    if (d.getDay() === dow) count++;
     d.setDate(d.getDate() + 1);
   }
   return count;
+}
+function countSundaysInRange(fromYmd, toYmd){
+  return countWeekdayInRange(fromYmd, toYmd, 0);  // 0 = Sunday
+}
+
+// Count distinct lesson SESSIONS held in the window for a given attendance
+// event_type (e.g. 'BTLI' or 'Pre-Pipeline'). A "session" = one (date, lesson)
+// pair, deduped on event_date + event_name. This is the church-wide count of
+// "lessons that passed since the cutoff" — the per-curriculum parallel to the
+// calendar Sunday/Wednesday counts. (Single-batch today → exact; with two
+// concurrent batches on different schedules it sums both — switch to per-batch
+// scoping if/when that happens.)
+function countLessonSessions(eventType){
+  const seen = new Set();
+  STATE.rows.forEach(r => {
+    if (r.event_type === eventType){
+      seen.add((r.event_date || '') + '|' + (r.event_name || ''));
+    }
+  });
+  return seen.size;
 }
 
 function countDaysInRange(fromYmd, toYmd){
@@ -657,22 +679,33 @@ async function loadReport(){
 // member appears in attendance rows. 'present' = same with present=true.
 // We dedupe on the natural attendance composite key.
 function buildBuckets(){
-  // Devotional denominator: period_days − Sundays. Same for every member.
-  // (Pastoral convention: devotionals are daily-except-Sunday.)
+  // ── Fixed denominators (present counts up against these; absent rows ignored)
+  // Sunday  = # of Sundays in the window     Prayer = # of Wednesdays in the window
+  // BTLI / Pre-Pipeline = # of lessons HELD in the window (distinct sessions)
+  // Devotional = period days − Sundays (daily-except-Sunday convention)
+  // LC + Ministry keep the rostered-session model (present OR absent rows).
+  const sundayDenom = countWeekdayInRange(STATE.range.from, STATE.range.to, 0); // Sun
+  const prayerDenom = countWeekdayInRange(STATE.range.from, STATE.range.to, 3); // Wed
+  const btliDenom   = countLessonSessions('BTLI');
+  const prepipDenom = countLessonSessions('Pre-Pipeline');
   const devoDenominator = Math.max(0,
     countDaysInRange(STATE.range.from, STATE.range.to) -
     countSundaysInRange(STATE.range.from, STATE.range.to)
   );
+  // Single source of truth for labels/footnote/CSV.
+  STATE.denoms = { sunday: sundayDenom, prayer: prayerDenom,
+                   btli: btliDenom, prepip: prepipDenom, devo: devoDenominator };
 
   const byMember = {};
   // Seed every member so they appear even with zero attendance rows
   STATE.members.forEach(m => {
     byMember[m.id] = {
       member: m,
-      sunday: emptyBucket(), prayer: emptyBucket(),
+      sunday: fixedBucket(sundayDenom), prayer: fixedBucket(prayerDenom),
       devo:   { present: 0, total: devoDenominator },  // total is fixed; present counts up
-      lc:     emptyBucket(), btli:   emptyBucket(),
-      prepip: emptyBucket(), minis:  emptyBucket(),
+      lc:     emptyBucket(),
+      btli:   fixedBucket(btliDenom), prepip: fixedBucket(prepipDenom),
+      minis:  emptyBucket(),
       other:  emptyOther(),
     };
   });
@@ -697,7 +730,11 @@ function buildBuckets(){
       m.other.breakdownTotals[k] = (m.other.breakdownTotals[k] || 0) + 1;
     } else {
       const b = m[col];
-      b.total++;
+      // Fixed-denominator columns (Sunday/Prayer/BTLI/Pre-Pipeline): total was set
+      // at seed from the calendar / lesson-session count, so only count PRESENT
+      // here. LC + Ministry keep the rostered model (total grows per row).
+      const fixedDenomCol = (col === 'sunday' || col === 'prayer' || col === 'btli' || col === 'prepip');
+      if (!fixedDenomCol) b.total++;
       if (r.present) b.present++;
       if ((col === 'sunday' || col === 'prayer')){
         const mode = r.attendance_mode || 'in_person';
@@ -721,6 +758,11 @@ function buildBuckets(){
 
 function emptyBucket(){
   return { present:0, total:0, onlinePresent:0, inPersonPresent:0, breakdown:{} };
+}
+// Bucket with a pre-set fixed denominator (calendar Sundays/Wednesdays or
+// lesson-session count). present + online/in-person split count up against it.
+function fixedBucket(total){
+  return { present:0, total: total||0, onlinePresent:0, inPersonPresent:0, breakdown:{} };
 }
 function emptyOther(){
   return { present:0, total:0, breakdown:{}, breakdownTotals:{} };
@@ -749,13 +791,12 @@ function renderSummary(buckets){
   // even when the LCG-list below was scoped to one LCG — a confusing UX
   // and an accidental disclosure of church-wide aggregates to LCLs.
   const members = _scopedMembers();
-  // Count distinct event_dates in the window for Sunday / Prayer
-  const sundayDates = new Set(), prayerDates = new Set();
+  // "Other events logged" = every row that isn't Sunday/Prayer/devotional
+  // (LC, BTLI, Pre-Pipeline, Ministry, Other, etc.) — raw row count.
   let otherTotal = 0;
   STATE.rows.forEach(r => {
-    if (r.event_type === 'Sunday Service') sundayDates.add(r.event_date);
-    else if (r.event_type === 'Prayer Meeting') prayerDates.add(r.event_date);
-    else if (r.event_type !== 'devotional') otherTotal++;
+    const et = r.event_type;
+    if (et !== 'Sunday Service' && et !== 'Prayer Meeting' && et !== 'devotional') otherTotal++;
   });
   // Devotional denominator (period days minus Sundays) — same for all members
   const devoDenom = Math.max(0,
@@ -769,19 +810,19 @@ function renderSummary(buckets){
   members.forEach(m => {
     const b = buckets[m.id];
     if (b.sunday.total > 0){
-      sumSundayPct += (b.sunday.present / b.sunday.total) * 100;
+      sumSundayPct += Math.min(100, (b.sunday.present / b.sunday.total) * 100);
       cntSundayPct++;
       sumOnlineSun += b.sunday.onlinePresent;
       sumInPersonSun += b.sunday.inPersonPresent;
     }
     if (b.prayer.total > 0){
-      sumPrayerPct += (b.prayer.present / b.prayer.total) * 100;
+      sumPrayerPct += Math.min(100, (b.prayer.present / b.prayer.total) * 100);
       cntPrayerPct++;
       sumOnlinePr += b.prayer.onlinePresent;
       sumInPersonPr += b.prayer.inPersonPresent;
     }
     if (b.devo.total > 0){
-      sumDevoPct += (b.devo.present / b.devo.total) * 100;
+      sumDevoPct += Math.min(100, (b.devo.present / b.devo.total) * 100);
       cntDevoPct++;
     }
   });
@@ -802,12 +843,12 @@ function renderSummary(buckets){
       <div class="summary-sub">${activeOnly ? 'active only' : 'all members'} · Test &amp; Guest excluded</div>
     </div>
     <div class="summary-card">
-      <div class="summary-label">Sundays (${sundayDates.size})</div>
+      <div class="summary-label">Sundays (${STATE.denoms.sunday})</div>
       <div class="summary-value">${sunAvg}<span class="unit">% avg</span></div>
       <div class="summary-sub">${sunF2fPct}% f2f · ${sunOnlinePct}% online</div>
     </div>
     <div class="summary-card">
-      <div class="summary-label">Prayer (${prayerDates.size})</div>
+      <div class="summary-label">Wednesdays (${STATE.denoms.prayer})</div>
       <div class="summary-value">${prAvg}<span class="unit">% avg</span></div>
       <div class="summary-sub">${prF2fPct}% f2f · ${prOnlinePct}% online</div>
     </div>
@@ -984,7 +1025,7 @@ function memberCell(m){
 
 function ratioCell(b, showMode){
   if (!b || b.total === 0) return '<span class="dash">—</span>';
-  const pct = Math.round((b.present / b.total) * 100);
+  const pct = Math.min(100, Math.round((b.present / b.total) * 100));
   const cls = pct >= 80 ? 'green' : pct >= 50 ? 'amber' : 'red';
   const split = (showMode && (b.onlinePresent || b.inPersonPresent))
     ? `<div class="split">🏛️${b.inPersonPresent} · 🌐${b.onlinePresent}</div>`
@@ -1023,9 +1064,11 @@ function otherCell(b){
 
 function renderFootnote(){
   const off = Object.entries(STATE.cols).filter(([k,v]) => !v).map(([k]) => k);
+  const d = STATE.denoms || {};
   const parts = [];
-  parts.push('Denominators reflect sessions the member was rostered for (logged present OR absent).');
-  parts.push('"—" = no rostered sessions in window.');
+  parts.push(`Denominators for this window — Sunday: ${d.sunday??0} Sundays · Wednesday: ${d.prayer??0} Wednesdays · BTLI: ${d.btli??0} lessons · Pre-Pipeline: ${d.prepip??0} lessons · Devotional: ${d.devo??0} days (Sundays excluded).`);
+  parts.push('Those columns count days/lessons that PASSED in the window (present ÷ that fixed total); LC and Ministry still reflect sessions the member was rostered for (present OR absent).');
+  parts.push('"—" = nothing scheduled in window.');
   parts.push('Test members and Guests are always excluded.');
   if (!STATE.cols.minis && STATE.cols.other) parts.push('Ministry rows are rolled into Other.');
   parts.push('Hover Ministry / Other cells for the breakdown.');
@@ -1092,7 +1135,7 @@ function exportCSV(){
 
 function pctOrBlank(b){
   if (!b || b.total === 0) return '';
-  return Math.round((b.present / b.total) * 100);
+  return Math.min(100, Math.round((b.present / b.total) * 100));
 }
 
 function csvCell(v){
