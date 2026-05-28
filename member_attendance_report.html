@@ -686,15 +686,27 @@ async function loadReport(){
       }
     });
 
-    // 3) Attendance rows for the window — single query, no joins.
-    // We page through if the result set is huge (~10k+ rows), but
-    // for a 90-day window on a 170-member church, expect ~5-8k rows.
-    const { data: att, error: aErr } = await db.from('attendance')
-      .select('member_id,event_type,event_date,event_name,present,attendance_mode')
-      .gte('event_date', STATE.range.from)
-      .lte('event_date', STATE.range.to);
-    if (aErr) throw aErr;
-    STATE.rows = att || [];
+    // 3) Attendance rows for the window — PAGINATED. PostgREST caps a single
+    // request at 1000 rows; a 90-day window for ~200 members (with daily
+    // devotional rows) runs to several thousand, so a single query silently
+    // truncated to the first 1000 and dropped real attendance (the "doesn't
+    // tally" bug). We page by id (stable, unique) until a short page returns.
+    const PAGE = 1000;
+    let allRows = [];
+    for (let offset = 0; ; offset += PAGE){
+      const { data: page, error: aErr } = await db.from('attendance')
+        .select('member_id,event_type,event_date,event_name,present,attendance_mode')
+        .gte('event_date', STATE.range.from)
+        .lte('event_date', STATE.range.to)
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (aErr) throw aErr;
+      if (!page || !page.length) break;
+      allRows = allRows.concat(page);
+      if (page.length < PAGE) break;       // last page
+      if (offset > 500000) break;          // safety valve (~500k rows)
+    }
+    STATE.rows = allRows;
 
     // 4) Course sizes = # of lessons in each curriculum (one quiz row per
     // lesson). This is the BTLI / Pre-Pipeline denominator — the full course
