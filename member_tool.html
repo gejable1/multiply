@@ -2629,7 +2629,10 @@ function computeStreak(rows){
   const dates = new Set(rows.map(r => r.event_date));
   const today = new Date(); today.setHours(0,0,0,0);
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-  const fmt = d => d.toISOString().slice(0,10);
+  // Local-date, NOT toISOString() — in Manila (UTC+8) toISOString() returns the
+  // PREVIOUS day before 8 AM PHT, so the streak couldn't see today's entry
+  // (which is stored via local-date todayIso()). Match the rest of this file.
+  const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 
   // Find the most recent date that's in the set (today or yesterday)
   let cursor = dates.has(fmt(today)) ? today : (dates.has(fmt(yesterday)) ? yesterday : null);
@@ -6443,7 +6446,7 @@ async function loadTodaysDevo(){
   // Fetch the whole current month for browse-month
   try{
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+    const start = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
     const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
     const end = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
     const {data, error} = await db.from('devotionals')
