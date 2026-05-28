@@ -232,6 +232,47 @@ table.members-tbl{
 .daterange.show{display:inline-flex;}
 .daterange-label{font-size:11px;color:var(--muted);font-weight:600;}
 
+/* ── Member drill-down ── */
+.members-tbl tbody tr.mrow{cursor:pointer;transition:background .12s;}
+.members-tbl tbody tr.mrow:hover{background:var(--gold-bg);}
+.detail-overlay{display:none;position:fixed;inset:0;background:rgba(20,25,22,.55);z-index:1000;
+  align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;}
+.detail-overlay.show{display:flex;}
+.detail-modal{background:var(--surface);width:100%;max-width:680px;border-radius:14px;
+  box-shadow:0 18px 50px rgba(0,0,0,.3);border:1px solid var(--border);overflow:hidden;margin:auto;}
+.dm-head{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border);
+  position:sticky;top:0;background:var(--surface);}
+.dm-av{width:40px;height:40px;border-radius:50%;background:var(--surface3);color:var(--text);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:0 0 auto;}
+.dm-av.lcl{background:var(--gold);color:#fff;}
+.dm-title{flex:1;min-width:0;}
+.dm-name{font-weight:700;font-size:16px;color:var(--text);}
+.dm-meta{font-size:12px;color:var(--muted);}
+.dm-x{background:none;border:none;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;padding:4px 8px;border-radius:8px;}
+.dm-x:hover{background:var(--surface2);color:var(--text);}
+.dm-body{padding:8px 20px 20px;}
+.dm-sec{margin-top:16px;}
+.dm-sec-h{display:flex;align-items:baseline;gap:8px;font-weight:700;font-size:13px;color:var(--text);
+  text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+.dm-sec-h .cnt{font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;}
+.dm-none{font-size:13px;color:var(--tertiary);font-style:italic;}
+.dm-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.dm-chip{font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:4px 8px;color:var(--text-dim);white-space:nowrap;}
+.dm-chip .mode{color:var(--muted);}
+.dm-chip .lname{color:var(--gold);font-weight:600;}
+/* reflections */
+.dm-refl{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--surface2);}
+.dm-refl-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+.dm-refl-date{font-weight:700;font-size:12px;color:var(--text);}
+.dm-refl-meta{font-size:11px;color:var(--muted);}
+.dm-flag{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;}
+.dm-flag.short{background:var(--warn-bg);color:var(--warn);}
+.dm-flag.blank{background:var(--red-bg);color:var(--red);}
+.dm-flag.dup{background:var(--red-bg);color:var(--red);}
+.dm-refl-text{font-size:13px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;word-break:break-word;
+  max-height:160px;overflow-y:auto;}
+.dm-loading{font-size:13px;color:var(--muted);font-style:italic;}
 </style>
 </head>
 <body>
@@ -319,6 +360,11 @@ table.members-tbl{
   </div>
 
   <div class="footnote" id="footnote"></div>
+</div>
+
+<!-- Member drill-down modal -->
+<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)closeMemberDetail()">
+  <div class="detail-modal" id="detailModal"></div>
 </div>
 
 <script>
@@ -1001,7 +1047,7 @@ function renderMembersTable(members, buckets){
     if (cols.prepip) cells.push(`<td>${ratioCell(b.prepip, false)}</td>`);
     if (cols.minis)  cells.push(`<td>${ministryCell(b.minis)}</td>`);
     if (cols.other)  cells.push(`<td style="text-align:center">${otherCell(b.other)}</td>`);
-    return `<tr>${cells.join('')}</tr>`;
+    return `<tr class="mrow" onclick="openMemberDetail('${m.id}')">${cells.join('')}</tr>`;
   }).join('');
 
   return `
@@ -1191,6 +1237,138 @@ function escAttr(s){ return escHTML(s); }
     sel.setAttribute('data-locked-mine', '1');
   }
 })();
+
+// ─── Member drill-down ─────────────────────────────────────────
+// Click a member row → see the actual dates behind each ratio, and the
+// full devotional reflection TEXT (lazy-loaded) so rubbish/blank/copy-paste
+// "passes" are visible. Flags are mechanical hints only (length, repeats) —
+// the pastor reads and decides, not the tool.
+function _dmFmt(ymdStr){
+  if(!ymdStr) return '';
+  const dt = new Date(ymdStr + 'T00:00:00');
+  return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+       + ' (' + dt.toLocaleDateString('en-US',{weekday:'short'}) + ')';
+}
+function dmDateChips(list, opts){
+  opts = opts || {};
+  if(!list.length) return '<div class="dm-none">— none in this window</div>';
+  return '<div class="dm-chips">' + list.map(x => {
+    let md = '';
+    if(opts.showMode) md = x.mode==='online' ? '<span class="mode"> · 🌐</span>'
+                         : (x.mode==='in_person' ? '<span class="mode"> · 🏛️</span>' : '');
+    let nm = '';
+    if(opts.showName && x.name) nm = ` <span class="lname">${escHTML(x.name)}</span>`;
+    return `<span class="dm-chip">${_dmFmt(x.date)}${md}${nm}</span>`;
+  }).join('') + '</div>';
+}
+function dmSection(title, cnt, inner){
+  return `<div class="dm-sec"><div class="dm-sec-h">${escHTML(title)} <span class="cnt">${escHTML(cnt)}</span></div>${inner}</div>`;
+}
+function openMemberDetail(memberId){
+  const m = (STATE.members||[]).find(x => x.id === memberId);
+  if(!m) return;
+  const present = (STATE.rows||[]).filter(r => r.member_id === memberId && r.present);
+  const byType = (t) => present.filter(r => r.event_type === t)
+      .map(r => ({ date:r.event_date, mode:r.attendance_mode, name:r.event_name }))
+      .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const sun  = byType('Sunday Service');
+  const wed  = byType('Prayer Meeting');
+  const lc   = byType('LC Meeting');
+  const btli = byType('BTLI');
+  const pre  = byType('Pre-Pipeline');
+  const KNOWN = new Set(['Sunday Service','Prayer Meeting','LC Meeting','BTLI','Pre-Pipeline','devotional']);
+  const other = present.filter(r => !KNOWN.has(r.event_type))
+      .map(r => ({ date:r.event_date, name:r.event_type }))
+      .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  const d = STATE.denoms || {};
+  const initials = (m.name||'').split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase() || '?';
+  const role  = m.is_facilitator ? (m.facilitator_role||'LCL') : '';
+  const level = (m.pipeline_level != null) ? `L${m.pipeline_level}` : '';
+  const meta  = [role, level].filter(Boolean).join(' · ');
+  const rangeStr = `${STATE.range.from} → ${STATE.range.to}`;
+
+  document.getElementById('detailModal').innerHTML = `
+    <div class="dm-head">
+      <div class="dm-av ${m.is_facilitator?'lcl':''}">${escHTML(initials)}</div>
+      <div class="dm-title">
+        <div class="dm-name">${escHTML(m.name||'(no name)')}</div>
+        <div class="dm-meta">${meta?escHTML(meta)+' · ':''}${escHTML(rangeStr)}</div>
+      </div>
+      <button class="dm-x" onclick="closeMemberDetail()" title="Close">✕</button>
+    </div>
+    <div class="dm-body">
+      ${dmSection('Sunday Service', `${sun.length}/${d.sunday??0}`, dmDateChips(sun,{showMode:true}))}
+      ${dmSection('Prayer Meeting (Wed)', `${wed.length}/${d.prayer??0}`, dmDateChips(wed,{showMode:true}))}
+      ${dmSection('LC Meeting', `${lc.length}/${d.lc??0} weeks`, dmDateChips(lc,{}))}
+      ${dmSection('BTLI lessons', `${btli.length}/${d.btli??0}`, dmDateChips(btli,{showName:true}))}
+      ${dmSection('Pre-Pipeline lessons', `${pre.length}/${d.prepip??0}`, dmDateChips(pre,{showName:true}))}
+      ${other.length ? dmSection('Ministry / Other', `${other.length}`, dmDateChips(other,{showName:true})) : ''}
+      <div class="dm-sec">
+        <div class="dm-sec-h">Devotional reflections <span class="cnt" id="dmDevoCnt"></span></div>
+        <div class="dm-loading" id="dmDevoBody">Loading reflections…</div>
+      </div>
+    </div>`;
+  document.getElementById('detailOverlay').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  _dmLoadReflections(memberId);
+}
+async function _dmLoadReflections(memberId){
+  const bodyEl = document.getElementById('dmDevoBody');
+  const cntEl  = document.getElementById('dmDevoCnt');
+  try{
+    const { data, error } = await db.from('devotional_reflections')
+      .select('entry_date,reflection')
+      .eq('member_id', memberId)
+      .gte('entry_date', STATE.range.from)
+      .lte('entry_date', STATE.range.to)
+      .order('entry_date', { ascending:false });
+    if(error) throw error;
+    if(!document.getElementById('dmDevoBody')) return; // modal closed
+    const refls = data || [];
+    const denom = (STATE.denoms && STATE.denoms.devo) || 0;
+    if(cntEl) cntEl.textContent = `${refls.length}/${denom}`;
+    if(!refls.length){
+      document.getElementById('dmDevoBody').outerHTML =
+        '<div class="dm-none" id="dmDevoBody">— no reflections saved in this window</div>';
+      return;
+    }
+    // Duplicate detection: identical normalized text on more than one day.
+    const norm = s => (s||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const counts = {};
+    refls.forEach(r => { const k = norm(r.reflection); if(k) counts[k] = (counts[k]||0)+1; });
+    const html = refls.map(r => {
+      const text = r.reflection || '';
+      const trimmed = text.trim();
+      const chars = trimmed.length;
+      const words = trimmed ? trimmed.split(/\s+/).length : 0;
+      const flags = [];
+      if(chars === 0)      flags.push('<span class="dm-flag blank">⚠ blank</span>');
+      else if(chars < 15)  flags.push('<span class="dm-flag short">⚠ very short</span>');
+      const k = norm(text);
+      if(k && counts[k] > 1) flags.push(`<span class="dm-flag dup">↺ repeated ×${counts[k]}</span>`);
+      return `<div class="dm-refl">
+        <div class="dm-refl-top">
+          <span class="dm-refl-date">${_dmFmt(r.entry_date)}</span>
+          <span class="dm-refl-meta">${words} word${words===1?'':'s'} · ${chars} char${chars===1?'':'s'}</span>
+          ${flags.join('')}
+        </div>
+        <div class="dm-refl-text">${chars ? escHTML(text) : '<em>(empty)</em>'}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('dmDevoBody').outerHTML = `<div id="dmDevoBody">${html}</div>`;
+  }catch(e){
+    console.warn('[member_attendance_report] reflection load failed:', e);
+    const el = document.getElementById('dmDevoBody');
+    if(el) el.textContent = 'Could not load reflections.';
+  }
+}
+function closeMemberDetail(){
+  const ov = document.getElementById('detailOverlay');
+  if(ov) ov.classList.remove('show');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeMemberDetail(); });
 
 loadReport();
 
