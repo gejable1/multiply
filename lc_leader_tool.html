@@ -8455,6 +8455,15 @@ function _batchesOpenCreate(){
           <textarea id="newBatchNotes" rows="2" placeholder="When you meet, special context, etc."
             style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.55;resize:vertical;box-sizing:border-box"></textarea>
         </div>
+        <div style="margin-bottom:.25rem">
+          <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+            <input type="checkbox" id="newBatchVisible" style="width:17px;height:17px;margin-top:1px;accent-color:var(--green);flex:0 0 auto">
+            <span style="font-size:12.5px;color:var(--text);line-height:1.45">
+              <strong>Visible to others</strong>
+              <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px">Leave unchecked to keep this a private grouping — only you can see and enroll into it. Check it when other leaders should be able to enroll their members (e.g. a BTLI class).</span>
+            </span>
+          </label>
+        </div>
       </div>
       <div style="padding:1rem 1.15rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
         <button onclick="_renderBatchesList()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer">Cancel</button>
@@ -8470,6 +8479,7 @@ async function _batchesSaveCreate(){
   const startD = document.getElementById('newBatchStart').value || null;
   const endD = document.getElementById('newBatchEnd').value || null;
   const notes = (document.getElementById('newBatchNotes').value || '').trim() || null;
+  const visibleToOthers = !!(document.getElementById('newBatchVisible') && document.getElementById('newBatchVisible').checked);
   if (!name) { toast('Batch name required', '⚠️'); return; }
   if (!programId) { toast('Pick a program', '⚠️'); return; }
 
@@ -8492,7 +8502,8 @@ async function _batchesSaveCreate(){
       end_date: endD,
       status: 'active',
       notes,
-      owner_id: L.leaderId
+      owner_id: L.leaderId,
+      visible_to_others: visibleToOthers
     }).select().single();
     if (error) throw error;
 

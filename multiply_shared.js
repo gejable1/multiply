@@ -1902,7 +1902,7 @@
     // ─── Step 1: Fetch cohorts (no embed) ───
     const cohRes = await db
       .from('cohorts')
-      .select('id, name, start_date, end_date, status, notes, program_id, owner_id, created_at')
+      .select('id, name, start_date, end_date, status, notes, program_id, owner_id, created_at, visible_to_others')
       .in('status', ['active', 'forming']);
     if (cohRes.error) {
       console.error('_cohortsListVisibleToLeader: cohorts query failed', cohRes.error);
@@ -1946,9 +1946,16 @@
     cohorts.forEach(c => { c._ownerIsPastor = pastorOwnerSet.has(c.owner_id); });
 
     // ─── Step 4: Trim by visibility rule ───
+    // Visibility rule (Session 22 — visible_to_others):
+    //   • You ALWAYS see your OWN batches (owner match), private or not.
+    //   • A batch you DON'T own shows only if it's Pastor-owned AND shared
+    //     (visible_to_others). `!== false` keeps legacy/default rows visible.
+    //   Private batches (visible_to_others = false) stay owner-only — used to
+    //   group the people a leader ministers to without others enrolling.
     if (!actor.isPastor) {
       cohorts = cohorts.filter(c =>
-        c._ownerIsPastor === true || c.owner_id === actor.memberId
+        c.owner_id === actor.memberId ||
+        (c._ownerIsPastor === true && c.visible_to_others !== false)
       );
     }
     if (cohorts.length === 0) {
