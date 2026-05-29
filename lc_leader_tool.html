@@ -8260,10 +8260,16 @@ async function openMyBatches(){
       isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
     };
 
-    // Load visible cohorts (with their members) + active programs in parallel.
+    // Load visible cohorts (with their members) + programs in parallel.
+    // Program choices: Pastor sees ALL program types (parity with MD — needed
+    // to create private mentoring/coaching batches under any program type,
+    // including ones marked inactive). Other leaders see active programs only.
+    let _progQ = db.from('cohort_programs').select('*');
+    if (!actor.isPastor) _progQ = _progQ.eq('is_active', true);
+    _progQ = _progQ.order('sort_order', { ascending: true }).order('name', { ascending: true });
     const [cohorts, progRes] = await Promise.all([
       MultiplyShared.cohorts.listVisibleToLeader(actor),
-      db.from('cohort_programs').select('*').eq('is_active', true).order('sort_order', { ascending: true }).order('name', { ascending: true })
+      _progQ
     ]);
     if (progRes.error) throw progRes.error;
 
@@ -8431,7 +8437,8 @@ function _batchesOpenCreate(){
             <option value="">— pick a program —</option>
             ${progs.map(p => {
               const lvl = p.pipeline_level != null ? ' · L'+p.pipeline_level : '';
-              return `<option value="${p.id}">${MultiplyShared.escapeHTML(p.name)}${lvl}</option>`;
+              const inactive = (p.is_active === false) ? ' (inactive)' : '';
+              return `<option value="${p.id}">${MultiplyShared.escapeHTML(p.name)}${lvl}${inactive}</option>`;
             }).join('')}
           </select>
           <div style="font-size:10.5px;color:var(--muted);margin-top:.3rem;line-height:1.5">
