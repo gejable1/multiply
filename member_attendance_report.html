@@ -522,14 +522,11 @@ function classifyEvent(eventType){
 // Count how many of a given weekday (0=Sun … 6=Sat) fall in [from,to] inclusive.
 // Local-time dates (the YMD strings are Manila-local), so no UTC drift.
 function countWeekdayInRange(fromYmd, toYmd, dow){
-  const from = new Date(fromYmd + 'T00:00:00');
-  const to   = new Date(toYmd   + 'T00:00:00');
-  let count = 0;
-  const d = new Date(from);
-  while (d <= to){
-    if (d.getDay() === dow) count++;
-    d.setDate(d.getDate() + 1);
-  }
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.countWeekday(fromYmd, toYmd, dow);   // shared single-source
+  const from = new Date(fromYmd + 'T00:00:00'), to = new Date(toYmd + 'T00:00:00');
+  let count = 0; const d = new Date(from);
+  while (d <= to){ if (d.getDay() === dow) count++; d.setDate(d.getDate() + 1); }
   return count;
 }
 function countSundaysInRange(fromYmd, toYmd){
@@ -537,22 +534,25 @@ function countSundaysInRange(fromYmd, toYmd){
 }
 
 function countDaysInRange(fromYmd, toYmd){
-  const from = new Date(fromYmd + 'T00:00:00');
-  const to   = new Date(toYmd   + 'T00:00:00');
-  return Math.round((to - from) / 86400000) + 1; // inclusive
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.countDays(fromYmd, toYmd);   // shared single-source
+  const from = new Date(fromYmd + 'T00:00:00'), to = new Date(toYmd + 'T00:00:00');
+  return Math.round((to - from) / 86400000) + 1;
 }
 
 // Number of weeks in the window (LC meetings are weekly). Rounded so a 90-day
 // window → 13 weeks, a 30-day window → 4. Tiny ranges (<4 days) round to 0 → "—".
 function countWeeksInRange(fromYmd, toYmd){
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.weeksBetween(fromYmd, toYmd);   // shared single-source
   return Math.round(countDaysInRange(fromYmd, toYmd) / 7);
 }
 
 // ─── Date range helpers ────────────────────────────────────────
 function ymd(d){
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.toYMD(d);   // shared single-source
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
 }
 

@@ -2632,7 +2632,7 @@ function computeStreak(rows){
   // Local-date, NOT toISOString() — in Manila (UTC+8) toISOString() returns the
   // PREVIOUS day before 8 AM PHT, so the streak couldn't see today's entry
   // (which is stored via local-date todayIso()). Match the rest of this file.
-  const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const fmt = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
 
   // Find the most recent date that's in the set (today or yesterday)
   let cursor = dates.has(fmt(today)) ? today : (dates.has(fmt(yesterday)) ? yesterday : null);
@@ -2717,7 +2717,7 @@ function _dismissReflectionReminder(){
 async function loadReflectionGap(){
   try{
     if(!MEMBER || !MEMBER.memberId){ _devoReflectionGap = false; return; }
-    const _ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const _ymd = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
     const today = new Date();
     const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
     const todayStr = _ymd(today);
@@ -2935,7 +2935,7 @@ async function openPreachingSwapRequestMMT(myAssignmentId, myPreachDate){
   // ─── TIMEZONE-SAFE LOCAL DATE (see admin/MLT for full rationale) ───
   // Use local-date components instead of toISOString to avoid UTC off-by-one
   // that turns Manila-midnight-Wednesday into UTC-Tuesday-4PM in storage.
-  const _ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const _ymd = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   const myDate = new Date(myPreachDate + 'T00:00:00');
   const winStart = new Date(myDate); winStart.setDate(winStart.getDate() - 42);
   const winEnd   = new Date(myDate); winEnd.setDate(winEnd.getDate()   + 42);
@@ -6416,11 +6416,10 @@ let currentReflectionRow = null; // existing reflection row (for update vs inser
 // the previous day, causing the home card to show yesterday's content.
 // This function pads year/month/day from the LOCAL Date to avoid that.
 function todayIso(){
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.todayYMD();   // shared single-source
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function isSundayDate(iso){
   // iso = 'YYYY-MM-DD'. Treat as local-midnight date.

@@ -2507,6 +2507,46 @@
 
 
   // ───── Public surface ─────
+  // ─── Date helpers — SINGLE SOURCE OF TRUTH for YYYY-MM-DD math ──────
+  // Session 22. Manila is UTC+8, so any date KEY built with toISOString()
+  // lands on the WRONG day before 8 AM PHT (it returns the previous UTC date),
+  // and bare `new Date('YYYY-MM-DD')` parses as UTC midnight (also a day off in
+  // local terms). Every YYYY-MM-DD that is stored, compared, or used as a range
+  // bound MUST come from here. toISOString() stays correct ONLY for instants
+  // (created_at and other *_at timestamp columns). If this bug ever resurfaces
+  // anywhere, patch it HERE — consumers keep only a thin shared-preferring
+  // wrapper with a local fallback.
+  function _dtToYMD(d){
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
+  }
+  function _dtTodayYMD(){ return _dtToYMD(new Date()); }
+  function _dtParseYMD(s){           // local midnight, never UTC
+    if (typeof s !== 'string') return null;
+    return new Date(s + 'T00:00:00');
+  }
+  function _dtCountDays(fromYMD, toYMD){   // inclusive
+    const a = _dtParseYMD(fromYMD), b = _dtParseYMD(toYMD);
+    if (!a || !b) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  }
+  function _dtCountWeekday(fromYMD, toYMD, dow){   // count occurrences of weekday (0=Sun..6=Sat)
+    const a = _dtParseYMD(fromYMD), b = _dtParseYMD(toYMD);
+    if (!a || !b) return 0;
+    let n = 0; const d = new Date(a);
+    while (d <= b){ if (d.getDay() === dow) n++; d.setDate(d.getDate() + 1); }
+    return n;
+  }
+  function _dtWeeksBetween(fromYMD, toYMD){ return Math.round(_dtCountDays(fromYMD, toYMD) / 7); }
+  function _dtMostRecentWeekday(dow){   // most recent past occurrence of dow, INCLUDING today
+    const today = new Date();
+    const delta = (today.getDay() - dow + 7) % 7;
+    const snapped = new Date(today);
+    snapped.setDate(today.getDate() - delta);
+    return _dtToYMD(snapped);
+  }
+
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
     getDB,
@@ -2549,6 +2589,18 @@
       attestableLessons,
       EVENT_TYPES: ATTEST_EVENT_TYPES,
       defaultEventDate
+    },
+    // Date helpers — SINGLE source of truth for all YYYY-MM-DD math (Session 22).
+    // Anything calendar-related routes here so the Manila UTC+8 mis-dating bug is
+    // fixed in exactly one place.
+    dates: {
+      toYMD:             _dtToYMD,
+      todayYMD:          _dtTodayYMD,
+      parseYMD:          _dtParseYMD,
+      countDays:         _dtCountDays,
+      countWeekday:      _dtCountWeekday,
+      weeksBetween:      _dtWeeksBetween,
+      mostRecentWeekday: _dtMostRecentWeekday
     },
     // Cohort permissions + MLT helpers (Priority C2 · May 16, 2026)
     cohorts: {

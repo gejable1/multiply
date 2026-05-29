@@ -1609,19 +1609,18 @@ async function _loadL5EventTypes(){
 // Per the May 2026 rule, L5 leaders tap "I'm here" while AT the event;
 // the date field defaults here but is pickable for backdating.
 function _l5Today(){
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.todayYMD();   // shared single-source
   const d = new Date();
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 // Local-time YYYY-MM-DD for an arbitrary Date. Never toISOString() (Manila is
 // UTC+8 → before 8 AM PHT toISOString() returns the previous day, mis-dating
 // date-key fields and dropping "today" from report upper-bounds). Inv #12/#106.
 function _localYMD(d){
-  return d.getFullYear() + '-' +
-         String(d.getMonth() + 1).padStart(2, '0') + '-' +
-         String(d.getDate()).padStart(2, '0');
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.toYMD(d);   // shared single-source
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 // Kept for backward-compat with any external caller; now just returns today.
@@ -2610,14 +2609,12 @@ function viewAssessmentResult(key){
 // Returns ISO date (YYYY-MM-DD) of the most recent Sunday — today if today
 // is Sunday, otherwise the prior Sunday. Always returns a real Sunday.
 function _getMostRecentSunday(){
-  const d = new Date();
-  d.setHours(0,0,0,0);
-  const dow = d.getDay(); // 0 = Sunday
+  const MS = window.MultiplyShared;
+  if (MS && MS.dates) return MS.dates.mostRecentWeekday(0);   // shared single-source (0 = Sunday)
+  const d = new Date(); d.setHours(0,0,0,0);
+  const dow = d.getDay();
   if(dow !== 0) d.setDate(d.getDate() - dow);
-  // Build ISO from local-date components to avoid timezone shifting
-  return d.getFullYear() + '-' +
-         String(d.getMonth()+1).padStart(2,'0') + '-' +
-         String(d.getDate()).padStart(2,'0');
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 // "Sun, May 3" — short friendly label for buttons/toasts
