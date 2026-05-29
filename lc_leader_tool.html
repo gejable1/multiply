@@ -824,6 +824,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="att-type-pill" data-type="Prayer Meeting" onclick="selectAttType(this)">Prayer Meeting</div>
       <div class="att-type-pill" data-type="BTLI" onclick="selectAttType(this)">BTLI</div>
       <div class="att-type-pill" data-type="Pre-Pipeline" onclick="selectAttType(this)">Pre-Pipeline</div>
+      <div class="att-type-pill" data-type="General Purpose Batch" onclick="selectAttType(this)">Gen. Purpose Batch</div>
       <div class="att-type-pill" data-type="Youth Gathering" onclick="selectAttType(this)">Youth Gathering</div>
       <div class="att-type-pill" data-type="Team Building" onclick="selectAttType(this)">Team Building</div>
       <div class="att-type-pill" data-type="Outing" onclick="selectAttType(this)">Outing</div>
@@ -876,6 +877,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <option value="">— Pick the batch —</option>
       </select>
       <div id="attUsbongBatchHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Only members enrolled in the chosen Pre-Pipeline batch can be marked present.</div>
+    </div>
+    <!-- General Purpose Batch picker (Session 22) — shown when event_type is
+         'General Purpose Batch'. Lists the leader's visible non-BTLI/Pre-Pipeline
+         live batches; the chosen batch's members become the roster; event_name =
+         batch name so two batches the same day don't collide. -->
+    <div id="attGpBatchRow" style="display:none;margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--gold);border-radius:var(--r-sm);">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">📦 Which Batch?</div>
+      <select id="attGpBatchSelect" onchange="onGpBatchChange()" style="width:100%;padding:9px 12px;font-size:14px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;color:var(--text);outline:none;cursor:pointer;">
+        <option value="">— Pick the batch —</option>
+      </select>
+      <div id="attGpBatchHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Only members in the chosen batch can be marked present. Logs under "General Purpose Batch" — never collides with LC meetings.</div>
     </div>
   </div>
   <!-- "Already saved" banner — populated by loadExistingAttendance(); hidden when nothing on file -->
@@ -1114,6 +1126,15 @@ let selectedUsbongEventName = '';     // computed "Usbong 1 · L1 · Sino Ang Di
 let _usbongBatchesForCourse = null;   // array of cohort rows, populated per course_code
 let _usbongBatchesLoading = false;
 let selectedUsbongBatchId = null;     // id of chosen cohort
+
+// General Purpose Batch picker state (Session 22). When event_type ===
+// 'General Purpose Batch', the leader picks one of their visible non-BTLI /
+// Pre-Pipeline live batches; its members become the roster, and event_name =
+// the batch name (collision-safe key, distinct from 'LC Meeting').
+let _gpBatches = null;            // array of visible, live, non-lesson cohort rows
+let selectedGpBatchId = null;     // id of chosen batch
+let _gpBatchRoster = null;        // member rows of the chosen batch
+let selectedGpEventName = '';     // = batch name
 let _usbongBatchRoster = null;        // member rows of the chosen batch, sorted
                                       // When non-null AND selectedAttType === 'Pre-Pipeline',
                                       // renderAttList draws from this instead of myMembers.
@@ -3348,6 +3369,9 @@ function _currentAttRoster(){
   if (selectedAttType === 'Pre-Pipeline' && Array.isArray(_usbongBatchRoster) && _usbongBatchRoster.length > 0) {
     return _usbongBatchRoster;
   }
+  if (selectedAttType === 'General Purpose Batch' && Array.isArray(_gpBatchRoster) && _gpBatchRoster.length > 0) {
+    return _gpBatchRoster;
+  }
   return myMembers || [];
 }
 
@@ -3372,6 +3396,12 @@ function showAttendance(){
   _btliBatchesForCourse = null;
   const _btliBatchRow = document.getElementById('attBtliBatchRow');
   if (_btliBatchRow) _btliBatchRow.style.display = 'none';
+  // Session 22: reset General Purpose Batch picker too.
+  selectedGpBatchId = null;
+  _gpBatchRoster = null;
+  selectedGpEventName = '';
+  const _gpRow = document.getElementById('attGpBatchRow');
+  if (_gpRow) _gpRow.style.display = (selectedAttType === 'General Purpose Batch') ? 'block' : 'none';
   const _btliBatchSelEl = document.getElementById('attBtliBatchSelect');
   if (_btliBatchSelEl) _btliBatchSelEl.innerHTML = '<option value="">— Pick the batch —</option>';
   // Pre-Pipeline (Usbong) state reset — Session 5 parallel to BTLI's.
@@ -3559,6 +3589,21 @@ function selectAttType(el){
       if (batchSel) batchSel.innerHTML = '<option value="">— Pick the batch —</option>';
     }
   }
+  // Show/hide General Purpose Batch picker (Session 22)
+  const gpRow = document.getElementById('attGpBatchRow');
+  if (gpRow) {
+    if (selectedAttType === 'General Purpose Batch') {
+      gpRow.style.display = 'block';
+      _gpLoadBatches();
+    } else {
+      gpRow.style.display = 'none';
+      selectedGpBatchId = null;
+      _gpBatchRoster = null;
+      selectedGpEventName = '';
+      const gsel = document.getElementById('attGpBatchSelect');
+      if (gsel) { gsel.value = ''; }
+    }
+  }
   onAttContextChange();
 
   // Session 8 PM redesign: per-row mode toggles re-render via renderAttList
@@ -3676,6 +3721,78 @@ async function _btliLoadBatchesForCourse(courseCode){
     if (hint) hint.textContent = 'Could not load batches: ' + (e.message || e);
     _btliBatchesForCourse = null;
   }
+}
+
+// Gen. Purpose Batch picker (Session 22) — load the leader's visible, live,
+// non-BTLI/Pre-Pipeline batches (those have their own lesson-driven chips).
+async function _gpLoadBatches(){
+  const row  = document.getElementById('attGpBatchRow');
+  const sel  = document.getElementById('attGpBatchSelect');
+  const hint = document.getElementById('attGpBatchHint');
+  if (!row || !sel) return;
+  row.style.display = 'block';
+  sel.innerHTML = '<option value="">— loading batches… —</option>';
+  sel.disabled = true;
+  try {
+    const L = LEADER || {};
+    const actor = {
+      memberId: L.leaderId,
+      leaderLevel: L.leaderLevel || 0,
+      isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
+    };
+    const all = await MultiplyShared.cohorts.listVisibleToLeader(actor);
+    _gpBatches = (all || []).filter(c => {
+      const cat = (((c.cohort_programs || {}).category) || '').toLowerCase();
+      const lessonDriven = cat === 'btli' || cat === 'pre-discipleship' || cat === 'pre-pipeline';
+      const live = c.status === 'active' || c.status === 'forming';
+      return !lessonDriven && live;
+    });
+    sel.disabled = false;
+    if (_gpBatches.length === 0) {
+      sel.innerHTML = '<option value="">⚠ No general-purpose batches yet</option>';
+      if (hint) hint.textContent = 'No general-purpose batches you can manage. Create one in 🎓 My Batches (under a non-BTLI / non-Pre-Pipeline program).';
+      return;
+    }
+    sel.innerHTML = '<option value="">— Pick the batch —</option>' +
+      _gpBatches.map(c => {
+        const count = (c._members || []).length;
+        const prog  = c.cohort_programs || {};
+        const progName = prog.name ? (' · ' + prog.name) : '';
+        const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? ' (Pastor)' : '');
+        return '<option value="' + c.id + '">' +
+          MultiplyShared.escapeHTML(c.name || '(unnamed)') +
+          MultiplyShared.escapeHTML(progName) + ' · ' + count + ' members' +
+          MultiplyShared.escapeHTML(ownerTag) + '</option>';
+      }).join('');
+    if (hint) hint.textContent = 'Only members in the chosen batch can be marked present. Logs under "General Purpose Batch" — never collides with LC meetings.';
+  } catch(e) {
+    console.error('_gpLoadBatches failed:', e);
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">⚠ Could not load batches</option>';
+    if (hint) hint.textContent = 'Could not load batches: ' + (e.message || e);
+    _gpBatches = null;
+  }
+}
+
+function onGpBatchChange(){
+  const sel = document.getElementById('attGpBatchSelect');
+  if (!sel) return;
+  selectedGpBatchId = sel.value || null;
+  if (!selectedGpBatchId || !_gpBatches) {
+    _gpBatchRoster = null; selectedGpEventName = '';
+    onAttContextChange(); return;
+  }
+  const batch = _gpBatches.find(c => c.id === selectedGpBatchId);
+  if (!batch) {
+    _gpBatchRoster = null; selectedGpEventName = '';
+    onAttContextChange(); return;
+  }
+  selectedGpEventName = batch.name || '';   // event_name = batch name (collision-safe)
+  _gpBatchRoster = (batch._members || [])
+    .map(cm => cm.members)
+    .filter(m => m && m.id)
+    .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+  onAttContextChange();
 }
 
 // C3b · LCL picked a specific batch — set the roster from its enrolled members.
@@ -4161,6 +4278,16 @@ async function saveAttendance(){
       return;
     }
   }
+  // General Purpose Batch (Session 22): batch required, else we'd fall back to
+  // myMembers and record false absences for non-members.
+  if (selectedAttType === 'General Purpose Batch') {
+    if (!selectedGpBatchId) {
+      toast('Please pick the batch before saving.','error');
+      const sel = document.getElementById('attGpBatchSelect');
+      if (sel) sel.focus();
+      return;
+    }
+  }
 
   const leader        = currentLeader;
   const eventLcGroup  = leader?.lc_group || '';
@@ -4170,6 +4297,7 @@ async function saveAttendance(){
   let eventName = null;
   if (selectedAttType === 'BTLI')         eventName = selectedBtliEventName;
   else if (selectedAttType === 'Pre-Pipeline') eventName = selectedUsbongEventName;
+  else if (selectedAttType === 'General Purpose Batch') eventName = selectedGpEventName;
 
   // C3b: roster is _btliBatchRoster for BTLI, myMembers otherwise.
   const rosterForSave = _currentAttRoster();
@@ -4213,7 +4341,7 @@ async function saveAttendance(){
       .eq('member_id', row.member_id)
       .eq('event_date', row.event_date)
       .eq('event_type', row.event_type);
-    if ((row.event_type === 'BTLI' || row.event_type === 'Pre-Pipeline') && row.event_name) {
+    if ((row.event_type === 'BTLI' || row.event_type === 'Pre-Pipeline' || row.event_type === 'General Purpose Batch') && row.event_name) {
       q = q.eq('event_name', row.event_name);
     }
     const { data: existing, error: selErr } = await q.maybeSingle();
