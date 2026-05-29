@@ -814,7 +814,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="att-meta">
     <div style="margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">📅 Date of Meeting (tap to change)</div>
-      <input type="date" class="att-date-input" id="attDate" onchange="onAttContextChange()" style="font-size:15px;padding:11px 14px;font-weight:600;width:auto;min-width:180px">
+      <input type="date" class="att-date-input" id="attDate" onchange="_attDateManuallySet = true; onAttContextChange()" style="font-size:15px;padding:11px 14px;font-weight:600;width:auto;min-width:180px">
     </div>
     <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Event Type</div>
     <div class="att-date-row" id="attTypeRow">
@@ -1058,6 +1058,19 @@ let attendanceState = {};
 let currentFilter = 'all';
 let currentMember = null;
 let selectedAttType = 'Sunday Service';
+// Log-Attendance date snapping (Session 22): the main Log Attendance date field
+// used to default to plain "today," so an LCL logging "Sunday Service" on a
+// Wednesday recorded the Wednesday date (the "wrong date" bug). We now snap the
+// date to the event's most-recent-past weekday (Sunday Service/School → Sunday,
+// Prayer Meeting → Wednesday; others → today) via the SAME shared helper L5 and
+// MMT use (Inv #92). Snapped date stays visible + editable; once the LCL edits
+// the date manually, we never auto-snap again (respects their explicit choice).
+let _attDateManuallySet = false;
+function _attApplySnap(eventTypeKey){
+  if (_attDateManuallySet) return;
+  const el = document.getElementById('attDate');
+  if (el) el.value = _l5DefaultDate(eventTypeKey);   // reuses the shared snap (fallback: today)
+}
 // Session 8 PM redesign (May 19, 2026): attendance_mode is per-member, not
 // per-form. attendanceModeState[memberId] = 'online' marks that member's
 // row as a livestream attendee for this save. Absence from the map means
@@ -3286,11 +3299,11 @@ function _currentAttRoster(){
 function showAttendance(){
   // Invariant #12: use local-component date, not toISOString().slice(0,10).
   // After 4PM Manila, toISOString() returns tomorrow's date in UTC.
-  const _now = new Date();
-  const _ymd = _now.getFullYear() + '-' +
-               String(_now.getMonth()+1).padStart(2,'0') + '-' +
-               String(_now.getDate()).padStart(2,'0');
-  document.getElementById('attDate').value = _ymd;
+  // Session 22: default the date by SNAPPING to the selected event's weekday
+  // (e.g. Sunday Service → most-recent Sunday) instead of plain today, so an
+  // LCL logging on the wrong calendar day no longer mis-dates the record.
+  _attDateManuallySet = false;
+  document.getElementById('attDate').value = _l5DefaultDate(selectedAttType);
   // Reset BTLI lesson picker — never carry forward a stale lesson selection
   selectedBtliQuizId = null;
   selectedBtliEventName = '';
@@ -3400,6 +3413,7 @@ function _recoverAttendanceDraft(){
   if(payload.date){
     const di = document.getElementById('attDate');
     if(di) di.value = payload.date;
+    _attDateManuallySet = true;   // a recovered draft date is an explicit prior choice — never snap over it
   }
   if(payload.eventType){
     selectedAttType = payload.eventType;
@@ -3443,6 +3457,7 @@ function selectAttType(el){
   document.querySelectorAll('.att-type-pill').forEach(p=>p.classList.remove('selected'));
   el.classList.add('selected');
   selectedAttType = el.dataset.type;
+  _attApplySnap(selectedAttType);   // snap date to this event's weekday (unless manually set)
   // Show/hide BTLI lesson picker
   const btliRow = document.getElementById('attBtliLessonRow');
   const btliBatchRow = document.getElementById('attBtliBatchRow');
