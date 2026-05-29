@@ -507,7 +507,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         <!-- My Ministry: visibility toggled at runtime by _refreshMyMinistryNav() — only leaders who head ≥1 ministry see it -->
         <button class="mm-item" id="navMyMinistryMore" data-nav="myMinistry" onclick="_navTo('myMinistry', renderMyMinistryPanel)" style="display:none">🎵 My Ministry</button>
         <button class="mm-item" data-nav="reports"       onclick="_navTo('reports')">📊 Reports</button>
-        <button class="mm-item" data-nav="settings"      onclick="_navTo('settings')">⚙️ Settings</button>
+        <button class="mm-item" data-nav="settings"      onclick="_navTo('settings', loadSviWeights)">⚙️ Settings</button>
       </div>
     </div>
   </div>
@@ -569,7 +569,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   <!-- My Ministry: shown at runtime by _refreshMyMinistryNav() to leaders who head ≥1 ministry -->
   <button class="nd-item" id="navMyMinistryDrawer" data-nav="myMinistry" onclick="_navTo('myMinistry', renderMyMinistryPanel, true)" style="display:none">🎵 My Ministry</button>
   <button class="nd-item" data-nav="reports"       onclick="_navTo('reports', null, true)">📊 Reports</button>
-  <button class="nd-item" data-nav="settings"      onclick="_navTo('settings', null, true)">⚙️ Settings</button>
+  <button class="nd-item" data-nav="settings"      onclick="_navTo('settings', loadSviWeights, true)">⚙️ Settings</button>
 </aside>
 
 <!-- OVERVIEW -->
@@ -949,6 +949,39 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       </div>
     </div>
     <div id="diagSettingsStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+  </div>
+
+<style>
+.svw-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:.5rem 0 .85rem}
+.svw-tab{background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.svw-tab-on{background:var(--gold);color:#1a1206;border-color:var(--gold)}
+.svw-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.svw-name{flex:1;display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--ink)}
+.svw-cat{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.svw-inp{width:64px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;color:var(--ink);font-family:inherit;font-size:13px;text-align:center}
+.svw-pct{width:48px;text-align:right;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.svw-thr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:.85rem 0 .25rem}
+.svw-thr input{width:60px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;color:var(--ink);font-family:inherit;font-size:13px;text-align:center}
+.svw-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:.75rem}
+</style>
+  <div class="ss" id="sviWeightsSection" style="display:none"><div class="st">⚖️ SVI Weights &amp; Zones <span style="display:inline-flex;align-items:center;gap:3px;font-size:9.5px;background:var(--surface2);color:var(--muted);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:.5rem;vertical-align:middle"><span style="font-size:10px">🔒</span>Pastor only</span></div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin:.5rem 0 .5rem">
+      Tune how much each KPI counts toward a member’s vitality score, <strong>per pipeline level</strong>. The numbers are <strong>relative</strong> — e.g. 2 counts twice as much as 1; they need not add up to anything. The “%” shows each KPI’s share at this level (for members who have data for it). Pick a level, adjust, then Save — or Save &amp; Recompute to apply right away.
+    </div>
+    <div class="svw-tabs" id="sviLevelTabs"></div>
+    <div id="sviWeightRows"></div>
+    <div class="svw-thr">
+      <span style="font-size:12px;color:var(--ink);font-weight:600">Zones:</span>
+      <span style="font-size:11.5px;color:var(--muted)">Thriving ≥</span><input type="number" id="svwThriving" min="0" max="100" step="1">
+      <span style="font-size:11.5px;color:var(--muted)">Warming ≥</span><input type="number" id="svwWarming" min="0" max="100" step="1">
+      <span style="font-size:11px;color:var(--lighter)">(below Warming = Dormant)</span>
+    </div>
+    <div class="svw-actions">
+      <button class="sbtn svw-savebtn" style="margin-top:0;background:var(--green);padding:7px 14px;font-size:11.5px" onclick="saveSviWeights(false)">💾 Save</button>
+      <button class="sbtn svw-savebtn" style="margin-top:0;background:var(--gold);color:#1a1206;padding:7px 14px;font-size:11.5px" onclick="saveSviWeights(true)">⚡ Save &amp; Recompute</button>
+      <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted);padding:7px 14px;font-size:11.5px" onclick="resetSviWeights()">↺ Revert</button>
+    </div>
+    <div id="sviWeightsStatus" style="font-size:11px;color:var(--muted);margin-top:.65rem;min-height:14px"></div>
   </div>
 
   <!-- ─── ASSESSMENT INSTRUMENT VERSIONS (Pastor-configurable) ─── -->
@@ -13283,11 +13316,147 @@ async function sviComputeNow(){
     const res = await fetch(url, { method:'GET', headers:{ 'Authorization':'Bearer '+SB_KEY, 'apikey': SB_KEY } });
     if (!res.ok) throw new Error('HTTP '+res.status);
     await loadCareRadar();
-    if (typeof toast === 'function') toast('SVI recomputed.', 'ok');
+    const j = await res.json().catch(()=>null);
+    if (j && j.write_failed){
+      console.warn('SVI write_errors:', j.write_errors);
+      if (typeof toast === 'function') toast('⚠ Computed but '+(j.write_error_count||0)+' write(s) failed — see console.', '⚠');
+    } else if (typeof toast === 'function') {
+      toast('SVI recomputed ('+((j&&j.snapshots_written)||0)+' written).', 'ok');
+    }
   } catch(e){
     // Fall back to opening the function directly (the deploy-doc method)
     if (typeof toast === 'function') toast('Couldn’t trigger in-page; opening the function — refresh after it finishes.', 'info');
     window.open(url, '_blank');
+  }
+}
+
+
+/* ===== SVI Weights & Zones editor (Settings, Pastor-only) — Session 23 ===== */
+let _sviWPProfiles = [];
+let _sviWPMetrics  = [];
+let _sviWPCur      = undefined;
+
+function _sviWPSameLevel(a,b){ return (a==null && b==null) || (a===b); }
+function _sviWPLevelLabel(lvl){ return (lvl==null) ? "Default" : ("L"+lvl); }
+function _sviWPCurProfile(){ return _sviWPProfiles.find(p=>_sviWPSameLevel(p.applies_to_level,_sviWPCur)); }
+function _sviWPMetricsForLevel(lvl){
+  if(lvl==null) return _sviWPMetrics.slice();
+  return _sviWPMetrics.filter(m=> (m.min_pipeline_level==null||lvl>=m.min_pipeline_level) && (m.max_pipeline_level==null||lvl<=m.max_pipeline_level));
+}
+
+async function loadSviWeights(){
+  const sec = document.getElementById("sviWeightsSection");
+  if(!sec) return;
+  const isPastor = (typeof LeaderScope!=="undefined") && LeaderScope.isPastor && LeaderScope.isPastor();
+  sec.style.display = isPastor ? "block" : "none";
+  if(!isPastor) return;
+  const status = document.getElementById("sviWeightsStatus");
+  try{
+    const [mRes,pRes] = await Promise.all([
+      db.from("svi_metrics").select("metric_key,display_name,category,min_pipeline_level,max_pipeline_level,sort_order").eq("is_active",true).order("sort_order"),
+      db.from("svi_weight_profiles").select("id,profile_key,applies_to_level,weights,zone_thresholds").eq("is_active",true)
+    ]);
+    if(mRes.error) throw mRes.error;
+    if(pRes.error) throw pRes.error;
+    _sviWPMetrics = mRes.data || [];
+    _sviWPProfiles = (pRes.data||[]).slice().sort((a,b)=>{
+      const av=a.applies_to_level==null?-1:a.applies_to_level, bv=b.applies_to_level==null?-1:b.applies_to_level; return av-bv;
+    });
+    if(_sviWPProfiles.length===0){ if(status){status.textContent="No active weight profiles found."; status.style.color="var(--muted)";} return; }
+    if(!_sviWPProfiles.some(p=>_sviWPSameLevel(p.applies_to_level,_sviWPCur))) _sviWPCur = _sviWPProfiles[0].applies_to_level;
+    _sviWPRenderTabs(); _sviWPRenderLevel();
+    if(status) status.textContent="";
+  }catch(e){
+    if(status){ status.textContent="⚠ "+(e.message||"Load failed"); status.style.color="var(--red)"; }
+  }
+}
+
+function _sviWPRenderTabs(){
+  const bar = document.getElementById("sviLevelTabs"); if(!bar) return;
+  bar.innerHTML = _sviWPProfiles.map(p=>{
+    const on = _sviWPSameLevel(p.applies_to_level,_sviWPCur) ? " svw-tab-on" : "";
+    const arg = (p.applies_to_level==null) ? "null" : p.applies_to_level;
+    return `<button class="svw-tab${on}" onclick="_sviWPSelect(${arg})">${_sviWPLevelLabel(p.applies_to_level)}</button>`;
+  }).join("");
+}
+
+function _sviWPSelect(lvl){ _sviWPCur = lvl; _sviWPRenderTabs(); _sviWPRenderLevel(); }
+
+function _sviWPRenderLevel(){
+  const host = document.getElementById("sviWeightRows"); if(!host) return;
+  const p = _sviWPCurProfile(); if(!p){ host.innerHTML=""; return; }
+  const w = p.weights || {};
+  const mets = _sviWPMetricsForLevel(p.applies_to_level);
+  if(mets.length===0){ host.innerHTML = `<div style="font-size:11.5px;color:var(--muted);padding:8px 0">No KPIs apply at this level.</div>`; }
+  else host.innerHTML = mets.map(m=>{
+    const val = (w[m.metric_key]!=null) ? w[m.metric_key] : 0;
+    return `<div class="svw-row"><div class="svw-name"><span>${m.display_name||m.metric_key}</span><span class="svw-cat">${m.category||""}</span></div><input type="number" min="0" step="1" class="svw-inp" id="svw_${m.metric_key}" value="${val}" oninput="_sviWPShares()"><span class="svw-pct" id="svwp_${m.metric_key}">—</span></div>`;
+  }).join("");
+  const zt = p.zone_thresholds || {thriving:70,warming:40};
+  const tEl=document.getElementById("svwThriving"); if(tEl) tEl.value=(zt.thriving!=null?zt.thriving:70);
+  const wEl=document.getElementById("svwWarming");  if(wEl) wEl.value=(zt.warming!=null?zt.warming:40);
+  _sviWPShares();
+}
+
+function _sviWPShares(){
+  const p=_sviWPCurProfile(); if(!p) return;
+  const mets=_sviWPMetricsForLevel(p.applies_to_level);
+  let sum=0; const vals={};
+  mets.forEach(m=>{ const el=document.getElementById("svw_"+m.metric_key); const v=el?Math.max(0,Number(el.value)||0):0; vals[m.metric_key]=v; sum+=v; });
+  mets.forEach(m=>{ const s=document.getElementById("svwp_"+m.metric_key); if(s) s.textContent = sum>0 ? (Math.round(vals[m.metric_key]/sum*100)+"%") : "—"; });
+}
+
+async function _sviInvokeCompute(){
+  const url = SB_URL + "/functions/v1/compute-svi-weekly";
+  const res = await fetch(url, { method:"GET", headers:{ "Authorization":"Bearer "+SB_KEY, "apikey": SB_KEY } });
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  return await res.json().catch(()=>null);
+}
+
+function resetSviWeights(){ _sviWPRenderLevel(); const s=document.getElementById("sviWeightsStatus"); if(s){ s.textContent="Reverted to last saved."; s.style.color="var(--muted)"; } }
+
+async function saveSviWeights(recompute){
+  if(!((typeof LeaderScope!=="undefined") && LeaderScope.isPastor && LeaderScope.isPastor())){ toast("Only the Pastor can edit weights","🔒"); return; }
+  const p=_sviWPCurProfile(); if(!p) return;
+  const status=document.getElementById("sviWeightsStatus");
+  const mets=_sviWPMetricsForLevel(p.applies_to_level);
+  const newW = Object.assign({}, p.weights||{});
+  mets.forEach(m=>{ const el=document.getElementById("svw_"+m.metric_key); newW[m.metric_key]= el?Math.max(0,Number(el.value)||0):0; });
+  const tv=Number((document.getElementById("svwThriving")||{}).value);
+  const wv=Number((document.getElementById("svwWarming")||{}).value);
+  if(isNaN(tv)||isNaN(wv)||tv<0||tv>100||wv<0||wv>100){ toast("Thresholds must be 0–100","⚠"); return; }
+  if(tv<=wv){ toast("Thriving must be greater than Warming","⚠"); return; }
+  const newZt = Object.assign({}, p.zone_thresholds||{}, {thriving:tv, warming:wv});
+  const btns=document.querySelectorAll(".svw-savebtn"); btns.forEach(b=>b.disabled=true);
+  try{
+    const {error}=await db.from("svi_weight_profiles").update({weights:newW, zone_thresholds:newZt, updated_at:new Date().toISOString()}).eq("id",p.id);
+    if(error) throw error;
+    p.weights=newW; p.zone_thresholds=newZt;
+    if(status){ status.textContent="✓ Saved "+_sviWPLevelLabel(p.applies_to_level)+" weights"; status.style.color="var(--green)"; }
+    toast("Weights saved ✓");
+    if(recompute){
+      if(status){ status.textContent="✓ Saved — recomputing all members (this can take ~30–60s)…"; status.style.color="var(--gold)"; }
+      try{
+        const j=await _sviInvokeCompute();
+        if(typeof loadCareRadar==="function") await loadCareRadar();
+        if(j && j.write_failed){
+          console.warn("SVI write_errors:", j.write_errors);
+          if(status){ status.textContent="⚠ Saved, but "+(j.write_error_count||0)+" snapshot write(s) failed — see console."; status.style.color="var(--red)"; }
+          toast("Recompute wrote with errors — check console","⚠");
+        } else {
+          if(status){ status.textContent="✓ Saved & recomputed ("+((j&&j.snapshots_written)||0)+" snapshots)"; status.style.color="var(--green)"; }
+          toast("Saved & recomputed ✓");
+        }
+      }catch(ce){
+        if(status){ status.textContent="Saved. Recompute couldn’t run in-page — use Care Radar ⚡ Compute now."; status.style.color="var(--gold)"; }
+        toast("Saved. Recompute manually.","info");
+      }
+    }
+  }catch(e){
+    if(status){ status.textContent="⚠ "+(e.message||"Save failed"); status.style.color="var(--red)"; }
+    toast("Save failed: "+e.message,"❌");
+  }finally{
+    btns.forEach(b=>b.disabled=false);
   }
 }
 
