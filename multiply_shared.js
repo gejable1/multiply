@@ -2547,6 +2547,96 @@
     return _dtToYMD(snapped);
   }
 
+  // ─── SVI (Spiritual Vitality Index) read engine — Session 22 ───────
+  // Shared by MD (church-wide Care Radar) and later MLT (flock-scoped).
+  // Pure data + mapping; UI chrome stays per-file (Inv #91). Reads the
+  // weekly svi_snapshots written by the compute-svi-weekly Edge Function.
+  // CARE, NOT A GRADE: zone labels are internal; "dormant" is never shown to
+  // a member. Consumers lead with the action, keep the number secondary.
+  const SVI_ZONES = {
+    thriving:  { key:'thriving',  label:'Thriving',  emoji:'🟢', color:'#3d6b3a', rank:0 },
+    warming:   { key:'warming',   label:'Warming',   emoji:'🟡', color:'#b8882a', rank:1 },
+    dormant:   { key:'dormant',   label:'Dormant',   emoji:'🔴', color:'#b03a2e', rank:2 },
+    onboarding:{ key:'onboarding',label:'Onboarding',emoji:'⚪', color:'#9aa49d', rank:-1 }
+  };
+  function _sviZoneMeta(zone){
+    if (!zone) return SVI_ZONES.onboarding;
+    const z = String(zone).toLowerCase();
+    return SVI_ZONES[z] || { key:z, label:String(zone), emoji:'⚪', color:'#9aa49d', rank:-1 };
+  }
+  const SVI_TRENDS = {
+    up:     { key:'up',     arrow:'↑', label:'rising'  },
+    down:   { key:'down',   arrow:'↓', label:'cooling' },
+    steady: { key:'steady', arrow:'→', label:'steady'  },
+    new:    { key:'new',    arrow:'•', label:'new'     }
+  };
+  function _sviTrendMeta(trend){
+    const t = String(trend||'new').toLowerCase();
+    return SVI_TRENDS[t] || SVI_TRENDS.new;
+  }
+  // Action-matrix step (SVI_DESIGN.md). Zone × trend → { level, text }.
+  function _sviActionFor(zone, trend){
+    const z = String(zone||'').toLowerCase();
+    const t = String(trend||'new').toLowerCase();
+    if (z === 'dormant')   return { level:'urgent', text:'Pastor + discipler huddle' };
+    if (z === 'warming'){
+      if (t === 'down')    return { level:'urgent', text:'Discipler conversation this week' };
+      if (t === 'up')      return { level:'watch',  text:'Encourage' };
+      return                      { level:'watch',  text:'Watch list' };
+    }
+    if (z === 'thriving'){
+      if (t === 'up')      return { level:'good',   text:'Celebrate' };
+      if (t === 'down')    return { level:'note',   text:'Quiet check-in' };
+      return                      { level:'good',   text:'Affirm' };
+    }
+    return { level:'note', text:'Onboarding focus' };
+  }
+  // Urgency score for sorting (higher = more urgent / shown first).
+  function _sviCareRank(snap){
+    const zr = _sviZoneMeta(snap && snap.zone).rank;   // dormant 2 > warming 1 > thriving 0 > onboarding -1
+    const t  = String((snap && snap.trend)||'').toLowerCase();
+    const tBump = (t === 'down') ? 0.5 : (t === 'up' ? -0.25 : 0); // cooling rises within a zone
+    return zr + tBump;
+  }
+  function _sviSortByCare(list){
+    return (list||[]).slice().sort((a,b)=>{
+      const r = _sviCareRank(b) - _sviCareRank(a);       // most urgent first
+      if (r !== 0) return r;
+      return (a.total_score||0) - (b.total_score||0);     // tie → lowest score first
+    });
+  }
+  // Most recent week's snapshots. Paginated (never trust the 1000-row cap).
+  // opts.weekStart pins a week; opts.memberIds (Set|array) filters to a flock.
+  async function _sviFetchLatest(opts){
+    opts = opts || {};
+    const db = getDB();
+    let week = opts.weekStart;
+    if (!week){
+      const { data: latest, error: le } = await db.from('svi_snapshots')
+        .select('week_start').order('week_start',{ascending:false}).limit(1);
+      if (le) throw le;
+      if (!latest || !latest.length) return { weekStart:null, snapshots:[] };
+      week = latest[0].week_start;
+    }
+    const PAGE = 1000; let rows = [];
+    for (let off=0;;off+=PAGE){
+      const { data, error } = await db.from('svi_snapshots')
+        .select('member_id,member_name,lc_group,pipeline_level,week_start,profile_used,metric_scores,category_scores,total_score,zone,trend,trend_delta')
+        .eq('week_start', week)
+        .order('member_id',{ascending:true})
+        .range(off, off+PAGE-1);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows = rows.concat(data);
+      if (data.length < PAGE) break;
+    }
+    if (opts.memberIds){
+      const set = (opts.memberIds instanceof Set) ? opts.memberIds : new Set(opts.memberIds);
+      rows = rows.filter(r => set.has(r.member_id));
+    }
+    return { weekStart: week, snapshots: rows };
+  }
+
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
     getDB,
@@ -2601,6 +2691,16 @@
       countWeekday:      _dtCountWeekday,
       weeksBetween:      _dtWeeksBetween,
       mostRecentWeekday: _dtMostRecentWeekday
+    },
+    // SVI read engine — shared by MD Care Radar + (later) MLT flock view.
+    svi: {
+      ZONES:       SVI_ZONES,
+      zoneMeta:    _sviZoneMeta,
+      trendMeta:   _sviTrendMeta,
+      actionFor:   _sviActionFor,
+      careRank:    _sviCareRank,
+      sortByCare:  _sviSortByCare,
+      fetchLatest: _sviFetchLatest
     },
     // Cohort permissions + MLT helpers (Priority C2 · May 16, 2026)
     cohorts: {
