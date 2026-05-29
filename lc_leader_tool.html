@@ -1615,6 +1615,14 @@ function _l5Today(){
   const da = String(d.getDate()).padStart(2, '0');
   return `${y}-${mo}-${da}`;
 }
+// Local-time YYYY-MM-DD for an arbitrary Date. Never toISOString() (Manila is
+// UTC+8 → before 8 AM PHT toISOString() returns the previous day, mis-dating
+// date-key fields and dropping "today" from report upper-bounds). Inv #12/#106.
+function _localYMD(d){
+  return d.getFullYear() + '-' +
+         String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0');
+}
 
 // Kept for backward-compat with any external caller; now just returns today.
 function _l5LastTypicalDay(typicalDay){ return _l5Today(); }
@@ -1993,7 +2001,7 @@ function openAddMember(){
     toast('Adding members requires Leader access (Level 2+).', 'info');
     return;
   }
-  const today = new Date().toISOString().split('T')[0];
+  const today = _l5Today();   // local date (Inv #12) — was toISOString (UTC, off by a day before 8AM PHT)
   // Reset form
   document.getElementById('amName').value     = '';
   document.getElementById('amContact').value  = '';
@@ -4261,7 +4269,7 @@ async function showMinistryAttendance(){
   sel.innerHTML = _maMinistries.map(m => `<option value="${m.id}">${MultiplyShared.escapeHTML(m.name)}</option>`).join('');
 
   // Default date = today
-  document.getElementById('maDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('maDate').value = _l5Today();   // local date, not toISOString (UTC mis-dated ministry attendance before 8AM PHT)
 
   // Reset state
   _maState = {};
@@ -4591,8 +4599,8 @@ async function showMinistryReport(){
   // Range: last 60 days
   const today = new Date();
   const fromDate = new Date(today.getTime() - 60*86400000);
-  const fromStr = fromDate.toISOString().split('T')[0];
-  const toStr = today.toISOString().split('T')[0];
+  const fromStr = _localYMD(fromDate);
+  const toStr = _localYMD(today);   // local upper bound — UTC dropped today's rows before 8AM PHT
 
   // Pull all attendance rows whose event_name starts with the ministry name
   // (covers both bare "Music" and "Music · Team A"). PostgREST `like` with
@@ -4713,7 +4721,7 @@ function setReportMember(id){
 
 function getReportRange(){
   const today = new Date();
-  const fmt = d => d.toISOString().split('T')[0];
+  const fmt = d => _localYMD(d);   // local date (UTC upper-bound dropped today before 8AM PHT)
   let from, to = fmt(today);
   switch(attReportPeriod){
     case 'month': {
@@ -4741,9 +4749,9 @@ function setAttPeriod(p){
     // Default custom range to this month if not set
     if(!attReportFrom){
       const d = new Date(); d.setDate(1);
-      attReportFrom = d.toISOString().split('T')[0];
+      attReportFrom = _localYMD(d);
     }
-    if(!attReportTo) attReportTo = new Date().toISOString().split('T')[0];
+    if(!attReportTo) attReportTo = _l5Today();
   }
   renderReports();
 }
