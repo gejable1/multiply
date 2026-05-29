@@ -978,6 +978,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <button class="da-btn da-secondary" id="markPresentBtn" onclick="logQuickAttendance()">✓ Mark present</button>
     <button class="da-btn da-secondary" id="proposeTransferBtn" onclick="openProposeTransfer()" style="display:none">🔀 Transfer</button>
     <button class="da-btn da-secondary" id="enrollBtn" onclick="openEnrollPicker()" style="display:none">🎓 Enroll</button>
+    <button class="da-btn da-secondary" id="resetPinBtn" onclick="resetMemberPin()" style="display:none">🔑 Reset PIN</button>
     <button class="da-btn da-primary" onclick="openSalvationDiag()">📋 Salvation Diag</button>
   </div>
 </div>
@@ -2202,6 +2203,8 @@ function openMember(id){
   _refreshTransferBtn(mem);
   // Show enroll button on the same visibility rule (C3a · May 18, 2026)
   _refreshEnrollBtn(mem);
+  // Show Reset PIN on the same "is this my member" rule (Session 22)
+  _refreshResetPinBtn(mem);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2783,6 +2786,53 @@ function _refreshEnrollBtn(mem){
   const isMyMember = isMyFac || isMyDisc;
   const isPastor   = (LEADER.leaderLevel || 0) >= 5;
   btn.style.display = (isMyMember || isPastor) ? '' : 'none';
+}
+
+// ─────────────────────────────────────────────────────────────
+// Reset a member's login PIN (Session 22)
+//
+// The member-login page sends anyone with a NULL member_pin_hash to the
+// "Set up your PIN (first time)" flow — so a reset = simply CLEARING the
+// hash. The LCL never sees or sets the PIN; the member picks a fresh one
+// themselves at next login. Scoped to the leader's own members (facilitator
+// or discipler) or Pastor — same gate as Enroll. RLS is disabled, so the
+// anon-key UPDATE goes through. Audit-logged for accountability.
+// ─────────────────────────────────────────────────────────────
+function _refreshResetPinBtn(mem){
+  const btn = document.getElementById('resetPinBtn');
+  if(!btn || !mem) return;
+  const isMyMember = (mem.facilitator_id === LEADER.leaderId) || (mem.discipler_id === LEADER.leaderId);
+  const isPastor   = (LEADER.leaderLevel || 0) >= 5;
+  btn.style.display = (isMyMember || isPastor) ? '' : 'none';
+}
+
+async function resetMemberPin(){
+  if(!currentMember) return;
+  const m = currentMember;
+  // Defense-in-depth: re-check the same gate the button uses.
+  const isMyMember = (m.facilitator_id === LEADER.leaderId) || (m.discipler_id === LEADER.leaderId);
+  const isPastor   = (LEADER.leaderLevel || 0) >= 5;
+  if(!(isMyMember || isPastor)){
+    toast('You can only reset the PIN of your own members.','error');
+    return;
+  }
+  const first = (m.name || 'This member').split(' ')[0];
+  const msg = `Reset ${first}'s PIN?\n\n`+
+    `This clears their current 4-digit PIN. The next time ${first} opens the member tool, `+
+    `they'll be asked to set a brand-new PIN of their own choosing.\n\n`+
+    `You won't see or set it — only ${first} will know the new PIN.\n\n`+
+    `Tap OK to reset, or Cancel.`;
+  if(!confirm(msg)) return;
+  try {
+    const { error } = await db.from('members')
+      .update({ member_pin_hash: null, member_pin_set_at: null, updated_at: new Date().toISOString() })
+      .eq('id', m.id);
+    if(error) throw error;
+    toast(`✓ ${first}'s PIN reset — they'll set a new one at next login.`, 'success');
+    try { MultiplyShared.logView(m.id, 'pin_reset'); } catch(_e){}
+  } catch(e){
+    toast('Could not reset PIN: '+(e.message || e), 'error');
+  }
 }
 
 async function openEnrollPicker(){
