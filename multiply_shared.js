@@ -810,6 +810,13 @@
   function _preaching_assignmentBannerHTML(assignment, stage, bilingual) {
     const date = new Date(assignment.preach_date + 'T00:00:00');
     const dateLabel = date.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    // Actual day-count for the 1–3 day ('3d') bucket so the copy never lies.
+    // (Was hardcoded "3 days" — a sermon 1 day out wrongly read "3 days".)
+    // Same local-midnight math as _preaching_computeReminderStage; Manila is
+    // UTC+8 so we intentionally avoid toISOString()/'Z' here.
+    const _today0 = new Date(); _today0.setHours(0,0,0,0);
+    const diffDays = Math.max(0, Math.round((date - _today0) / 86400000));
+    const isTomorrow = diffDays === 1;
     // Service type drives messaging — Sunday vs Wednesday phrasing differs.
     // Defaults to 'wednesday' for legacy rows that pre-date the column.
     const svc = (assignment.service_type || 'wednesday');
@@ -837,9 +844,9 @@
         tl: 'Ikaw ang mangangaral sa darating na ' + dayWordTL + ', ' + dateLabel + '. Tara, magsimula nang magprepare!'
       } : { en: 'You\'re preaching this coming ' + dayWord + ', ' + dateLabel + '. Time to start preparing!', tl: null },
       '3d': bilingual ? {
-        en: '3 days until you preach (' + dateLabel + '). What message is God placing on your heart?',
-        tl: '3 araw na lang bago ka mangaral (' + dateLabel + '). Anong mensahe ang inilalagay ng Diyos sa puso mo?'
-      } : { en: '3 days until you preach (' + dateLabel + '). What message is God placing on your heart?', tl: null },
+        en: (isTomorrow ? 'Tomorrow you preach (' + dateLabel + ').' : diffDays + ' days until you preach (' + dateLabel + ').') + ' What message is God placing on your heart?',
+        tl: (isTomorrow ? 'Bukas ka nang mangangaral (' + dateLabel + ').' : diffDays + ' araw na lang bago ka mangaral (' + dateLabel + ').') + ' Anong mensahe ang inilalagay ng Diyos sa puso mo?'
+      } : { en: (isTomorrow ? 'Tomorrow you preach (' + dateLabel + ').' : diffDays + ' days until you preach (' + dateLabel + ').') + ' What message is God placing on your heart?', tl: null },
       '0d': bilingual ? {
         en: 'You preach this ' + tonightOrMorning + '. Praying for you, kapatid.',
         tl: 'Ikaw ang mangangaral ngayong ' + tonightOrMorningTL + '. Ipinagdarasal ka namin, kapatid.'
@@ -848,7 +855,7 @@
     const m = msgs[stage];
     const titles = {
       '7d': 'Upcoming · This ' + dayWord,
-      '3d': 'Reminder · 3 Days',
+      '3d': isTomorrow ? 'Reminder · Tomorrow' : ('Reminder · ' + diffDays + ' Days'),
       '0d': isSunday ? 'This Morning' : 'Tonight'
     };
 
