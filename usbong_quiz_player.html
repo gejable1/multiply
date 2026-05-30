@@ -396,6 +396,14 @@ let COUNTS_FOR_GRADE = true;
 let START_TIME = null;
 let PRIOR_ATTEMPTS = [];   // existing attempts for retake/cooldown logic
 let LANG = 'en';
+// Tolerant option-text accessor: data stores option labels as label_en/label_tl;
+// older/imported quizzes may use en/tl. Read either so options never render blank.
+function _optText(o, lang){
+  if (!o) return '';
+  var en = (o.label_en != null ? o.label_en : (o.en != null ? o.en : ''));
+  var tl = (o.label_tl != null ? o.label_tl : (o.tl != null ? o.tl : ''));
+  return lang === 'tl' ? (tl || en) : en;
+}
 let ELIGIBILITY = null;    // { eligible, reason, enrolled, dropIn, cohortIds, programNames }
                            //   Populated by loadQuiz() via MultiplyShared.usbong.eligibilityFor.
 
@@ -630,7 +638,7 @@ function renderQuestion(){
     optionsHTML = '<div class="options">';
     opts.forEach((opt, idx) => {
       const letter = String.fromCharCode(65 + idx); // A, B, C, D
-      const text = LANG === 'tl' ? (opt.tl || opt.en) : opt.en;
+      const text = _optText(opt, LANG);
       const selected = ANSWERS[CURRENT_Q] && ANSWERS[CURRENT_Q].chosen === idx ? 'selected' : '';
       optionsHTML += `<div class="option ${selected}" onclick="pickOption(${idx})" data-idx="${idx}">
         <div class="opt-letter">${letter}</div>
@@ -681,7 +689,7 @@ function pickOption(idx){
     q_origIndex: q._origIndex,
     q_type: 'mc',
     chosen: idx,
-    chosen_text: opt.en, // store for review
+    chosen_text: _optText(opt, 'en'), // store for review
     is_correct: !!opt.correct
   };
   renderQuestion();
@@ -899,7 +907,7 @@ function renderReview(){
     let correctText = '';
     if (q.type === 'mc') {
       const correctOpt = (q.options || []).find(o => o.correct);
-      correctText = correctOpt ? (LANG === 'tl' ? (correctOpt.tl || correctOpt.en) : correctOpt.en) : '';
+      correctText = correctOpt ? _optText(correctOpt, LANG) : '';
     } else if (q.type === 'tf') {
       correctText = q.correct ? (LANG === 'tl' ? 'Tama (True)' : 'True') : (LANG === 'tl' ? 'Mali (False)' : 'False');
     }
