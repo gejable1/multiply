@@ -607,6 +607,7 @@ async function loadFullRow(id){
     if (error) throw error;
     STATE.selected = data;
     STATE.draft = { ...data };
+    _normalizeQuizForEditor(STATE.draft.questions);
     renderEditor();
   } catch (e) {
     toast('Could not load quiz: ' + (e.message || e), 'err');
@@ -629,6 +630,39 @@ async function reloadList(){
 }
 
 // ─── Render editor ─────────────────────────────────────────────
+// ── Option-key normalization (fixes label_en/label_tl ⇄ en/tl drift) ──
+// DB canonical option shape is {correct, label_en, label_tl}; the editor UI
+// works in {en, tl, correct}. Backfill on load so real answers display + edit;
+// re-emit canonical labels on save so the stored shape — and the member quiz
+// player, which reads label_en/label_tl — is preserved. No data is renamed in DB.
+function _normalizeQuizForEditor(questions){
+  if (Array.isArray(questions)) questions.forEach(function(q){
+    if (q && Array.isArray(q.options)) q.options.forEach(function(o){
+      if (o.en == null && o.label_en != null) o.en = o.label_en;
+      if (o.tl == null && o.label_tl != null) o.tl = o.label_tl;
+      if (o.en == null) o.en = '';
+      if (o.tl == null) o.tl = '';
+    });
+  });
+  return questions;
+}
+function _serializeQuizForSave(questions){
+  return (Array.isArray(questions) ? questions : []).map(function(q){
+    if (q && Array.isArray(q.options)){
+      var opts = q.options.map(function(o){
+        var out = {};
+        for (var k in o){ if (k !== 'en' && k !== 'tl') out[k] = o[k]; }
+        out.label_en = (o.en != null ? o.en : (o.label_en || ''));
+        out.label_tl = (o.tl != null ? o.tl : (o.label_tl || ''));
+        return out;
+      });
+      var nq = {}; for (var k in q){ if (k !== 'options') nq[k] = q[k]; } nq.options = opts;
+      return nq;
+    }
+    return q;
+  });
+}
+
 function renderEditor(){
   const host = document.getElementById('editorHost');
   if (!STATE.draft) {
@@ -1084,7 +1118,7 @@ async function saveEdit(){
 
   // Also save questions JSONB if it was edited in Phase 2
   if (Array.isArray(d.questions)) {
-    payload.questions = d.questions;
+    payload.questions = _serializeQuizForSave(d.questions);
   }
 
   // Optional: stamp updated_by if available
@@ -1100,6 +1134,7 @@ async function saveEdit(){
     if (error) throw error;
     STATE.selected = data;
     STATE.draft = { ...data };
+    _normalizeQuizForEditor(STATE.draft.questions);
     setDirty(false);
     toast('✓ Saved', 'success');
     // Refresh the list so the picker label reflects new title/active state
