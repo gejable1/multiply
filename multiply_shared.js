@@ -1467,6 +1467,33 @@
     return new Set((data || []).map(r => (r.event_name || '').toLowerCase()).filter(Boolean));
   }
 
+  // Internal: live unlock keys for the member's cohorts. Mirrors
+  // _btliFetchUnlockKeys exactly — Set of `${cohort_id}::${lesson_id}` for
+  // live unlocks (unlocked_at set OR scheduled_for passed). Powers the Usbong
+  // Model X participant lesson-lock (back-ported from BTLI, Session 14).
+  async function _usbongFetchUnlockKeys(cohortIds) {
+    const empty = new Set();
+    if (!Array.isArray(cohortIds) || cohortIds.length === 0) return empty;
+    const db = getDB();
+    if (!db) return empty;
+    const { data, error } = await db
+      .from('cohort_lesson_unlocks')
+      .select('cohort_id, lesson_id, unlocked_at, scheduled_for')
+      .in('cohort_id', cohortIds);
+    if (error) {
+      console.warn('_usbongFetchUnlockKeys failed (no participant lock this pass):', error);
+      return empty;
+    }
+    const now = Date.now();
+    const keys = new Set();
+    (data || []).forEach(u => {
+      const live = !!u.unlocked_at ||
+        (u.scheduled_for && new Date(u.scheduled_for).getTime() <= now);
+      if (live && u.cohort_id && u.lesson_id) keys.add(`${u.cohort_id}::${u.lesson_id}`);
+    });
+    return keys;
+  }
+
   // Public: eligibility for a single Usbong quiz.
   // `quiz` must include: course_code, attendance_event_name_pattern.
   // `opts` may include: isPastor (skips all checks).
@@ -1483,7 +1510,8 @@
       _usbongFetchEnrollments(memberId),
       _usbongFetchAttendedNames(memberId)
     ]);
-    return _usbongComputeOne(quiz, enrollments, attendedNames);
+    const unlockKeys = await _usbongFetchUnlockKeys(enrollments.map(e => e.cohort_id));
+    return _usbongComputeOne(quiz, enrollments, attendedNames, unlockKeys);
   }
 
   // Public: eligibility for many quizzes at once (single batch fetch).
@@ -1509,14 +1537,16 @@
       _usbongFetchEnrollments(memberId),
       _usbongFetchAttendedNames(memberId)
     ]);
+    const unlockKeys = await _usbongFetchUnlockKeys(enrollments.map(e => e.cohort_id));
     quizzes.forEach(q => {
-      out.set(q.id, _usbongComputeOne(q, enrollments, attendedNames));
+      out.set(q.id, _usbongComputeOne(q, enrollments, attendedNames, unlockKeys));
     });
     return out;
   }
 
   // Pure: given pre-fetched enrollments + attendance, decide for one quiz.
-  function _usbongComputeOne(quiz, enrollments, attendedNames) {
+  function _usbongComputeOne(quiz, enrollments, attendedNames, unlockKeys) {
+    unlockKeys = unlockKeys || new Set();
     const courseCode = quiz.course_code || '';
     // Enrollment match: any enrollment whose program teaches this course_code
     const matchingEnrollments = enrollments.filter(e => e.usbong_course_code === courseCode);
@@ -1532,6 +1562,28 @@
     }
 
     if (enrolled) {
+      // ── Model X participant lesson-lock (back-ported from BTLI, Session 14) ──
+      // Usbong quizzes now carry lesson_id (usbong_quizzes_lesson_id_migration.sql).
+      // A participant is locked out until their batch unlocks the linked lesson;
+      // staff (teacher/co-teacher/apprentice) bypass. FAIL CLOSED (Inv #89): if the
+      // quiz has no lesson_id (unlinked/misconfigured), a participant stays locked
+      // rather than defaulting open. "Open" wins if ANY matching enrollment is open.
+      const lessonId = quiz.lesson_id || null;
+      const anyOpen = matchingEnrollments.some(e => {
+        const isStaff = e.role === 'teacher' || e.role === 'co-teacher' || e.role === 'apprentice';
+        if (isStaff) return true;
+        return lessonId ? unlockKeys.has(`${e.cohort_id}::${lessonId}`) : false;
+      });
+      if (!anyOpen) {
+        return {
+          eligible: false,
+          reason: 'lesson_locked',
+          enrolled: true,
+          dropIn: false,
+          cohortIds: matchingEnrollments.map(e => e.cohort_id),
+          programNames: Array.from(new Set(matchingEnrollments.map(e => e.program_name).filter(Boolean)))
+        };
+      }
       return {
         eligible: true,
         reason: 'enrolled',
