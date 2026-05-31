@@ -614,7 +614,16 @@ body.lang-tl .tl-text{display:inline;}
   display:flex;align-items:center;justify-content:center;
   font-family:'Fraunces',serif;font-weight:700;font-size:28px;
   box-shadow:0 4px 14px -4px rgba(14,58,44,.4);
+  background-position:center;background-size:cover;  /* used when a photo is set */
 }
+.avatar-upload-link{
+  display:inline-block;margin:0 auto 14px;padding:5px 14px;
+  background:transparent;border:1px solid rgba(14,58,44,.22);border-radius:999px;
+  color:var(--forest,#2f6d4f);font-family:inherit;font-size:12.5px;font-weight:600;
+  cursor:pointer;transition:background .15s;
+}
+.avatar-upload-link:hover{ background:rgba(47,109,79,.07); }
+.avatar-upload-link:disabled{ opacity:.6;cursor:default; }
 .profile-hero .name{
   font-family:'Fraunces',serif;font-weight:600;
   font-size:19px;color:var(--ink);margin-bottom:3px;
@@ -1846,6 +1855,10 @@ body.lang-tl .tl-text{display:inline;}
 
       <div class="profile-hero">
         <div class="big-avatar" id="profileAvatar">M</div>
+        <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="_onAvatarFilePicked(event)">
+        <button type="button" class="avatar-upload-link" id="avatarUploadLink" onclick="document.getElementById('avatarFileInput').click()">
+          <span class="en-text">Upload photo</span><span class="tl-text">Mag-upload ng larawan</span>
+        </button>
         <div class="name" id="profileName">…</div>
         <div class="role" id="profileRole">…</div>
         <div class="meta-row">
@@ -2587,9 +2600,9 @@ async function loadMember(){
   const first = (memberRow.name||'').split(' ')[0] || 'kapatid';
   document.getElementById('memberFirstName').textContent = first + ' ✦';
 
-  // Avatar initials
+  // Avatar: photo if uploaded, else initials
   const initials = (memberRow.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  document.getElementById('avatarBtn').textContent = initials;
+  _applyAvatar(document.getElementById('avatarBtn'), memberRow.photo_url, initials);
 
   // ── Guest of Rosehill banner — only shown to external (non-member) users ──
   // The is_external_user flag is set by Pastor in MD's Add Member form.
@@ -5141,11 +5154,97 @@ function showToast(msg){
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PROFILE PHOTO — apply / resize / upload
+// ═══════════════════════════════════════════════════════════════
+// Photos live in Supabase Storage (public bucket 'avatars'), NOT the DB —
+// members.photo_url holds only the public URL (cache-busted with ?t= on each
+// upload, since we upsert to a fixed path memberId.jpg). Resized client-side to
+// ≤512px JPEG (~0.82) so each avatar is ~80–120 KB: tiny storage, light egress.
+function _applyAvatar(el, photoUrl, initials){
+  if(!el) return;
+  if(photoUrl){
+    el.style.backgroundImage = `url("${photoUrl}")`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = '';          // falls back to the CSS gradient
+    if(initials != null) el.textContent = initials;
+  }
+}
+
+// Decode → scale longest side to maxDim (never upscales) → re-encode JPEG.
+// Returns a Blob. Circular display handles cropping via background-size:cover,
+// so we keep aspect ratio rather than hard-cropping the stored file.
+function _resizeImageToBlob(file, maxDim, quality){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if(!w || !h){ reject(new Error('bad image dimensions')); return; }
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('encode failed')), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+    img.src = url;
+  });
+}
+
+async function _onAvatarFilePicked(ev){
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';  // allow re-picking the same file later
+  if(!file) return;
+  const tl = document.body.classList.contains('lang-tl');
+  if(!/^image\//.test(file.type || '')){
+    showToast(tl ? 'Pumili ng larawan (image file).' : 'Please choose an image file.');
+    return;
+  }
+  const link = document.getElementById('avatarUploadLink');
+  const prevHtml = link ? link.innerHTML : '';
+  if(link){
+    link.disabled = true;
+    link.innerHTML = '<span class="en-text">Uploading…</span><span class="tl-text">Ina-upload…</span>';
+  }
+  try{
+    const blob = await _resizeImageToBlob(file, 512, 0.82);
+    const path = MEMBER.memberId + '.jpg';
+    const { error: upErr } = await db.storage.from('avatars')
+      .upload(path, blob, { upsert:true, contentType:'image/jpeg', cacheControl:'3600' });
+    if(upErr) throw upErr;
+    const { data: pub } = db.storage.from('avatars').getPublicUrl(path);
+    const base = (pub && pub.publicUrl) ? pub.publicUrl : '';
+    if(!base) throw new Error('no public url');
+    const publicUrl = base + '?t=' + Date.now();   // bust cache on the fixed path
+    const { error: updErr } = await db.from('members')
+      .update({ photo_url: publicUrl }).eq('id', MEMBER.memberId);
+    if(updErr) throw updErr;
+    memberRow.photo_url = publicUrl;
+    _applyAvatar(document.getElementById('avatarBtn'), publicUrl);
+    _applyAvatar(document.getElementById('profileAvatar'), publicUrl);
+    showToast(tl ? 'Na-update ang larawan ✓' : 'Photo updated ✓');
+  }catch(e){
+    console.warn('avatar upload failed:', e);
+    showToast(tl ? 'Hindi na-upload. Subukan ulit.' : "Couldn't upload — please try again.");
+  }finally{
+    if(link){
+      link.disabled = false;
+      link.innerHTML = prevHtml || '<span class="en-text">Upload photo</span><span class="tl-text">Mag-upload ng larawan</span>';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PROFILE RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderProfile(){
   const initials = (memberRow.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  document.getElementById('profileAvatar').textContent = initials;
+  _applyAvatar(document.getElementById('profileAvatar'), memberRow.photo_url, initials);
   document.getElementById('profileName').textContent = memberRow.name || '—';
   const lvl = memberRow.pipeline_level || 0;
   const role = memberRow.facilitator_role || LN[lvl];
@@ -5228,7 +5327,7 @@ async function saveModalField(){
       const first = (val || '').split(' ')[0] || 'kapatid';
       document.getElementById('memberFirstName').textContent = first + ' ✦';
       const initials = (val||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-      document.getElementById('avatarBtn').textContent = initials;
+      _applyAvatar(document.getElementById('avatarBtn'), memberRow.photo_url, initials);
     }
     closeModal();
     showToast('Saved ✓');
