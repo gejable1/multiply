@@ -5162,15 +5162,21 @@ function showToast(msg){
 // ≤512px JPEG (~0.82) so each avatar is ~80–120 KB: tiny storage, light egress.
 function _applyAvatar(el, photoUrl, initials){
   if(!el) return;
-  if(photoUrl){
+  // Initials are the base/fallback layer — set them first, always.
+  el.style.backgroundImage = '';
+  if(initials != null) el.textContent = initials;
+  if(!photoUrl) return;
+  // Preload; only swap to the photo if it actually loads. A broken or
+  // inaccessible URL leaves the initials in place instead of a blank circle.
+  const probe = new Image();
+  probe.onload = () => {
     el.style.backgroundImage = `url("${photoUrl}")`;
     el.style.backgroundSize = 'cover';
     el.style.backgroundPosition = 'center';
     el.textContent = '';
-  } else {
-    el.style.backgroundImage = '';          // falls back to the CSS gradient
-    if(initials != null) el.textContent = initials;
-  }
+  };
+  probe.onerror = () => { /* keep initials */ };
+  probe.src = photoUrl;
 }
 
 // Decode → scale longest side to maxDim (never upscales) → re-encode JPEG.
