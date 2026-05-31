@@ -1620,7 +1620,7 @@ async function loadMembers(){
   // more efficiently, and the wire payload is smaller. Every column
   // listed here is consumed by r2l(); add columns here if r2l() adds
   // new fields. Approx 50-70% faster load on slow connections.
-  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at').order('updated_at',{ascending:false});
+  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at,photo_url').order('updated_at',{ascending:false});
   if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   sync('ok');
@@ -1674,6 +1674,7 @@ function l2r(m){
 function r2l(r){
   return{
     id:r.id,name:r.name,bday:r.birthday||'',civil:r.civil_status||'',
+    photo:r.photo_url||'',
     baptism:r.baptism_date||'',enrolled:r.enrolled_date||'',
     discipler_id:r.discipler_id||'',discipler:r.discipler||'',discipler_name:r.discipler_name||'',
     lc_group:r.lc_group||'',pending_lc_group:r.pending_lc_group||'',
@@ -1817,6 +1818,20 @@ function setF(f,el){
   renderTable();
 }
 
+// ─── Member avatar helpers (photo if uploaded via MMT, else level-color initials)
+// Photos live in Storage; m.photo holds the public URL. When a photo exists we
+// fill the circle with it (cover) and drop the initials; otherwise the existing
+// level-coloured initials are kept exactly as before. Used across every roster /
+// listing so Pastor can recognise faces, not just names.
+function mdAvBg(m){
+  return (m && m.photo)
+    ? `background-image:url("${m.photo}");background-size:cover;background-position:center;`
+    : `background:${LC_COLORS[(m&&m.level)||0]};color:${LC_TEXT[(m&&m.level)||0]};`;
+}
+function mdAvLabel(m){
+  return (m && m.photo) ? '' : (m&&m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+}
+
 function renderTable(){
   const q=(document.getElementById('sq')?.value||'').toLowerCase();
   // ── Apply leader-scope first; then the existing zone/level filters ──
@@ -1865,7 +1880,7 @@ function renderTable(){
     const intFlag=dz>=2?`<span class="int-flag ${dz==4?'if-z4':dz==3?'if-z3':'if-z2'}">${dz==4?'🔴 Z4 Gospel':dz==3?'🟠 Z3 First Steps':'🟡 Z2 Assurance'}</span>`:'<span style="font-size:11px;color:var(--lighter)">—</span>';
     return`<tr onclick="openEdit('${m.id}')" ${(m.is_test_member || m.is_external_user)?'style="opacity:.7"':''}>
       <td><div class="nc">
-        <div class="av" style="background:${LC_COLORS[l]};color:${LC_TEXT[l]}">${ini}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
+        <div class="av" style="${mdAvBg(m)}">${mdAvLabel(m)}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
         <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${m.is_test_member?' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#7c3aed;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);">🧪 Test</span>':''}${m.is_external_user?' <span style="font-size:9px;background:rgba(74,144,226,.16);color:#3a7bd1;padding:1px 5px;border-radius:8px;border:1px solid rgba(74,144,226,.35);">👤 Guest</span>':''}</div>
         <div class="mi">${m.discipler_name||m.discipler||'No discipler'}</div></div>
       </div></td>
@@ -1899,7 +1914,7 @@ function rPipe(){
       const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
       return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer;min-width:150px;box-shadow:var(--shadow)" onclick="openEdit('${m.id}')">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <div class="av" style="background:${LC_COLORS[l]};color:${LC_TEXT[l]};width:28px;height:28px;font-size:10px">${ini}</div>
+          <div class="av" style="${mdAvBg(m)}width:28px;height:28px;font-size:10px">${mdAvLabel(m)}</div>
           <div style="font-size:12px;font-weight:600;color:var(--ink)">${m.name}</div>
         </div>
         <div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div>
@@ -2207,7 +2222,7 @@ function rOvExtras(){
   document.getElementById('ru').innerHTML=!s.length?
     '<div style="color:var(--muted);font-size:12px">No members yet.</div>':
     s.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <div class="av" style="background:${LC_COLORS[m.level||0]};color:${LC_TEXT[m.level||0]};width:26px;height:26px;font-size:10px">${(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
+      <div class="av" style="${mdAvBg(m)}width:26px;height:26px;font-size:10px">${mdAvLabel(m)}</div>
       <div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--ink)">${m.name}</div><div style="font-size:10px;color:var(--muted)">${LN[m.level||0]} · ${m.ministry||'Unplaced'}</div></div>
       <div style="font-size:10px;color:var(--muted)">${m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—'}</div>
     </div>`).join('');
@@ -2436,7 +2451,7 @@ function _disciplesRow(m, ZONE_COLOR){
     ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ZONE_COLOR[m.diagnostic_zone]||'var(--muted)'};margin-right:6px;vertical-align:middle"></span>`
     : '';
   return `<div onclick="drillToMember('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
-    <div style="width:30px;height:30px;border-radius:50%;background:${LC_COLORS[m.level||0]};color:${LC_TEXT[m.level||0]};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">${initials}</div>
+    <div style="width:30px;height:30px;border-radius:50%;${mdAvBg(m)}display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">${mdAvLabel(m)}</div>
     <div style="flex:1;min-width:0">
       <div style="font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${zoneDot}${escapeHTMLNotif(m.name)}</div>
       <div style="font-size:10.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTMLNotif(meta.join(' · '))}</div>
