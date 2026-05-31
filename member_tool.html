@@ -2672,14 +2672,28 @@ function showReflectionReminderModal(){
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9500;padding:1rem;';
     document.body.appendChild(modal);
   }
+  // Monday reframe: Sunday is intentionally devo-free, so the "yesterday + today
+  // empty" gap is structural, not negligence. On Mondays we swap the (slightly
+  // guilt-toned) "you haven't written lately" for a fresh-week INVITATION that is
+  // true for everyone, regardless of last week's pattern. Other days keep the
+  // gentle original. getDay(): 1 = Monday, local device date (Manila phone = PHT).
+  const _isMonday = (new Date().getDay() === 1);
+  const _rHeadEn = _isMonday ? 'First things first this week' : 'A space for your heart';
+  const _rHeadTl = _isMonday ? 'Unahin ang Panginoon ngayong linggo' : 'May puwang para sa iyong puso';
+  const _rBodyEn = _isMonday
+    ? "It's Monday. Before the to-do list takes over, give God the first word. Open today's devotional and jot down what He stirs. 🌱"
+    : "You haven't written a reflection lately. Even a sentence on what God is teaching you helps it take root. 🌱";
+  const _rBodyTl = _isMonday
+    ? "Lunes na. Bago madaganan ng to-do list, ibigay muna kay Lord ang unang salita. Buksan ang devotional ngayong araw at magtala kahit isang linya ng ginigising Niya sa puso mo. 🌱"
+    : "Wala ka pang naisusulat na tugon kamakailan. Kahit isang pangungusap lang tungkol sa itinuturo sa'yo ng Diyos, nakatutulong na ito mag-ugat. 🌱";
   modal.innerHTML = `<div style="background:#fff;max-width:400px;width:100%;border-radius:18px;padding:1.6rem 1.4rem 1.3rem;box-shadow:0 12px 40px rgba(0,0,0,.28);text-align:center;">
     <div style="font-size:34px;line-height:1;margin-bottom:8px;">📝</div>
     <h2 style="font-size:20px;font-weight:800;color:var(--ink,#2a2a2a);margin:0 0 8px;line-height:1.25;">
-      <span class="en-text">A space for your heart</span><span class="tl-text">May puwang para sa iyong puso</span>
+      <span class="en-text">${_rHeadEn}</span><span class="tl-text">${_rHeadTl}</span>
     </h2>
     <p style="font-size:13.5px;color:var(--muted,#6a6a6a);line-height:1.6;margin:0 0 18px;">
-      <span class="en-text">You haven't written a reflection lately. Even a sentence on what God is teaching you helps it take root. 🌱</span>
-      <span class="tl-text">Wala ka pang naisusulat na tugon kamakailan. Kahit isang pangungusap lang tungkol sa itinuturo sa'yo ng Diyos, nakatutulong na ito mag-ugat. 🌱</span>
+      <span class="en-text">${_rBodyEn}</span>
+      <span class="tl-text">${_rBodyTl}</span>
     </p>
     <button onclick="_reflectNowFromModal()" style="width:100%;padding:13px;background:var(--forest,#2f6d4f);color:#fff;border:0;border-radius:11px;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:9px;">
       <span class="en-text">Reflect now</span><span class="tl-text">Magtala ngayon</span>
@@ -5636,7 +5650,8 @@ const EOLO_STEPS_TL = [
 let lcMembers = [];        // fellow LC members (filtered by share_with_lc)
 let lcDisciplerInfo = null;
 let lcMeetingDay = null;
-let celebrationWins = [];  // recent wins from same LC
+let celebrationWins = [];  // recent individual wins from same LC
+let celebrationGroupBadges = [];  // LCG-wide badges (pinned atop the feed)
 let saveStatusTimer = null;
 
 // Default EOLO shape (matches dashboard's r2l output)
@@ -6220,16 +6235,15 @@ async function loadCelebrationFeed(){
   // Same LCG-resolution rule as loadLcDetails: proceed when the member has
   // either an lc_group text OR an LCL (discipler_id), per Invariant #59.
   if(!hasGroupText && !memberRow.discipler_id){
-    celebrationWins = [];
+    celebrationWins = []; celebrationGroupBadges = [];
     return;
   }
   const wins = [];
 
-  // Get LC member rows (we may already have them from loadLcDetails)
-  // but we need full assessment columns + updated_at, so re-fetch with that.
+  // Get LC member rows. Adds `birthday` (date) for the birthday-this-month win.
   // Group by lc_group text when present, else by shared LCL (discipler_id).
   let cq = db.from('members')
-    .select('id,name,share_with_lc,is_test_member,pipeline_level,facilitator_role,spiritual_gifts,disc_primary,enneagram_type,love_language_primary,strengths_top5,conflict_primary,diagnostic_zone,updated_at')
+    .select('id,name,share_with_lc,is_test_member,pipeline_level,facilitator_role,spiritual_gifts,disc_primary,enneagram_type,love_language_primary,strengths_top5,conflict_primary,diagnostic_zone,birthday,updated_at')
     .neq('is_external_user', true);
   if(hasGroupText){
     cq = cq.eq('lc_group', memberRow.lc_group);
@@ -6241,71 +6255,180 @@ async function loadCelebrationFeed(){
   // No pipeline_level gate (Pre-Pipeline LC family count too). Test members
   // visible only to a test viewer per Invariant #69; guests excluded above.
   const all = (lcRows || []).filter(m => _viewerIsTestMember() || !m.is_test_member);
+  // Privacy: drop anyone who opted out of LC sharing (but never hide self).
+  // One `eligible` set drives EVERY win type + both group badges, so scope is
+  // identical across the feed — strictly same-LCG, sharing members only.
+  const eligible = all.filter(m => !(m.share_with_lc === false && m.id !== MEMBER.memberId));
+  const lcIds = eligible.map(m => m.id);
   const recent_threshold_days = 21; // ~3 weeks of recent wins
   const cutoff = Date.now() - recent_threshold_days * 24*3600*1000;
 
-  // Each row: harvest "wins" = denorm columns that are now non-empty.
-  // We don't have a per-field timestamp, only updated_at — so this is
-  // a best-effort feed: wins shown are the COMBINATION of (member, recent_update, has_assessment).
-  for(const m of all){
-    if(m.share_with_lc === false && m.id !== MEMBER.memberId) continue; // respect privacy
+  const _dates = (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates : null;
+  const _toYMD = d => _dates ? _dates.toYMD(d) : (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+
+  // ── (A) ASSESSMENT WINS (existing best-effort: recent updated_at + non-empty field)
+  const assessmentDefs = [
+    { field:'spiritual_gifts',       icon:'🎁', label_en:'completed Spiritual Gifts',   label_tl:'natapos ang Spiritual Gifts' },
+    { field:'disc_primary',          icon:'🧭', label_en:'discovered DISC style',       label_tl:'natuklasan ang DISC style' },
+    { field:'enneagram_type',        icon:'🌀', label_en:'discovered Enneagram type',   label_tl:'natuklasan ang Enneagram' },
+    { field:'love_language_primary', icon:'💝', label_en:'found Love Language',         label_tl:'natuklasan ang Love Language' },
+    { field:'strengths_top5',        icon:'⭐', label_en:'found their Strengths',       label_tl:'natuklasan ang Strengths' },
+    { field:'conflict_primary',      icon:'⚖️', label_en:'discovered Conflict Style',   label_tl:'natuklasan ang Conflict Style' },
+    { field:'diagnostic_zone',       icon:'✝️', label_en:'completed Salvation Assurance', label_tl:'natapos ang Salvation Assurance' }
+  ];
+  for(const m of eligible){
     const upd = m.updated_at ? Date.parse(m.updated_at) : 0;
     if(!upd || upd < cutoff) continue;
-
-    // Decide what assessment(s) might be the "win" — show only one per member, the most likely-recent
-    const assessmentWins = [
-      { field:'spiritual_gifts',       icon:'🎁', label_en:'completed Spiritual Gifts',   label_tl:'natapos ang Spiritual Gifts' },
-      { field:'disc_primary',          icon:'🧭', label_en:'discovered DISC style',       label_tl:'natuklasan ang DISC style' },
-      { field:'enneagram_type',        icon:'🌀', label_en:'discovered Enneagram type',   label_tl:'natuklasan ang Enneagram' },
-      { field:'love_language_primary', icon:'💝', label_en:'found Love Language',         label_tl:'natuklasan ang Love Language' },
-      { field:'strengths_top5',        icon:'⭐', label_en:'found their Strengths',       label_tl:'natuklasan ang Strengths' },
-      { field:'conflict_primary',      icon:'⚖️', label_en:'discovered Conflict Style',   label_tl:'natuklasan ang Conflict Style' },
-      { field:'diagnostic_zone',       icon:'✝️', label_en:'completed Salvation Assurance', label_tl:'natapos ang Salvation Assurance' }
-    ];
-
-    // Take the FIRST non-empty one (assume that's the most recent — best we can do without per-field timestamps)
     let primaryWin = null;
-    for(const aw of assessmentWins){
+    for(const aw of assessmentDefs){
       const v = m[aw.field];
       const hasIt = Array.isArray(v) ? v.length > 0 : (v != null && v !== '');
       if(hasIt){ primaryWin = aw; break; }
     }
     if(primaryWin){
       wins.push({
-        memberId: m.id,
-        memberName: m.name,
-        isTest: !!m.is_test_member,
-        icon: primaryWin.icon,
-        label_en: primaryWin.label_en,
-        label_tl: primaryWin.label_tl,
-        whenIso: m.updated_at,
-        sortKey: upd
+        memberId:m.id, memberName:m.name, isTest:!!m.is_test_member,
+        icon:primaryWin.icon, label_en:primaryWin.label_en, label_tl:primaryWin.label_tl,
+        whenIso:m.updated_at, sortKey:upd
       });
     }
   }
+  wins.sort((a,b) => b.sortKey - a.sortKey); // assessments newest-first
 
-  // Sort newest first, cap at 6
-  wins.sort((a,b) => b.sortKey - a.sortKey);
-  celebrationWins = wins.slice(0, 6);
+  // ── (B) DEVOTIONAL STREAKS (per-member) — batched, paginated (Inv: never
+  // trust a single 1000-row page; the MAR truncation bug came from exactly that).
+  // Streak source matches loadDevoStreak: attendance rows event_type='devotional'.
+  const streakByMember = new Map();
+  if(lcIds.length){
+    const since = new Date(); since.setDate(since.getDate() - 120); // covers up to ~100-day streaks
+    const sinceYMD = _toYMD(since);
+    const devoRows = [];
+    const PAGE = 1000;
+    for(let from=0; from<8000; from+=PAGE){
+      const { data, error: derr } = await db.from('attendance')
+        .select('member_id,event_date')
+        .eq('event_type','devotional').eq('present', true)
+        .in('member_id', lcIds).gte('event_date', sinceYMD)
+        .order('event_date', { ascending:false })
+        .range(from, from+PAGE-1);
+      if(derr) throw derr;
+      if(data && data.length) devoRows.push(...data);
+      if(!data || data.length < PAGE) break;
+    }
+    const grouped = new Map();
+    for(const r of devoRows){
+      if(!grouped.has(r.member_id)) grouped.set(r.member_id, []);
+      grouped.get(r.member_id).push(r);
+    }
+    for(const [mid, rows] of grouped){ streakByMember.set(mid, computeStreak(rows)); }
+  }
+  const STREAK_FLOOR = 7; // 7+ days qualifies (Pastor's call)
+  const streakWins = [];
+  for(const m of eligible){
+    const s = streakByMember.get(m.id) || 0;
+    if(s >= STREAK_FLOOR){
+      streakWins.push({
+        memberId:m.id, memberName:m.name, isTest:!!m.is_test_member,
+        icon:'🔥',
+        label_en:`is on a ${s}-day devotional streak`,
+        label_tl:`${s} araw nang sunud-sunod sa devotional`,
+        streak:s
+      });
+    }
+  }
+  streakWins.sort((a,b) => b.streak - a.streak); // most impressive first
+
+  // ── (C) BIRTHDAYS THIS MONTH (birthday is a DATE; we only match month/day)
+  const now = new Date();
+  const curMonth = now.getMonth() + 1, curDay = now.getDate();
+  const bdayWins = [];
+  for(const m of eligible){
+    if(!m.birthday) continue;
+    const parts = String(m.birthday).split('-'); // 'YYYY-MM-DD'
+    const bm = parseInt(parts[1], 10), bd = parseInt(parts[2], 10);
+    if(!bm || bm !== curMonth) continue;
+    const isToday = (bd === curDay);
+    bdayWins.push({
+      memberId:m.id, memberName:m.name, isTest:!!m.is_test_member,
+      icon:'🎂',
+      label_en: isToday ? 'celebrates a birthday today! 🎉' : 'has a birthday this month',
+      label_tl: isToday ? 'kaarawan ngayong araw! 🎉'      : 'may kaarawan ngayong buwan',
+      bday:bd, isToday
+    });
+  }
+  bdayWins.sort((a,b) => (b.isToday - a.isToday) || (a.bday - b.bday)); // today first, then earliest
+
+  // ── INDIVIDUAL ORDER: birthdays → streaks → assessments; cap 8.
+  celebrationWins = [...bdayWins, ...streakWins, ...wins].slice(0, 8);
+
+  // ── (D) GROUP BADGES (pinned atop, not counted in the cap)
+  // 1) Perfect attendance last Sunday — fires ONLY if the whole sharing LCG
+  //    (≥2 members) was present. Anything short → no badge (it's "perfect").
+  let attendanceBadge = null;
+  if(eligible.length >= 2 && lcIds.length && _dates){
+    const lastSun = _dates.mostRecentWeekday(0); // 0 = Sunday, includes today if Sun
+    const { data: sunRows, error: serr } = await db.from('attendance')
+      .select('member_id')
+      .eq('event_type','Sunday Service').eq('present', true)
+      .eq('event_date', lastSun).in('member_id', lcIds);
+    if(serr) throw serr;
+    const present = new Set((sunRows || []).map(r => r.member_id));
+    if(eligible.every(m => present.has(m.id))){
+      attendanceBadge = {
+        icon:'🙌',
+        label_en:'Perfect attendance last Sunday — the whole LCG showed up!',
+        label_tl:'Perpektong attendance noong Linggo — kumpleto ang buong LCG!'
+      };
+    }
+  }
+  // 2) LCG devotional streak — how many are on a 7+ day streak this week.
+  let streakBadge = null;
+  const streakerCount = eligible.filter(m => (streakByMember.get(m.id) || 0) >= STREAK_FLOOR).length;
+  if(streakerCount >= 1){
+    streakBadge = {
+      icon:'🔥',
+      label_en:`Your LCG: ${streakerCount} ${streakerCount===1?'member is':'members are'} on a 7+ day devotional streak`,
+      label_tl:`Ang LCG mo: ${streakerCount} miyembro ang 7+ araw nang sunud-sunod sa devotional`
+    };
+  }
+  celebrationGroupBadges = [attendanceBadge, streakBadge].filter(Boolean);
 }
 
 function renderCelebrationFeed(){
   const card = document.getElementById('celebrationCard');
   if(!card) return;
-  if(!celebrationWins.length){
+  const badges = celebrationGroupBadges || [];
+  const wins = celebrationWins || [];
+  if(!badges.length && !wins.length){
     card.innerHTML = `<div class="celebration-empty">
       <span class="en-text">No recent wins yet — be the first this week.</span>
       <span class="tl-text">Wala pang tagumpay — ikaw ang una sa linggong ito.</span>
     </div>`;
     return;
   }
-  card.innerHTML = celebrationWins.map(w => {
+  // Group badges first (whole-LCG wins): tinted, bold, no name, no timestamp.
+  const badgeHtml = badges.map(b => `
+      <div class="win-row" style="background:rgba(47,109,79,.07);border-radius:10px;">
+        <div class="win-icon">${b.icon}</div>
+        <div class="win-body">
+          <div class="win-text" style="font-weight:700;">
+            <span class="en-text">${MultiplyShared.escapeHTML(b.label_en)}</span>
+            <span class="tl-text">${MultiplyShared.escapeHTML(b.label_tl)}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  const winHtml = wins.map(w => {
     const isMe = w.memberId === MEMBER.memberId;
     const displayName = isMe
       ? (document.body.classList.contains('lang-tl') ? 'Ikaw' : 'You')
       : w.memberName;
     const testTag = w.isTest
       ? '<span style="background:#fde2d3;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em;vertical-align:middle">🧪 TEST</span>'
+      : '';
+    // Only assessment wins carry a timestamp; streaks/birthdays don't.
+    const whenHtml = w.whenIso
+      ? `<div class="win-when">${MultiplyShared.escapeHTML(timeAgo(w.whenIso))}</div>`
       : '';
     return `
       <div class="win-row">
@@ -6316,11 +6439,12 @@ function renderCelebrationFeed(){
             <span class="en-text"> ${MultiplyShared.escapeHTML(w.label_en)}</span>
             <span class="tl-text"> ${MultiplyShared.escapeHTML(w.label_tl)}</span>
           </div>
-          <div class="win-when">${MultiplyShared.escapeHTML(timeAgo(w.whenIso))}</div>
+          ${whenHtml}
         </div>
       </div>
     `;
   }).join('');
+  card.innerHTML = badgeHtml + winHtml;
 }
 
 function timeAgo(iso){
