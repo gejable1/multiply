@@ -864,7 +864,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <select id="attUsbongLessonSelect" onchange="onUsbongLessonChange()" style="width:100%;padding:9px 12px;font-size:14px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-family:'DM Sans',sans-serif;color:var(--text);outline:none;cursor:pointer;">
         <option value="">— Pick the lesson —</option>
       </select>
-      <div id="attUsbongLessonHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Pick the specific Pre-Pipeline lesson (Usbong / Usad / Unlad). This unlocks the comprehension quiz for everyone marked present.</div>
+      <div id="attUsbongLessonHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Pick the lesson you're teaching today. Marking a disciple present opens that lesson — and its quiz — for that person.</div>
     </div>
     <!-- Pre-Pipeline (Usbong) batch picker — Session 5 parallel to BTLI's.
          Shown only once a Pre-Pipeline lesson is selected. Derives course_code
@@ -877,6 +877,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <option value="">— Pick the batch —</option>
       </select>
       <div id="attUsbongBatchHint" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Only members enrolled in the chosen Pre-Pipeline batch can be marked present.</div>
+    </div>
+    <!-- Per-lesson roster filter (Session 25) — Usbong shows only disciples DUE
+         for the chosen lesson; the toggle reveals the full enrolled list (catch-up
+         / fix-a-forgotten-mark escape hatch). -->
+    <div id="attUsbongFilterRow" style="display:none;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:8px 14px;background:var(--surface);border:1px dashed var(--green);border-radius:var(--r-sm);">
+      <span id="attUsbongFilterLabel" style="font-size:11.5px;color:var(--muted);line-height:1.4;"></span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--text);cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="attUsbongShowAll" onchange="onUsbongShowAllToggle(this.checked)" style="width:15px;height:15px;cursor:pointer;"> Show all enrolled
+      </label>
     </div>
     <!-- General Purpose Batch picker (Session 22) — shown when event_type is
          'General Purpose Batch'. Lists the leader's visible non-BTLI/Pre-Pipeline
@@ -1136,6 +1145,11 @@ let selectedGpBatchId = null;     // id of chosen batch
 let _gpBatchRoster = null;        // member rows of the chosen batch
 let selectedGpEventName = '';     // = batch name
 let _usbongBatchRoster = null;        // member rows of the chosen batch, sorted
+// Session 25 — per-lesson roster filter state
+let selectedUsbongLessonNumber = null; // lesson_number of the chosen Usbong lesson
+let _usbongBatchRosterAll = null;      // full enrolled roster (unfiltered)
+let _usbongProgressMap = null;         // Map<member_id, maxAttendedLessonNumber>
+let _usbongShowAll = false;            // "Show all enrolled" toggle (bypass due-filter)
                                       // When non-null AND selectedAttType === 'Pre-Pipeline',
                                       // renderAttList draws from this instead of myMembers.
 
@@ -3414,6 +3428,15 @@ function showAttendance(){
   selectedUsbongBatchId = null;
   _usbongBatchRoster = null;
   _usbongBatchesForCourse = null;
+  // Session 25 — clear per-lesson roster-filter state + hide its UI.
+  selectedUsbongLessonNumber = null;
+  _usbongBatchRosterAll = null;
+  _usbongProgressMap = null;
+  _usbongShowAll = false;
+  const _usbongFilterRowEl = document.getElementById('attUsbongFilterRow');
+  if (_usbongFilterRowEl) _usbongFilterRowEl.style.display = 'none';
+  const _usbongShowAllEl = document.getElementById('attUsbongShowAll');
+  if (_usbongShowAllEl) _usbongShowAllEl.checked = false;
   const _usbongBatchRow = document.getElementById('attUsbongBatchRow');
   if (_usbongBatchRow) _usbongBatchRow.style.display = 'none';
   const _usbongBatchSelEl = document.getElementById('attUsbongBatchSelect');
@@ -3583,6 +3606,15 @@ function selectAttType(el){
       selectedUsbongBatchId = null;
       _usbongBatchRoster = null;
       _usbongBatchesForCourse = null;
+      // Session 25 — clear per-lesson roster-filter state + hide its UI.
+      selectedUsbongLessonNumber = null;
+      _usbongBatchRosterAll = null;
+      _usbongProgressMap = null;
+      _usbongShowAll = false;
+      const filterRowEl = document.getElementById('attUsbongFilterRow');
+      if (filterRowEl) filterRowEl.style.display = 'none';
+      const showAllEl = document.getElementById('attUsbongShowAll');
+      if (showAllEl) showAllEl.checked = false;
       const sel = document.getElementById('attUsbongLessonSelect');
       if (sel) sel.value = '';
       const batchSel = document.getElementById('attUsbongBatchSelect');
@@ -3861,6 +3893,8 @@ async function ensureUsbongQuizzesLoaded(){
       opt.dataset.eventName = eventName;
       // course_code needed by onUsbongLessonChange → batch picker loader.
       opt.dataset.courseCode = q.course_code || '';
+      // Session 25 — lesson_number drives the per-lesson roster filter.
+      opt.dataset.lessonNumber = String(q.lesson_number);
       sel.appendChild(opt);
     });
     if (!_usbongQuizzes.length) {
@@ -3881,6 +3915,8 @@ function onUsbongLessonChange(){
   selectedUsbongQuizId = sel.value || null;
   const chosen = sel.options[sel.selectedIndex];
   selectedUsbongEventName = (chosen && chosen.dataset && chosen.dataset.eventName) || '';
+  // Session 25 — lesson_number drives the per-lesson roster filter.
+  selectedUsbongLessonNumber = parseInt((chosen && chosen.dataset && chosen.dataset.lessonNumber) || '', 10) || null;
   // Derive course_code from the picked quiz and load matching batches.
   const courseCode = (chosen && chosen.dataset && chosen.dataset.courseCode) || '';
   _usbongLoadBatchesForCourse(courseCode);
@@ -3888,6 +3924,11 @@ function onUsbongLessonChange(){
   // different course's batch, and we don't want a stale roster.
   selectedUsbongBatchId = null;
   _usbongBatchRoster = null;
+  // Session 25 — clear filter state; a new lesson means a new "due" set.
+  _usbongBatchRosterAll = null;
+  _usbongProgressMap = null;
+  _usbongShowAll = false;
+  _usbongUpdateFilterUI();
   // If Pre-Pipeline lesson changes mid-form, reload existing attendance
   // so we see the right set (different lesson on same day = different event_name).
   onAttContextChange();
@@ -3945,27 +3986,89 @@ async function _usbongLoadBatchesForCourse(courseCode){
 }
 
 // LCL picked a specific Pre-Pipeline batch — set the roster from its enrolled members.
-function onUsbongBatchChange(){
+// Session 25: build the FULL roster, fetch per-person progress, then apply the
+// per-lesson "due" filter. Async (awaits progress); roster is set before any render.
+async function onUsbongBatchChange(){
   const sel = document.getElementById('attUsbongBatchSelect');
   if (!sel) return;
   selectedUsbongBatchId = sel.value || null;
+  _usbongShowAll = false;  // reset toggle whenever the batch changes
   if (!selectedUsbongBatchId || !_usbongBatchesForCourse) {
-    _usbongBatchRoster = null;
+    _usbongBatchRosterAll = null; _usbongBatchRoster = null; _usbongProgressMap = null;
+    _usbongUpdateFilterUI();
     onAttContextChange();
     return;
   }
   const batch = _usbongBatchesForCourse.find(c => c.id === selectedUsbongBatchId);
   if (!batch) {
-    _usbongBatchRoster = null;
+    _usbongBatchRosterAll = null; _usbongBatchRoster = null; _usbongProgressMap = null;
+    _usbongUpdateFilterUI();
     onAttContextChange();
     return;
   }
-  // Map cohort_members → member rows (with name, level, lc_group).
-  // Sort alphabetically for stable scan order on mobile.
-  _usbongBatchRoster = (batch._members || [])
+  // Full enrolled roster (alpha-sorted for stable mobile scan order).
+  _usbongBatchRosterAll = (batch._members || [])
     .map(cm => cm.members)
     .filter(m => m && m.id)
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+  // Per-person progress (Session 25). On any failure leave the map null →
+  // _applyUsbongRosterFilter shows everyone (a roster that HIDES people is worse
+  // than a full one; the access gate stays fail-closed regardless).
+  _usbongProgressMap = null;
+  try {
+    const ids = _usbongBatchRosterAll.map(m => m.id);
+    _usbongProgressMap = await MultiplyShared.usbong.memberProgress(ids);
+  } catch(e) {
+    console.warn('usbong progress fetch failed — showing all enrolled:', e);
+    _usbongProgressMap = null;
+  }
+  _applyUsbongRosterFilter();
+  _usbongUpdateFilterUI();
+  onAttContextChange();
+}
+
+// Session 25 — restrict the Usbong roster to disciples DUE for the chosen lesson:
+// maxAttended >= N-1 (their next lesson OR one they've already attended, so
+// re-marking is always possible). Bypassed when "Show all" is on or we lack a
+// progress map / lesson number (then show everyone).
+function _applyUsbongRosterFilter(){
+  const all = _usbongBatchRosterAll || [];
+  const N = selectedUsbongLessonNumber;
+  if (_usbongShowAll || !_usbongProgressMap || !N) {
+    _usbongBatchRoster = all.slice();
+    return;
+  }
+  _usbongBatchRoster = all.filter(m => (_usbongProgressMap.get(m.id) || 0) >= (N - 1));
+}
+
+// Session 25 — show/hide the filter row + the "showing N due · M not yet here" label.
+function _usbongUpdateFilterUI(){
+  const row = document.getElementById('attUsbongFilterRow');
+  const lbl = document.getElementById('attUsbongFilterLabel');
+  const chk = document.getElementById('attUsbongShowAll');
+  if (!row) return;
+  const all = _usbongBatchRosterAll || [];
+  const show = (selectedAttType === 'Pre-Pipeline' && !!selectedUsbongBatchId && all.length > 0);
+  row.style.display = show ? 'flex' : 'none';
+  if (!show) return;
+  if (chk) chk.checked = !!_usbongShowAll;
+  const shown = (_usbongBatchRoster || all).length;
+  const hidden = all.length - shown;
+  if (lbl) {
+    if (_usbongShowAll || !_usbongProgressMap || !selectedUsbongLessonNumber) {
+      lbl.textContent = `Showing all ${all.length} enrolled`;
+    } else {
+      lbl.textContent = `Showing ${shown} due for this lesson` + (hidden > 0 ? ` · ${hidden} not yet here` : '');
+    }
+  }
+}
+
+// Session 25 — "Show all enrolled" toggle. Re-applies the filter and refreshes
+// the list via the standard context-change path (which reloads existing marks).
+function onUsbongShowAllToggle(checked){
+  _usbongShowAll = !!checked;
+  _applyUsbongRosterFilter();
+  _usbongUpdateFilterUI();
   onAttContextChange();
 }
 
@@ -4329,7 +4432,7 @@ async function saveAttendance(){
 
   // Process each row: check if it exists, then update or insert.
   // This avoids DELETE entirely (which was failing due to a stale RLS policy).
-  let okCount = 0, failCount = 0, lastErr = null;
+  let okCount = 0, failCount = 0, lastErr = null, skippedCount = 0;
 
   for (const row of rows) {
     // Check if a row already exists for this member + date + type.
@@ -4349,6 +4452,17 @@ async function saveAttendance(){
     if (selErr) {
       console.error('SELECT failed for', row.member_name, selErr);
       lastErr = selErr; failCount++; continue;
+    }
+
+    // Session 25 — Usbong is PRESENT-ONLY. Never create a spurious "absent" row
+    // for a disciple who simply hasn't reached this lesson yet (the Julius bug):
+    // an UNCHECKED member with NO existing row is skipped entirely. An unchecked
+    // member WITH an existing row is still written (present:false) = an explicit
+    // UNDO that re-locks the lesson/quiz. Checked members write present:true.
+    // Scoped to Pre-Pipeline; all other event types keep recording absences.
+    if (row.event_type === 'Pre-Pipeline' && row.present === false && !existing) {
+      skippedCount++;
+      continue;
     }
 
     let writeErr = null;

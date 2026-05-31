@@ -433,6 +433,27 @@
     const myCohortRoles = (cmRes.data || []);
     const allUnlocks = unRes.data || [];
 
+    // ── Per-person Usbong unlock (Session 25) ───────────────────────────────
+    // For track==='Usbong' lessons, a PARTICIPANT's lesson opens once they have
+    // been marked PRESENT for it (attendance is the unlock signal) — in addition
+    // to any per-batch cohort_lesson_unlocks override. Scoped to Usbong only;
+    // BTLI stays batch-paced. Fail-CLOSED: an empty attended-set or empty
+    // pattern-map ⇒ no per-person unlock fires ⇒ the lesson stays locked (relies
+    // on the batch override). A read error never makes a lesson MORE open.
+    const _hasUsbong = lessons.some(l => l && l.track === 'Usbong');
+    let _usbongAttendedNames = new Set();
+    const _usbongPatternByLessonId = Object.create(null);
+    if (memberId && !isPastor && _hasUsbong) {
+      const [_an, _pm] = await Promise.all([
+        _usbongFetchAttendedNames(memberId),
+        _usbongFetchLessonPatterns()
+      ]);
+      _usbongAttendedNames = _an || new Set();
+      (_pm || []).forEach(p => {
+        if (p.lesson_id && p.pattern) _usbongPatternByLessonId[p.lesson_id] = p.pattern;
+      });
+    }
+
     // Index cohort program ids for program-level grants
     const myCohortIds = new Set(myCohortRoles.map(cm => cm.cohort_id));
 
@@ -582,15 +603,28 @@
         else lockedCount++;
       });
 
-      // ── Participant lesson-lock (Model X · Session 14) ──
-      // A participant sees the lesson LISTED but LOCKED until their batch has
-      // an unlock row for this lesson. Teachers / co-teachers / apprentices
-      // bypass this lock entirely (they see it open as soon as enrolled — the
-      // role_required attachment gate still governs WHICH materials they open).
-      // Pastor + non-cohort access reasons (lc_leaders, all_members, member_grant)
-      // are never participant-locked.
+      // ── Participant lesson-lock (Model X · Session 14; per-person Usbong · Session 25) ──
+      // A participant sees the lesson LISTED but LOCKED until it's unlocked for
+      // them. Teachers / co-teachers / apprentices bypass entirely (open as soon
+      // as enrolled — the role_required attachment gate still governs WHICH
+      // materials they open). Pastor + non-cohort access reasons (lc_leaders,
+      // all_members, member_grant) are never participant-locked.
+      // Two unlock paths:
+      //   • Batch override — a live cohort_lesson_unlocks row (any track).
+      //   • Per-person (Usbong ONLY) — the participant has a PRESENT attendance
+      //     row whose event_name matches this lesson's pattern. Fail-closed: no
+      //     linked pattern or no matching attendance ⇒ attendedThisLesson=false.
+      let attendedThisLesson = false;
+      if (bestRole === 'participant' && l.track === 'Usbong') {
+        const _pat = _usbongPatternByLessonId[l.id];
+        if (_pat) {
+          for (const n of _usbongAttendedNames) {
+            if (n.includes(_pat)) { attendedThisLesson = true; break; }
+          }
+        }
+      }
       const participantLocked =
-        bestRole === 'participant' && !cohortUnlockedForThisLesson;
+        bestRole === 'participant' && !cohortUnlockedForThisLesson && !attendedThisLesson;
 
       result.push({
         lesson: l,
@@ -598,6 +632,7 @@
         attachments: visibleAttachments,
         lockedAttachmentCount: lockedCount,
         cohortUnlockedForThisLesson,  // for UI hints
+        attendanceUnlocked: attendedThisLesson,  // Session 25 — per-person Usbong unlock (UI hint)
         participantLocked             // Model X — true => render locked badge, block open
       });
     }
@@ -1467,6 +1502,68 @@
     return new Set((data || []).map(r => (r.event_name || '').toLowerCase()).filter(Boolean));
   }
 
+  // Internal: active Usbong lesson ↔ attendance bridge rows (Session 25).
+  // → [{ lesson_id, lesson_number, pattern, course_code }] with a lowercased,
+  // trimmed `pattern`. Powers (a) the per-person lesson-lock in
+  // fetchVisibleLessons and (b) usbongMemberProgress. Returns [] on error
+  // (fail-closed: no patterns ⇒ no per-person unlock / progress).
+  async function _usbongFetchLessonPatterns() {
+    const db = getDB();
+    if (!db) return [];
+    const { data, error } = await db
+      .from('usbong_quizzes')
+      .select('lesson_id, lesson_number, attendance_event_name_pattern, course_code')
+      .eq('is_active', true);
+    if (error) {
+      console.warn('_usbongFetchLessonPatterns failed (no per-person unlock this pass):', error);
+      return [];
+    }
+    return (data || []).map(q => ({
+      lesson_id:     q.lesson_id || null,
+      lesson_number: (q.lesson_number != null ? q.lesson_number : null),
+      pattern:       (q.attendance_event_name_pattern || '').toLowerCase().trim(),
+      course_code:   q.course_code || ''
+    })).filter(x => x.pattern);
+  }
+
+  // Public: highest Usbong lesson_number each member has been marked PRESENT for
+  // (Session 25). → Map<member_id, maxLessonNumber> (0 when none). Single source
+  // of truth is attendance — no separate progress table. Used by MLT's per-lesson
+  // roster filter. On read error returns all-zeros so the caller can fall back to
+  // "show everyone": a roster that HIDES people is worse than a full one, so the
+  // roster errs toward visible even though the access GATE stays fail-closed.
+  async function usbongMemberProgress(memberIds) {
+    const out = new Map();
+    if (!Array.isArray(memberIds) || memberIds.length === 0) return out;
+    const db = getDB();
+    if (!db) return out;
+    memberIds.forEach(id => { if (id) out.set(id, 0); });
+    const [attRes, patterns] = await Promise.all([
+      db.from('attendance')
+        .select('member_id, event_name')
+        .in('member_id', memberIds)
+        .eq('present', true)
+        .eq('event_type', 'Pre-Pipeline'),
+      _usbongFetchLessonPatterns()
+    ]);
+    if (attRes.error) {
+      console.warn('usbongMemberProgress failed (returning zeros — caller should show all):', attRes.error);
+      return out;
+    }
+    (attRes.data || []).forEach(r => {
+      const name = (r.event_name || '').toLowerCase();
+      if (!name || !r.member_id) return;
+      let best = out.get(r.member_id) || 0;
+      for (const p of patterns) {
+        if (p.lesson_number != null && p.pattern && name.includes(p.pattern) && p.lesson_number > best) {
+          best = p.lesson_number;
+        }
+      }
+      out.set(r.member_id, best);
+    });
+    return out;
+  }
+
   // Internal: live unlock keys for the member's cohorts. Mirrors
   // _btliFetchUnlockKeys exactly — Set of `${cohort_id}::${lesson_id}` for
   // live unlocks (unlocked_at set OR scheduled_for passed). Powers the Usbong
@@ -1572,6 +1669,12 @@
       const anyOpen = matchingEnrollments.some(e => {
         const isStaff = e.role === 'teacher' || e.role === 'co-teacher' || e.role === 'apprentice';
         if (isStaff) return true;
+        // Per-person unlock (Session 25): being marked PRESENT for THIS lesson
+        // opens its quiz for this disciple — staggered Usbong progress. The
+        // pattern is lesson-unique after the Step-0 normalization (the trailing
+        // delimiter blocks the l1/l10 collision), so attendanceMatch is true only
+        // for the actual lesson attended.
+        if (attendanceMatch) return true;
         return lessonId ? unlockKeys.has(`${e.cohort_id}::${lessonId}`) : false;
       });
       if (!anyOpen) {
@@ -2735,7 +2838,9 @@
     // Usbong (Pre-Pipeline) Quiz eligibility (Session 5 · May 18, 2026 — parallel to BTLI per Invariant #50)
     usbong: {
       eligibilityFor: usbongEligibilityFor,
-      eligibilityForMany: usbongEligibilityForMany
+      eligibilityForMany: usbongEligibilityForMany,
+      memberProgress: usbongMemberProgress,        // Session 25 — highest attended Usbong lesson per member
+      lessonPatterns: _usbongFetchLessonPatterns    // Session 25 — [{lesson_id,lesson_number,pattern}]
     },
     // Self-attest shared logic (Session 19 · May 23, 2026 — Invariant #91).
     // Logic shared by MMT + MLT L5; UI stays per-file. attestableLessons
