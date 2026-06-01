@@ -95,7 +95,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .leader-card{display:flex;align-items:center;gap:12px;}
 .leader-av{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--gold),#b8860b);
   display:flex;align-items:center;justify-content:center;
-  font-family:'Syne',serif;font-size:18px;font-weight:800;color:#0f0f13;flex-shrink:0;}
+  font-family:'Syne',serif;font-size:18px;font-weight:800;color:#0f0f13;flex-shrink:0;position:relative;}
 .leader-name{font-family:'Syne',serif;font-size:17px;font-weight:700;}
 .leader-role{font-size:11px;color:var(--muted);margin-top:2px;}
 .leader-lc{font-size:11px;color:var(--gold);margin-top:1px;font-weight:600;}
@@ -180,7 +180,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .z3-bar{background:var(--z3);} .z4-bar{background:var(--z4);}
 .mc-body{padding:12px 12px 10px 16px;display:flex;align-items:center;gap:11px;}
 .mc-av{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;
-  justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
+  justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;position:relative;}
 .mc-info{flex:1;min-width:0;}
 .mc-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mc-sub{font-size:11px;color:var(--muted);margin-top:2px;}
@@ -217,7 +217,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   color:var(--green);flex-shrink:0;transition:all .15s;}
 .att-member.present .att-check{background:var(--green);border-color:var(--green);color:#0f0f13;}
 .att-av{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;
-  justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+  justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;position:relative;}
 .att-name{font-size:14px;font-weight:600;flex:1;}
 .att-streak{font-size:11px;color:var(--muted);}
 
@@ -254,7 +254,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   padding:16px;border-bottom:1px solid var(--border);}
 .dh-top{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
 .dh-av{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;
-  justify-content:center;font-family:'Syne',serif;font-size:20px;font-weight:800;flex-shrink:0;}
+  justify-content:center;font-family:'Syne',serif;font-size:20px;font-weight:800;flex-shrink:0;position:relative;}
 .dh-name{font-family:'Syne',serif;font-size:18px;font-weight:800;}
 .dh-meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .dh-zone-bar{display:flex;align-items:center;gap:8px;}
@@ -351,7 +351,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   border-bottom:1px solid var(--border);}
 .absent-item:last-child{border-bottom:none;}
 .ai-av{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;
-  justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+  justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;position:relative;}
 .ai-name{font-size:13px;font-weight:600;flex:1;}
 .ai-streak{font-size:11px;color:var(--red);}
 
@@ -1351,7 +1351,7 @@ async function loadMyMembers(){
     // natural_talents, enneagram_description, sports_inclination,
     // max_interventions, leader_pin_*, member_pin_*.
     const {data, error} = await db.from('members')
-      .select('id,created_at,updated_at,name,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
+      .select('id,created_at,updated_at,name,photo_url,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
       .order('name');
     if(error) throw error;
     allMembers = data || [];
@@ -1485,7 +1485,10 @@ function renderTransferAlerts(){
 
 function renderHome(){
   const m = currentLeader;
-  document.getElementById('homeAv').textContent = initials(m.name);
+  // The session LEADER shim carries no photo_url, so look the leader up in the
+  // loaded members array for their face; initials remain the base (Inv #133).
+  const _leaderRow = (typeof allMembers !== 'undefined' ? allMembers : []).find(x => x.id === m.id);
+  document.getElementById('homeAv').innerHTML = initials(m.name) + mltAvImg(_leaderRow || '');
   document.getElementById('homeAv').style.background = avColor(m.pipeline_level);
   document.getElementById('homeName').textContent = m.name;
   document.getElementById('homeRole').textContent = LEVEL_NAMES[m.pipeline_level]||'Leader';
@@ -2002,7 +2005,7 @@ function renderMemberList(){
     return `<div class="member-card" data-mid="${mem.id}">
       <div class="mc-left-bar z${z}-bar"></div>
       <div class="mc-body">
-        <div class="mc-av" style="background:${zd.bg};color:${zd.color}">${initials(mem.name)}</div>
+        <div class="mc-av" style="background:${zd.bg};color:${zd.color}">${initials(mem.name)}${mltAvImg(mem)}</div>
         <div class="mc-info">
           <div class="mc-name">${mem.name}</div>
           <div class="mc-sub">${mem.contact||''} ${mem.lc_group?'· '+mem.lc_group:''}</div>
@@ -2218,7 +2221,7 @@ function openMember(id){
 
   document.getElementById('detailTitle').textContent = mem.name.split(' ')[0];
   const av = document.getElementById('detailAv');
-  av.textContent = initials(mem.name);
+  av.innerHTML = initials(mem.name) + mltAvImg(mem);
   av.style.background = zd.bg; av.style.color = zd.color;
   document.getElementById('detailName').textContent = mem.name;
   document.getElementById('detailMeta').textContent = [
@@ -4262,7 +4265,7 @@ function renderAttList(){
       : '';
     return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
-      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
+      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}${mltAvImg(mem)}</div>
       <div class="att-name">${mem.name}</div>
       <div class="att-streak"></div>
       ${modeBtn}
@@ -4666,7 +4669,7 @@ function _renderMaList(){
     const isWalkIn = _maWalkIns.has(mem.id);
     return `<div class="att-member ${present?'present':''}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
-      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}</div>
+      <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}${mltAvImg(mem)}</div>
       <div class="att-name">${MultiplyShared.escapeHTML(mem.name)}${isWalkIn ? ' <span style="font-size:9.5px;color:var(--blue,#4a90e2);font-weight:700;margin-left:5px">WALK-IN</span>' : ''}</div>
       <div class="att-streak"></div>
     </div>`;
@@ -4746,7 +4749,7 @@ function _maRenderWalkInList(){
   }
   list.innerHTML = rows.map(m => `
     <div onclick="_maAddWalkIn('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;background:var(--surface2);margin-bottom:5px">
-      <div class="att-av" style="background:var(--surface3);color:var(--muted)">${initials(m.name)}</div>
+      <div class="att-av" style="background:var(--surface3);color:var(--muted)">${initials(m.name)}${mltAvImg(m)}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;color:var(--text)">${MultiplyShared.escapeHTML(m.name)}</div>
         ${m.lc_group ? `<div style="font-size:10.5px;color:var(--muted)">${MultiplyShared.escapeHTML(m.lc_group)}</div>` : ''}
@@ -5477,7 +5480,7 @@ async function renderReports(){
       <div class="rc-title">⚠️ Frequent Absences (${periodLabel})</div>
       <div class="absent-list">
         ${frequentAbsent.map(m=>`<div class="absent-item" data-mid="${m.id}">
-          <div class="ai-av" style="background:rgba(248,113,113,.15);color:var(--red)">${initials(m.name)}</div>
+          <div class="ai-av" style="background:rgba(248,113,113,.15);color:var(--red)">${initials(m.name)}${mltAvImg(m)}</div>
           <div class="ai-name">${m.name}</div>
           <div class="ai-streak">${m.absent} absence${m.absent>1?'s':''}</div>
         </div>`).join('')}
@@ -5501,8 +5504,8 @@ async function renderReports(){
           <div style="width:48px;height:48px;border-radius:14px;
             background:rgba(232,184,75,.15);color:var(--gold);
             display:flex;align-items:center;justify-content:center;
-            font-family:'Syne',serif;font-size:18px;font-weight:800">
-            ${initials(memberView.member.name)}
+            font-family:'Syne',serif;font-size:18px;font-weight:800;position:relative">
+            ${initials(memberView.member.name)}${mltAvImg(memberView.member)}
           </div>
           <div style="flex:1">
             <div style="font-family:'Syne',serif;font-size:17px;font-weight:700">${memberView.member.name}</div>
@@ -6013,6 +6016,17 @@ function sendLink_(memberId, memberName, file, assessName, contact){
 // HELPERS
 // ═══════════════════════════════════════════════════════
 function initials(name){return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
+// Photo overlay for member avatars (Inv #133): the caller renders initials as
+// the always-present base inside a position:relative circle; this returns an
+// <img> that overlays and removes itself on load error, so a broken/
+// inaccessible URL falls back to initials (never a blank circle). Mirrors MD's
+// mdAvImg. Accepts a member object or a raw URL string.
+function mltAvImg(m){
+  const url = (m && typeof m === 'object') ? (m.photo_url || '') : (m || '');
+  if(!url) return '';
+  const esc = (window.MultiplyShared && MultiplyShared.escapeHTML) ? MultiplyShared.escapeHTML(url) : url;
+  return `<img src="${esc}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+}
 function avColor(level){
   const colors={0:'#2a2a38',1:'#1e2a3a',2:'#1a3d2b',3:'#3d2060',4:'#5a2010',5:'#7a4a00'};
   return colors[level]||'#2a2a38';
