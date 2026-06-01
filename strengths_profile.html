@@ -245,10 +245,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 
 <!-- COVER -->
 <div class="cover">
-  <span class="cover-badge">MULTIPLY Pipeline · Rosehill Christian Church</span>
-  <div class="cover-title">Strengths Profile</div>
-  <div class="cover-sub-tl tl-text">Tuklasin ang iyong mga dominanteng talent themes. Sa bawat tanong, pumili ng A o B — alinmang mas natural sa iyo karamihan ng oras.</div>
-  <div class="cover-sub-en en-text">Discover your dominant talent themes. For each question, choose A or B — whichever feels more naturally like you most of the time.</div>
+  <span class="cover-badge">MULTIPLY Pipeline</span>
+  <div class="cover-title">Strengths Reflection</div>
+  <div class="cover-sub-tl tl-text">Tuklasin ang iyong mga kahiligang talent themes. Sa bawat tanong, pumili ng A o B — alinmang mas natural sa iyo karamihan ng oras.</div>
+  <div class="cover-sub-en en-text">Explore the talent themes you lean toward. For each question, choose A or B — whichever feels more naturally like you most of the time.</div>
+  <div style="margin-top:.6rem;font-size:11.5px;line-height:1.5;color:var(--muted);max-width:34rem;margin-left:auto;margin-right:auto;">
+    <span class="tl-text">Isa itong self-reflection na kasangkapan — <strong>hindi</strong> ang opisyal na Gallup CliftonStrengths®.</span>
+    <span class="en-text">This is a self-reflection tool — <strong>not</strong> the official Gallup CliftonStrengths®.</span>
+  </div>
   <div class="domain-pills">
     <span class="dp dp-ex">⚙ Executing</span>
     <span class="dp dp-in">📣 Influencing</span>
@@ -347,8 +351,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
   <!-- CALCULATE -->
   <div class="calc-wrap">
     <button class="calc-btn" id="calcBtn" onclick="calculate()" disabled>
-      <span class="tl-text">📊 Tingnan ang aking Top 5 Themes</span>
-      <span class="en-text">📊 See My Top 5 Themes</span>
+      <span class="tl-text">📊 Tingnan ang aking mga Strength Theme</span>
+      <span class="en-text">📊 See My Strength Themes</span>
     </button>
     <div class="msg" id="calcMsg"></div>
   </div>
@@ -362,7 +366,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
     </div>
     <div class="results-body">
 
-      <div class="section-title"><span class="tl-text">Iyong Top 5 Themes</span><span class="en-text">Your Top 5 Themes</span></div>
+      <div style="background:var(--gold-bg,#fdf6e8);border:1px solid var(--gold,#b8882a);border-left:4px solid var(--gold,#b8882a);border-radius:9px;padding:.7rem .9rem;margin-bottom:1.25rem;font-size:12px;line-height:1.6;color:var(--ink);">
+        <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:3px;color:var(--gold,#b8882a);">
+          <span class="tl-text">ℹ️ Paano basahin ito</span><span class="en-text">ℹ️ How to read this</span>
+        </div>
+        <span class="tl-text">Isa itong self-reflection na pampasimula ng usapan kung paano ka 'wired,' <strong>hindi</strong> ang opisyal na Gallup CliftonStrengths®. Sa 102 either/or na pagpili, malapad lang ang larawan: <strong>mas pagkatiwalaan ang Domain pattern sa ibaba</strong> (alin sa 4 na malalawak na lugar ang kiling mo) kaysa sa eksaktong pagkakasunod ng bawat theme. Para sa tumpak at ranked na Top-5, kunin ang opisyal na pagsusulit sa <a href="https://www.gallup.com/cliftonstrengths" target="_blank" rel="noopener" style="color:var(--gold,#b8882a);font-weight:600;">gallup.com/cliftonstrengths</a>.</span>
+        <span class="en-text">This is a self-reflection starter for a conversation about how you're wired — <strong>not</strong> the official Gallup CliftonStrengths®. With 102 either/or choices it gives a broad picture: <strong>trust the Domain pattern below</strong> (which of the 4 broad areas you lean toward) more than the exact order of individual themes. For an accurate, ranked Top-5, take the official assessment at <a href="https://www.gallup.com/cliftonstrengths" target="_blank" rel="noopener" style="color:var(--gold,#b8882a);font-weight:600;">gallup.com/cliftonstrengths</a>.</span>
+      </div>
+
+      <div class="section-title"><span class="tl-text">Mga Theme na Pinaka-kiling Mo</span><span class="en-text">Themes You Leaned Toward Most</span></div>
       <div class="top5-grid" id="top5Grid"></div>
 
       <div class="section-title"><span class="tl-text">Domain Distribution</span><span class="en-text">Domain Distribution</span></div>
@@ -1069,7 +1081,16 @@ function calculate(){
   });
 
   // Sort themes desc by score
-  _sortedThemes=Object.keys(THEMES).sort((a,b)=>(_scores[b]||0)-(_scores[a]||0));
+  // Tie-break NEUTRALLY (Strengths review fix): with only 6 appearances per
+  // theme, scores (0–6) tie constantly. A plain sort left ties in Object.keys
+  // (alphabetical) order, systematically favouring early-alphabet themes
+  // (Achiever, Activator…) and pushing genuine late-alphabet themes (Learner,
+  // Ideation, Futuristic) out of the top. Shuffle the keys once, THEN stable-
+  // sort by score: equal scores now resolve at random, not by name. Computed
+  // once per submission and reused for every render/PDF/save.
+  const _shuffled=Object.keys(THEMES);
+  for(let i=_shuffled.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[_shuffled[i],_shuffled[j]]=[_shuffled[j],_shuffled[i]];}
+  _sortedThemes=_shuffled.sort((a,b)=>(_scores[b]||0)-(_scores[a]||0));
 
   msg.style.display='none';
   showResults(name);
@@ -1082,7 +1103,7 @@ function showResults(name){
   const wrap=document.getElementById('resultsWrap');
   wrap.classList.add('visible');
   document.getElementById('rcName').textContent=name+(_lang==='tl'?'\u2019s Strengths Profile':"'s Strengths Profile");
-  document.getElementById('rcSub').textContent=(_lang==='tl'?'102 Paired-Choice · Rosehill Christian Church':'102 Paired-Choice · Rosehill Christian Church');
+  document.getElementById('rcSub').textContent=(_lang==='tl'?'102 Paired-Choice · Self-Reflection · MULTIPLY Pipeline':'102 Paired-Choice · Self-Reflection · MULTIPLY Pipeline');
 
   // Top 5 grid
   const top5=_sortedThemes.slice(0,5);
@@ -1221,7 +1242,7 @@ async function downloadPDFReport(saveAfter){
   doc.setFont('helvetica','normal');
   doc.setFontSize(10);
   doc.setTextColor(184,136,42);
-  doc.text('Rosehill Christian Church · MULTIPLY Pipeline',margin,56);
+  doc.text('MULTIPLY Pipeline · Strengths Reflection',margin,56);
   doc.setTextColor(200,200,200);
   doc.setFontSize(9);
   doc.text(`Name: ${name}   |   LC Group: ${lcGroup}   |   Date: ${today}`,margin,76);
