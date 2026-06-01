@@ -1233,6 +1233,10 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
           <label>Facilitator Role</label>
           <select id="fFacRole"><option value="">Select...</option><option>LC Leader</option><option>Pastoral Staff</option><option>Intern Facilitator</option></select>
         </div>
+        <div class="fi" style="margin-top:.5rem;display:none" id="lcGroupRow">
+          <label>LC Group Name <span style="color:var(--muted);font-weight:400;font-size:10px">(the group this leader leads — NOT a person's name; blank → "[FirstName] LC")</span></label>
+          <input type="text" id="flcgroup" placeholder="e.g. North LCG · Grace LC" maxlength="60">
+        </div>
       </div>
 
       <!-- TEST MEMBER FLAG (Pastor-only; hidden for everyone else by JS) -->
@@ -1660,6 +1664,7 @@ function l2r(m){
     address:m.address||null,
     checks:m.checks||{},eolo:m.eolo||[],notes:m.notes||[],
     is_facilitator:m.is_facilitator||false,facilitator_role:m.facilitator_role||null,
+    lc_group:(m.lc_group===''?null:(m.lc_group??null)),
     is_test_member:!!m.is_test_member,
     is_external_user:!!m.is_external_user,
     diagnostic_score:m.diagnostic_score||null,diagnostic_zone:m.diagnostic_zone||null,
@@ -1748,7 +1753,19 @@ function renderAll(){
   // Show facilitator role row if checked
   document.getElementById('fIsFac')?.addEventListener('change',e=>{
     document.getElementById('facRoleRow').style.display=e.target.checked?'flex':'none';
+    _mdSyncLcGroupRow();
   });
+}
+
+// LC Group Name row is Pastor-only AND facilitator-only: the field labels the
+// group a LEADER leads. Hidden otherwise so non-Pastors can't touch it and
+// non-leaders aren't tempted to type their LCL's name into it (the drift that
+// mislabels groups in the LACR — Inv #138-era data fix, Session 27).
+function _mdSyncLcGroupRow(){
+  const row=document.getElementById('lcGroupRow'); if(!row) return;
+  const isFac=!!document.getElementById('fIsFac')?.checked;
+  const isPastor=(typeof LeaderScope!=='undefined' && LeaderScope.isPastor && LeaderScope.isPastor()) || _isSuperuser();
+  row.style.display=(isFac && isPastor)?'flex':'none';
 }
 
 // ═══════════════════════════════════════
@@ -2866,7 +2883,7 @@ function openEdit(id){
   // Gifts tab loads on demand when clicked (async Supabase call)
   document.getElementById('mo').classList.add('open');
   // If in self-edit mode, apply visual lock to Pastor-managed fields
-  if(_selfEditMode) _applySelfEditLock();
+  if(_selfEditMode && !_isSuperuser()) _applySelfEditLock();
 }
 function closeMO(e){if(e.target===document.getElementById('mo'))closeMD();}
 function closeMD(){
@@ -2879,6 +2896,22 @@ function closeMD(){
 // Apply visual lock to Pastor-managed fields when in self-edit mode.
 // Adds a banner at the top of the modal and disables the protected fields
 // with a lock icon + tooltip explaining who manages them.
+// ─── Superuser predicate (Session 27) ───
+// Top-of-tree leaders edit ANYTHING in any profile — including their own —
+// with no self-edit lock and full access to Pastor-managed fields. Definition:
+// the Pastor account, OR any Level-5 leader with no LCL/discipler above them
+// (Pastor + wife now; more as the church grows). NOTE: like every gate in MD,
+// this is a client-side convenience until RLS Phase 2 — it does not replace
+// server-side authorization.
+function _isSuperuser(){
+  if(typeof LeaderScope!=='undefined' && LeaderScope.isPastor && LeaderScope.isPastor()) return true;
+  if(!LEADER || (LEADER.leaderLevel||0) < 5) return false;
+  const meRow = members.find(m => m.id === LEADER.leaderId);
+  // No discipler = no LCL above = top of the tree. If the row isn't loaded
+  // yet, a Level-5 session is treated as superuser (only the top reaches here).
+  return meRow ? !meRow.discipler_id : true;
+}
+
 function _applySelfEditLock(){
   // Banner
   let banner = document.getElementById('selfEditBanner');
@@ -2966,6 +2999,8 @@ function clearF(){
   if(fIsFac)fIsFac.checked=false;
   const facRoleRow=document.getElementById('facRoleRow');
   if(facRoleRow)facRoleRow.style.display='none';
+  const _flcReset=document.getElementById('flcgroup'); if(_flcReset)_flcReset.value='';
+  const lcGroupRow=document.getElementById('lcGroupRow'); if(lcGroupRow)lcGroupRow.style.display='none';
   // ── BUGFIX: reset the Test Member checkbox too ──
   // Without this, the checkbox state leaked from a previously-edited test
   // member into "Add New Member", silently flagging brand-new records as
@@ -3023,8 +3058,10 @@ function fillF(m){
   document.getElementById('fIsFac').checked=m.is_facilitator||false;
   document.getElementById('fFacRole').value=m.facilitator_role||'';
   document.getElementById('facRoleRow').style.display=m.is_facilitator?'flex':'none';
+  const _flc=document.getElementById('flcgroup'); if(_flc) _flc.value=m.lc_group||'';
+  _mdSyncLcGroupRow();
   // Test member flag — Pastor-only, hidden from everyone else
-  const isPastorView = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+  const isPastorView = ((typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor())) || _isSuperuser();
   const testRow = document.getElementById('testMemberRow');
   if(testRow){
     testRow.style.display = isPastorView ? 'block' : 'none';
@@ -3219,15 +3256,17 @@ async function saveMember(){
   // If the row is hidden, preserve whatever was already in the DB to avoid
   // an LCL accidentally clearing the flag by saving a profile edit.
   const _isPastor = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+  const _isSuper = _isSuperuser();           // Pastor OR Level-5-no-LCL (Session 27)
+  const _canManage = _isPastor || _isSuper;  // may edit Pastor-managed profile fields
   const _existingTest = eid ? !!(members.find(x=>x.id===eid)?.is_test_member) : false;
-  const isTest = _isPastor
+  const isTest = _canManage
     ? !!document.getElementById('fIsTest').checked
     : _existingTest;
-  // ─── External user flag — same Pastor-only treatment ───
+  // ─── External user flag — same Pastor-managed treatment ───
   // Real human, not a Rosehill member. Excluded from stats just like
   // test members. Preserved server-side when the row isn't visible.
   const _existingExt = eid ? !!(members.find(x=>x.id===eid)?.is_external_user) : false;
-  const isExternal = _isPastor
+  const isExternal = _canManage
     ? !!(document.getElementById('fIsExternal')?.checked)
     : _existingExt;
   // ─── Enforce: test/external members default to Pastor's flock ───
@@ -3240,11 +3279,21 @@ async function saveMember(){
   // had a discipler chosen yet.
   let effDiscId = discId || null;
   let effDiscName = discName || null;
-  if((isTest || isExternal) && _isPastor && !discId && !discName){
+  if((isTest || isExternal) && _canManage && !discId && !discName){
     const me = (typeof LEADER !== 'undefined' && LEADER) ? LEADER : {};
     effDiscId   = me.leaderId || null;
     effDiscName = me.leaderName || null;
   }
+  // ─── LC Group name — Pastor-only, facilitator-only label (Session 27) ───
+  // The field names the group THIS leader leads. Editable only by Pastor and
+  // only when the member is a facilitator; otherwise preserve whatever the DB
+  // holds (e.g. a non-leader's transfer-set group), so a routine save never
+  // wipes it. Empty → null (LACR then shows "[FirstName] LC").
+  const _existingLc = eid ? ((members.find(x=>x.id===eid)?.lc_group)||'') : '';
+  const _canEditLc  = _canManage && isFac;
+  const effLcGroup  = _canEditLc
+    ? ((document.getElementById('flcgroup')?.value||'').trim() || null)
+    : (_existingLc || null);
   const data={
     id:eid||undefined,name,
     bday:document.getElementById('fb').value,
@@ -3268,6 +3317,7 @@ async function saveMember(){
     family_members:famData,
     is_facilitator:isFac,
     facilitator_role:isFac?document.getElementById('fFacRole').value:null,
+    lc_group:effLcGroup,
     is_test_member:isTest,
     is_external_user:isExternal,
   };
@@ -3275,7 +3325,7 @@ async function saveMember(){
   // Even if the user disabled the locks via DevTools, force these
   // Pastor-managed fields back to their existing values before save.
   // The visual lock is convenience; this is the actual security boundary.
-  if(_selfEditMode && eid){
+  if(_selfEditMode && !_isSuperuser() && eid){
     const ex = members.find(x => x.id === eid);
     if(ex){
       data.level             = ex.level || 0;
@@ -3304,6 +3354,14 @@ async function saveMember(){
     data.intervention_status=null;
     data.facilitator_name=null;
     data.facilitator_id=null;
+  }
+  // Guard (Session 27): an LC Group name that exactly matches a member's name
+  // is the drift that mislabels groups in the LACR (e.g. Lyza's group showing
+  // "Gloria Jacob"). Warn before saving — the label should name the GROUP, not
+  // the leader's own LCL.
+  if(_canEditLc && effLcGroup){
+    const clash = members.find(x => x.id !== eid && (x.name||'').trim().toLowerCase() === effLcGroup.toLowerCase());
+    if(clash && !confirm(`"${effLcGroup}" is the name of a member (${clash.name}).\n\nThe LC Group name should be the name of the group this leader LEADS — not a person. Putting a person's name here is what mislabels groups in attendance reports.\n\nSave it anyway?`)) return;
   }
   try{
     const saved=await upsert(data);
@@ -9581,6 +9639,7 @@ function selectFac(id, name) {
 function toggleFacRole() {
   const checked = document.getElementById('fIsFac').checked;
   document.getElementById('facRoleRow').style.display = checked ? 'flex' : 'none';
+  _mdSyncLcGroupRow();
 }
 
 // ═══════════════════════════════════════
