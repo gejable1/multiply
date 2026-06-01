@@ -40,7 +40,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
-<script src="multiply_shared.js" onerror="__mmtMarkDepFailed('shared')"></script>
+<script src="multiply_shared.js?v=2" onerror="__mmtMarkDepFailed('shared')"></script>
 
 <!-- YOUTUBE IFRAME PLAYER API
      Loaded async — it's optional. If it fails to load, podcasts still play
@@ -9891,10 +9891,15 @@ async function renderBtliQuizzes(){
     try {
       eligMap = await MultiplyShared.btli.eligibilityForMany(MEMBER.memberId, quizzes, {});
     } catch(eEli){
-      console.warn('eligibilityForMany threw, falling open:', eEli);
+      // FAIL-CLOSED (Inv #127/#89): if the gate throws, LOCK every quiz.
+      // The hybrid gate's attendance fallback (Inv #35) lives in
+      // MultiplyShared.btli.eligibilityForMany above (inside the try); on
+      // success it returns the proper map and this catch never runs, so this
+      // flip touches ONLY the error path, not the attendance fallback.
+      console.warn('btli eligibilityForMany threw, falling CLOSED:', eEli);
       eligMap = new Map();
       quizzes.forEach(q => eligMap.set(q.id, {
-        eligible: true, reason: 'no_gate', enrolled: false, dropIn: true, cohortIds: [], programNames: []
+        eligible: false, reason: 'gate_error', enrolled: false, dropIn: false, cohortIds: [], programNames: []
       }));
     }
 
@@ -10100,10 +10105,15 @@ async function renderUsbongQuizzes(){
     try {
       eligMap = await MultiplyShared.usbong.eligibilityForMany(MEMBER.memberId, quizzes, {});
     } catch(eEli){
-      console.warn('usbong eligibilityForMany threw, falling open:', eEli);
+      // FAIL-CLOSED (Inv #127/#89): if the gate throws, LOCK every quiz —
+      // never open them. The attendance-triggered unlock (Inv #128) lives in
+      // MultiplyShared.usbong.eligibilityForMany above (inside the try); on
+      // success it returns the proper map and this catch never runs, so this
+      // flip touches ONLY the error path, not attendance unlocks.
+      console.warn('usbong eligibilityForMany threw, falling CLOSED:', eEli);
       eligMap = new Map();
       quizzes.forEach(q => eligMap.set(q.id, {
-        eligible: true, reason: 'no_gate', enrolled: false, dropIn: true, cohortIds: [], programNames: []
+        eligible: false, reason: 'gate_error', enrolled: false, dropIn: false, cohortIds: [], programNames: []
       }));
     }
 
