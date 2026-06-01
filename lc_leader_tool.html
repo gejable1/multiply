@@ -8704,6 +8704,7 @@ function _batchesOpenCreate(){
           <textarea id="newBatchNotes" rows="2" placeholder="When you meet, special context, etc."
             style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.55;resize:vertical;box-sizing:border-box"></textarea>
         </div>
+        ${LeaderScope.isPastor() ? `
         <div style="margin-bottom:.25rem">
           <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
             <input type="checkbox" id="newBatchVisible" style="width:17px;height:17px;margin-top:1px;accent-color:var(--green);flex:0 0 auto">
@@ -8713,6 +8714,7 @@ function _batchesOpenCreate(){
             </span>
           </label>
         </div>
+        ` : ''}
       </div>
       <div style="padding:1rem 1.15rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
         <button onclick="_renderBatchesList()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer">Cancel</button>
@@ -8728,7 +8730,7 @@ async function _batchesSaveCreate(){
   const startD = document.getElementById('newBatchStart').value || null;
   const endD = document.getElementById('newBatchEnd').value || null;
   const notes = (document.getElementById('newBatchNotes').value || '').trim() || null;
-  const visibleToOthers = !!(document.getElementById('newBatchVisible') && document.getElementById('newBatchVisible').checked);
+  const visibleToOthers = LeaderScope.isPastor() && !!(document.getElementById('newBatchVisible') && document.getElementById('newBatchVisible').checked);
   if (!name) { toast('Batch name required', '⚠️'); return; }
   if (!programId) { toast('Pick a program', '⚠️'); return; }
 
@@ -8799,6 +8801,7 @@ function _batchesOpenRoster(cohortId){
   const c = (_batchesState.cohorts || []).find(x => x.id === cohortId);
   if (!c) { toast('Batch not found', '❌'); return; }
   _batchesState.selectedCohortId = cohortId;
+  _batchesState.renaming = false;
   _renderBatchesRoster();
 }
 
@@ -8827,7 +8830,19 @@ function _renderBatchesRoster(){
         </div>
         <div style="margin-top:.3rem">
           <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Roster</div>
-          <div style="font-size:17px;font-weight:700;color:var(--text);margin-top:2px">${MultiplyShared.escapeHTML(c.name || '(unnamed)')}</div>
+          ${_batchesState.renaming && editPerm.ok ? `
+            <div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+              <input id="batchRenameInput" type="text" value="${MultiplyShared.escapeHTML(c.name || '')}"
+                style="flex:1;min-width:160px;font-size:15px;font-weight:700;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--text);box-sizing:border-box">
+              <button onclick="_batchesSaveRename()" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">Save</button>
+              <button onclick="_batchesCancelRename()" style="background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer">Cancel</button>
+            </div>
+          ` : `
+            <div style="display:flex;align-items:center;gap:7px;margin-top:2px">
+              <div style="font-size:17px;font-weight:700;color:var(--text)">${MultiplyShared.escapeHTML(c.name || '(unnamed)')}</div>
+              ${editPerm.ok ? `<button onclick="_batchesStartRename()" title="Edit batch name" style="background:transparent;border:none;cursor:pointer;font-size:13px;color:var(--muted);padding:2px 4px;line-height:1">✏️</button>` : ''}
+            </div>
+          `}
           <div style="font-size:11.5px;color:var(--muted);margin-top:3px">
             ${MultiplyShared.escapeHTML(prog.name || '')} · ${levelText} · ${enrolledActive.length} active · status: ${c.status}
           </div>
@@ -8890,14 +8905,104 @@ function _renderBatchesRoster(){
           </div>
         ` : ''}
       </div>
-      <div style="padding:1rem 1.15rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-        ${gradPerm.ok && enrolledActive.length > 0 ? `
-          <button onclick="_batchesGraduateAll()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer">🎓 Graduate all</button>
-        ` : ''}
-        <button onclick="_batchesOpenAddMember()" style="background:var(--gold,#b8882a);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer">+ Add member</button>
+      <div style="padding:1rem 1.15rem;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap">
+        <div>
+          ${editPerm.ok ? `
+            <button onclick="_batchesDeleteBatch()" style="background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,.4);border-radius:7px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer">🗑 Delete batch</button>
+          ` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          ${gradPerm.ok && enrolledActive.length > 0 ? `
+            <button onclick="_batchesGraduateAll()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer">🎓 Graduate all</button>
+          ` : ''}
+          <button onclick="_batchesOpenAddMember()" style="background:var(--gold,#b8882a);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer">+ Add member</button>
+        </div>
       </div>
     </div>
   `;
+}
+
+// ── Rename (owner/Pastor). Program/level stay LOCKED — to change those, the
+// LCL deletes this batch and creates a new one (avoids enrollment-qualification
+// conflicts with already-enrolled members). The batch name doubles as the
+// meeting-attendance event_name (attendance has no cohort_id), so on rename we
+// also migrate matching attendance rows by exact name so history stays linked.
+// Lesson attendance uses the canonical Inv#30 event_name (program · level ·
+// title), never a bare batch name, so it can't be touched by this equality update.
+function _batchesStartRename(){ _batchesState.renaming = true; _renderBatchesRoster(); }
+function _batchesCancelRename(){ _batchesState.renaming = false; _renderBatchesRoster(); }
+
+async function _batchesSaveRename(){
+  const c = (_batchesState.cohorts || []).find(x => x.id === _batchesState.selectedCohortId);
+  if (!c) return;
+  const input = document.getElementById('batchRenameInput');
+  const newName = ((input && input.value) || '').trim();
+  const oldName = (c.name || '').trim();
+  if (!newName) { toast('Batch name required', '⚠️'); return; }
+  if (newName === oldName) { _batchesState.renaming = false; _renderBatchesRoster(); return; }
+
+  // Count meeting-attendance rows logged under the old name (exact match).
+  let attCount = 0;
+  try {
+    const { count } = await db.from('attendance')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_name', oldName);
+    attCount = count || 0;
+  } catch(_) { /* count is advisory only */ }
+
+  const msg = attCount > 0
+    ? `Rename "${oldName}" → "${newName}"?\n\nThis also updates ${attCount} past meeting-attendance record(s) so the batch's history stays linked.`
+    : `Rename "${oldName}" → "${newName}"?`;
+  if (!confirm(msg)) return;
+
+  try {
+    const { error } = await db.from('cohorts')
+      .update({ name: newName, updated_at: new Date().toISOString() })
+      .eq('id', c.id);
+    if (error) throw error;
+    if (attCount > 0) {
+      const { error: aerr } = await db.from('attendance')
+        .update({ event_name: newName, updated_at: new Date().toISOString() })
+        .eq('event_name', oldName);
+      if (aerr) {
+        toast('Renamed, but updating attendance history failed: ' + (aerr.message || aerr) + ' — please tell Pastor.', '⚠️');
+      }
+    }
+    c.name = newName;                 // c is a reference into _batchesState.cohorts → list updates too
+    _batchesState.renaming = false;
+    toast('✓ Batch renamed', 'success');
+    _renderBatchesRoster();
+  } catch(e) {
+    toast('Could not rename: ' + (e.message || e), '❌');
+  }
+}
+
+// ── Delete (owner/Pastor). cohort_members + cohort_lesson_unlocks are ON DELETE
+// CASCADE, so removing the cohorts row clears them automatically. Attendance has
+// no FK to cohorts, so meeting history is PRESERVED (left under its event_name).
+async function _batchesDeleteBatch(){
+  const c = (_batchesState.cohorts || []).find(x => x.id === _batchesState.selectedCohortId);
+  if (!c) return;
+  const active = (c._members || []).filter(cm => cm.status === 'active').length;
+  const past   = (c._members || []).filter(cm => cm.status !== 'active').length;
+  let msg = `Delete batch "${c.name}"?\n\n`;
+  if (active) msg += `• ${active} active member(s) will be un-enrolled.\n`;
+  if (past)   msg += `• ${past} past (graduated/withdrawn) record(s) will be removed.\n`;
+  msg += `• Meeting/attendance history is KEPT (not deleted).\n`;
+  msg += `• This batch's lesson unlocks are removed.\n\n`;
+  msg += `This cannot be undone. Tip: if you're changing the program, create the new batch first, then move members over.`;
+  if (!confirm(msg)) return;
+
+  try {
+    const { error } = await db.from('cohorts').delete().eq('id', c.id);
+    if (error) throw error;
+    toast('🗑 Batch deleted', 'success');
+    _batchesState.selectedCohortId = null;
+    _batchesState.renaming = false;
+    await openMyBatches();   // refetch + back to the list
+  } catch(e) {
+    toast('Could not delete batch: ' + (e.message || e), '❌');
+  }
 }
 
 async function _batchesWithdraw(cmId, memberName){
