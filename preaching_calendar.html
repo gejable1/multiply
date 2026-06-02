@@ -159,23 +159,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 const db = MultiplyShared.getDB();
 const esc = MultiplyShared.escapeHTML;
 
-function getCurrentMemberId(){
-  try {
-    const ls = localStorage.getItem('multiply_leader_session');
-    if (ls) { const o = JSON.parse(ls); if (o && o.leaderId) return o.leaderId; }
-  } catch(e){}
-  try {
-    const ms = localStorage.getItem('multiply_member_session');
-    if (ms) { const o = JSON.parse(ms); if (o && o.memberId) return o.memberId; }
-  } catch(e){}
-  return null;
+function getCurrentMemberIds(){
+  // An Exec. Leader may have BOTH a leader and a member session whose ids
+  // differ. Preaching rows may be keyed to either, so collect all candidates
+  // and treat a cell as "mine" if its preacher matches ANY of them.
+  const ids = [];
+  try { const ls = localStorage.getItem('multiply_leader_session'); if (ls) { const o = JSON.parse(ls); if (o && o.leaderId) ids.push(o.leaderId); } } catch(e){}
+  try { const ms = localStorage.getItem('multiply_member_session'); if (ms) { const o = JSON.parse(ms); if (o && o.memberId) ids.push(o.memberId); } } catch(e){}
+  return [...new Set(ids.filter(Boolean))];
 }
+function getCurrentMemberId(){ return getCurrentMemberIds()[0] || null; }
 
 let _viewMonth = new Date(); _viewMonth.setDate(1); _viewMonth.setHours(0,0,0,0);
 let _members = [];
 let _preachers = [];
 let _assignments = [];
-let _myMemberId = getCurrentMemberId();
+let _myMemberIds = getCurrentMemberIds();
+let _myMemberId = _myMemberIds[0] || null;
 
 function ymd(d){
   const y = d.getFullYear();
@@ -324,7 +324,7 @@ function renderCell(d, serviceType, today, todayStr){
   const isPast = d < today;
   const isToday = dateStr === todayStr;
   const isSwapped = assignment && assignment.original_preacher_member_id && assignment.original_preacher_member_id !== assignment.preacher_member_id;
-  const isMine = !!(_myMemberId && assignment && assignment.preacher_member_id === _myMemberId);
+  const isMine = !!(assignment && _myMemberIds.includes(assignment.preacher_member_id));
   const preacherRec = member ? _preachers.find(p => p.member_id === member.id) : null;
   const isMainstaySlot = serviceType === 'sunday' && !isLastSundayOfMonth(d) && preacherRec && preacherRec.is_mainstay_preacher;
 
@@ -368,9 +368,11 @@ let _swapTargetOptions = [];
 async function openSwapModal(assignmentId){
   const mine = _assignments.find(a => a.id == assignmentId);
   if (!mine) { toast('Assignment not found', '⚠️'); return; }
-  if (!_myMemberId) { toast('Please log in first', '⚠️'); return; }
-  // Single shared implementation (with the swap-FROM picker for Wed+Sun weeks).
-  MultiplyShared.preaching.openSwapRequest(mine.id, mine.preach_date, _myMemberId, {
+  if (!_myMemberIds.length) { toast('Please log in first', '⚠️'); return; }
+  // Use the assignment's own preacher id as the requester — it's confirmed to
+  // be one of the user's ids (the cell rendered a swap button only if isMine),
+  // and it guarantees the shared modal loads the correct "mine" set.
+  MultiplyShared.preaching.openSwapRequest(mine.id, mine.preach_date, mine.preacher_member_id, {
     bilingual: false,
     onSent: (name) => { toast('Swap request sent! ' + name + ' will be notified.', '✓'); loadAll(); }
   });
