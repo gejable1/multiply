@@ -699,10 +699,14 @@
     return y + '-' + m + '-' + day;
   }
 
-  async function _preaching_getUpcomingForMember(memberId, daysAhead) {
+  // Returns ALL upcoming assignments for this member within `daysAhead`
+  // (default 7), oldest-first. A preacher can have BOTH a Wednesday and a
+  // Sunday in the same week — we must NOT collapse to one (the old .limit(1)
+  // hid the second engagement, which read as "Wednesday alert not working").
+  async function _preaching_getUpcomingAllForMember(memberId, daysAhead) {
     daysAhead = daysAhead || 7;
     const db = getDB();
-    if (!db || !memberId) return null;
+    if (!db || !memberId) return [];
     const today = new Date(); today.setHours(0,0,0,0);
     const end = new Date(today); end.setDate(end.getDate() + daysAhead);
     // Use LOCAL-date helper. toISOString() shifts to UTC which off-by-ones
@@ -715,10 +719,15 @@
       .eq('preacher_member_id', memberId)
       .gte('preach_date', todayStr)
       .lte('preach_date', endStr)
-      .order('preach_date')
-      .limit(1);
-    if (error) { console.warn('preaching.getUpcoming:', error); return null; }
-    return (data && data[0]) || null;
+      .order('preach_date');
+    if (error) { console.warn('preaching.getUpcomingAll:', error); return []; }
+    return data || [];
+  }
+
+  // Back-compat: nearest single upcoming assignment (or null).
+  async function _preaching_getUpcomingForMember(memberId, daysAhead) {
+    const all = await _preaching_getUpcomingAllForMember(memberId, daysAhead);
+    return (all && all[0]) || null;
   }
 
   async function _preaching_getPendingSwapsForMember(memberId) {
@@ -769,8 +778,8 @@
     const bilingual = !!opts.bilingual;
 
     // Fetch in parallel
-    const [assignment, swaps] = await Promise.all([
-      _preaching_getUpcomingForMember(memberId, 7),
+    const [upcoming, swaps] = await Promise.all([
+      _preaching_getUpcomingAllForMember(memberId, 7),
       _preaching_getPendingSwapsForMember(memberId)
     ]);
 
@@ -799,12 +808,21 @@
       }
     }
 
-    // ── Upcoming assignment reminder ──
-    if (assignment) {
-      const stage = _preaching_computeReminderStage(assignment.preach_date);
-      if (stage && !_preaching_isDismissed(memberId, assignment.preach_date, stage)) {
-        parts.push(_preaching_assignmentBannerHTML(assignment, stage, bilingual));
+    // ── Upcoming assignment reminders ──
+    // A preacher may have Wednesday + Sunday in the SAME week. Collect every
+    // non-dismissed engagement in the window; render one combined banner when
+    // there are 2+, otherwise the familiar single banner.
+    const live = [];
+    for (const a of (upcoming || [])) {
+      const stage = _preaching_computeReminderStage(a.preach_date);
+      if (stage && !_preaching_isDismissed(memberId, a.preach_date, stage)) {
+        live.push({ a, stage });
       }
+    }
+    if (live.length === 1) {
+      parts.push(_preaching_assignmentBannerHTML(live[0].a, live[0].stage, bilingual));
+    } else if (live.length >= 2) {
+      parts.push(_preaching_combinedBannerHTML(live, bilingual));
     }
 
     container.innerHTML = parts.join('');
@@ -821,6 +839,10 @@
         if (action === 'dismiss') {
           _preaching_dismiss(memberId, preachDate, stage);
           // Re-render
+          _preaching_renderReminderBanner(containerId, memberId, opts);
+        } else if (action === 'dismiss-all') {
+          const keys = (btn.dataset.preachKeys || '').split(',').filter(Boolean);
+          keys.forEach(k => { const p = k.split('|'); _preaching_dismiss(memberId, p[0], p[1]); });
           _preaching_renderReminderBanner(containerId, memberId, opts);
         } else if (action === 'request-swap') {
           if (typeof opts.onRequestSwap === 'function') {
@@ -842,36 +864,53 @@
     });
   }
 
-  function _preaching_assignmentBannerHTML(assignment, stage, bilingual) {
-    const date = new Date(assignment.preach_date + 'T00:00:00');
-    const dateLabel = date.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-    // Actual day-count for the 1–3 day ('3d') bucket so the copy never lies.
-    // (Was hardcoded "3 days" — a sermon 1 day out wrongly read "3 days".)
-    // Same local-midnight math as _preaching_computeReminderStage; Manila is
-    // UTC+8 so we intentionally avoid toISOString()/'Z' here.
-    const _today0 = new Date(); _today0.setHours(0,0,0,0);
-    const diffDays = Math.max(0, Math.round((date - _today0) / 86400000));
-    const isTomorrow = diffDays === 1;
-    // Service type drives messaging — Sunday vs Wednesday phrasing differs.
-    // Defaults to 'wednesday' for legacy rows that pre-date the column.
-    const svc = (assignment.service_type || 'wednesday');
-    const isSunday = svc === 'sunday';
-    const dayWord = isSunday ? 'Sunday' : 'Wednesday';
-    const dayWordTL = isSunday ? 'Linggo' : 'Miyerkules';
-    // Service-specific time-of-service phrasing
-    const tonightOrMorning = isSunday ? 'morning' : 'tonight';
-    const tonightOrMorningTL = isSunday ? 'umaga' : 'gabi';
-
-    // Mid-tone saturated backgrounds — must read well against BOTH dark MLT
-    // (#0f0f13) AND cream MMT (#f5f0e6) since this function is shared. Earlier
-    // attempts at near-pastel were too close to MMT's cream. These colors
-    // strike a balance: clearly visible on dark, clearly visible on cream.
+  // Stage → banner colors (shared by single + combined banners so they never drift).
+  function _preaching_colors(stage) {
     const colors = {
       '7d': { bg:'linear-gradient(135deg,#f5d78e,#e8b84b)', border:'#8a6116', icon:'📅', textColor:'#1a1612' },
       '3d': { bg:'linear-gradient(135deg,#fdba74,#fb923c)', border:'#a14a0a', icon:'⚠️', textColor:'#1a1612' },
       '0d': { bg:'linear-gradient(135deg,#fca5a5,#f87171)', border:'#7f1d1d', icon:'🎤', textColor:'#1a1612' }
     };
-    const c = colors[stage];
+    return colors[stage] || colors['7d'];
+  }
+
+  // Day metadata derived FROM preach_date's weekday — the source of truth.
+  // (wednesday_preaching has no service_type column, so the weekday itself
+  // tells us Sunday vs Wednesday. service_type, if ever added, only overrides.)
+  // dow: 0=Sun … 6=Sat. Sunday → morning service; everything else → evening.
+  function _preaching_dayMeta(preachDate, serviceType) {
+    const d = new Date(preachDate + 'T00:00:00');   // local parse, no UTC shift
+    const dow = d.getDay();
+    const isSunday = serviceType ? (serviceType === 'sunday') : (dow === 0);
+    const enDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const tlDays = ['Linggo','Lunes','Martes','Miyerkules','Huwebes','Biyernes','Sabado'];
+    const _today0 = new Date(); _today0.setHours(0,0,0,0);
+    const diffDays = Math.max(0, Math.round((d - _today0) / 86400000));
+    return {
+      d, dow, isSunday,
+      dayWord:   isSunday ? 'Sunday'   : enDays[dow],
+      dayWordTL: isSunday ? 'Linggo'   : tlDays[dow],
+      dateLabel: d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }),
+      shortDate: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }),
+      diffDays,
+      isTomorrow: diffDays === 1
+    };
+  }
+
+  function _preaching_assignmentBannerHTML(assignment, stage, bilingual) {
+    const meta = _preaching_dayMeta(assignment.preach_date, assignment.service_type);
+    const dateLabel = meta.dateLabel;
+    // Actual day-count for the 1–3 day ('3d') bucket so the copy never lies.
+    const diffDays = meta.diffDays;
+    const isTomorrow = meta.isTomorrow;
+    // Day word + time-of-service phrasing come from the preach_date weekday.
+    const isSunday = meta.isSunday;
+    const dayWord = meta.dayWord;
+    const dayWordTL = meta.dayWordTL;
+    const tonightOrMorning = isSunday ? 'morning' : 'tonight';
+    const tonightOrMorningTL = isSunday ? 'umaga' : 'gabi';
+
+    const c = _preaching_colors(stage);
 
     const msgs = {
       '7d': bilingual ? {
@@ -910,6 +949,59 @@
           '</div>' +
         '</div>' +
         '<button type="button" data-preaching-action="dismiss" data-preach-date="' + assignment.preach_date + '" data-stage="' + stage + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
+      '</div>'
+    );
+  }
+
+  // Combined banner for 2+ engagements in the same window (e.g. Wednesday
+  // midweek + Sunday service in one week). One message, urgency colored by
+  // the NEAREST engagement; each row keeps its own Swap action.
+  function _preaching_combinedBannerHTML(live, bilingual) {
+    const items = live
+      .map(x => ({ a: x.a, stage: x.stage, meta: _preaching_dayMeta(x.a.preach_date, x.a.service_type) }))
+      .sort((p, q) => p.meta.diffDays - q.meta.diffDays);
+    const c = _preaching_colors(items[0].stage);   // nearest drives urgency
+    const n = items.length;
+
+    const relEN = (m) => m.diffDays === 0 ? (m.isSunday ? 'this morning' : 'tonight') : m.diffDays === 1 ? 'tomorrow' : ('in ' + m.diffDays + ' days');
+    const relTL = (m) => m.diffDays === 0 ? (m.isSunday ? 'ngayong umaga' : 'mamayang gabi') : m.diffDays === 1 ? 'bukas' : ('sa ' + m.diffDays + ' araw');
+
+    const rowsHTML = items.map(it => {
+      const m = it.meta;
+      const lineEN = m.dayWord + ' (' + m.shortDate + ') — ' + relEN(m);
+      const lineTL = m.dayWordTL + ' (' + m.shortDate + ') — ' + relTL(m);
+      const label = (bilingual)
+        ? '<span class="en-text">' + escapeHTML(lineEN) + '</span><span class="tl-text">' + escapeHTML(lineTL) + '</span>'
+        : escapeHTML(lineEN);
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0">' +
+        '<span style="font-size:12.5px;color:#1a1612">• ' + label + '</span>' +
+        '<button type="button" data-preaching-action="request-swap" data-assignment-id="' + it.a.id + '" data-preach-date="' + it.a.preach_date + '" style="background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.22);font-family:inherit;font-size:10.5px;padding:3px 8px;border-radius:5px;cursor:pointer;font-weight:600;color:#1a1612;white-space:nowrap">🔄 Swap</button>' +
+        '</div>';
+    }).join('');
+
+    const headEN = 'You\'re preaching ' + (n === 2 ? 'twice' : n + ' times') + ' this week:';
+    const headTL = 'Mangangaral ka ng ' + (n === 2 ? 'dalawang beses' : n + ' beses') + ' ngayong linggo:';
+    const closeEN = 'Praying for you, kapatid. 🙏';
+    const closeTL = 'Ipinagdarasal ka namin, kapatid. 🙏';
+    const head = bilingual ? '<span class="en-text">' + escapeHTML(headEN) + '</span><span class="tl-text">' + escapeHTML(headTL) + '</span>' : escapeHTML(headEN);
+    const close = bilingual ? '<span class="en-text">' + escapeHTML(closeEN) + '</span><span class="tl-text">' + escapeHTML(closeTL) + '</span>' : escapeHTML(closeEN);
+
+    // Dismiss-all carries every (preach_date|stage) shown so one ✕ clears the set.
+    const dismissKeys = items.map(it => it.a.preach_date + '|' + it.stage).join(',');
+
+    return (
+      '<div style="background:' + c.bg + ';border:1.5px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.18)">' + c.icon + '</div>' +
+        '<div style="flex:1;min-width:0;line-height:1.4">' +
+          '<div style="font-weight:700;font-size:13.5px;margin-bottom:3px;color:#1a1612">Preaching This Week</div>' +
+          '<div style="font-size:12.5px;color:#1a1612;margin-bottom:4px">' + head + '</div>' +
+          rowsHTML +
+          '<div style="font-size:12px;color:#1a1612;margin-top:5px">' + close + '</div>' +
+          '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
+            '<button type="button" data-preaching-action="view-calendar" style="background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:#1a1612;font-weight:500">📅 View Calendar</button>' +
+          '</div>' +
+        '</div>' +
+        '<button type="button" data-preaching-action="dismiss-all" data-preach-keys="' + dismissKeys + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
       '</div>'
     );
   }
@@ -2885,6 +2977,7 @@
     // Wednesday Preaching (May 2026)
     preaching: {
       getUpcomingForMember: _preaching_getUpcomingForMember,
+      getUpcomingAllForMember: _preaching_getUpcomingAllForMember,
       getPendingSwapsForMember: _preaching_getPendingSwapsForMember,
       computeReminderStage: _preaching_computeReminderStage,
       isDismissed: _preaching_isDismissed,
