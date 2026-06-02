@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzJhNWM0MCIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2I4ODgyYSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TTwvdGV4dD48L3N2Zz4=">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="multiply_shared.js"></script>
+<script src="multiply_shared.js?v=3"></script>
 <style>
 :root{
   --ink:#1a1612;--paper:#fefcf8;--bg:#f5f0e8;
@@ -368,38 +368,12 @@ let _swapTargetOptions = [];
 async function openSwapModal(assignmentId){
   const mine = _assignments.find(a => a.id == assignmentId);
   if (!mine) { toast('Assignment not found', '⚠️'); return; }
-  _swapMyAssignment = mine;
-  const d = parseDate(mine.preach_date);
-  const svcLabel = (mine.service_type || 'wednesday') === 'sunday' ? 'Sunday' : 'Wednesday';
-  document.getElementById('swapModalSub').textContent =
-    "You're preaching on " + svcLabel + ", " + fmtDate(d) + ". Choose another preacher's date to swap with.";
-  document.getElementById('swapReason').value = '';
-  document.getElementById('swapTarget').innerHTML = '<option>Loading…</option>';
-  document.getElementById('swapModal').classList.add('open');
-
-  const todayStr = todayYMD();
-  const { data, error } = await db.from('wednesday_preaching')
-    .select('*')
-    .gte('preach_date', todayStr)
-    .neq('preacher_member_id', _myMemberId)
-    .order('preach_date')
-    .limit(30);
-  if (error) { toast('Could not load swap options', '⚠️'); return; }
-  _swapTargetOptions = data || [];
-
-  const sel = document.getElementById('swapTarget');
-  if (_swapTargetOptions.length === 0) {
-    sel.innerHTML = '<option value="">— No other future assignments to swap with —</option>';
-    return;
-  }
-  sel.innerHTML = '<option value="">— Choose a date —</option>' +
-    _swapTargetOptions.map(a => {
-      const dt = parseDate(a.preach_date);
-      const svc = (a.service_type || 'wednesday') === 'sunday' ? 'Sun' : 'Wed';
-      const m = _members.find(mm => mm.id === a.preacher_member_id);
-      const nm = m ? m.name : '(unknown)';
-      return '<option value="' + a.id + '">' + svc + ' ' + fmtDate(dt) + ' — ' + esc(nm) + '</option>';
-    }).join('');
+  if (!_myMemberId) { toast('Please log in first', '⚠️'); return; }
+  // Single shared implementation (with the swap-FROM picker for Wed+Sun weeks).
+  MultiplyShared.preaching.openSwapRequest(mine.id, mine.preach_date, _myMemberId, {
+    bilingual: false,
+    onSent: (name) => { toast('Swap request sent! ' + name + ' will be notified.', '✓'); loadAll(); }
+  });
 }
 
 function closeSwapModal(){

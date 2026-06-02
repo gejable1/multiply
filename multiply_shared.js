@@ -742,6 +742,130 @@
     return data || [];
   }
 
+  // ─── Consolidated swap-request modal (MMT + MLT + preaching_calendar) ───
+  // Single source of truth. Each caller passes its own requesterMemberId and a
+  // bilingual flag; an optional onSent(targetName) lets the caller toast/refresh
+  // (calendar) instead of the default alert (MMT/MLT). Includes the "swap FROM"
+  // picker so a preacher with BOTH a Wednesday and a Sunday upcoming can choose
+  // which engagement to give away; the "swap WITH" list re-filters to ±6 weeks
+  // of the selected FROM.
+  async function _preaching_openSwapRequest(myAssignmentId, myPreachDate, requesterMemberId, opts) {
+    opts = opts || {};
+    const bilingual = !!opts.bilingual;
+    const db = getDB();
+    if (!db || !requesterMemberId) { alert('Please log in first.'); return; }
+    const myId = requesterMemberId;
+    // Normalize a numeric-string id (calendar passes dataset strings) so it
+    // matches the bigint ids from the DB and we don't double-add the FROM row.
+    if (typeof myAssignmentId === 'string' && /^\d+$/.test(myAssignmentId)) myAssignmentId = parseInt(myAssignmentId, 10);
+    const todayStr = _ymdLocal(new Date());
+
+    const [mineRes, othersRes] = await Promise.all([
+      db.from('wednesday_preaching').select('*').eq('preacher_member_id', myId).gte('preach_date', todayStr).order('preach_date'),
+      db.from('wednesday_preaching').select('*').neq('preacher_member_id', myId).gte('preach_date', todayStr).order('preach_date')
+    ]);
+    if (mineRes.error) { alert('Could not load swap candidates: ' + mineRes.error.message); return; }
+    let mine = mineRes.data || [];
+    const others = othersRes.data || [];
+    if (!mine.some(a => a.id === myAssignmentId)) {
+      mine.unshift({ id: myAssignmentId, preach_date: myPreachDate, preacher_member_id: myId });
+    }
+    if (others.length === 0) { alert('No other preacher assignments to swap with.'); return; }
+
+    const preacherIds = [...new Set(others.map(a => a.preacher_member_id))];
+    const { data: mems } = await db.from('members').select('id, name').in('id', preacherIds);
+    const memMap = new Map((mems || []).map(m => [m.id, m]));
+
+    const fmtFull  = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday:'long',  month:'long',  day:'numeric' });
+    const fmtShort = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    const within6w = (otherIso, fromIso) => {
+      const o = new Date(otherIso + 'T00:00:00'), f = new Date(fromIso + 'T00:00:00');
+      return Math.abs(Math.round((o - f) / 86400000)) <= 42;
+    };
+    const buildWithOptions = (fromIso) => {
+      const pool = others.filter(a => within6w(a.preach_date, fromIso));
+      if (pool.length === 0) return '<option value="">— none within 6 weeks —</option>';
+      return pool.map(a => {
+        const p = memMap.get(a.preacher_member_id) || { name:'?' };
+        return '<option value="' + a.id + '">' + escapeHTML(fmtShort(a.preach_date)) + ' — ' + escapeHTML(p.name) + '</option>';
+      }).join('');
+    };
+    const t = (en, tl) => bilingual ? ('<span class="en-text">' + en + '</span><span class="tl-text">' + tl + '</span>') : en;
+    const LBL = 'display:block;font-size:11px;font-weight:700;color:#888;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px';
+    const FLD = 'width:100%;padding:9px 11px;font-family:inherit;font-size:13.5px;border:1.5px solid #d0d0d0;border-radius:7px;margin-bottom:.65rem';
+
+    const multiFrom = mine.length >= 2;
+    const fromOptionsHtml = mine.map(a =>
+      '<option value="' + a.id + '"' + (a.id === myAssignmentId ? ' selected' : '') + '>' + escapeHTML(fmtShort(a.preach_date)) + '</option>'
+    ).join('');
+
+    const modalId = 'preachingSwapModalShared';
+    let modal = document.getElementById(modalId);
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,14,.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;font-family:inherit';
+
+    const intro = multiFrom
+      ? t('You have more than one upcoming assignment. Pick which one to swap, then a preacher to swap with (within 6 weeks).',
+          'May higit sa isa kang paparating na assignment. Piliin kung alin ang ipa-swap, tapos ang kapalit na preacher (loob ng 6 na linggo).')
+      : t('Your assignment: <strong>' + escapeHTML(fmtFull(myPreachDate)) + '</strong>. Pick another preacher\'s assignment within 6 weeks to propose a swap.',
+          'Iyong assignment: <strong>' + escapeHTML(fmtFull(myPreachDate)) + '</strong>. Pumili ng ibang preacher na nasa loob ng 6 na linggo upang mag-swap.');
+
+    const fromBlock = multiFrom
+      ? '<label style="' + LBL + '">' + t('Swap from (your assignment)', 'I-swap mula sa') + '</label>' +
+        '<select id="_psFrom" style="' + FLD + '">' + fromOptionsHtml + '</select>'
+      : '';
+
+    modal.innerHTML =
+      '<div style="background:white;border-radius:12px;max-width:440px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);color:#1a1612">' +
+        '<div style="font-family:Playfair Display,serif;font-size:1.1rem;font-weight:700;margin-bottom:.75rem">Request Swap</div>' +
+        '<div style="font-size:13px;color:#555;line-height:1.55;margin-bottom:.95rem">' + intro + '</div>' +
+        fromBlock +
+        '<label style="' + LBL + '">' + t('Swap with', 'I-swap kay') + '</label>' +
+        '<select id="_psWith" style="' + FLD + '">' + buildWithOptions(myPreachDate) + '</select>' +
+        '<label style="' + LBL + '">' + t('Reason (optional)', 'Dahilan (optional)') + '</label>' +
+        '<textarea id="_psReason" rows="2" style="' + FLD + ';resize:vertical"></textarea>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1.1rem">' +
+          '<button id="_psCancel" style="padding:7px 13px;border:1px solid #d0d0d0;background:white;border-radius:7px;font-family:inherit;font-size:12.5px;cursor:pointer">' + t('Cancel', 'Kanselahin') + '</button>' +
+          '<button id="_psSend" style="padding:7px 13px;border:1px solid #2a5c40;background:#2a5c40;color:white;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">' + t('Send Request', 'Ipadala') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    if (multiFrom) {
+      const fromSel = modal.querySelector('#_psFrom');
+      fromSel.onchange = () => {
+        const a = mine.find(x => String(x.id) === fromSel.value);
+        modal.querySelector('#_psWith').innerHTML = buildWithOptions(a ? a.preach_date : myPreachDate);
+      };
+    }
+    modal.querySelector('#_psCancel').onclick = () => modal.remove();
+    modal.querySelector('#_psSend').onclick = async () => {
+      const fromId = multiFrom ? parseInt(modal.querySelector('#_psFrom').value, 10) : myAssignmentId;
+      const targetVal = modal.querySelector('#_psWith').value;
+      if (!targetVal) { alert('Pick a preacher to swap with.'); return; }
+      const targetAssignmentId = parseInt(targetVal, 10);
+      const reason = modal.querySelector('#_psReason').value.trim() || null;
+      const target = others.find(a => a.id === targetAssignmentId);
+      if (!target) { alert('Pick a target.'); return; }
+      if (fromId === target.id) { alert('Choose two different dates.'); return; }
+      const { error } = await db.from('preaching_swap_requests').insert({
+        requester_assignment_id: fromId,
+        target_assignment_id: target.id,
+        requester_member_id: myId,
+        target_member_id: target.preacher_member_id,
+        reason,
+        status: 'pending'
+      });
+      if (error) { alert('Could not submit: ' + error.message); return; }
+      modal.remove();
+      const targetName = (memMap.get(target.preacher_member_id) || {}).name || 'They';
+      if (typeof opts.onSent === 'function') opts.onSent(targetName);
+      else alert('Swap request sent. ' + targetName + ' will see it in their tool.');
+    };
+  }
+
   function _preaching_computeReminderStage(preachDateStr) {
     if (!preachDateStr) return null;
     const today = new Date(); today.setHours(0,0,0,0);
@@ -2982,6 +3106,7 @@
       computeReminderStage: _preaching_computeReminderStage,
       isDismissed: _preaching_isDismissed,
       dismiss: _preaching_dismiss,
+      openSwapRequest: _preaching_openSwapRequest,
       renderReminderBanner: _preaching_renderReminderBanner
     },
     // LCG Transfers — propose/approve flow with audit history (May 18, 2026)

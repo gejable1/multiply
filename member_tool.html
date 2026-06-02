@@ -40,7 +40,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
-<script src="multiply_shared.js?v=2" onerror="__mmtMarkDepFailed('shared')"></script>
+<script src="multiply_shared.js?v=3" onerror="__mmtMarkDepFailed('shared')"></script>
 
 <!-- YOUTUBE IFRAME PLAYER API
      Loaded async — it's optional. If it fails to load, podcasts still play
@@ -2972,80 +2972,9 @@ function renderHome(){
 // pending swap as a banner in their own MMT/MLT next time they open.
 // ═══════════════════════════════════════════════════════════════
 async function openPreachingSwapRequestMMT(myAssignmentId, myPreachDate){
-  const db = MultiplyShared.getDB();
-  // ─── TIMEZONE-SAFE LOCAL DATE (see admin/MLT for full rationale) ───
-  // Use local-date components instead of toISOString to avoid UTC off-by-one
-  // that turns Manila-midnight-Wednesday into UTC-Tuesday-4PM in storage.
-  const _ymd = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
-  const myDate = new Date(myPreachDate + 'T00:00:00');
-  const winStart = new Date(myDate); winStart.setDate(winStart.getDate() - 42);
-  const winEnd   = new Date(myDate); winEnd.setDate(winEnd.getDate()   + 42);
-  const todayStr = _ymd(new Date());
-
-  const { data: assignments, error: aErr } = await db.from('wednesday_preaching')
-    .select('*')
-    .gte('preach_date', todayStr)
-    .gte('preach_date', _ymd(winStart))
-    .lte('preach_date', _ymd(winEnd))
-    .neq('id', myAssignmentId)
-    .order('preach_date');
-  if (aErr) { alert('Could not load: ' + aErr.message); return; }
-  if (!assignments || assignments.length === 0) {
-    alert('No other preacher assignments within 6 weeks to swap with.');
-    return;
-  }
-
-  const preacherIds = [...new Set(assignments.map(a => a.preacher_member_id))];
-  const { data: mems } = await db.from('members').select('id, name').in('id', preacherIds);
-  const memMap = new Map((mems || []).map(m => [m.id, m]));
-
-  const modalId = 'preachingSwapModalDynMMT';
-  let modal = document.getElementById(modalId);
-  if (modal) modal.remove();
-  modal = document.createElement('div');
-  modal.id = modalId;
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,14,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;font-family:inherit';
-  const myDateLabel = myDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-  const esc = MultiplyShared.escapeHTML;
-  const optionsHtml = assignments.map(a => {
-    const d = new Date(a.preach_date + 'T00:00:00');
-    const label = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-    const preacher = memMap.get(a.preacher_member_id) || { name: '?' };
-    return '<option value="' + a.id + '">' + esc(label) + ' — ' + esc(preacher.name) + '</option>';
-  }).join('');
-
-  modal.innerHTML =
-    '<div style="background:white;border-radius:12px;max-width:440px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.3);color:#1a1612">' +
-      '<div style="font-family:Playfair Display,serif;font-size:1.1rem;font-weight:700;margin-bottom:.75rem">Request Swap</div>' +
-      '<div style="font-size:13px;color:#555;line-height:1.55;margin-bottom:.95rem"><span class="en-text">Your assignment: <strong>' + esc(myDateLabel) + '</strong>. Pick another preacher\'s assignment within 6 weeks to propose a swap.</span><span class="tl-text">Iyong assignment: <strong>' + esc(myDateLabel) + '</strong>. Pumili ng ibang preacher na nasa loob ng 6 na linggo upang mag-swap.</span></div>' +
-      '<label style="display:block;font-size:11px;font-weight:700;color:#888;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px"><span class="en-text">Swap with</span><span class="tl-text">I-swap kay</span></label>' +
-      '<select id="swapTargetSelMMT" style="width:100%;padding:9px 11px;font-family:inherit;font-size:13.5px;border:1.5px solid #d0d0d0;border-radius:7px;margin-bottom:.65rem">' + optionsHtml + '</select>' +
-      '<label style="display:block;font-size:11px;font-weight:700;color:#888;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px"><span class="en-text">Reason (optional)</span><span class="tl-text">Dahilan (optional)</span></label>' +
-      '<textarea id="swapReasonTxtMMT" rows="2" style="width:100%;padding:9px 11px;font-family:inherit;font-size:13.5px;border:1.5px solid #d0d0d0;border-radius:7px;resize:vertical"></textarea>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1.1rem">' +
-        '<button id="swapCancelBtnMMT" style="padding:7px 13px;border:1px solid #d0d0d0;background:white;border-radius:7px;font-family:inherit;font-size:12.5px;cursor:pointer">Cancel</button>' +
-        '<button id="swapSubmitBtnMMT" style="padding:7px 13px;border:1px solid #2a5c40;background:#2a5c40;color:white;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer"><span class="en-text">Send Request</span><span class="tl-text">Ipadala</span></button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(modal);
-  modal.querySelector('#swapCancelBtnMMT').onclick = () => modal.remove();
-  modal.querySelector('#swapSubmitBtnMMT').onclick = async () => {
-    const targetAssignmentId = parseInt(modal.querySelector('#swapTargetSelMMT').value, 10);
-    const reason = modal.querySelector('#swapReasonTxtMMT').value.trim() || null;
-    const target = assignments.find(a => a.id === targetAssignmentId);
-    if (!target) { alert('Pick a target.'); return; }
-    const { error } = await db.from('preaching_swap_requests').insert({
-      requester_assignment_id: myAssignmentId,
-      target_assignment_id: target.id,
-      requester_member_id: MEMBER.memberId,
-      target_member_id: target.preacher_member_id,
-      reason,
-      status: 'pending'
-    });
-    if (error) { alert('Could not submit: ' + error.message); return; }
-    modal.remove();
-    alert('Swap request sent. ' + (memMap.get(target.preacher_member_id)?.name || 'They') + ' will see it in their tool.');
-  };
+  // Thin wrapper → single shared implementation (alert + swap live together
+  // in multiply_shared.js). MMT is bilingual; member session id is used.
+  return MultiplyShared.preaching.openSwapRequest(myAssignmentId, myPreachDate, MEMBER.memberId, { bilingual: true });
 }
 
 function computeNextSteps(){
