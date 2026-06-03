@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzJhNWM0MCIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2I4ODgyYSIgZm9udC1mYW1pbHk9InNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TTwvdGV4dD48L3N2Zz4=">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="multiply_shared.js?v=3"></script>
+<script src="multiply_shared.js?v=4"></script>
 <style>
 :root{
   --ink:#1a1612;--paper:#fefcf8;--bg:#f5f0e8;
@@ -160,12 +160,20 @@ const db = MultiplyShared.getDB();
 const esc = MultiplyShared.escapeHTML;
 
 function getCurrentMemberIds(){
-  // An Exec. Leader may have BOTH a leader and a member session whose ids
-  // differ. Preaching rows may be keyed to either, so collect all candidates
-  // and treat a cell as "mine" if its preacher matches ANY of them.
+  // The login session lives in sessionStorage (NOT localStorage). window.open
+  // copies sessionStorage from the opener for same-origin pages, so this carries
+  // when the calendar is launched from MLT/MMT "View Calendar". An Exec. Leader
+  // may have BOTH a leader and a member session whose ids differ, so collect all.
   const ids = [];
-  try { const ls = localStorage.getItem('multiply_leader_session'); if (ls) { const o = JSON.parse(ls); if (o && o.leaderId) ids.push(o.leaderId); } } catch(e){}
-  try { const ms = localStorage.getItem('multiply_member_session'); if (ms) { const o = JSON.parse(ms); if (o && o.memberId) ids.push(o.memberId); } } catch(e){}
+  try { const ls = sessionStorage.getItem('multiply_leader_session'); if (ls) { const o = JSON.parse(ls); if (o && o.leaderId) ids.push(o.leaderId); } } catch(e){}
+  try { const ms = sessionStorage.getItem('multiply_member_session'); if (ms) { const o = JSON.parse(ms); if (o && o.memberId) ids.push(o.memberId); } } catch(e){}
+  // Fallback: explicit ?me=<id>[,<id>] in the URL — covers launches where
+  // sessionStorage does NOT carry (PWA opening an external browser, a bookmark,
+  // or rel=noopener links).
+  try {
+    const me = new URLSearchParams(location.search).get('me');
+    if (me) me.split(',').forEach(x => { x = x.trim(); if (x) ids.push(x); });
+  } catch(e){}
   return [...new Set(ids.filter(Boolean))];
 }
 function getCurrentMemberId(){ return getCurrentMemberIds()[0] || null; }

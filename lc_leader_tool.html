@@ -423,7 +423,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      dashboard. If no valid session exists, redirect to the central
      login page. This replaces the old open-name-search login.
 ─────────────────────────────────────────────────────────────── -->
-<script src="multiply_shared.js?v=3"></script>
+<script src="multiply_shared.js?v=4"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -574,7 +574,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
        background:linear-gradient(135deg, rgba(184,136,42,.10), rgba(184,136,42,.03));
        border:1px solid rgba(184,136,42,.35); border-radius:var(--r);
        display:none; align-items:center; gap:10px; cursor:pointer;"
-       onclick="window.open('preaching_calendar.html', '_blank')">
+       onclick="window.open('preaching_calendar.html?me=' + encodeURIComponent((window.LEADER && LEADER.leaderId) || ''), '_blank')">
     <div style="font-size:22px;flex-shrink:0;">📣</div>
     <div style="flex:1;line-height:1.4;">
       <div style="font-weight:700;font-size:13.5px;color:var(--text);">Preaching Calendar</div>
@@ -4345,6 +4345,13 @@ function toggleSelectAll(){
 // SAVE ATTENDANCE — PATCHED: writes all new columns
 // ═══════════════════════════════════════════════════════
 async function saveAttendance(){
+  // Immediate-feedback handles: lock the Save button while writing so users
+  // SEE that something is happening (the old no-feedback + slow per-member
+  // loop made people think it had saved, so they left → nothing saved).
+  const _saveBtn = document.querySelector('#screenAttendance .att-save-btn');
+  if (_saveBtn && _saveBtn.disabled) return;   // a save is already in progress
+  const _restoreSaveBtn = () => { if (_saveBtn) { _saveBtn.disabled = false; _saveBtn.textContent = '💾 Save'; } };
+
   const date = document.getElementById('attDate').value;
   if(!date){ toast('Please select a date','error'); return; }
 
@@ -4433,72 +4440,75 @@ async function saveAttendance(){
     logged_by_id:    loggedById,
   }));
 
-  // Process each row: check if it exists, then update or insert.
-  // This avoids DELETE entirely (which was failing due to a stale RLS policy).
+  // ── Lock the button: visible "Saving…" so no one assumes it's done early. ──
+  if (_saveBtn) { _saveBtn.disabled = true; _saveBtn.textContent = '⏳ Saving…'; }
+
+  // ── Batched write. Was: 2 sequential round-trips PER member (SELECT then
+  //    UPDATE/INSERT), awaited one-at-a-time → 40-60 calls for a 20-30 person
+  //    roster → 15-30s of dead time on mobile. Now: ONE select for existing
+  //    rows, ONE bulk insert for the new ones, parallel updates for the rest.
+  //    Still avoids DELETE (RLS) and preserves the Pre-Pipeline present-only
+  //    skip. ──
+  const needsName = (selectedAttType === 'BTLI' || selectedAttType === 'Pre-Pipeline' || selectedAttType === 'General Purpose Batch');
+  const keyOf = (mid, ename) => needsName ? (mid + '||' + (ename || '')) : String(mid);
+
   let okCount = 0, failCount = 0, lastErr = null, skippedCount = 0;
-
-  for (const row of rows) {
-    // Check if a row already exists for this member + date + type.
-    // For BTLI and Pre-Pipeline, we also match on event_name so different
-    // lessons on the same day produce separate rows (rare, but supported).
-    let q = db
+  try {
+    const memberIds = rows.map(r => r.member_id);
+    const { data: existingRows, error: selErr } = await db
       .from('attendance')
-      .select('id')
-      .eq('member_id', row.member_id)
-      .eq('event_date', row.event_date)
-      .eq('event_type', row.event_type);
-    if ((row.event_type === 'BTLI' || row.event_type === 'Pre-Pipeline' || row.event_type === 'General Purpose Batch') && row.event_name) {
-      q = q.eq('event_name', row.event_name);
-    }
-    const { data: existing, error: selErr } = await q.maybeSingle();
+      .select('id, member_id, event_name')
+      .eq('event_date', date)
+      .eq('event_type', selectedAttType)
+      .in('member_id', memberIds);
+    if (selErr) throw selErr;
 
-    if (selErr) {
-      console.error('SELECT failed for', row.member_name, selErr);
-      lastErr = selErr; failCount++; continue;
-    }
+    const existingMap = new Map();
+    (existingRows || []).forEach(r => existingMap.set(keyOf(r.member_id, r.event_name), r.id));
 
-    // Session 25 — Usbong is PRESENT-ONLY. Never create a spurious "absent" row
-    // for a disciple who simply hasn't reached this lesson yet (the Julius bug):
-    // an UNCHECKED member with NO existing row is skipped entirely. An unchecked
-    // member WITH an existing row is still written (present:false) = an explicit
-    // UNDO that re-locks the lesson/quiz. Checked members write present:true.
-    // Scoped to Pre-Pipeline; all other event types keep recording absences.
-    if (row.event_type === 'Pre-Pipeline' && row.present === false && !existing) {
-      skippedCount++;
-      continue;
+    const toInsert = [];
+    const toUpdate = [];
+    for (const row of rows) {
+      const existingId = existingMap.get(keyOf(row.member_id, row.event_name));
+      // Session 25 — Pre-Pipeline is PRESENT-ONLY: never create a spurious
+      // "absent" row for a disciple who hasn't reached this lesson yet.
+      if (row.event_type === 'Pre-Pipeline' && row.present === false && !existingId) { skippedCount++; continue; }
+      if (existingId) toUpdate.push({ id: existingId, row });
+      else toInsert.push(row);
     }
 
-    let writeErr = null;
-    if (existing) {
-      // Update the existing row
-      const { error } = await db.from('attendance').update(row).eq('id', existing.id);
-      writeErr = error;
-    } else {
-      // Insert a new row
-      const { error } = await db.from('attendance').insert(row);
-      writeErr = error;
+    if (toInsert.length) {
+      const { error } = await db.from('attendance').insert(toInsert);
+      if (error) { failCount += toInsert.length; lastErr = error; }
+      else okCount += toInsert.length;
     }
-
-    if (writeErr) {
-      console.error('WRITE failed for', row.member_name, writeErr);
-      lastErr = writeErr; failCount++;
-    } else {
-      okCount++;
+    if (toUpdate.length) {
+      const errs = await Promise.all(toUpdate.map(u =>
+        db.from('attendance').update(u.row).eq('id', u.id).then(r => r.error)
+      ));
+      errs.forEach(e => { if (e) { failCount++; lastErr = e; } else okCount++; });
     }
+  } catch (e) {
+    console.error('saveAttendance batched write failed:', e);
+    lastErr = e;
+    failCount = failCount || rows.length;
   }
 
   if (failCount > 0) {
-    toast('Saved '+okCount+', failed '+failCount+': '+(lastErr?.message||'unknown'), 'error');
+    toast('Saved ' + okCount + ', failed ' + failCount + ': ' + (lastErr?.message || 'unknown'), 'error');
+    _restoreSaveBtn();   // let them retry
     return;
   }
+
   const cnt = Object.values(attendanceState).filter(Boolean).length;
   attendanceDirty = false;
   // Successful save → clear the recovery draft so we don't re-prompt
   _clearAttendanceDraft();
+  if (_saveBtn) _saveBtn.textContent = '✅ Saved!';
   toast(`✅ Saved! ${cnt}/${rosterForSave.length} present`,'success');
   // Refresh the banner so it now reflects this save (logged_by becomes us)
   loadExistingAttendance();
-  setTimeout(()=>showScreen('screenHome'),1500);
+  setTimeout(() => { _restoreSaveBtn(); showScreen('screenHome'); }, 1500);
 }
 
 

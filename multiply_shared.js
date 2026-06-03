@@ -975,7 +975,9 @@
             alert('Swap request: contact Pastor or open preaching_admin.html to manage swaps.');
           }
         } else if (action === 'view-calendar') {
-          window.open('preaching_calendar.html', '_blank');
+          // Pass the member id so the calendar can personalize even when opened
+          // in a context that doesn't share the session (PWA → external browser).
+          window.open('preaching_calendar.html?me=' + encodeURIComponent(memberId || ''), '_blank');
         } else if (action === 'respond-swap') {
           if (typeof opts.onRespondSwap === 'function') {
             opts.onRespondSwap(swapId);
