@@ -5,12 +5,23 @@
 **System launch date:** May 1, 2026 (production live ~1 month)
 **Repo:** github.com/gejable1/multiply (deployed to gejable1.github.io/multiply)
 **Supabase project:** tirzeikbflolaclgtket
+**Dev surface (NEW — June 4, 2026):** Development has **migrated to Claude Code**. The canonical dev surface is now this **local git clone** — edit here, `git push` to GitHub, and **Pages auto-deploys**. `CLAUDE.md` is the Claude Code project-memory file (read it alongside this HANDOFF each session). The old **manual download / upload-to-GitHub** workflow is **retired**.
 
 ---
 
 ## 🎯 Jumpstart prompt for next session
 
 > *"Hi Claude, kapatid — fresh session. Please read `HANDOFF.md`, `MULTIPLY_INVARIANTS.md`, `GRACE_PATHWAY.md`, `MULTIPLY_PIPELINE_DIAGRAM.md`, and `BTLI1_LESSON_MAP.md` first. **Session 28 was a preaching-tools + attendance-save session.** Shipped: (1) MD **batch bulk-enroll** — Cohorts→Roster "⚡ Bulk add" with Everyone/By-Level/By-LC-Leader filters and an intermediate name-checklist; test/guests excluded, already-enrolled disabled, no canEnroll gate (Pastor override), pacing still via lesson unlocks (Inv #145). (2) Preaching banner now derives Sun/Wed from the **`preach_date` weekday** not `service_type` (which the table doesn't reliably have — Inv #146), and shows a **combined "Preaching This Week"** banner when 2+ engagements are within the 7-day window, each with its own Swap + a dismiss-all (Inv #147). (3) The swap-request modal was **consolidated** into `MultiplyShared.preaching.openSwapRequest` (MMT/MLT/calendar are thin wrappers) with a **"Swap from" picker** for Wed+Sun weeks and a ±6-week "Swap with" filter (Inv #148). (4) The calendar's "no Swap" bug was root-caused to a **storage mismatch** — it read `localStorage` while the app keeps sessions in **`sessionStorage`**; fixed to read the shared session API, match BOTH leader+member ids, and accept a **`?me=` URL fallback** for PWA→external-browser launches (Inv #149). (5) LC **attendance save** was slow + silent (2 sequential round-trips per member, no button feedback → users assumed it saved and left); now **batched** (1 SELECT + bulk INSERT + parallel UPDATE) with an immediate **"⏳ Saving…"** button state (Inv #150). All shared.js consumers are `?v=4`. **TOP OPEN ITEM: BTLI L12 — Understanding My Unique Design** (UNLAD-L2, Eph 2:10, the assessment-battery lesson) — needs the **UNLAD-L2 scan** uploaded. Also pending: bump the remaining report HTMLs to `?v=4` so all shared.js consumers are lockstep. When I ask 'what's next?', refresh from this HANDOFF's pending list (Inv #43). **Session-start reminder: ask me to upload the latest `multiply_shared.js`, `multiply_dashboard.html`, `lc_leader_tool.html`, `member_tool.html`, `preaching_calendar.html`, and any assessment/quiz/lesson files relevant to the session topic before editing (Inv #56) — GitHub Pages/PWA caches hard, so bump `?v=` and hard-refresh after deploys."*
+
+---
+
+## ✅ OPERATIONAL — JUNE 4, 2026 (Claude Code migration + repo housekeeping)
+
+No platform-code / feature changes — operational + housekeeping only.
+- **Added `CLAUDE.md` project memory** for Claude Code (`005dbdb`).
+- **Added `.gitattributes`** — `* text=auto eol=lf`, explicit `eol=lf` for `html`/`js`/`ts`/`json`/`md`/`svg`/`css`/`sql`, and `binary` for images/`pptx`/`pdf`/fonts; `git add --renormalize` confirmed the index was already **pure LF** (`39289bb`). See Inv #151.
+- **Completed the `?v=4` lockstep** — bumped **ALL** shared.js consumers to `?v=4`: the **4 reports** (`v=2→4`) **plus 8 previously-UNVERSIONED** admin/quiz tools (`attendance_admin`, `btli_quiz_admin`, `btli_quiz_player`, `devotional_admin`, `lesson_quiz_editor`, `preaching_admin`, `transfer_management`, `usbong_quiz_player`) that carried a latent stale-cache risk; left the **self-inlined** `profile_results_viewer.html` alone (it does not load shared.js) (`cc328c4`).
+- **Repo cleanup** — removed stale BTLI 101 folders `lessons/btli101` + `lessons/btli101_s1_hrwm68` (`616c072`), and two mistakenly-uploaded dupe files `member_tool (14).html` + `multiply_dashboard0.html` (`8f16665`).
 
 ---
 
@@ -57,9 +68,6 @@ Fail-closed parity on both MMT render-layer eligibility catches (Inv #137). `mul
 ### **🔝 BTLI L12 — Understanding My Unique Design** (LEAD — the next real build)
 - **Effort:** Large (full 8-deliverable lesson). **Status:** Ready — needs the **UNLAD-L2 scan** uploaded.
 - Source UNLAD-L2; MV **Ephesians 2:10**; character (proposed) Goodness/Faithfulness — confirm from source (Inv #75). **THE assessment-battery lesson** — build the sequence to take all 6 MULTIPLY assessments (Spiritual Gifts, Strengths, DISC, Enneagram, Love Language, Salvation) into the participant page. Direct build (no Gemini). Library seed FIRST then quiz seed (Inv #84); render-verify PPTX (#82); favicon+slider (#80/#81); browser-verify all (#80).
-
-### **🔧 Finish the `?v=4` lockstep** (Inv #138) — quick
-- `multiply_shared.js` changed in S28 → the five files I had are `?v=4`, but the **four report HTMLs** (`lc_attendance_report.html`, `lc_member_report.html`, `lcg_pulse_report.html`, `member_attendance_report.html`) are still `?v=2`. Bump them to `?v=4` (find `multiply_shared.js?v=2` → `?v=4`) so the browser caches a single shared.js. (Upload them and Claude will do it, or one-line find/replace.)
 
 ### **🧹 Optional tidy from S28**
 - **Confirm preaching-row ids** all use the canonical Gerry id (`547ebda6-5126-436e-9890-709f50588ced`) — the `?me=` + both-ids fix made the calendar robust regardless, so this is cosmetic.

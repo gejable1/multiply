@@ -1926,7 +1926,15 @@ MLT `saveAttendance` must do two things the old version did not. (a) **Immediate
 
 ---
 
+### **151. The repo enforces LF via `.gitattributes` — never remove it**
+
+The repository root carries a `.gitattributes` that pins line endings: `* text=auto eol=lf`, explicit `text eol=lf` for `*.html`/`*.js`/`*.ts`/`*.json`/`*.md`/`*.svg`/`*.css`/`*.sql`, and `binary` for images/`*.pptx`/`*.pdf`/fonts. **Never remove or weaken it.** It is what makes **Rule #3 (these files are pure LF)** hold on *every* machine regardless of a developer's local `core.autocrlf` — git stores and checks out LF for all text files, so the splice anchors (`\n`) stay valid no matter who clones or edits. (At introduction, `git add --renormalize` confirmed the index was already pure LF; the file's job is to keep it that way forever.) **Established June 4, 2026 (operational — Claude Code migration).**
+
+---
+
 **Established June 3, 2026 (Session 28). Invariants #145–#150 added — count now 150.**
+
+**Established June 4, 2026 (operational — Claude Code migration). Invariant #151 added — count now 151.**
 
 ---
 
