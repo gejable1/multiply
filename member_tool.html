@@ -7467,7 +7467,7 @@ async function _loadRecentAttests(){
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
     const cutoffStr = cutoff.toISOString().slice(0,10);
     const {data, error} = await db.from('attendance')
-      .select('event_date,event_type,event_name,source')
+      .select('event_date,event_type,event_name,source,present')
       .eq('member_id', MEMBER.memberId)
       .neq('source', 'self_attest')
       .gte('event_date', cutoffStr);
@@ -7558,8 +7558,14 @@ async function renderAttestCard(){
       // non-inviting "✓ recorded by leader" state instead of an "I'm here"
       // button, so the member isn't nudged to tap something that would only
       // bounce. Leader log is authoritative; nothing for the member to do.
+      // Only a leader-logged PRESENCE is authoritative "by leader ✓". A leader-
+      // marked ABSENCE must NOT disable the pill — the (often online) member
+      // still needs to self-attest and correct it (see memberSelfAttest).
       const byLeader = _leaderLoggedSlots.find(r =>
-        r.event_type === et.key && r.event_date === targetDate
+        r.event_type === et.key && r.event_date === targetDate && r.present === true
+      );
+      const byLeaderAbsent = !byLeader && _leaderLoggedSlots.find(r =>
+        r.event_type === et.key && r.event_date === targetDate && r.present === false
       );
       if (byLeader) {
         const lblBy = isTl ? 'naitala ng leader' : 'by leader';
@@ -7576,7 +7582,9 @@ async function renderAttestCard(){
                 </div>`;
       }
 
-      // Not yet attested — show "I'm here" button
+      // Not yet attested — show "I'm here" button. If a leader pre-marked the
+      // member ABSENT for this slot, add an honest hint (no false "✓"): tapping
+      // self-attests and corrects the absence (memberSelfAttest → present).
       return `<button onclick="_pendingAttestEventName=null; memberSelfAttest('${et.key}', ${et.typical_day || 7})"
                 style="flex:1 1 calc(50% - .25rem); min-width:0; padding:.6rem .5rem;
                        background:var(--cream); border:1px solid var(--line);
@@ -7585,6 +7593,7 @@ async function renderAttestCard(){
                        line-height:1.25; color:var(--ink);">
                 <span style="font-size:15px;">${et.icon || '📍'}</span>
                 <span style="font-weight:600;">${labelEsc}</span>
+                ${byLeaderAbsent ? `<span style="font-size:10px;color:var(--muted);white-space:nowrap;">· ${isTl ? 'naka-absent — i-tap kung dumalo' : 'marked absent — tap if you were here'}</span>` : ''}
               </button>`;
     }).join('');
   }
@@ -7960,8 +7969,31 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     if (existing && existing.length) {
       const row = existing[0];
       const byLeader = row.source && row.source !== 'self_attest';
+      if (byLeader && row.present === false) {
+        // Leader marked this member ABSENT before they self-reported (often an
+        // online member). Treat the tap as a CORRECTION: flip to present and
+        // record it as a self-attestation so it surfaces in the leader's Pending
+        // Confirmations card (confirmed_by stays null → leader can ✓ Confirm /
+        // ✕ Dispute). Present counts immediately; confirmation is a trust overlay.
+        const {error: upErr} = await db.from('attendance').update({
+          present:      true,
+          source:       'self_attest',
+          logged_by:    memberRow.name,
+          logged_by_id: MEMBER.memberId
+        }).eq('id', row.id);
+        if (upErr) {
+          console.error('[self-attest] absent→present correction failed:', upErr);
+          showToast('Error: ' + upErr.message, true);
+          return;
+        }
+        showToast(lang === 'tl'
+          ? `✓ Naitama mula sa "absent." Makikita ito ng leader mo para kumpirmahin.`
+          : `✓ Corrected from "absent." Your leader will see it to confirm.`, false);
+        await renderAttestCard();
+        return;
+      }
       if (byLeader) {
-        // LCL log is authoritative — their record stands, no nudge needed.
+        // present=true LCL log is authoritative — their record stands, no nudge.
         // Honest, reassuring feedback: it's already counted (✓), nothing to do.
         showToast(lang === 'tl'
           ? `✓ Naitala na ito ng leader mo para sa ${targetLbl} — wala ka nang kailangang gawin.`
