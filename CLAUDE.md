@@ -17,7 +17,7 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 - **`MULTIPLY_INVARIANTS.md`** — 150 hard rules (canonical record). Don't violate; add new ones when you establish a rule.
 - `GRACE_PATHWAY.md`, `MULTIPLY_PIPELINE_DIAGRAM.md` — ministry model + vocabulary.
 - `BTLI1_LESSON_MAP.md` — read before ANY BTLI lesson build.
-- `schema.json` — read before writing ANY SQL/seed. It can lag the live DB — inspect actual stored payloads when unsure.
+- `multiply-schema.json` — read before writing ANY SQL/seed. **LOCAL-only snapshot** of the live DB (gitignored, never pushed); it can lag the live DB — regenerate it from Supabase when the schema changes, and inspect actual stored payloads when unsure.
 
 ## Core files
 - `multiply_shared.js` — shared module (sessions, dates, SVI, preaching, swap modal, etc.). Loaded by every tool as `multiply_shared.js?v=N` (**currently v=4**).
