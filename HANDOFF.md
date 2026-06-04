@@ -88,6 +88,7 @@ Fail-closed parity on both MMT render-layer eligibility catches (Inv #137). `mul
 - **First Usbong batch lifecycle hygiene** — demote/delete any duplicate `forming` batch for "New & Pre-believer's Class."
 - **Diagnose RLS policies file** — run `diagnose_rls_policies.sql` to completion; keep if load-bearing, drop if vestigial (Inv #10).
 - **Discipler text-fallback tidy in MD** — legacy decorative `discipler` text column.
+- **LC meeting-day/time feature** — designed but the `lc_groups` table was **never created** (live-DB verified 2026-06-04: no such relation in any schema). `member_tool.html:5986` is a **fail-soft dead reference** (returns null → skipped; LC card's meeting day never populates). Decide later: build `lc_groups` as a **PER-CHURCH** table within/after the tenancy migration, or remove the dead call. **Left as-is for now.**
 
 ---
 

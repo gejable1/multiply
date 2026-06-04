@@ -13,12 +13,12 @@
 ### **1. LC group naming is sparse — key off LC Leaders, not text fields**
 The `lc_group` text field on `members` is unreliable as a source of group identity. Any group-level feature (attendance reports, compliance dashboards, audience filters, etc.) MUST derive group membership from LC Leader records using `is_facilitator` / `facilitator_role`. Never trust `lc_group` alone.
 
-### **10. RLS must be DISABLED on every new public table until RLS Phase 2**
-Every `CREATE TABLE` migration for a public-schema table MUST include:
+### **10. RLS posture — mostly DISABLED today; Phase 2 turns it ON everywhere**
+Until RLS Phase 2, new public tables are created RLS-**disabled**:
 ```sql
 ALTER TABLE <name> DISABLE ROW LEVEL SECURITY;
 ```
-Until RLS Phase 2, the public schema is intentionally open at the database layer. Run `fix_rls_audit.sql` (idempotent, in outputs folder) after any new table creation to catch missed cases.
+**Correction (2026-06-04, live-DB verified — see `TENANCY_AUDIT.md` §5):** the schema is **not** uniformly open. Of 50 public tables, **43 are RLS-disabled** but **7 are RLS-ENABLED with no policies and `rls_forced = false`** — `_backup_members_diag_zone_2026_05_06`, `interventions`, `ministry_intake`, `svi_metrics`, `svi_snapshots`, `svi_weight_profiles`, `view_log`. Enabled + no-policy + not-forced = **deny-all for `anon`**: direct anon reads of those 7 return zero rows, so the app reaches them only via owner-privileged (SECURITY DEFINER) views/functions that bypass RLS. The old "always DISABLE" wording was inaccurate for those 7. **The multi-tenant migration (Phase 2) supersedes this rule entirely: RLS will be turned ON across all per-church tables with `church_id`-scoped policies** — at which point "disable on every new table" no longer applies. Run `fix_rls_audit.sql` (idempotent, in outputs folder) to re-check live state when in doubt.
 
 ### **27. BTLI Quiz System schema — `course_code` and `intro_text`**
 The `btli_quizzes` table uses `course_code` (text) and `intro_text` (text) — not `course_id`/`intro_en`. Confirm schema in `/mnt/project/schema.json` before writing seed SQL. Best-of-three attempts, 70% pass threshold, LCG attendance soft-gate, rank reveal at course completion.

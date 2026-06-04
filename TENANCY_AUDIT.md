@@ -17,6 +17,7 @@
 ### PER-CHURCH (39) — holds one church's data → needs a church_id
 `members` (anchor, 222 rows), `attendance` (2878), `absence_notices`, `announcements`, `announcement_acks`, `announcement_retraction_dismissals`, `attendance_self_attest_log`, `cohorts`, `cohort_members`, `cohort_lesson_unlocks`, `pipeline_lesson_grants`, `debrief_records`, `diagnostic_results`, `interventions`, `discipler_change_log`, `transfers`, `notifications`, `leader_sessions`, `profile_tokens`, `view_log`, `svi_snapshots` (619), `preachers`, `wednesday_preaching`, `preaching_swap_requests`, `sermons`, `ministries`, `ministry_roles`, `ministry_rosters`, `ministry_roster_members`, `ministry_intake`, `devotional_reflections`, `library_progress`, `library_chapter_progress`, `library_quiz_attempts`, `btli_quiz_attempts`, `usbong_quiz_attempts`, **`gifts_diagnostic`** (50), **`member_profiles`** (297), `_backup_members_diag_zone_2026_05_06`.
 
+- **`_backup_members_diag_zone_2026_05_06`** is a backup/temp snapshot (dated 2026-05-06, 57 rows) — **EXCLUDE from the `church_id` migration; drop candidate** (clean it up rather than carry it into multi-tenancy).
 - **`ministries` / `ministry_roles` / `ministry_rosters`** classed PER-CHURCH (each church runs its own ministry teams). If churches were meant to share a *ministry-type template*, these move toward UNSURE — flag for the Phase-0 call.
 - **`sermons`** is per-church content but currently 0 rows — same content-vs-shared question as `devotionals` (see UNSURE).
 
@@ -30,7 +31,7 @@
 - **`svi_metrics`** / **`svi_weight_profiles`** — SVI scoring catalog + weight profiles. Currently RLS-enabled in the dump (see §5). Platform default vs per-church override is a real decision; the in-app SVI Weights editor (Inv #119) suggests per-church tuning.
 
 ### ⚠️ Referenced-but-absent table
-- **`lc_groups`** is queried in `member_tool.html` (`db.from('lc_groups')`) but **does not appear in `schema.json`**. Either schema-lag (Inv #124) or a renamed/removed object. **VERIFY against live DB** — and classify (likely PER-CHURCH lookup) once confirmed.
+- **`lc_groups` — RESOLVED (2026-06-04): dead code reference.** A live `pg_class`/`pg_namespace` lookup returned **no rows** — there is **no such relation in any schema** (not a table, view, materialized view, or foreign table). The single call site, `member_tool.html:5986` (`db.from('lc_groups').select('name,meeting_day,meeting_time')`), is **fail-soft**: the Supabase client returns `{data: null}` for a missing relation, the code reads only `data`, so `lcg` is null and the block is skipped (the LC-card meeting-day simply never populates from this source). Not a crash; not a tenancy table. See HANDOFF PENDING (parked feature decision).
 
 ---
 
@@ -122,13 +123,13 @@ That single sentence is the crux of multi-tenancy: **a shared anon key + client-
 
 ## 5. RLS status
 
-- **No `.sql` files in the repo** → DDL/policies are not version-controlled; authoritative RLS state is **live-DB only (VERIFY)**.
-- **`MULTIPLY_INVARIANTS.md` (Inv #10):** RLS is **platform-wide DISABLED** until "RLS Phase 2"; every `CREATE TABLE` is expected to add `ALTER TABLE … DISABLE ROW LEVEL SECURITY`. `multiply_shared.js:166–168` and `:153` reference an (unversioned) `RLS_PHASE_2.md`.
-- **`schema.json` metadata says otherwise for 7 tables** — a discrepancy to resolve live:
-  - `rls_enabled = true` (but `rls_forced = false`, and **`policies = null` everywhere**) for: **`interventions`, `ministry_intake`, `svi_metrics`, `svi_snapshots`, `svi_weight_profiles`, `view_log`, `_backup_members_diag_zone_2026_05_06`**.
-  - `rls_enabled = false` for the other **43** tables.
-  - RLS-enabled + zero policies + not-forced is normally *deny-all for `anon`*, yet `svi_snapshots` holds 619 rows the app reads — so either the dump's RLS flags lag reality (Inv #124) or access goes through a path not seen in the repo. **VERIFY against live DB.**
-- **Implication:** multi-tenant isolation almost certainly hinges on turning RLS **on** with a `church_id` predicate bound to a server-trusted claim. Today's posture (RLS off + shared anon key) gives **no** server-side tenant isolation.
+- **CONFIRMED LIVE (2026-06-04)** via the §2 authoritative query (run by the Pastor in the Supabase SQL editor, role `postgres`). No `.sql` files in the repo — DDL/policies remain un-version-controlled — but the live `pg_class` state is now known:
+  - **43 tables RLS-DISABLED** (`relrowsecurity = false`).
+  - **7 tables RLS-ENABLED** (`relrowsecurity = true`), all with **`rls_forced = false`** and **no policies**: **`_backup_members_diag_zone_2026_05_06`, `interventions`, `ministry_intake`, `svi_metrics`, `svi_snapshots`, `svi_weight_profiles`, `view_log`**. (Exactly the 7 the `schema.json` dump had claimed — the dump did **not** lag on RLS here.)
+- **The `schema.json` flags were accurate**, so the contradiction with Inv #10 is **real, not a dump artifact**: the platform is *not* uniformly "RLS disabled."
+- **Implication (deny-all for anon):** RLS-enabled + **no policy** + **not forced** = **deny-all for the `anon` role**. So **direct anon reads of those 7 tables return zero rows** — they are only reachable through an **owner-privileged (SECURITY DEFINER) view or function** that bypasses RLS (e.g. `svi_snapshots` is almost certainly read via `v_svi_latest`, not directly). The Pastor's query saw rows only because `postgres` (table owner) bypasses non-forced RLS. *(`postgres`/owner reads ≠ what the browser anon key can see.)*
+- **Multi-tenant implication:** today's posture (RLS off on 43 tables + shared anon key) gives **no** server-side tenant isolation. Phase 2 hinges on turning RLS **on everywhere** with a `church_id` predicate bound to a server-trusted claim.
+- **⚠️ Phase 2 open item (RLS-design input — NOT a Phase 1 blocker):** **inventory every VIEW and SECURITY DEFINER function that touches per-church data**, and confirm the app's real read path for `svi_snapshots` / `interventions` / `ministry_intake`. A SECURITY DEFINER view bypasses RLS on its base tables — so under multi-tenancy such a view **would leak across churches** unless it *also* filters by `church_id` itself. These owner-privileged paths must be audited alongside the table policies, or they become the tenancy hole.
 
 ---
 
