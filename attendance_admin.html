@@ -241,8 +241,10 @@ tbody td.mono{font-family:'DM Mono',monospace;font-size:11.5px;}
       </select>
     </div>
     <div class="cb-group">
-      <span class="cb-label">LC Group</span>
-      <input type="search" class="cb-input" id="filterLc" placeholder="filter by LC group..." style="min-width:160px">
+      <span class="cb-label">LC Leader</span>
+      <select class="cb-select" id="filterLc" title="Filter by LC Leader (discipler / LCL). Most lc_group values are blank, but every member has an LCL (Inv #46)." style="min-width:170px">
+        <option value="">All LC Leaders</option>
+      </select>
     </div>
     <div class="cb-group">
       <span class="cb-label">Member</span>
@@ -305,6 +307,7 @@ let _sortBy = 'event_date';
 let _sortDir = 'desc';
 let _page = 0;
 const PAGE_SIZE = 50;
+let _memberLcl = new Map();   // member_id → { id, name } of their LC Leader (discipler / LCL, Inv #46)
 
 function goBack(){
   // MULTIPLY standing rule: pages opened via window.open(_blank) close
@@ -329,7 +332,38 @@ function defaultRange(){
   return {from: isoDate(from), to: isoDate(today)};
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+// ── LC Leader index ────────────────────────────────────────────────
+// lc_group is unreliable (often null), but every member has an LCL =
+// their discipler (Inv #46). Build member_id → {LCL id, name} so attendance
+// rows can be filtered by leader, and populate the LC Leader dropdown with the
+// distinct disciplers. Loaded once on boot; non-fatal on failure (filter just
+// stays "All"). No is_test_member filter — this admin tool shows ALL rows.
+async function _loadLclIndex(){
+  try{
+    const {data, error} = await db.from('members')
+      .select('id,discipler_id,discipler_name');
+    if(error) throw error;
+    _memberLcl = new Map();
+    const lclById = new Map();   // discipler_id → name
+    (data||[]).forEach(m => {
+      if(!m.discipler_id) return;
+      const name = m.discipler_name || '(unnamed leader)';
+      _memberLcl.set(m.id, { id: m.discipler_id, name });
+      if(!lclById.has(m.discipler_id)) lclById.set(m.discipler_id, name);
+    });
+    const sel = document.getElementById('filterLc');
+    if(sel){
+      const lcls = [...lclById.entries()].sort((a,b) => String(a[1]).localeCompare(String(b[1])));
+      sel.innerHTML = '<option value="">All LC Leaders</option>'
+        + lcls.map(([id,name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('')
+        + '<option value="__none__">— No LC leader —</option>';
+    }
+  }catch(e){
+    console.warn('[attendance-admin] LC Leader index load failed (non-fatal):', e);
+  }
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
   const r = defaultRange();
   document.getElementById('filterFrom').value = r.from;
   document.getElementById('filterTo').value   = r.to;
@@ -342,6 +376,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ['filterFrom','filterTo'].forEach(id => {
     document.getElementById(id).addEventListener('change', loadAttendance);
   });
+  await _loadLclIndex();   // populate the LC Leader dropdown + member→LCL map
   loadAttendance();
 });
 
@@ -379,15 +414,16 @@ async function loadAttendance(){
 function applyFilters(){
   const type   = document.getElementById('filterType').value.toLowerCase().trim();
   const mode   = document.getElementById('filterMode').value.toLowerCase().trim();
-  const lcQ    = document.getElementById('filterLc').value.toLowerCase().trim();
+  const lcSel  = document.getElementById('filterLc').value;   // '' | discipler_id | '__none__'
   const memQ   = document.getElementById('filterMember').value.toLowerCase().trim();
 
   _filteredRows = _allRows.filter(r => {
     if(type && (r.event_type||'').toLowerCase() !== type) return false;
     if(mode && ((r.attendance_mode||'in_person').toLowerCase() !== mode)) return false;
-    if(lcQ){
-      const lc = ((r.event_lc_group||r.member_lc_group||'')+'').toLowerCase();
-      if(!lc.includes(lcQ)) return false;
+    if(lcSel){
+      const lcl = _memberLcl.get(r.member_id);
+      if(lcSel === '__none__'){ if(lcl) return false; }   // only members with NO LCL
+      else if(!lcl || lcl.id !== lcSel) return false;     // member's LCL must match the pick
     }
     if(memQ && !((r.member_name||'').toLowerCase().includes(memQ))) return false;
     return true;
@@ -660,6 +696,8 @@ function openEditRow(id){
   document.getElementById('editPresent').value = r.present ? 'true' : 'false';
   document.getElementById('editName').value = r.event_name || '';
   document.getElementById('editLcGroup').value = r.event_lc_group || '';
+  // attendance_mode: default legacy/null rows to in_person (Face-to-face).
+  document.getElementById('editMode').value = (r.attendance_mode === 'online') ? 'online' : 'in_person';
   document.getElementById('editModal').style.display = 'flex';
 }
 
@@ -676,6 +714,7 @@ async function saveEditRow(){
   const newPresent = document.getElementById('editPresent').value === 'true';
   const newName = document.getElementById('editName').value.trim();
   const newLc = document.getElementById('editLcGroup').value.trim();
+  const newMode = document.getElementById('editMode').value;
 
   if(!newDate){ alert('Please set a date.'); return; }
 
@@ -691,6 +730,7 @@ async function saveEditRow(){
     present: newPresent,
     event_name: newName || null,
     event_lc_group: newLc || null,
+    attendance_mode: newMode,
     source: 'pastor_admin'
   };
 
@@ -746,6 +786,12 @@ async function saveEditRow(){
     <select id="editPresent" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:12px;font-size:14px;">
       <option value="true">✓ Present</option>
       <option value="false">✗ Absent</option>
+    </select>
+
+    <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">Attendance Mode</label>
+    <select id="editMode" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:12px;font-size:14px;" title="Face-to-face vs online — for Sunday Service, Prayer (Wednesday), LC Meeting, etc.">
+      <option value="in_person">🏛️ Face-to-face</option>
+      <option value="online">🌐 Online</option>
     </select>
 
     <label style="display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:4px;">Event Name <span style="font-weight:400;color:#999;">(optional)</span></label>
