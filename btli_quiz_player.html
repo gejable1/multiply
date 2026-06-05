@@ -404,6 +404,20 @@ function _optText(o, lang){
   var tl = (o.label_tl != null ? o.label_tl : (o.tl != null ? o.tl : ''));
   return lang === 'tl' ? (tl || en) : en;
 }
+// Tolerant QUESTION-STEM accessor (mirrors _optText, Inv #125). Canonical is
+// question_en/question_tl; also read drifted stem_en/stem_tl and legacy
+// en/question so a drifted stem never renders blank (matches usbong fork).
+function _qText(q, lang){
+  if (!q) return '';
+  var en = (q.question_en != null ? q.question_en
+          : (q.stem_en != null ? q.stem_en
+          : (q.en != null ? q.en
+          : (q.question != null ? q.question : ''))));
+  var tl = (q.question_tl != null ? q.question_tl
+          : (q.stem_tl != null ? q.stem_tl
+          : (q.tl != null ? q.tl : '')));
+  return lang === 'tl' ? (tl || en) : en;
+}
 let ELIGIBILITY = null;    // { eligible, reason, enrolled, dropIn, cohortIds, programNames }
                            //   Populated by loadQuiz() via MultiplyShared.btli.eligibilityFor.
 
@@ -630,7 +644,7 @@ function renderQuestion(){
 
   const card = document.getElementById('qCard');
   const typeLabel = q.type === 'mc' ? 'Multiple Choice' : 'True or False';
-  const qText = LANG === 'tl' ? (q.question_tl || q.question_en) : q.question_en;
+  const qText = _qText(q, LANG);
 
   let optionsHTML = '';
   if (q.type === 'mc') {
@@ -902,7 +916,7 @@ function renderReview(){
   list.innerHTML = '';
   QUESTIONS.forEach((q, i) => {
     const a = ANSWERS[i];
-    const qText = LANG === 'tl' ? (q.question_tl || q.question_en) : q.question_en;
+    const qText = _qText(q, LANG);
     const correct = a && a.is_correct;
     let correctText = '';
     if (q.type === 'mc') {
