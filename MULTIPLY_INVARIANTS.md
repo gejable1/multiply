@@ -1932,9 +1932,47 @@ The repository root carries a `.gitattributes` that pins line endings: `* text=a
 
 ---
 
+### **152. Self-attest disable must be present-aware (a leader ABSENCE never blocks self-correction)**
+
+The member "I'M HERE AT SERVICE" pill (`member_tool.html`) may show the non-tappable "✓ by leader" state ONLY when a leader-logged row for this week's occurrence is `present=true`. A leader-marked **ABSENCE** (`present=false`) must NEVER disable the pill — online members are routinely marked absent on-site **before** they self-report, and blocking them would silently lose real attendance. When a leader-absent row exists, the pill stays **ENABLED** with an honest "marked absent — tap if you were here" / "naka-absent — i-tap kung dumalo" hint (no false ✓). Tapping **corrects** the row: flip to `present=true, source='self_attest', logged_by=member`, updated by `id` (safe — `UNIQUE(member_id,event_type,event_date)` = `attendance_member_id_event_type_event_date_key`). The correction surfaces in the leader's **Pending Confirmations** (✓ Confirm / ✕ Dispute). Self-attest `present=true` **counts immediately** in attendance stats — confirmation is a trust overlay, NOT a counting gate (reports do not filter on `confirmed_by`). **Established June 5, 2026 (Session 29).**
+
+---
+
+### **153. Migrations are versioned, additive + idempotent, human-gated, and ship with a rollback**
+
+Schema changes live as numbered files in **`migrations/`** (e.g. `001_add_tenancy.sql`). Every migration is **ADDITIVE + IDEMPOTENT** (`IF NOT EXISTS` / `ON CONFLICT` / `WHERE … IS NULL`) and **human-gated**: the **Pastor runs it in the Supabase SQL editor** — Claude Code holds **no service-role key** and never runs migrations (extends #5/#10). Every migration ships with a matching **`NNN_rollback.sql`** (derived from the forward migration, idempotent, NOT run unless undoing). **Established June 5, 2026 (Session 29).**
+
+---
+
+### **154. `church_id` is NULLABLE in Phase 1 — NOT NULL is deferred**
+
+The tenancy `church_id` column added in `001_add_tenancy.sql` is **nullable** with an FK → `churches(id)`. NOT NULL is **deliberately deferred** to a post-Phase-2 tightening migration, applied ONLY once the app sets `church_id` on **every** insert. Adding NOT NULL before then would break live writes (which don't yet populate it). **Established June 5, 2026 (Session 29).**
+
+---
+
+### **155. A post-backfill NULL trickle on high-write tables is expected, not a failure**
+
+After a one-time backfill, rows inserted **after** the backfill ran carry `church_id=NULL` until the app populates it on insert (Phase 2). On high-traffic tables this shows as a small `null_ct` (S29: announcement_acks 10, attendance 10, leader_sessions 9, devotional_reflections 7, …) — **expected and harmless**, NOT a backfill failure. A **true** failure looks different: a whole table with `set_ct=0` (nothing backfilled at all). Re-running the idempotent backfill (`WHERE church_id IS NULL`) mops up the trickle if ever needed. **Established June 5, 2026 (Session 29).**
+
+---
+
+### **156. Tenancy table classification (which tables carry `church_id`)**
+
+**41 tables carry `church_id`:** **40 PER-CHURCH** (backfilled to the church) + **`devotionals`** (HYBRID — `church_id` nullable, **NULL = shared/global** content, not backfilled). **9 tables are EXCLUDED:** 8 GLOBAL catalog — `pipeline_lessons`, `library_resources`, `library_chapters`, `library_quizzes`, `btli_quizzes`, `usbong_quizzes`, `cohort_programs`, `svi_metrics` — plus `_backup_members_diag_zone_2026_05_06` (backup/temp, drop candidate). Source of truth: `TENANCY_AUDIT.md` + `PHASE1_PREP.md` (live-DB confirmed). **Established June 5, 2026 (Session 29).**
+
+---
+
+### **157. Supabase Free tier has NO backups — a rollback script is mandatory before any mutating migration**
+
+The project is on Supabase **Free tier → no automatic database backups**. Therefore every mutating migration MUST ship its **`_rollback.sql`** (#153) BEFORE it is run, and that rollback is the **only** safety net if a migration goes wrong — there is no "restore from backup" fallback. **Established June 5, 2026 (Session 29).**
+
+---
+
 **Established June 3, 2026 (Session 28). Invariants #145–#150 added — count now 150.**
 
 **Established June 4, 2026 (operational — Claude Code migration). Invariant #151 added — count now 151.**
+
+**Established June 5, 2026 (Session 29). Invariants #152–#157 added — count now 157.**
 
 ---
 

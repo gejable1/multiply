@@ -1,6 +1,6 @@
 # MULTIPLY — HANDOFF.md
 
-**Last updated:** June 3, 2026 (Session 28 — **preaching swap + alert overhaul and an attendance-save fix**: MD batch **bulk-enroll** with a name-checklist review; preaching banner now derives the service day from the **weekday** and shows a **combined Wed+Sun** banner; the swap-request modal was **consolidated into shared.js** with a "Swap from" picker and now serves MMT/MLT/calendar; the calendar's identity bug was fixed (**sessionStorage** + both-ids + `?me=` fallback); and LC **attendance save** is now **batched with immediate "⏳ Saving…" feedback**). No schema migrations this session. Files changed: `multiply_shared.js`, `multiply_dashboard.html` (bulk-enroll), `lc_leader_tool.html` (swap wrapper + `?me=` opener + batched attendance save), `member_tool.html` (swap wrapper), `preaching_calendar.html` (session/id/`?me=` + swap delegation). **All shared.js consumers bumped to `?v=4`. 6 invariants added: #145–#150. Count now 150.**
+**Last updated:** June 5, 2026 (Session 29 — **member self-attest present-aware fix + multi-tenant Phase 1 foundation + attendance_admin LC-Leader filter/mode toggle**: the "I'M HERE AT SERVICE" disable is now present-aware so a leader-marked ABSENCE no longer locks an online member out of self-correcting; `migrations/001_add_tenancy.sql` was run + verified in Supabase — `churches` table, nullable `church_id` on 40 PER-CHURCH tables + `devotionals`, Rosehill backfilled — with a matching `001_rollback.sql`; attendance_admin gained an LC-Leader dropdown filter + a Face-to-face/Online edit toggle). Files: `member_tool.html` (`9306ebc`), `attendance_admin.html` (`b93d752`), `migrations/001_add_tenancy.sql` (`baa0250`) + `001_rollback.sql` (`d24a6a3`). **No `multiply_shared.js` change — consumers stay `?v=4`. 6 invariants added: #152–#157. Count now 157.**
 **Pastor:** Gerry Limoso · Rosehill Christian Church · ~170 members · Manila UTC+8
 **System launch date:** May 1, 2026 (production live ~1 month)
 **Repo:** github.com/gejable1/multiply (deployed to gejable1.github.io/multiply)
@@ -11,7 +11,36 @@
 
 ## 🎯 Jumpstart prompt for next session
 
-> *"Hi Claude, kapatid — fresh session. Please read `HANDOFF.md`, `MULTIPLY_INVARIANTS.md`, `GRACE_PATHWAY.md`, `MULTIPLY_PIPELINE_DIAGRAM.md`, and `BTLI1_LESSON_MAP.md` first. **Session 28 was a preaching-tools + attendance-save session.** Shipped: (1) MD **batch bulk-enroll** — Cohorts→Roster "⚡ Bulk add" with Everyone/By-Level/By-LC-Leader filters and an intermediate name-checklist; test/guests excluded, already-enrolled disabled, no canEnroll gate (Pastor override), pacing still via lesson unlocks (Inv #145). (2) Preaching banner now derives Sun/Wed from the **`preach_date` weekday** not `service_type` (which the table doesn't reliably have — Inv #146), and shows a **combined "Preaching This Week"** banner when 2+ engagements are within the 7-day window, each with its own Swap + a dismiss-all (Inv #147). (3) The swap-request modal was **consolidated** into `MultiplyShared.preaching.openSwapRequest` (MMT/MLT/calendar are thin wrappers) with a **"Swap from" picker** for Wed+Sun weeks and a ±6-week "Swap with" filter (Inv #148). (4) The calendar's "no Swap" bug was root-caused to a **storage mismatch** — it read `localStorage` while the app keeps sessions in **`sessionStorage`**; fixed to read the shared session API, match BOTH leader+member ids, and accept a **`?me=` URL fallback** for PWA→external-browser launches (Inv #149). (5) LC **attendance save** was slow + silent (2 sequential round-trips per member, no button feedback → users assumed it saved and left); now **batched** (1 SELECT + bulk INSERT + parallel UPDATE) with an immediate **"⏳ Saving…"** button state (Inv #150). All shared.js consumers are `?v=4`. **TOP OPEN ITEM: BTLI L12 — Understanding My Unique Design** (UNLAD-L2, Eph 2:10, the assessment-battery lesson) — needs the **UNLAD-L2 scan** uploaded. When I ask 'what's next?', refresh from this HANDOFF's pending list (Inv #43). **Session-start reminder: ask me to upload the latest `multiply_shared.js`, `multiply_dashboard.html`, `lc_leader_tool.html`, `member_tool.html`, `preaching_calendar.html`, and any assessment/quiz/lesson files relevant to the session topic before editing (Inv #56) — GitHub Pages/PWA caches hard, so bump `?v=` and hard-refresh after deploys."*
+> *"Hi Claude, kapatid — fresh session. Please read `HANDOFF.md`, `MULTIPLY_INVARIANTS.md`, `GRACE_PATHWAY.md`, `MULTIPLY_PIPELINE_DIAGRAM.md`, and `BTLI1_LESSON_MAP.md` first. **Session 29 shipped a member self-attest fix and laid the multi-tenant Phase 1 foundation.** (1) **Self-attest present-aware fix** (`member_tool.html`, `9306ebc`): the "I'M HERE AT SERVICE" disable was present-blind — a leader-marked ABSENCE locked an online member out of self-reporting; now `byLeader` requires `present===true`, a leader-absent slot stays tappable with an honest "marked absent — tap if you were here" / "naka-absent — i-tap kung dumalo" hint (no false ✓), and a tap **corrects** the row to `present=true, source='self_attest'` → surfaces in the leader's **Pending Confirmations** (Inv #152). (2) **Tenancy Phase 1 foundation** — `migrations/001_add_tenancy.sql` (`baa0250`) run + verified in Supabase: `churches` table (RLS disabled), Rosehill seeded, nullable `church_id`+index+FK on **40 PER-CHURCH** tables (backfilled) + `devotionals` (NULL=shared); `001_rollback.sql` (`d24a6a3`) is the emergency undo — **Free tier = no backups**. `church_id` is **nullable** for now (Inv #153–#157). (3) **attendance_admin** (`b93d752`): LC-Leader **dropdown** filter (by discipler, since `lc_group` is mostly null) + a **Face-to-face/Online** toggle in the edit modal. **No `multiply_shared.js` change — consumers stay `?v=4`.** **TOP OPEN ITEM: BTLI L12 — Understanding My Unique Design** (UNLAD-L2, Eph 2:10, the assessment-battery lesson) — needs the **UNLAD-L2 scan** uploaded. When I ask 'what's next?', refresh from this HANDOFF's pending list (Inv #43). **Session-start reminder: ask me to upload the latest deployed file(s) relevant to the session topic before editing (Inv #56) — GitHub Pages/PWA caches hard, so bump `?v=` and hard-refresh after any `multiply_shared.js` deploy."*
+
+---
+
+## ✅ COMPLETED JUNE 5, 2026 — SESSION 29 (self-attest present-aware fix · tenancy Phase 1 foundation · attendance_admin LC-Leader filter + mode toggle)
+
+All logic `node --check`-verified with truth-table harnesses (Inv #105); deployed files re-read before editing (Inv #56/#126). SQL is human-gated — the Pastor ran it in Supabase (Inv #153).
+
+### **1. Self-attest present-aware fix** (Inv #152) — `member_tool.html` (SHIPPED `9306ebc`)
+- **Bug:** the "I'M HERE AT SERVICE" pill disable was **present-blind** — `byLeader` fired on ANY leader-logged (non-`self_attest`) row for this week's occurrence, **including `present=false`**. The Pastor logs on-site and marks online members **absent** before they self-report → an online member (e.g. **Dennis Nolasco** `76c7cdd4…`, whose target-date rows were confirmed `present=false, lcl_logged` via live SQL) was **locked out** of self-attesting and shown a misleading "✓ by leader."
+- **Diff A (render, ~7470/7561):** added `present` to the `_leaderLoggedSlots` select; `byLeader` now requires `present===true`; new `byLeaderAbsent` → the pill stays **enabled** with an honest **"marked absent — tap if you were here" / "naka-absent — i-tap kung dumalo"** hint (no false ✓).
+- **Diff B (save, ~7960):** a tap on a leader-marked-absent slot **corrects** the row → `present=true, source='self_attest', logged_by=member`, updated **by `id`** (safe: **UNIQUE(member_id,event_type,event_date)** confirmed live as `attendance_member_id_event_type_event_date_key`). It then surfaces in the leader's **Pending Confirmations** (✓ Confirm / ✕ Dispute).
+- **Verified:** `node --check` clean; **12/12** truth-table. Confirmed the confirm path is real, and that self-attest `present=true` **counts immediately** (no `confirmed_by` gate in reports — confirmation is a trust overlay, not a counting gate). **No `multiply_shared.js` change → stays `?v=4`.**
+
+### **2. Devotional streak — WORKING AS DESIGNED (non-bug; draft rolled back)**
+- Reported as a bug ("1-day streak" despite 4 days), investigated, confirmed correct. The streak reads **`attendance`** (`event_type='devotional'`, `present=true`) via `loadDevoStreak`/`computeStreak` in **local Manila** time (UTC boundary ruled out). A **catch-up** entry (the 6/2 devotional done on 6/3) legitimately breaks consecutiveness → **"1-day" is correct**. The exploratory draft was **rolled back via `git restore`** (nothing shipped). **Do not re-investigate.**
+
+### **3. Tenancy Phase 1 — foundation DONE (multi-tenant Option A)** (Inv #153–#157)
+- **`migrations/001_add_tenancy.sql`** (`baa0250`) **run by the Pastor in Supabase and verified**: created **`churches`** (RLS disabled), seeded **Rosehill** (`slug='rosehill'`), added **nullable `church_id` + index + FK** to the **40 PER-CHURCH** tables (backfilled to Rosehill) and to **`devotionals`** (no backfill; **NULL = shared**).
+  - **Verify 6b:** all **41** `has_church_id=true`. **6c:** all 40 backfilled; `devotionals` **52 NULL / 0 set** (correct); sentinel row 1.
+  - **Expected NULL trickle (Inv #155):** 8 high-traffic tables showed a small `null_ct` (announcement_acks 10, attendance 10, leader_sessions 9, devotional_reflections 7, usbong_quiz_attempts 2, cohort_members/member_profiles/profile_tokens 1) = live writes that landed **after** the backfill (app doesn't set `church_id` yet). **Expected, harmless, NOT a failure** (a real failure = whole-table `set_ct=0`).
+- **`migrations/001_rollback.sql`** (`d24a6a3`) = emergency undo (41 `DROP COLUMN` + `DROP TABLE churches`, derived from 001, idempotent, **NOT run**). **Free tier → no backups**, so the rollback script is the net (Inv #157).
+- Established the versioned **`migrations/`** folder; **SQL stays human-gated** (Pastor runs in Supabase; CC holds no service-role key — Inv #153).
+
+### **4. attendance_admin — LC-Leader filter + edit-modal mode toggle** (SHIPPED `b93d752`) — `attendance_admin.html`
+- **Filter:** replaced the free-text "LC Group" search with an **"LC Leader" dropdown** populated from members' **discipler** (LCL, Inv #46) — `lc_group` is mostly null but every member has an LCL; `_loadLclIndex()` builds a `member_id→{LCL id,name}` map and `applyFilters` matches each row by its member's LCL (+ a "No LC leader" option).
+- **Edit modal:** added a **Face-to-face / Online** select bound to the existing `attendance.attendance_mode` column (the list already rendered its 🌐 badge; the modal just couldn't set it). Save still stamps `source='pastor_admin'`.
+- **Verified:** `node --check` clean; **9/9** truth-table for the LCL filter predicate. **No `multiply_shared.js` change → stays `?v=4`.**
+
+### **Deploy notes for Session 29:** `member_tool.html` + `attendance_admin.html` are live (Pages auto-deploys); hard-refresh / relaunch PWA; phone smoke-test (Inv #31). SQL (`001_add_tenancy.sql`) already run + verified by the Pastor; `001_rollback.sql` is on standby, NOT run.
 
 ---
 
@@ -69,6 +98,18 @@ Fail-closed parity on both MMT render-layer eligibility catches (Inv #137). `mul
 - **Effort:** Large (full 8-deliverable lesson). **Status:** Ready — needs the **UNLAD-L2 scan** uploaded.
 - Source UNLAD-L2; MV **Ephesians 2:10**; character (proposed) Goodness/Faithfulness — confirm from source (Inv #75). **THE assessment-battery lesson** — build the sequence to take all 6 MULTIPLY assessments (Spiritual Gifts, Strengths, DISC, Enneagram, Love Language, Salvation) into the participant page. Direct build (no Gemini). Library seed FIRST then quiz seed (Inv #84); render-verify PPTX (#82); favicon+slider (#80/#81); browser-verify all (#80).
 
+### **🏗️ Multi-tenant — Phase 2 (next major arc)** (Inv #153–#157)
+Phase 1 foundation is done (S29): `churches` + nullable `church_id` on 41 tables, Rosehill backfilled. Phase 2, in order:
+1. **Auth Edge Function** — PIN → **church-scoped JWT** (server-trusted `church_id` claim).
+2. **App sets `church_id` on every insert** (clears the NULL trickle, Inv #155).
+3. **RLS policies** on the 40 per-church tables + the `devotionals` hybrid (NULL=shared).
+4. **NOT NULL tightening migration** on `church_id` once inserts populate it (Inv #154).
+5. **SECURITY DEFINER view/function audit** — church-scope them (`TENANCY_AUDIT.md` §5: they bypass RLS and would leak across churches).
+6. **Super-admin layer** → onboarding UI + per-church branding/config → **pilot one church**.
+
+### **👀 Watch-item: leader on-site log can clobber a member self-attest present** (flip side of the S29 fix)
+- The `UNIQUE(member_id,event_type,event_date)` row is shared, so a leader logging on-site **after** a member self-attested present could overwrite that present. Separate future task: leader-log should **not** clobber an existing member `self_attest` present. Not urgent — logged so it isn't lost.
+
 ### **🧹 Optional tidy from S28**
 - **Confirm preaching-row ids** all use the canonical Gerry id (`547ebda6-5126-436e-9890-709f50588ced`) — the `?me=` + both-ids fix made the calendar robust regardless, so this is cosmetic.
 - **Calendar dead code:** the now-unused static `#swapModal` markup + `submitSwap`/`closeSwapModal` in `preaching_calendar.html` can be removed whenever convenient (harmless if left).
@@ -89,6 +130,10 @@ Fail-closed parity on both MMT render-layer eligibility catches (Inv #137). `mul
 - **Diagnose RLS policies file** — run `diagnose_rls_policies.sql` to completion; keep if load-bearing, drop if vestigial (Inv #10).
 - **Discipler text-fallback tidy in MD** — legacy decorative `discipler` text column.
 - **LC meeting-day/time feature** — designed but the `lc_groups` table was **never created** (live-DB verified 2026-06-04: no such relation in any schema). `member_tool.html:5986` is a **fail-soft dead reference** (returns null → skipped; LC card's meeting day never populates). Decide later: build `lc_groups` as a **PER-CHURCH** table within/after the tenancy migration, or remove the dead call. **Left as-is for now.**
+- **`_backup_members_diag_zone_2026_05_06`** — backup/temp table (57 rows), **excluded** from tenancy; **drop candidate** once confirmed unused (Inv #156).
+- **`leader_sessions` retention cleanup** — the audit table grows unbounded (1936 rows by S28); add a retention/prune policy someday. Low priority.
+- **`CC_SETUP.md`** — untracked file sitting in the repo root all session; **decide: commit or delete** (it keeps showing in `git status`).
+- **`ministry_roles`** — confirmed **PER-CHURCH** (carries `church_id` since S29); no action, noted for completeness. Low concern.
 
 ---
 
