@@ -1756,7 +1756,7 @@ When revising any assessment, strip **all** church-specific references (e.g. "Ro
 
 ### **125. Canonical quiz data shape: `question_en`/`question_tl` + `options:[{label_en,label_tl,correct}]`; consumers read `label_en` with an `en` fallback; every seed ends with a NOT-NULL verify-SELECT**
 
-Both `btli_quizzes` and `usbong_quizzes` store all questions + options in a single `questions` jsonb. The **one canonical shape**: each question has `question_en` / `question_tl`; MC options are `{correct:bool, label_en, label_tl}`; TF carries its answer at the **question level** (`correct:bool`). Readers (the editor + both players) must use a **tolerant accessor** (`opt.label_en ?? opt.en`) because legacy rows drifted to bare `en`/`tl` — the Session-24 "blank options" bug was exactly this (data stored `label_en`, code read `.en`). Every quiz **seed SQL must end with a verify-SELECT asserting `question_en IS NOT NULL`** (and option text non-empty): the L9/L10 rebuild caught seeds that were structurally valid but had null `question_en` under a *rogue* schema. **Established May 30, 2026 (Session 24).**
+Both `btli_quizzes` and `usbong_quizzes` store all questions + options in a single `questions` jsonb. The **one canonical shape**: each question has `question_en` / `question_tl`; MC options are `{correct:bool, label_en, label_tl}`; TF carries its answer at the **question level** (`correct:bool`). Readers (the editor + both players) must use a **tolerant accessor** (`opt.label_en ?? opt.en`) because legacy rows drifted to bare `en`/`tl` — the Session-24 "blank options" bug was exactly this (data stored `label_en`, code read `.en`). Every quiz **seed SQL must end with a verify-SELECT asserting `question_en IS NOT NULL`** (and option text non-empty): the L9/L10 rebuild caught seeds that were structurally valid but had null `question_en` under a *rogue* schema. **Established May 30, 2026 (Session 24).** **Addendum (Session 30 — see #158):** the same drift later hit the question **STEM** (`stem_en`/`stem_tl` on Usbong 1 L6–10) — stems get the tolerant-reader (`_qText`) treatment too, and drifted stem data is normalized via `migrations/002`.
 
 ---
 
@@ -1968,11 +1968,19 @@ The project is on Supabase **Free tier → no automatic database backups**. Ther
 
 ---
 
+### **158. Quiz STEMS drift like options did (#125) — players read via tolerant `_qText`; drifted DATA must be normalized**
+
+Companion to #125 (the tolerant OPTION reader `_optText`). The question STEM drifts the same way: canonical is `question_en`/`question_tl`, but live **Usbong 1 lessons 6–10** stored it under **`stem_en`/`stem_tl`**, so any reader using raw `q.question_en` rendered a **BLANK stem with the choices intact** (`escapeHtml(null)`→`''`). (a) **Both quiz players must read the stem via a tolerant `_qText(q,lang)`** = `question_en ?? stem_en ?? en ?? question` (+ `tl` variants), at BOTH the render and answer-review sites in `usbong_quiz_player.html` and `btli_quiz_player.html`, mirroring `_optText`. Never read a raw `q.question_en`. (b) **`lesson_quiz_editor.html` reads canonical `question_en` only**, so drifted rows stay blank there until the DATA is normalized — therefore stem drift MUST also be fixed at the source with a migration (S30 `migrations/002_normalize_usbong_stems.sql`: `stem_en→question_en` for Usbong 1 L6–10, idempotent + scoped, ending with the #125 verify-SELECT; `002_rollback.sql` is the undo). Tolerant readers + normalized data = belt and suspenders. **Established June 5, 2026 (Session 30).**
+
+---
+
 **Established June 3, 2026 (Session 28). Invariants #145–#150 added — count now 150.**
 
 **Established June 4, 2026 (operational — Claude Code migration). Invariant #151 added — count now 151.**
 
 **Established June 5, 2026 (Session 29). Invariants #152–#157 added — count now 157.**
+
+**Established June 5, 2026 (Session 30). Invariant #158 added — count now 158.**
 
 ---
 
