@@ -8377,7 +8377,40 @@ function _openLessonAttachment(btn){
   const url = btn.getAttribute('data-att-url');
   const label = btn.getAttribute('data-att-label') || 'Attachment';
   if (!url) { toast('No URL set for this attachment','error'); return; }
+  // Office/binary files (.pptx, .docx, …) can't render in an iframe — they
+  // showed a blank in-app viewer whose "↗ New tab" link did the real download.
+  // Download them directly on the FIRST click instead. HTML/PDF still preview
+  // in the in-app viewer.
+  if (_isDownloadAttachment(url)) { _downloadAttachment(url, label); return; }
   _openLessonViewerModal(url, label);
+}
+
+// True for attachment types browsers cannot render inline (the iframe viewer
+// would just show blank). Tests the path only (ignores ?query / #hash).
+function _isDownloadAttachment(url){
+  const clean = String(url || '').split(/[?#]/)[0].toLowerCase();
+  return /\.(pptx?|docx?|xlsx?|odp|ods|odt|key|zip)$/.test(clean);
+}
+
+// Download on first click. Same-origin (lesson decks live on GitHub Pages):
+// forced via the download attribute — no new tab, no blank viewer. Cross-origin
+// (browsers ignore `download`): open it so the browser fetches the binary.
+function _downloadAttachment(url, label){
+  let sameOrigin = false;
+  try { sameOrigin = (new URL(url, location.href)).origin === location.origin; } catch(e) {}
+  if (sameOrigin) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (url.split(/[?#]/)[0].split('/').pop()) ||
+                 (String(label).replace(/[^\w.-]+/g, '_') + '.pptx');
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } else {
+    window.open(url, '_blank', 'noopener');
+  }
+  try { toast('Downloading ' + (label || 'file') + '…', 'success'); } catch(e) {}
 }
 
 function _openLessonViewerModal(url, label){
