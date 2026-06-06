@@ -10017,18 +10017,50 @@ function _openBtliQuiz(course, lesson){
 // Quiz player opens in new tab via usbong_quiz_player.html.
 // ═══════════════════════════════════════════════════════════════
 
+// Is this member STAFF (teacher / co-teacher / apprentice) in a LIVE Usbong
+// batch? Mirrors multiply_shared.js _usbongFetchEnrollments' chain: an active
+// cohort_members staff row → a live cohort (active|forming) → an active program
+// that carries a usbong_course_code. Used so an Usbong-batch teacher — who is
+// L2+, and would otherwise be hidden by the L0-only quiz gate — still sees the
+// Pre-Pipeline quiz section, in parity with the lessons (which already show for
+// staff regardless of level). Fails CLOSED (returns false) on any error.
+async function _isUsbongStaff(memberId){
+  if (!memberId) return false;
+  try {
+    const { data: cms, error: e1 } = await db.from('cohort_members')
+      .select('cohort_id, role').eq('member_id', memberId).eq('status', 'active')
+      .in('role', ['teacher', 'co-teacher', 'apprentice']);
+    if (e1) throw e1;
+    const cohortIds = Array.from(new Set((cms || []).map(c => c.cohort_id).filter(Boolean)));
+    if (!cohortIds.length) return false;
+    const { data: cos, error: e2 } = await db.from('cohorts')
+      .select('id, program_id, status').in('id', cohortIds).in('status', ['active', 'forming']);
+    if (e2) throw e2;
+    const programIds = Array.from(new Set((cos || []).map(c => c.program_id).filter(Boolean)));
+    if (!programIds.length) return false;
+    const { data: progs, error: e3 } = await db.from('cohort_programs')
+      .select('id').in('id', programIds).eq('is_active', true).not('usbong_course_code', 'is', null);
+    if (e3) throw e3;
+    return !!(progs && progs.length);
+  } catch (e) {
+    console.warn('[usbong] staff check failed (non-fatal, failing closed):', e);
+    return false;
+  }
+}
+
 async function renderUsbongQuizzes(){
   const wrap = document.getElementById('usbongQuizzesSection');
   if (!wrap) return;
   if (!MEMBER || !MEMBER.memberId) return;
 
-  // ───── L0-only gate (Session 5 decision) ─────
-  // If member is not Level 0, hide the section entirely. Use a fresh
-  // memberRow read since this is the canonical level field per the
-  // pattern at line 2812 etc.
+  // ───── L0-or-Usbong-staff gate ─────
+  // Pre-Pipeline quizzes are normally an L0-only surface (Session 5). But a
+  // teacher/co-teacher/apprentice discipling a live Usbong batch is L2+ and must
+  // still see the batch's quizzes — parity with the lessons, which already show
+  // for staff regardless of level (S30 fix). So: show if L0 OR Usbong staff.
   const lvl = (memberRow && memberRow.pipeline_level) || 0;
-  if (lvl !== 0) {
-    wrap.innerHTML = '';   // clear in case the member was just demoted/promoted mid-session
+  if (lvl !== 0 && !(await _isUsbongStaff(MEMBER.memberId))) {
+    wrap.innerHTML = '';   // clear in case the member was promoted/demoted mid-session
     return;
   }
 
