@@ -1974,6 +1974,12 @@ Companion to #125 (the tolerant OPTION reader `_optText`). The question STEM dri
 
 ---
 
+### **159. Pre-Pipeline quiz visibility = L0 OR live-batch staff — never gate a staff surface on the staff member's own pipeline level**
+
+The MMT Usbong (Pre-Pipeline) quiz section (`renderUsbongQuizzes`) was hidden whenever the **member's own** `pipeline_level !== 0` (the Session-5 L0-only gate), and it **returned BEFORE** the eligibility check — so a teacher/co-teacher/apprentice discipling a live Usbong batch (who is L2+) saw the **lessons** (role/enrollment-based) but NOT the **quizzes**, even though `MultiplyShared.usbong.eligibilityFor` already grants them via the staff bypass (#84/#85, `multiply_shared.js:1888`). **Rule:** a quiz/lesson surface meant for STAFF must be gated by the member's **batch role**, never by their own pipeline level. The section now shows when `pipeline_level === 0` **OR** the member is **staff in a live Usbong batch** — `_isUsbongStaff` in `member_tool.html` mirrors `_usbongFetchEnrollments` (active staff `cohort_members` row → live cohort `active`/`forming` → active program with a `usbong_course_code`; fails closed). The shared eligibility gate was NOT the cause (live SQL confirmed the teacher's enrollment was correctly tagged); the section-display gate was. `lc_leader_tool.html` (MLT) has no member-facing quiz-taking section, so nothing to change there. **Established June 5, 2026 (Session 31).**
+
+---
+
 **Established June 3, 2026 (Session 28). Invariants #145–#150 added — count now 150.**
 
 **Established June 4, 2026 (operational — Claude Code migration). Invariant #151 added — count now 151.**
@@ -1981,6 +1987,8 @@ Companion to #125 (the tolerant OPTION reader `_optText`). The question STEM dri
 **Established June 5, 2026 (Session 29). Invariants #152–#157 added — count now 157.**
 
 **Established June 5, 2026 (Session 30). Invariant #158 added — count now 158.**
+
+**Established June 5, 2026 (Session 31). Invariant #159 added — count now 159.**
 
 ---
 
