@@ -1980,6 +1980,18 @@ The MMT Usbong (Pre-Pipeline) quiz section (`renderUsbongQuizzes`) was hidden wh
 
 ---
 
+### **160. Guests (`is_external_user`) are OPERATIONALLY visible — only statistical reports exclude them; never gate a relationship/operational view on `is_external_user`**
+
+`is_test_member` and `is_external_user` are NOT the same and must not be lumped together. **Test members** are fake fixtures → hidden from operational surfaces. **Guests** are *real people* (e.g. invited pastor-friends test-driving MMT/MLT/MD) who are kept off **Rosehill's statistics** so they don't contaminate counts — but otherwise get the **same UX as any member**, and their relationships are real. Therefore: **operational/relationship/assignment surfaces must show guests** (disciples tree, flock lists, member pickers, the guest's own MMT/MLT/MD experience). **Only statistical reports exclude guests** — and those already have their own strict rule (`is_test_member = false AND is_external_user = false`, Inv #6). The recurring bug is filtering an operational view on `(m.is_test_member || m.is_external_user)`: that wrongly hides guests. S32 fix — MD's DISCIPLES tab (`_disciplesDirect`, `_disciplesTree`, `_getUnassignedMembers`) now hide **test fixtures only**. (Open: the MD scope-count badges `updateScopeCounts`/`liveMembers()` still exclude guests as anti-inflation headline counts — a deliberate, flagged exception pending pastoral review.) **Established June 5, 2026 (Session 32).**
+
+---
+
+### **161. MLT lesson attachments: office/binary types download on first click; only HTML/PDF use the in-app viewer**
+
+`lc_leader_tool.html`'s "My Lessons" opened EVERY attachment in a full-screen iframe viewer. HTML/PDF render there, but a `.pptx` cannot → a blank page whose "↗ New tab" link did the real download (two steps). `_openLessonAttachment` now routes non-iframe-renderable types — `.pptx/.ppt/.docx/.xlsx/.odp/.ods/.odt/.key/.zip` (`_isDownloadAttachment`) — to a **first-click download**: same-origin (lesson decks live on GitHub Pages) via an `<a download>` (no tab), cross-origin via `window.open`. HTML/PDF still preview in the viewer. Lesson decks are committed to the repo (`lessons/**.pptx`), i.e. same-origin, so `download` is honored. **Established June 5, 2026 (Session 32).**
+
+---
+
 **Established June 3, 2026 (Session 28). Invariants #145–#150 added — count now 150.**
 
 **Established June 4, 2026 (operational — Claude Code migration). Invariant #151 added — count now 151.**
@@ -1989,6 +2001,8 @@ The MMT Usbong (Pre-Pipeline) quiz section (`renderUsbongQuizzes`) was hidden wh
 **Established June 5, 2026 (Session 30). Invariant #158 added — count now 158.**
 
 **Established June 5, 2026 (Session 31). Invariant #159 added — count now 159.**
+
+**Established June 5, 2026 (Session 32). Invariants #160–#161 added — count now 161.**
 
 ---
 
