@@ -1934,7 +1934,7 @@ The repository root carries a `.gitattributes` that pins line endings: `* text=a
 
 ### **152. Self-attest disable must be present-aware (a leader ABSENCE never blocks self-correction)**
 
-The member "I'M HERE AT SERVICE" pill (`member_tool.html`) may show the non-tappable "✓ by leader" state ONLY when a leader-logged row for this week's occurrence is `present=true`. A leader-marked **ABSENCE** (`present=false`) must NEVER disable the pill — online members are routinely marked absent on-site **before** they self-report, and blocking them would silently lose real attendance. When a leader-absent row exists, the pill stays **ENABLED** with an honest "marked absent — tap if you were here" / "naka-absent — i-tap kung dumalo" hint (no false ✓). Tapping **corrects** the row: flip to `present=true, source='self_attest', logged_by=member`, updated by `id` (safe — `UNIQUE(member_id,event_type,event_date)` = `attendance_member_id_event_type_event_date_key`). The correction surfaces in the leader's **Pending Confirmations** (✓ Confirm / ✕ Dispute). Self-attest `present=true` **counts immediately** in attendance stats — confirmation is a trust overlay, NOT a counting gate (reports do not filter on `confirmed_by`). **Established June 5, 2026 (Session 29).**
+The member "I'M HERE AT SERVICE" pill (`member_tool.html`) may show the non-tappable "✓ by leader" state ONLY when a leader-logged row for this week's occurrence is `present=true`. A leader-marked **ABSENCE** (`present=false`) must NEVER disable the pill — online members are routinely marked absent on-site **before** they self-report, and blocking them would silently lose real attendance. When a leader-absent row exists, the pill stays **ENABLED** with an honest "marked absent — tap if you were here" / "naka-absent — i-tap kung dumalo" hint (no false ✓). Tapping **corrects** the row: flip to `present=true, source='self_attest', logged_by=member`, updated by `id` (safe — `UNIQUE(member_id,event_type,event_date)` = `attendance_member_id_event_type_event_date_key`). The correction surfaces in the leader's **Pending Confirmations** (✓ Confirm / ✕ Dispute). Self-attest `present=true` **counts immediately** in attendance stats — confirmation is a trust overlay, NOT a counting gate (reports do not filter on `confirmed_by`). **Established June 5, 2026 (Session 29).** **Addendum (Session 33 — see #163):** correcting an **OLD** leader-marked absence is allowed at **any age** (not just the latest occurrence); only brand-new self-reports keep the 7-day window.
 
 ---
 
@@ -2000,9 +2000,23 @@ The MMT Usbong (Pre-Pipeline) quiz section (`renderUsbongQuizzes`) was hidden wh
 
 **Established June 5, 2026 (Session 30). Invariant #158 added — count now 158.**
 
+### **162. A member CREATED by a guest/test user inherits that flag (both insert paths)**
+
+Companion to #160. When a guest (`is_external_user`) or test (`is_test_member`) user **creates** a member, the new record **inherits the creator's flag**, so guest/test-added members never leak into Rosehill's stats and Pastor never has to deduct by hand. Both member-insert paths enforce it: **MD Add Member** (`multiply_dashboard.html`) — NEW members only (`eid` falsy): `effIsExternal/effIsTest = explicitCheckbox OR (isNew && creatorFlag)`, creator read from the global `members` row for `LEADER.leaderId`; a guest therefore **cannot create a Rosehill member even by unchecking the box** (intended containment); edits keep the form/lock logic. **MLT Add Member** (`lc_leader_tool.html` `saveNewMember`) — `currentLeader` is a session shim without these flags, so the creator's row is read from the DB; the payload carries `is_external_user`/`is_test_member`; fail-soft to non-guest/non-test on lookup error. **Forward-only:** members created before this rule are not retroactively flagged (a one-time backfill handles those). **Phase 2:** fold both paths into one shared `newMemberDefaults(creator)` that also stamps `church_id` (Inv #153–#157). **Established June 5, 2026 (Session 33).**
+
+---
+
+### **163. Self-attest: correcting a leader-marked ABSENCE is allowed at ANY age; only brand-new self-reports are window-gated**
+
+Extends #152. The `SELF_ATTEST_WINDOW_DAYS` (=7) guard in `member_tool.html` must NOT block a member from flipping an **old** leader-marked absence — that's a correction, and the leader still confirms it via Pending Confirmations. So `_doSaveAttest` runs the **duplicate check FIRST**: an existing leader-marked-absent row → flip to present **at any age** (returns before the window); the window applies **ONLY to a brand-new claim** (no existing row), just before insert, so members can't fabricate ancient attendance. The picker (`openAttestDatePicker`) gained a native `<input type="date">` (max=today) so any past Sunday/Wednesday (or other plain event) is reachable, and recent-day quick-picks are no longer disabled past the window (the save logic decides correction-vs-claim). One code path gates all plain events. **Established June 5, 2026 (Session 33).**
+
+---
+
 **Established June 5, 2026 (Session 31). Invariant #159 added — count now 159.**
 
 **Established June 5, 2026 (Session 32). Invariants #160–#161 added — count now 161.**
+
+**Established June 5, 2026 (Session 33). Invariants #162–#163 added — count now 163.**
 
 ---
 
