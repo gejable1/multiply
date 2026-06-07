@@ -3272,6 +3272,18 @@ async function saveMember(){
   const isExternal = _canManage
     ? !!(document.getElementById('fIsExternal')?.checked)
     : _existingExt;
+  // ─── Guest/Test INHERITANCE on creation (mirror this rule in MLT saveNewMember) ───
+  // A member CREATED by a guest (is_external_user) or test (is_test_member) user
+  // inherits that flag, so guest/test-added members never leak into Rosehill's
+  // stats and Pastor never has to deduct by hand. NEW members only (eid falsy);
+  // edits keep the form/lock logic above. A guest therefore cannot create a
+  // Rosehill member even by unchecking the box — exactly the containment we want.
+  const _isNewMember = !eid;
+  const _creatorRow  = (typeof LEADER !== 'undefined' && LEADER) ? members.find(m => m.id === LEADER.leaderId) : null;
+  const _creatorExt  = !!(_creatorRow && _creatorRow.is_external_user);
+  const _creatorTest = !!(_creatorRow && _creatorRow.is_test_member);
+  const effIsTest     = isTest     || (_isNewMember && _creatorTest);
+  const effIsExternal = isExternal || (_isNewMember && _creatorExt);
   // ─── Enforce: test/external members default to Pastor's flock ───
   // Behavior (May 14, 2026): If Pastor explicitly picks a discipler from
   // the dropdown, honor that pick — including for test/external records.
@@ -3321,8 +3333,8 @@ async function saveMember(){
     is_facilitator:isFac,
     facilitator_role:isFac?document.getElementById('fFacRole').value:null,
     lc_group:effLcGroup,
-    is_test_member:isTest,
-    is_external_user:isExternal,
+    is_test_member:effIsTest,
+    is_external_user:effIsExternal,
   };
   // ─── DEFENSE IN DEPTH: Self-edit mode field protection ───
   // Even if the user disabled the locks via DevTools, force these

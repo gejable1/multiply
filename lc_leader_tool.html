@@ -2146,6 +2146,23 @@ async function saveNewMember(){
     levelInput = 1;
   }
 
+  // ─── Guest/Test INHERITANCE on creation (mirrors MD's Add Member) ───
+  // A member added by a guest (is_external_user) or test (is_test_member) leader
+  // inherits that flag, so guest/test-added members never contaminate Rosehill's
+  // stats. currentLeader is a session shim WITHOUT these flags, so read them from
+  // the creator's member row. On lookup failure, default to non-guest/non-test
+  // (no worse than the prior behavior).
+  let _creatorExt = false, _creatorTest = false;
+  try {
+    const _meId = (window.LEADER && window.LEADER.leaderId) || null;
+    if(_meId){
+      const { data: _meRow } = await db.from('members')
+        .select('is_external_user, is_test_member').eq('id', _meId).maybeSingle();
+      _creatorExt  = !!(_meRow && _meRow.is_external_user);
+      _creatorTest = !!(_meRow && _meRow.is_test_member);
+    }
+  } catch(e) { console.warn('[add-member] creator-flag lookup failed; defaulting to non-guest/non-test:', e); }
+
   const payload = {
     name,
     contact:        document.getElementById('amContact').value.trim()  || null,
@@ -2158,6 +2175,8 @@ async function saveNewMember(){
     pipeline_level: levelInput,
     discipler_id:   currentLeader?.id   || null,
     discipler_name: currentLeader?.name || null,
+    is_external_user: _creatorExt,
+    is_test_member:   _creatorTest,
     updated_at:     new Date().toISOString(),
   };
 
