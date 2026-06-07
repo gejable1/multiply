@@ -7889,18 +7889,17 @@ function openAttestDatePicker(eventTypeKey, typicalDay, defaultDate, forced){
         : `${MultiplyShared.escapeHTML(eventTypeKey)} wasn't on its usual day this week. When did you attend?`)
     : (lang === 'tl' ? 'Pumili ng petsa' : 'Pick a date');
 
+  // All recent-day buttons are now tappable (Option A): an old date is either a
+  // correction of a leader-marked absence (allowed any age) or a brand-new claim
+  // (window-checked at save). _doSaveAttest decides — no pre-disabling here.
   const dayBtns = days.map(d => {
-    const inWindow = d.ageDays <= SELF_ATTEST_WINDOW_DAYS;
     const star = d.isDefault ? '⭐ ' : '';
-    const disabled = !inWindow;
-    return `<button ${disabled ? 'disabled' : ''}
+    return `<button
       onclick="_doSaveAttest('${MultiplyShared.escapeHTML(eventTypeKey)}','${d.iso}')"
-      style="padding:.6rem .75rem;background:${disabled?'#f0e8d8':'var(--cream)'};
-             color:${disabled?'#aaa':'var(--ink)'};
-             border:1px solid var(--line);border-radius:12px;
-             cursor:${disabled?'not-allowed':'pointer'};font-size:12.5px;
+      style="padding:.6rem .75rem;background:var(--cream);color:var(--ink);
+             border:1px solid var(--line);border-radius:12px;cursor:pointer;font-size:12.5px;
              text-align:left;font-weight:${d.isDefault?'700':'500'};">
-      ${star}${d.label}${disabled ? ' <span style="font-size:10px;opacity:.7;">(past window)</span>' : ''}
+      ${star}${d.label}
     </button>`;
   }).join('');
 
@@ -7909,8 +7908,18 @@ function openAttestDatePicker(eventTypeKey, typicalDay, defaultDate, forced){
       <h3 style="margin:0;font-size:15px;line-height:1.3;">${headerTxt}</h3>
       <button onclick="document.getElementById('attestDatePickerModal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);flex-shrink:0;">×</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:.7rem;">
-      ⭐ = ${lang==='tl'?'default na araw':'usual day'} · ${lang==='tl'?'huling':'last'} ${SELF_ATTEST_WINDOW_DAYS} ${lang==='tl'?'araw lang':'days only'}
+    <div style="margin-bottom:.8rem;">
+      <label style="font-size:11.5px;color:var(--muted);font-weight:600;display:block;margin-bottom:.35rem;">${lang==='tl'?'📅 Pumili ng kahit anong nakaraang petsa:':'📅 Pick any past date:'}</label>
+      <input type="date" id="attestDateInput" max="${todayIso()}" value="${defaultDate}"
+        onchange="if(this.value){ _doSaveAttest('${MultiplyShared.escapeHTML(eventTypeKey)}', this.value); }"
+        style="width:100%;padding:.6rem;border:1px solid var(--line);border-radius:12px;font-size:13px;background:var(--cream);color:var(--ink);font-family:inherit;">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:.7rem;line-height:1.5;">
+      ⭐ = ${lang==='tl'?'default na araw':'usual day'}. ${lang==='tl'
+        ? `Para itama ang absent na minarka ng leader, OK ang kahit anong nakaraang petsa. Ang BAGONG self-report ay huling ${SELF_ATTEST_WINDOW_DAYS} araw lang.`
+        : `Correcting a leader-marked absence works for any past date; a brand-new self-report is limited to the last ${SELF_ATTEST_WINDOW_DAYS} days.`}
+    </div>
+    <div style="font-size:10.5px;color:var(--muted);margin-bottom:.4rem;">${lang==='tl'?'O i-tap ang nakaraang araw:':'Or tap a recent day:'}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;">${dayBtns}</div>
   `;
@@ -7937,14 +7946,10 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     if (m) m.style.display = 'none';
   });
 
-  // Window check (defense-in-depth — should never trip if UI was used correctly)
-  if (_attestDaysAgo(targetDate) > SELF_ATTEST_WINDOW_DAYS) {
-    showToast(lang === 'tl'
-      ? `Lumagpas na ng ${SELF_ATTEST_WINDOW_DAYS} araw — sabihan si ${_myDiscipler?.name || 'leader'} para mag-add manual.`
-      : `Past the ${SELF_ATTEST_WINDOW_DAYS}-day window — ask your leader to add this manually.`,
-      true);
-    return;
-  }
+  // NOTE (Option A · self-attest past-date): the window check moved BELOW the
+  // duplicate check. Correcting an existing leader-marked ABSENCE is allowed at
+  // ANY age (it returns from the dup branch); the SELF_ATTEST_WINDOW_DAYS guard
+  // now applies ONLY to brand-new claims (no existing row), just before insert.
 
   // Duplicate check — SOURCE-AGNOSTIC (Inv #92 companion, Session 20).
   // The UNIQUE key on attendance is (member_id,event_type,event_date) and IGNORES
@@ -8013,6 +8018,18 @@ async function _doSaveAttest(eventTypeKey, targetDate){
     showToast(lang === 'tl'
       ? `Hindi ma-verify ngayon — pakisubukan ulit saglit.`
       : `Couldn't verify just now — please try again in a moment.`, true);
+    return;
+  }
+
+  // ── Brand-new claim (no existing row) → apply the self-report window ──
+  // Option A: correcting an existing leader-marked absence is allowed at ANY age
+  // (handled above, returns); but a BRAND-NEW self-report stays limited to the
+  // last SELF_ATTEST_WINDOW_DAYS so members can't fabricate old attendance.
+  if (_attestDaysAgo(targetDate) > SELF_ATTEST_WINDOW_DAYS) {
+    showToast(lang === 'tl'
+      ? `Para sa BAGONG self-report, huling ${SELF_ATTEST_WINDOW_DAYS} araw lang. (Kung minarkahang absent ka ng leader nang araw na 'yon, awtomatikong naitatama 'yon kapag na-tap.) Sabihan si ${_myDiscipler?.name || 'leader'} para sa mas luma.`
+      : `Brand-new self-reports are limited to the last ${SELF_ATTEST_WINDOW_DAYS} days. (If a leader marked you absent that day, tapping it corrects that automatically.) Ask ${_myDiscipler?.name || 'your leader'} to add older dates.`,
+      true);
     return;
   }
 
