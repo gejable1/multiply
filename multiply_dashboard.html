@@ -2324,10 +2324,13 @@ function _shouldHideTest(){
 // is bound to the logged-in leader). Applies containment rule above.
 function _disciplesDirect(rootId){
   if(!rootId) return [];
+  // Hide TEST fixtures here, but NOT guests (is_external_user): guests are real
+  // people test-driving the app — their discipler relationships must stay visible
+  // in this operational view. Only statistical reports exclude guests (Inv #6).
   const hideTest = _shouldHideTest();
   return members.filter(m => {
     if(m.discipler_id !== rootId) return false;
-    if(hideTest && (m.is_test_member || m.is_external_user)) return false;
+    if(hideTest && m.is_test_member) return false;
     return true;
   });
 }
@@ -2340,7 +2343,7 @@ function _disciplesTree(rootId){
   const byDiscipler = new Map();
   members.forEach(m => {
     if(!m.discipler_id) return;
-    if(hideTest && (m.is_test_member || m.is_external_user)) return;
+    if(hideTest && m.is_test_member) return;   // test fixtures only — guests stay visible (operational view)
     if(!byDiscipler.has(m.discipler_id)) byDiscipler.set(m.discipler_id, []);
     byDiscipler.get(m.discipler_id).push(m);
   });
@@ -2511,7 +2514,7 @@ function _getUnassignedMembers(){
       // Has a name-only discipler (legacy data) — still considered "assigned"
       return false;
     }
-    if(hideTest && (m.is_test_member || m.is_external_user)) return false;
+    if(hideTest && m.is_test_member) return false;   // test fixtures only; guests are real & assignable (operational)
     return true;
   });
 }
