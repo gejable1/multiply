@@ -113,6 +113,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 </head>
 <body>
 
+<!-- Always-visible exit. The viewer opens in its own tab (callers use
+     window.open(_blank)); on tablet/PWA there's otherwise no way back, so users
+     got stuck. Self-closes the tab, with referrer/history/home fallbacks. -->
+<button id="viewerCloseBtn" onclick="viewerClose()" aria-label="Close" title="Close"
+  style="position:fixed;top:.6rem;right:.6rem;z-index:99999;background:rgba(20,16,14,.66);color:#fff;border:none;border-radius:999px;padding:.55rem 1rem;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.28);font-family:inherit;line-height:1;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);">
+  ✕ Close
+</button>
+
 <div id="loadingView" class="loading">
   <div class="spinner"></div>
   <div style="font-size:13px;color:var(--muted)">Loading profile results...</div>
@@ -153,6 +161,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 </div>
 
 <script>
+
+// Exit the viewer, returning the user to WHERE IT WAS FIRED (MD / MLT / MMT).
+// The viewer opens in its own tab (callers use window.open(_blank)), so closing
+// the tab drops the user back on the exact caller tab — same scroll/state, the
+// ideal "back." Fallbacks only run if the browser blocks close() (some PWAs):
+// navigate THIS tab to the firing page via the same-host referrer, then history,
+// then a safe home as a last resort that should rarely hit.
+function viewerClose(){
+  try { window.close(); } catch(e) {}
+  setTimeout(() => {
+    try {
+      if (document.referrer && new URL(document.referrer).host === location.host) {
+        location.href = document.referrer; return;   // back to the firing page
+      }
+    } catch(e) {}
+    if (history.length > 1) { history.back(); return; }
+    location.href = 'member_tool.html';
+  }, 200);
+}
 
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
