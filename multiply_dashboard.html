@@ -6827,20 +6827,20 @@ function _coRenderRoster(){
   const program = _cohortState.programs.find(p => p.id === c.program_id);
   const cms = (_cohortState.cohortMembers[cohortId] || []).slice();
 
-  // Sort: active first (by role: teacher, co-teacher, apprentice, participant, observer), then graduated, then withdrew
-  // (participant slotted between apprentice and observer May 17, 2026)
-  const statusOrder = { active: 0, graduated: 1, withdrew: 2 };
-  const roleOrder = { teacher: 0, 'co-teacher': 1, apprentice: 2, participant: 3, observer: 4 };
-  cms.sort((a,b) => {
-    const sd = (statusOrder[a.status]??99) - (statusOrder[b.status]??99);
-    if(sd !== 0) return sd;
-    return (roleOrder[a.role]??99) - (roleOrder[b.role]??99);
-  });
-
   const memberName = (cm) => {
     const mem = _cohortState.members.find(m => m.id === cm.member_id);
     return mem?.name || '(member not found)';
   };
+
+  // Sort: active first, then graduated, then withdrew (so departed members stay
+  // out of the way); ALPHABETICAL by member name within each status group
+  // (Pastor's request, June 2026 — replaces the prior role-based ordering).
+  const statusOrder = { active: 0, graduated: 1, withdrew: 2 };
+  cms.sort((a,b) => {
+    const sd = (statusOrder[a.status]??99) - (statusOrder[b.status]??99);
+    if(sd !== 0) return sd;
+    return memberName(a).localeCompare(memberName(b), undefined, { sensitivity:'base' });
+  });
 
   let modal = document.getElementById('cohortRosterModal');
   if(!modal){
