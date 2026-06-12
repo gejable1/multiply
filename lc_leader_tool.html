@@ -1381,31 +1381,58 @@ async function loadMyMembers(){
 }
 
 // ─────────────────────────────────────────────────────────────
-// Test-member visibility rule (added May 16, 2026 — kapatid C):
+// KIND-MIRRORING containment (Session 34 — Inv #164; supersedes the
+// May-16 _isTestLeader/includeTest rule and mirrors MD's helpers).
 //
-// LeaderScope.apply() by default strips is_test_member and is_external_user
-// records, which is the right behavior for real LC leaders viewing real
-// members. But when Pastor logs into MLT as a TEST LCL (himself flagged
-// is_test_member=true) to dogfood the flow, his test disciples disappear
-// and he sees "No members found" — breaking smoke tests.
+// memberKind(m) = 'test' | 'guest' | 'real', read from the MEMBER's own
+// flags (both flags set → test wins). _viewerKind() reads the VIEWER's
+// own members row in allMembers (Inv #162 — never the session shim,
+// which doesn't carry these flags); no row loaded → 'real' (old default).
 //
-// Containment rule: a logged-in leader who is themselves a test member
-// can see other test members in their tree. Real LCLs are unaffected —
-// they can't trigger this branch because they aren't test members.
-//
-// We read is_test_member from the leader's own record in allMembers
-// (loaded above) rather than from window.LEADER, because the leader
-// session payload does not currently carry that flag and we don't want
-// to touch leader_login.html for one boolean.
+// THE RULE:
+//   • OPERATIONS (rosters, attendance, pickers, member list):
+//       real viewer  → sees real + guest + test, each kind-badged,
+//                      still subject to the LeaderScope level gate;
+//       test viewer  → test-kind only;
+//       guest viewer → guest-kind only.
+//   • STATISTICS (every count: home stats, scope badges): only members
+//       whose kind MATCHES the viewer's count — kinds never cross-count.
 // ─────────────────────────────────────────────────────────────
-function _isTestLeader(){
-  const me = (allMembers || []).find(m => m.id === (window.LEADER && window.LEADER.leaderId));
-  return !!(me && me.is_test_member);
+function memberKind(m){
+  if(!m) return 'real';
+  if(m.is_test_member) return 'test';      // both flags → test wins
+  if(m.is_external_user) return 'guest';
+  return 'real';
+}
+function _viewerKind(){
+  const myId = (window.LEADER && window.LEADER.leaderId) || null;
+  return memberKind(myId ? (allMembers || []).find(m => m.id === myId) : null);
+}
+// OPERATIONAL visibility — real sees every kind (badged); others see own kind.
+function _kindVisible(m){
+  const vk = _viewerKind();
+  return vk === 'real' ? true : memberKind(m) === vk;
+}
+// STATISTICAL membership — counts only mirror the viewer's own kind.
+function _sameKind(m){ return memberKind(m) === _viewerKind(); }
+// Kind badge for operational rows (real → no badge). Dark-theme colors.
+function _kindBadge(m){
+  const k = memberKind(m);
+  if(k === 'test')  return ' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#a78bfa;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);white-space:nowrap">🧪 Test</span>';
+  if(k === 'guest') return ' <span style="font-size:9px;background:rgba(74,144,226,.16);color:#7ab1e8;padding:1px 5px;border-radius:8px;border:1px solid rgba(74,144,226,.35);white-space:nowrap">👤 Guest</span>';
+  return '';
+}
+// Plain-text kind tag for <option> rows / textContent (no HTML allowed).
+function _kindOptTag(m){
+  const k = memberKind(m);
+  return k === 'test' ? ' · 🧪 test' : (k === 'guest' ? ' · 👤 guest' : '');
 }
 
 // Apply current scope and refresh derived state.
+// myMembers = the OPERATIONAL roster: LeaderScope level gate + kind rule.
+// Statistical counts re-filter with _sameKind (see renderHome).
 function refreshScopedMembers(){
-  myMembers = LeaderScope.apply(allMembers, { includeTest: _isTestLeader() });
+  myMembers = LeaderScope.apply(allMembers, { includeTest: true }).filter(_kindVisible);
 }
 
 // Mobile scope tab handler — switches view and re-renders.
@@ -1424,15 +1451,14 @@ function setMobileScope(view, btn){
 // Update the count badges + reveal pastor's All tab if applicable.
 function updateScopeCountsMobile(){
   const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
-  // Counts mirror refreshScopedMembers' inclusion policy: a test leader
-  // sees their test disciples in the counts; a real LCL doesn't.
-  const includeTest = _isTestLeader();
-  const stripIfNeeded = arr => includeTest ? arr : arr.filter(m => !m.is_test_member);
-  set('msCountDisciples', stripIfNeeded(LeaderScope.getDirect()).length);
-  set('msCountTree',      stripIfNeeded(LeaderScope.getTree()).length);
-  set('msCountMinistry',  stripIfNeeded(LeaderScope.getMinistry()).length);
+  // Statistics are kind-mirrored (Inv #164): counts include only members
+  // of the viewer's own kind — real, test, and guest universes never
+  // inflate each other's badges.
+  set('msCountDisciples', LeaderScope.getDirect().filter(_sameKind).length);
+  set('msCountTree',      LeaderScope.getTree().filter(_sameKind).length);
+  set('msCountMinistry',  LeaderScope.getMinistry().filter(_sameKind).length);
   if(LeaderScope.isPastor()){
-    set('msCountAll', allMembers.length);
+    set('msCountAll', (allMembers || []).filter(_sameKind).length);
     const b = document.getElementById('msScopeAllBtn');
     if(b) b.style.display = 'inline-flex';
   }
@@ -1473,7 +1499,7 @@ function renderTransferAlerts(){
   if(!pending.length) return '';
   const rows = pending.map(m=>`
     <div class="ta-row">
-      <div class="ta-name">${m.name}</div>
+      <div class="ta-name">${m.name}${_kindBadge(m)}</div>
       <div class="ta-to">→ ${m.pending_lc_group}</div>
       ${m.transfer_date?`<div class="ta-date">${m.transfer_date}</div>`:''}
     </div>`).join('');
@@ -1497,12 +1523,15 @@ function renderHome(){
   // Show/hide ministry-attendance quick-button based on whether this leader heads any ministry
   refreshMinistryAttButton();
 
-  const z4 = myMembers.filter(x=>x.diagnostic_zone===4).length;
-  const z1 = myMembers.filter(x=>x.diagnostic_zone===1).length;
-  const z3 = myMembers.filter(x=>x.diagnostic_zone===3).length;
-  const noDiag = myMembers.filter(x=>!x.diagnostic_zone).length;
+  // Home stats are kind-mirrored (Inv #164) — myMembers is the OPERATIONAL
+  // (kind-visible) roster, so re-filter to the viewer's own kind for counts.
+  const statPool = myMembers.filter(_sameKind);
+  const z4 = statPool.filter(x=>x.diagnostic_zone===4).length;
+  const z1 = statPool.filter(x=>x.diagnostic_zone===1).length;
+  const z3 = statPool.filter(x=>x.diagnostic_zone===3).length;
+  const noDiag = statPool.filter(x=>!x.diagnostic_zone).length;
 
-  document.getElementById('statTotal').textContent = myMembers.length;
+  document.getElementById('statTotal').textContent = statPool.length;
   document.getElementById('statZ1').textContent = z1;
   document.getElementById('statZ3').textContent = z3;
   document.getElementById('statZ4').textContent = z4;
@@ -1517,7 +1546,7 @@ function renderHome(){
     <div class="as-icon">📋</div>
     <div class="as-text"><strong>${noDiag} member${noDiag>1?'s':''}</strong> haven't taken the Salvation Diagnostic yet.</div>
   </div>`;
-  if(z1===myMembers.length && myMembers.length>0) alerts += `<div class="alert-strip green" style="margin-top:${(z4||noDiag)?'8':'14'}px">
+  if(z1===statPool.length && statPool.length>0) alerts += `<div class="alert-strip green" style="margin-top:${(z4||noDiag)?'8':'14'}px">
     <div class="as-icon">🎉</div>
     <div class="as-text"><strong>All members in Zone 1!</strong> Keep investing — look for who can start discipling others.</div>
   </div>`;
@@ -1971,7 +2000,7 @@ function renderMemberList(){
       m.facilitator_id === LEADER.leaderId
     );
     const incoming = (allMembers||[]).filter(m =>
-      m.pending_facilitator_id === LEADER.leaderId
+      m.pending_facilitator_id === LEADER.leaderId && _kindVisible(m)
     );
     // Dedupe by id (defensive — shouldn't overlap, but just in case)
     const seen = new Set();
@@ -2007,7 +2036,7 @@ function renderMemberList(){
       <div class="mc-body">
         <div class="mc-av" style="background:${zd.bg};color:${zd.color}">${initials(mem.name)}${mltAvImg(mem)}</div>
         <div class="mc-info">
-          <div class="mc-name">${mem.name}</div>
+          <div class="mc-name">${mem.name}${_kindBadge(mem)}</div>
           <div class="mc-sub">${mem.contact||''} ${mem.lc_group?'· '+mem.lc_group:''}</div>
         </div>
         <div><span class="zone-badge z${z||0}-badge">${z?zd.label:'No Zone'}</span></div>
@@ -2085,11 +2114,11 @@ function cancelAddMember(){
 // Soft duplicate-name check used by saveNewMember (Session 10).
 //
 // Scans allMembers (church-wide pool, already loaded into client state by
-// loadMyMembers) for case-insensitive exact name matches. Excludes test
-// members AND guests per the standing exclusion rule — if there's a
-// "Maria Santos" in the test fixtures or a one-time guest, that shouldn't
-// trigger a duplicate warning on a real LCL trying to enroll a new
-// "Maria Santos" disciple.
+// loadMyMembers) for case-insensitive exact name matches. The pool is
+// kind-mirrored (Inv #164): a real LCL checks against real members only
+// (a "Maria Santos" among test fixtures or guests shouldn't warn), and a
+// guest/test leader checks against their own kind's universe (their own
+// previously-added "Maria Santos" should warn).
 //
 // Returns:
 //   { isDuplicate: false }                            — name is clear
@@ -2102,9 +2131,7 @@ function cancelAddMember(){
 function _checkAddMemberDup(name){
   const needle = (name || '').trim().toLowerCase();
   if(!needle) return { isDuplicate: false };
-  const pool = (allMembers || []).filter(m =>
-    !m.is_test_member && !m.is_external_user
-  );
+  const pool = (allMembers || []).filter(_sameKind);
   const existing = pool.find(m =>
     (m.name || '').trim().toLowerCase() === needle
   );
@@ -2116,8 +2143,8 @@ async function saveNewMember(){
   if(!name){ toast('Name is required','error'); return; }
 
   // ── Soft duplicate-name guard (Session 10) ────────────────
-  // If someone with this exact name already exists in the church (excluding
-  // test members and guests), surface a confirmation so the LCL can either
+  // If someone with this exact name already exists in the viewer's own
+  // kind universe (Inv #164), surface a confirmation so the LCL can either
   // (a) cancel and search the existing person, or (b) intentionally proceed
   // (e.g., two real members really do share a name).
   const dup = _checkAddMemberDup(name);
@@ -2245,6 +2272,7 @@ function openMember(id){
   document.getElementById('detailName').textContent = mem.name;
   document.getElementById('detailMeta').textContent = [
     LEVEL_NAMES[mem.pipeline_level]||'Pre-Pipeline',
+    memberKind(mem)==='test' ? '🧪 Test' : (memberKind(mem)==='guest' ? '👤 Guest' : ''),
     mem.lc_group||'',
     mem.contact||''
   ].filter(Boolean).join(' · ');
@@ -4285,7 +4313,7 @@ function renderAttList(){
     return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
       <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}${mltAvImg(mem)}</div>
-      <div class="att-name">${mem.name}</div>
+      <div class="att-name">${mem.name}${_kindBadge(mem)}</div>
       <div class="att-streak"></div>
       ${modeBtn}
     </div>`;
@@ -4661,9 +4689,11 @@ function _maComputeMembers(){
   const ministryName = _maMinistryName();
   if (!ministryName) return [];
   const rosterId = document.getElementById('maRoster').value;
-  // Base candidates: anyone with this ministry in any of 3 slots
+  // Base candidates: anyone with this ministry in any of 3 slots,
+  // kind-visible to this viewer (Inv #164).
   let candidates = (allMembers || []).filter(m =>
-    m.ministry === ministryName || m.ministry2 === ministryName || m.ministry3 === ministryName
+    (m.ministry === ministryName || m.ministry2 === ministryName || m.ministry3 === ministryName)
+    && _kindVisible(m)
   );
   // Roster filter: only those in the selected roster (if any)
   if (rosterId){
@@ -4671,7 +4701,7 @@ function _maComputeMembers(){
     candidates = candidates.filter(m => set.has(m.id));
   }
   // Add walk-ins (always shown even if not in ministry/roster)
-  const walkInRows = (allMembers || []).filter(m => _maWalkIns.has(m.id))
+  const walkInRows = (allMembers || []).filter(m => _maWalkIns.has(m.id) && _kindVisible(m))
     .filter(m => !candidates.some(c => c.id === m.id)); // dedupe
   candidates = [...candidates, ...walkInRows];
   // Sort by name
@@ -4699,7 +4729,7 @@ function _renderMaList(){
     return `<div class="att-member ${present?'present':''}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
       <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}${mltAvImg(mem)}</div>
-      <div class="att-name">${MultiplyShared.escapeHTML(mem.name)}${isWalkIn ? ' <span style="font-size:9.5px;color:var(--blue,#4a90e2);font-weight:700;margin-left:5px">WALK-IN</span>' : ''}</div>
+      <div class="att-name">${MultiplyShared.escapeHTML(mem.name)}${_kindBadge(mem)}${isWalkIn ? ' <span style="font-size:9.5px;color:var(--blue,#4a90e2);font-weight:700;margin-left:5px">WALK-IN</span>' : ''}</div>
       <div class="att-streak"></div>
     </div>`;
   }).join('');
@@ -4733,7 +4763,7 @@ function openMaWalkInPicker(){
   // Modal listing all members not currently in the displayed list
   const ministryName = _maMinistryName();
   const inList = new Set(_maMembers.map(m => m.id));
-  const others = (allMembers || []).filter(m => !inList.has(m.id));
+  const others = (allMembers || []).filter(m => !inList.has(m.id) && _kindVisible(m));
 
   let modal = document.getElementById('maWalkInModal');
   if (!modal){
@@ -4780,7 +4810,7 @@ function _maRenderWalkInList(){
     <div onclick="_maAddWalkIn('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;background:var(--surface2);margin-bottom:5px">
       <div class="att-av" style="background:var(--surface3);color:var(--muted)">${initials(m.name)}${mltAvImg(m)}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${MultiplyShared.escapeHTML(m.name)}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${MultiplyShared.escapeHTML(m.name)}${_kindBadge(m)}</div>
         ${m.lc_group ? `<div style="font-size:10.5px;color:var(--muted)">${MultiplyShared.escapeHTML(m.lc_group)}</div>` : ''}
       </div>
       <div style="color:var(--blue,#4a90e2);font-size:18px;font-weight:700">+</div>
@@ -9094,9 +9124,9 @@ function _renderBatchesAddMember(){
   const L = LEADER || {};
   const actor = { memberId: L.leaderId, isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL };
 
-  // Scoped members: LeaderScope tree (LCL's downline). Pastor gets all
-  // members (since LeaderScope.getTree on Pastor is broad).
-  const scoped = (LeaderScope.getTree && LeaderScope.getTree()) || [];
+  // Scoped members: LeaderScope tree (LCL's downline), kind-visible to
+  // this viewer (Inv #164). Pastor gets all members (broad tree).
+  const scoped = ((LeaderScope.getTree && LeaderScope.getTree()) || []).filter(_kindVisible);
 
   // Compute "already enrolled in same program" globally — look at every
   // cohort with the same program_id and collect active member_ids.
@@ -9158,7 +9188,7 @@ function _renderBatchesAddMember(){
     if (x.status === 'eligible') {
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.65rem .8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;gap:.5rem">
         <div style="flex:1;min-width:0">
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3">${safeName}</div>
+          <div style="font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3">${safeName}${_kindBadge(m)}</div>
           <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${sub}</div>
         </div>
         <button onclick="_batchesEnrollOne('${m.id}', '${safeName.replace(/'/g, "&#39;")}')"
@@ -9189,7 +9219,7 @@ function _renderBatchesAddMember(){
     return `<div style="padding:.65rem .8rem;background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${accent};border-radius:8px;margin-bottom:.4rem;opacity:.92">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
         <div style="flex:1;min-width:0">
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3">${safeName}</div>
+          <div style="font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3">${safeName}${_kindBadge(m)}</div>
           <div style="font-size:10.5px;color:var(--muted);margin-top:2px">${sub}</div>
         </div>
         <span style="flex-shrink:0;font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:3px 9px;border-radius:999px;background:rgba(127,127,127,.12);color:${accent};border:1px solid ${accent}55">${badge}</span>
@@ -9235,7 +9265,7 @@ async function _batchesEnrollOne(memberId, memberName){
 
   // Re-check permission with shared helper before the write. (Defensive:
   // the picker already filtered, but a stale state could let through.)
-  const scoped = (LeaderScope.getTree && LeaderScope.getTree()) || [];
+  const scoped = ((LeaderScope.getTree && LeaderScope.getTree()) || []).filter(_kindVisible);
   const candidate = scoped.find(m => m.id === memberId);
   if (!candidate) { toast('Member not in your scope', '❌'); return; }
   const perm = MultiplyShared.cohorts.canEnroll(actor, c, c.cohort_programs || {}, candidate);

@@ -1529,16 +1529,13 @@ const LeaderScope = MultiplyShared.makeLeaderScope(() => members);
 // Update the count badges in the view-tabs UI.
 function updateScopeCounts(){
   const set = (id, n) => { const el = document.getElementById(id); if(el) el.textContent = n; };
-  // Test-data containment (Session 10) — mirror the Members table rule:
-  // if viewer is a test member, count their test fixture flock; otherwise
-  // exclude test+guest from the scope counts so they don't inflate.
-  // (Subject-based exception in _shouldHideTest doesn't apply here — the
-  //  scope tabs are not inside any specific member's modal.)
-  const hideTest = !_viewerIsTestMember();
-  const isHidden = m => hideTest && (m.is_test_member || m.is_external_user);
-  set('scopeCountDisciples', LeaderScope.getDirect().filter(m=>!isHidden(m)).length);
-  set('scopeCountTree',      LeaderScope.getTree().filter(m=>!isHidden(m)).length);
-  set('scopeCountMinistry',  LeaderScope.getMinistry().filter(m=>!isHidden(m)).length);
+  // Statistics are kind-mirrored (Inv #164): every count includes only
+  // members of the VIEWER's own kind — a real viewer counts real members,
+  // a test viewer counts test fixtures, a guest counts their guest-kind
+  // members. Kinds never inflate each other's badges.
+  set('scopeCountDisciples', LeaderScope.getDirect().filter(_sameKind).length);
+  set('scopeCountTree',      LeaderScope.getTree().filter(_sameKind).length);
+  set('scopeCountMinistry',  LeaderScope.getMinistry().filter(_sameKind).length);
   if(LeaderScope.isPastor()) set('scopeCountAll', liveMembers().length);
 }
 
@@ -1594,21 +1591,23 @@ function logView(viewedMemberId, context){
 let members=[],filt='all',eid=null;
 
 // ═══════════════════════════════════════
-// liveMembers() — TEST-MEMBER FILTER (Pastor's call, May 2026)
-// Returns members minus those flagged as test/beta records. Used in
-// EVERY counting/statistical context so test members count for nobody:
+// liveMembers() — KIND-MIRRORED STATISTICAL FILTER (Inv #164, Session 34;
+// generalizes the May-2026 test-member filter)
+// Returns members whose kind (real / guest / test — see memberKind below)
+// MATCHES THE VIEWER's own kind. For a real viewer this is identical to
+// the old behavior (excludes test + guest); a test viewer counts their
+// test fixtures; a guest viewer counts their guest-kind members. Used in
+// EVERY counting/statistical context so kinds never cross-count:
 //   - dashboard stat cards
 //   - LCG flock counts and attendance denominators
-//   - LPR Champions / Heartbeat (which need real flock sizes)
-//   - LC Attendance Report
-//   - LeaderScope (so test members never show in any leader's view)
+//   - pipeline / zone / EOLO / alert distributions
 //
-// `members` itself is left intact so admin tools (member list, edit
-// modal, search) can still see test members — they get a 🧪 badge in
-// the Pastor view to make the flag obvious.
+// `members` itself is left intact so operational tools (member list, edit
+// modal, search, pickers) can still see other kinds — those go through
+// _kindVisible/_scopedMembers and show a 🧪/👤 badge instead.
 // ═══════════════════════════════════════
 function liveMembers(){
-  return members.filter(m => !m.is_test_member && !m.is_external_user);
+  return members.filter(_sameKind);
 }
 
 function sync(s){
@@ -1774,7 +1773,10 @@ function _mdSyncLcGroupRow(){
 function rKPI(){
   // KPIs respect scope. Pastor-level "all" view sees everything; other
   // leaders see counts of their disciples / tree / ministry only.
-  const view = (typeof LeaderScope === 'object') ? LeaderScope.apply(members) : members;
+  // Counts are kind-mirrored (Inv #164): only the viewer's own kind counts.
+  const view = (typeof LeaderScope === 'object')
+    ? LeaderScope.apply(members, {includeTest:true}).filter(_sameKind)
+    : members;
   const bl=[0,0,0,0,0,0];let ea=0,dd=0,needInt=0;
   view.forEach(m=>{
     bl[m.level||0]++;
@@ -1793,7 +1795,8 @@ function rKPI(){
 }
 
 function rPV(){
-  const bl=[0,0,0,0,0,0];members.forEach(m=>bl[m.level||0]++);
+  // Pipeline distribution is a statistic → kind-mirrored (Inv #164).
+  const bl=[0,0,0,0,0,0];liveMembers().forEach(m=>bl[m.level||0]++);
   const max=Math.max(...bl,1);const labs=['Pre','L1','L2','L3','L4','L5'];
   const filterMap=['L0','L1','L2','L3','L3','L3'];
   document.getElementById('pvl').innerHTML=bl.map((n,i)=>
@@ -1856,9 +1859,10 @@ function mdAvImg(m){
 function renderTable(){
   const q=(document.getElementById('sq')?.value||'').toLowerCase();
   // ── Apply leader-scope first; then the existing zone/level filters ──
-  // Pastor needs to SEE test members here to manage them, so opt in
-  // explicitly. LCLs still get them filtered out automatically.
-  const scopedMembers = LeaderScope.apply(members, {includeTest: LeaderScope.isPastor()});
+  // Kind-mirroring (Inv #164): a real viewer sees real + guest + test
+  // (badged) within their level scope; a test/guest viewer sees their
+  // own kind only. _scopedMembers = LeaderScope level gate + kind rule.
+  const scopedMembers = _scopedMembers();
   let fl=scopedMembers.filter(m=>{
     const ok=!q||(m.name||'').toLowerCase().includes(q)||(m.group||'').toLowerCase().includes(q)||(m.gifts||'').toLowerCase().includes(q)||(m.ministry||'').toLowerCase().includes(q)||(m.discipler||'').toLowerCase().includes(q);
     if(!ok)return false;
@@ -1899,10 +1903,10 @@ function renderTable(){
     const upd=m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—';
     const dz=m.diagnostic_zone;
     const intFlag=dz>=2?`<span class="int-flag ${dz==4?'if-z4':dz==3?'if-z3':'if-z2'}">${dz==4?'🔴 Z4 Gospel':dz==3?'🟠 Z3 First Steps':'🟡 Z2 Assurance'}</span>`:'<span style="font-size:11px;color:var(--lighter)">—</span>';
-    return`<tr onclick="openEdit('${m.id}')" ${(m.is_test_member || m.is_external_user)?'style="opacity:.7"':''}>
+    return`<tr onclick="openEdit('${m.id}')" ${memberKind(m)!=='real'?'style="opacity:.7"':''}>
       <td><div class="nc">
         <div class="av" style="${mdAvBg(m)}">${mdAvLabel(m)}${mdAvImg(m)}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
-        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${m.is_test_member?' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#7c3aed;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);">🧪 Test</span>':''}${m.is_external_user?' <span style="font-size:9px;background:rgba(74,144,226,.16);color:#3a7bd1;padding:1px 5px;border-radius:8px;border:1px solid rgba(74,144,226,.35);">👤 Guest</span>':''}</div>
+        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${_kindBadge(m)}</div>
         <div class="mi">${m.discipler_name||m.discipler||'No discipler'}</div></div>
       </div></td>
       <td><span class="lb lb${l}">${LN[l]}</span></td>
@@ -1927,7 +1931,8 @@ function renderTable(){
 // PIPELINE PANEL
 // ═══════════════════════════════════════
 function rPipe(){
-  const bl={};members.forEach(m=>{const l=m.level||0;if(!bl[l])bl[l]=[];bl[l].push(m);});
+  // Pipeline panel is a per-level distribution → kind-mirrored (Inv #164).
+  const bl={};liveMembers().forEach(m=>{const l=m.level||0;if(!bl[l])bl[l]=[];bl[l].push(m);});
   document.getElementById('pv').innerHTML=[0,1,2,3,4,5].map(l=>{
     const g=bl[l]||[];if(!g.length)return'';
     const tiles=g.map(m=>{
@@ -1961,7 +1966,8 @@ function rInterventions(){
   //    Diagnostic zones are sensitive pastoral data — same scope rules
   //    used by renderTable() and the member modal must apply here too.
   //    Pastor (Level 5) sees all via LeaderScope.apply when scope = 'all'.
-  const scoped = LeaderScope.apply(members);
+  //    Intervention counts are kind-mirrored (Inv #164).
+  const scoped = LeaderScope.apply(members, {includeTest:true}).filter(_sameKind);
   const z4=scoped.filter(m=>m.diagnostic_zone==4);
   const z2=scoped.filter(m=>m.diagnostic_zone==2);
   const z3=scoped.filter(m=>m.diagnostic_zone==3);
@@ -2039,8 +2045,9 @@ async function markIntComplete(id){
 // EOLO PANEL
 // ═══════════════════════════════════════
 function rEolo(){
+  // EOLO funnel counts are statistics → kind-mirrored (Inv #164).
   let t=0,a=0,inv=0,res=0;const rows=[];
-  members.forEach(m=>(m.eolo||[]).forEach(e=>{
+  liveMembers().forEach(m=>(m.eolo||[]).forEach(e=>{
     if(!e.name)return;t++;
     if(e.steps&&e.steps[0])a++;if(e.steps&&e.steps[4])inv++;if(e.steps&&e.steps[6])res++;
     rows.push({mn:m.name,p:e.name,s:e.steps||{}});
@@ -2061,8 +2068,10 @@ function rEolo(){
 // ALERTS
 // ═══════════════════════════════════════
 function rAlerts(){
+  // Alert queue mirrors the viewer's kind (Inv #164) — test fixtures never
+  // generate "no discipler / no EOLO" noise on a real viewer's board.
   const al=[];
-  members.forEach(m=>{
+  liveMembers().forEach(m=>{
     if(m.diagnostic_zone==4)al.push({i:'🔴',t:`${m.name} — Zone 4: Gospel Conversations needed`,s:`Score: ${m.diagnostic_score||'?'}% · Facilitator: ${m.facilitator_name||m.discipler||'Unassigned'} · Needs Pre-BTLI Gospel Conversations track (3–5 sessions).`,b:'abu',bt:'Priority',id:m.id,zone:4});
     if(m.diagnostic_zone==2)al.push({i:'🟡',t:`${m.name} — Zone 2: Assurance Formation needed`,s:`Genuine believer with performance-based doubt. Enroll in BTLI 101-A (3 sessions).`,b:'abs',bt:'Enroll',id:m.id,zone:2});
     if(m.diagnostic_zone==3)al.push({i:'🟠',t:`${m.name} — Zone 3: First Steps Track needed`,s:`Faith credible but habits absent. Assign discipler and begin 8-week First Steps.`,b:'abs',bt:'Enroll',id:m.id,zone:3});
@@ -2077,7 +2086,7 @@ function rAlerts(){
   const el=document.getElementById('al');
 
   // Pending transfer banner — always shown above alerts
-  const pendingTx = members.filter(m => m.pending_lc_group && m.pending_lc_group !== m.lc_group);
+  const pendingTx = liveMembers().filter(m => m.pending_lc_group && m.pending_lc_group !== m.lc_group);
   const txBanner = `<div onclick="openTransfers()" style="cursor:pointer;display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;margin-bottom:1rem;background:${pendingTx.length?'linear-gradient(90deg,rgba(184,136,42,.12),rgba(184,136,42,.04))':'var(--surface2)'};border:1px solid ${pendingTx.length?'rgba(184,136,42,.4)':'var(--border)'};border-radius:10px;transition:all .15s" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='var(--shadow)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
     <div style="font-size:22px">🔄</div>
     <div style="flex:1">
@@ -2141,10 +2150,10 @@ async function checkUnmatchedDiagnostics(alArr) {
             <select id="match-${d.id}"
               style="font-family:'DM Sans',sans-serif;font-size:12px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--ink)">
               <option value="">— Match to member —</option>
-              ${members.filter(m=>(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0]))
-                .concat(members.filter(m=>!(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0])))
+              ${(()=>{const pool=members.filter(_kindVisible);return pool.filter(m=>(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0]))
+                .concat(pool.filter(m=>!(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0])))
                 .slice(0,30)
-                .map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}
+                .map(m=>`<option value="${m.id}">${m.name}${_kindOptTag(m)}</option>`).join('');})()}
             </select>
             <button class="alert-link al-assign" onclick="matchDiagnostic('${d.id}')">✓ Link & Update</button>
           </div>
@@ -2239,7 +2248,8 @@ function rReports(){
 }
 
 function rOvExtras(){
-  const s=[...members].sort((a,b)=>new Date(b.updated||0)-new Date(a.updated||0)).slice(0,6);
+  // Recent-activity + zone funnel are overview statistics → kind-mirrored (Inv #164).
+  const s=[...liveMembers()].sort((a,b)=>new Date(b.updated||0)-new Date(a.updated||0)).slice(0,6);
   document.getElementById('ru').innerHTML=!s.length?
     '<div style="color:var(--muted);font-size:12px">No members yet.</div>':
     s.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
@@ -2280,70 +2290,76 @@ function rOvExtras(){
 let _dpScope = 'direct';
 
 // ─────────────────────────────────────────────────────────────
-// Test-data containment (Session 10 — mirrors MLT's pattern)
+// KIND-MIRRORING containment (Session 34 — Inv #164; supersedes the
+// Session-10 _viewerIsTestMember/_shouldHideTest pair, whose subject-
+// exception is subsumed: a real viewer now always sees test fixtures).
 //
-// THE RULE in three lines:
-//   1. By default, test members + guests are hidden from statistical
-//      and pastoral-context surfaces (member modal DISCIPLES tab,
-//      bulk-assign candidate pool, etc.).
-//   2. If the VIEWER is a test member, test data becomes visible to
-//      them — they're inside the test universe smoke-testing as an LCL.
-//   3. If the SUBJECT being inspected (eid) is a test member, test data
-//      becomes visible in that modal — Pastor explicitly opening a test
-//      record's modal is signaling intent to inspect it.
+// memberKind(m) = 'test' | 'guest' | 'real', read from the MEMBER's own
+// flags (both flags set → test wins). _viewerKind() reads the VIEWER's
+// own members row (Inv #162 — never the session shim, which doesn't
+// carry these flags); no row loaded → 'real' (the old default).
 //
-// The Members screen (administrative discovery surface) is NOT affected —
-// it shows all members with their test/guest pills so Pastor can always
-// find and click into a test record from there.
+// THE RULE:
+//   • OPERATIONS (rosters, trees, pickers, unassigned, All Members):
+//       real viewer  → sees real + guest + test, each kind-badged,
+//                      still subject to the LeaderScope level gate;
+//       test viewer  → test-kind only;
+//       guest viewer → guest-kind only.
+//   • STATISTICS (every count/distribution): memberKind === viewerKind,
+//       always — kinds never cross-count (see liveMembers()).
 //
-// Statistical reports (MAR, LCG Pulse, etc.) have their OWN strict rule
-// (Memory #16) — they exclude test+guest regardless of viewer. Do not
-// import _shouldHideTest into reports without explicit pastoral review.
+// Statistical REPORT HTMLs keep their own strict inline rule (Inv #58)
+// until the Phase-B viewer-aware generalization.
 // ─────────────────────────────────────────────────────────────
-function _viewerIsTestMember(){
-  const myId = (window.LEADER && window.LEADER.leaderId) || null;
-  if(!myId) return false;
-  const me = members.find(m => m.id === myId);
-  return !!(me && me.is_test_member);
+function memberKind(m){
+  if(!m) return 'real';
+  if(m.is_test_member) return 'test';      // both flags → test wins
+  if(m.is_external_user) return 'guest';
+  return 'real';
 }
-
-function _shouldHideTest(){
-  // (1) Test viewer → don't hide (they're smoke-testing as an LCL)
-  if(_viewerIsTestMember()) return false;
-  // (2) Subject of the open modal is a test record → don't hide
-  //     (Pastor inspecting a test fixture's flock needs to see it)
-  if(eid){
-    const subject = members.find(m => m.id === eid);
-    if(subject && subject.is_test_member) return false;
-  }
-  // Default: hide test + guest
-  return true;
+function _viewerKind(){
+  const myId = (window.LEADER && window.LEADER.leaderId) || null;
+  return memberKind(myId ? members.find(m => m.id === myId) : null);
+}
+// OPERATIONAL visibility — real sees every kind (badged); others see own kind.
+function _kindVisible(m){
+  const vk = _viewerKind();
+  return vk === 'real' ? true : memberKind(m) === vk;
+}
+// STATISTICAL membership — counts only mirror the viewer's own kind.
+function _sameKind(m){ return memberKind(m) === _viewerKind(); }
+// Kind badge for operational rows (real → no badge).
+function _kindBadge(m){
+  const k = memberKind(m);
+  if(k === 'test')  return ' <span style="font-size:9px;background:rgba(167,139,250,.18);color:#7c3aed;padding:1px 5px;border-radius:8px;border:1px solid rgba(167,139,250,.4);white-space:nowrap">🧪 Test</span>';
+  if(k === 'guest') return ' <span style="font-size:9px;background:rgba(74,144,226,.16);color:#3a7bd1;padding:1px 5px;border-radius:8px;border:1px solid rgba(74,144,226,.35);white-space:nowrap">👤 Guest</span>';
+  return '';
+}
+// Plain-text kind tag for <option> rows (selects can't render HTML).
+function _kindOptTag(m){
+  const k = memberKind(m);
+  return k === 'test' ? ' · 🧪 test' : (k === 'guest' ? ' · 👤 guest' : '');
+}
+// OPERATIONAL scope helper — LeaderScope level gate + kind rule, in one place.
+function _scopedMembers(){
+  return LeaderScope.apply(members, {includeTest:true}).filter(_kindVisible);
 }
 
 // Direct disciples of any given member id (not tied to LeaderScope which
-// is bound to the logged-in leader). Applies containment rule above.
+// is bound to the logged-in leader). Applies the kind rule above.
 function _disciplesDirect(rootId){
   if(!rootId) return [];
-  // Hide TEST fixtures here, but NOT guests (is_external_user): guests are real
-  // people test-driving the app — their discipler relationships must stay visible
-  // in this operational view. Only statistical reports exclude guests (Inv #6).
-  const hideTest = _shouldHideTest();
-  return members.filter(m => {
-    if(m.discipler_id !== rootId) return false;
-    if(hideTest && m.is_test_member) return false;
-    return true;
-  });
+  return members.filter(m => m.discipler_id === rootId && _kindVisible(m));
 }
 
 // Recursive tree of any given member id, with cycle protection.
-// Applies containment rule above.
+// Applies the kind rule above.
 function _disciplesTree(rootId){
   if(!rootId) return [];
-  const hideTest = _shouldHideTest();
   const byDiscipler = new Map();
   members.forEach(m => {
     if(!m.discipler_id) return;
-    if(hideTest && m.is_test_member) return;   // test fixtures only — guests stay visible (operational view)
+    if(!_kindVisible(m)) return;   // kind rule (Inv #164)
     if(!byDiscipler.has(m.discipler_id)) byDiscipler.set(m.discipler_id, []);
     byDiscipler.get(m.discipler_id).push(m);
   });
@@ -2477,7 +2493,7 @@ function _disciplesRow(m, ZONE_COLOR){
   return `<div onclick="drillToMember('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='transparent'">
     <div style="width:30px;height:30px;border-radius:50%;${mdAvBg(m)}display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;position:relative">${mdAvLabel(m)}${mdAvImg(m)}</div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${zoneDot}${escapeHTMLNotif(m.name)}</div>
+      <div style="font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${zoneDot}${escapeHTMLNotif(m.name)}${_kindBadge(m)}</div>
       <div style="font-size:10.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTMLNotif(meta.join(' · '))}</div>
     </div>
     <div style="font-size:14px;color:var(--muted);flex-shrink:0">›</div>
@@ -2503,9 +2519,8 @@ function _getUnassignedMembers(){
   // Members with no discipler AND who aren't themselves LC Leaders
   // (LC Leaders shouldn't be assigned via this bulk widget — use the
   // discipler dropdown for those edge cases).
-  // Test-data containment (Session 10): hide test+guest unless the
-  // viewer or subject is a test record — see _shouldHideTest above.
-  const hideTest = _shouldHideTest();
+  // Kind-mirroring (Inv #164): real viewer sees every kind (badged);
+  // test/guest viewers see their own kind only.
   return members.filter(m => {
     if(m.id === eid) return false;          // can't disciple self
     if(_isLCLeader(m)) return false;         // skip flagged leaders
@@ -2514,7 +2529,7 @@ function _getUnassignedMembers(){
       // Has a name-only discipler (legacy data) — still considered "assigned"
       return false;
     }
-    if(hideTest && m.is_test_member) return false;   // test fixtures only; guests are real & assignable (operational)
+    if(!_kindVisible(m)) return false;       // kind rule (Inv #164)
     return true;
   });
 }
@@ -2630,7 +2645,7 @@ function renderUnassignedList(){
           style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--surface);color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">${ini}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTMLNotif(m.name||'(no name)')}${lvlBadge}</div>
+          <div style="font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTMLNotif(m.name||'(no name)')}${_kindBadge(m)}${lvlBadge}</div>
         </div>
       </label>
     `;
@@ -2838,7 +2853,9 @@ function openEdit(id){
   // Scope guard — prevent leaders opening members outside their view.
   // Pastor bypasses; leaders bypass when editing their OWN record.
   if(!LeaderScope.isPastor() && !_selfEditMode){
-    const allowed = LeaderScope.apply(members);
+    // Same operational scope as the table that rendered the row (Inv #164) —
+    // otherwise a real leader couldn't open the guest/test rows they can see.
+    const allowed = _scopedMembers();
     const inScope = allowed.some(x => x.id === m.id);
     if(!inScope){
       toast('That member is outside your current view.','🔒');
@@ -6844,7 +6861,7 @@ function _coRenderRoster(){
 
   const memberName = (cm) => {
     const mem = _cohortState.members.find(m => m.id === cm.member_id);
-    return mem?.name || '(member not found)';
+    return (mem?.name || '(member not found)') + (mem ? _kindOptTag(mem) : '');
   };
 
   // Sort: active first, then graduated, then withdrew (so departed members stay
@@ -6883,9 +6900,9 @@ function _coRenderRoster(){
           <select id="crNewMember" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
             <option value="">— Pick a member —</option>
             ${_cohortState.members
-              .filter(m => !cms.some(cm => cm.member_id === m.id))
+              .filter(m => !cms.some(cm => cm.member_id === m.id) && _kindVisible(m))
               .sort((a,b) => (a.name||'').localeCompare(b.name||'', undefined, { sensitivity:'base' }))
-              .map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}</option>`).join('')}
+              .map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}${_kindOptTag(m)}</option>`).join('')}
           </select>
           <select id="crNewRole" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12px;color:var(--ink)">
             <option value="participant" selected>participant</option>
@@ -7116,8 +7133,10 @@ async function _coAddRosterMember(){
 // BULK ENROLL — filter (Everyone / By Level / By LC Leader) → review
 // a name-checklist → commit. Pastor-only path (same as the roster
 // itself). Mirrors the single-add insert; NO canEnroll gate by design
-// (Inv #103 — MD is the intentional override). Test members & guests
-// are excluded; already-enrolled are shown disabled, never re-inserted.
+// (Inv #103 — MD is the intentional override). Candidates follow the
+// kind rule (Inv #164: real viewer sees every kind, badged; test/guest
+// viewers their own kind); already-enrolled are shown disabled, never
+// re-inserted.
 // ─────────────────────────────────────────────────────────────────
 function _coOpenBulkAdd(){
   if(!_cohortState.rosterCohortId){ toast('Open a batch roster first', '⚠️'); return; }
@@ -7130,7 +7149,7 @@ function _coOpenBulkAdd(){
 // LC Leaders = members flagged facilitator (Inv #1 — never trust lc_group text)
 function _coBulkLcls(){
   return (_cohortState.members || [])
-    .filter(m => m.is_facilitator || m.facilitator_role)
+    .filter(m => (m.is_facilitator || m.facilitator_role) && _kindVisible(m))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -7140,7 +7159,9 @@ function _coBulkCandidates(){
   const cohortId = _cohortState.rosterCohortId;
   const enrolled = new Set((_cohortState.cohortMembers[cohortId] || []).map(cm => cm.member_id));
   const b = _cohortState.bulk;
-  let list = (_cohortState.members || []).filter(m => !m.is_test_member && !m.is_external_user);
+  // Kind-mirroring (Inv #164): real viewer sees every kind (badged);
+  // test/guest viewers see their own kind only (was: exclude test+guest).
+  let list = (_cohortState.members || []).filter(_kindVisible);
   if(b.scope === 'level'){
     list = list.filter(m => b.levels.has(Number(m.pipeline_level || 0)));
   } else if(b.scope === 'lcl'){
@@ -7208,7 +7229,7 @@ function _coRenderBulkAdd(){
         const checked = !already && b.selected.has(m.id);
         return `<label style="display:flex;align-items:center;gap:.55rem;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12.5px;${already ? 'opacity:.5' : 'cursor:pointer'}">
           <input type="checkbox" ${checked ? 'checked' : ''} ${already ? 'disabled' : ''} onchange="_coBulkToggleMember('${m.id}')" style="cursor:${already ? 'default' : 'pointer'}">
-          <span style="flex:1;color:var(--ink)">${escapeHTMLNotif(m.name)}</span>
+          <span style="flex:1;color:var(--ink)">${escapeHTMLNotif(m.name)}${_kindBadge(m)}</span>
           <span style="font-size:10px;color:var(--muted)">L${Number(m.pipeline_level || 0)}${m.lc_group ? ` · ${escapeHTMLNotif(m.lc_group)}` : ''}</span>
           ${already ? `<span style="font-size:9.5px;background:rgba(94,125,82,.16);color:var(--green);padding:1px 6px;border-radius:8px;white-space:nowrap">✓ in batch</span>` : ''}
         </label>`;
@@ -7251,7 +7272,7 @@ function _coRenderBulkAdd(){
       <div style="flex:1;overflow-y:auto;padding:.25rem 1.25rem">${listHtml}</div>
 
       <div style="padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:.6rem">
-        <div style="font-size:10.5px;color:var(--lighter);line-height:1.4">Test members &amp; guests excluded. Participants stay 🔒 until you unlock lessons.</div>
+        <div style="font-size:10.5px;color:var(--lighter);line-height:1.4">Test/guest members are badged (Inv #164). Participants stay 🔒 until you unlock lessons.</div>
         <div style="display:flex;gap:.5rem">
           <button onclick="_coCloseBulkAdd()" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Cancel</button>
           <button onclick="_coBulkCommit()" ${selCount === 0 ? 'disabled' : ''} style="background:${selCount === 0 ? 'var(--surface2)' : 'var(--green)'};color:${selCount === 0 ? 'var(--muted)' : '#fff'};border:none;border-radius:7px;padding:7px 16px;font-family:inherit;font-size:12px;font-weight:700;cursor:${selCount === 0 ? 'default' : 'pointer'};white-space:nowrap">➕ Enroll ${selCount}</button>
@@ -7410,7 +7431,7 @@ async function _llLoadData(){
     db.from('pipeline_lessons').select('*').order('level', { ascending: true, nullsFirst: false }).order('track', { ascending: true, nullsFirst: false }).order('lesson_number', { ascending: true, nullsFirst: false }),
     db.from('cohorts').select('id, program_id, name, status'),
     db.from('cohort_programs').select('id, name, is_active'),
-    db.from('members').select('id, name, lc_group'),
+    db.from('members').select('id, name, lc_group, is_test_member, is_external_user'),
     db.from('pipeline_lesson_grants').select('*')
   ]);
   if(lRes.error) throw lRes.error;
@@ -7968,7 +7989,7 @@ function _llRenderGrantTargetOptions(type){
   }
   if(type === 'member'){
     return ['<option value="">— Pick a member —</option>',
-      ..._lessonState.members.map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}</option>`)
+      ..._lessonState.members.filter(_kindVisible).map(m => `<option value="${m.id}">${escapeHTMLNotif(m.name)}${m.lc_group?` · ${escapeHTMLNotif(m.lc_group)}`:''}${_kindOptTag(m)}</option>`)
     ].join('');
   }
   return '';
@@ -10019,13 +10040,15 @@ function buildMinistrySelect() {
 function populateDisciplerSelect(currentDisciplerName) {
   const sel = document.getElementById('fd');
   if (!sel) return;
-  const facs = members.filter(m => m.is_facilitator || m.facilitator_role);
+  // Discipler picker follows the kind rule (Inv #164): real viewer sees
+  // every kind (text-tagged); test/guest viewers see their own kind only.
+  const facs = members.filter(m => (m.is_facilitator || m.facilitator_role) && _kindVisible(m));
   sel.innerHTML = '<option value="">— None —</option>';
   facs.forEach(m => {
     const o = document.createElement('option');
     o.value = m.name;
     o.dataset.id = m.id;
-    o.textContent = m.name + (m.facilitator_role ? ' (' + m.facilitator_role + ')' : '');
+    o.textContent = m.name + (m.facilitator_role ? ' (' + m.facilitator_role + ')' : '') + _kindOptTag(m);
     if (m.name === currentDisciplerName) o.selected = true;
     sel.appendChild(o);
   });

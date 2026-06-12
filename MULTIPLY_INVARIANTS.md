@@ -2018,6 +2018,19 @@ Extends #152. The `SELF_ATTEST_WINDOW_DAYS` (=7) guard in `member_tool.html` mus
 
 **Established June 5, 2026 (Session 33). Invariants #162–#163 added — count now 163.**
 
+### **164. KIND-MIRRORING: member visibility and counts are relative to the VIEWER's kind (real / guest / test) — operations show all kinds badged to a real viewer; statistics never cross-count kinds**
+
+Generalizes #160/#162 into one rule. **`memberKind(m)`** = `'test'` (`is_test_member`; **wins when both flags are set**) | `'guest'` (`is_external_user`) | `'real'`, always read from the member's **own** flags. **`_viewerKind()`** is read from the **viewer's own `members` row** (per #162 the session shim does NOT carry these flags — never trust it); if the row isn't loaded, default `'real'` (the pre-#164 behavior). Two predicates, two surface classes:
+
+- **OPERATIONS** (`_kindVisible`): rosters, trees (`_disciplesDirect`/`_disciplesTree`), `_getUnassignedMembers`, member pickers, attendance lists, All Members. A **real** viewer sees **real + guest + test** — still subject to the LeaderScope level gate — with every non-real row carrying a **kind badge** (🧪 Test / 👤 Guest pill via `_kindBadge`, or the plain-text `_kindOptTag` inside `<option>`s; the badge rule is PART of this invariant — an unbadged foreign-kind row is a bug). A **test** viewer sees **test-kind only**; a **guest** viewer sees **guest-kind only** (their containment is now total: they no longer see Rosehill's real members, and Pastor sees their universe badged).
+- **STATISTICS** (`_sameKind`): every count/distribution — MD `liveMembers()` (the chokepoint), `updateScopeCounts`, KPIs, pipeline/zone/EOLO/alert distributions, MLT `updateScopeCountsMobile` + home stats, the MLT duplicate-name check pool — includes ONLY members whose kind **equals** the viewer's kind. Kinds never inflate each other's numbers, in any direction.
+
+Phase A (S34) applied this inside `multiply_dashboard.html` + `lc_leader_tool.html` (each carries its own mirrored helper set; no `multiply_shared.js` change → `?v=4`). **Phase B (queued):** generalize the report HTMLs' strict inline predicate (#58 stays binding on them until then) to viewer-aware `memberKind === viewerKind`, and centralize the helpers in `multiply_shared.js` (bump `?v=`). This retires #160's open exception (the MD scope-count badges excluding guests is now the rule, not an exception) without weakening #160 itself: guest relationships remain operationally visible to real viewers. **Established June 12, 2026 (Session 34).**
+
+---
+
+**Established June 12, 2026 (Session 34). Invariant #164 added — count now 164.**
+
 ---
 
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
