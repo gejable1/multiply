@@ -48,6 +48,12 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 - `git add -A && git commit -m "…" && git push` → Pages auto-deploys (~1 min). Then **hard-refresh / relaunch the PWA**.
 - The Pastor smoke-tests on his **phone** (PWA, live Supabase) — that step is his, not yours.
 
+## Working across machines (desktop ↔ laptop)
+The repo is the single source of truth — clone it on any machine, any drive/path (nothing hardcodes the path). **Discipline: `git pull` before you start; commit + `push` before you switch machines.** Push before you stand up, pull before you sit down. If a push is rejected, `git pull --rebase` then push.
+- **Won't travel (by design):** `multiply-schema.json` is **gitignored** (local-only DB snapshot, #124) — regenerate it from Supabase on the other machine when needed. `CC_SETUP.md` is untracked.
+- **Keep the working copy on a plain LOCAL drive — not a cloud-synced folder** (OneDrive/Dropbox/Google Drive). A background sync can overwrite files with a stale cached copy mid-session; let **git** be the only sync. (If on-disk docs ever look reverted while `git log`/GitHub are correct, `git restore <file>` from HEAD fixes it — HEAD + origin are authoritative.)
+- `.gitattributes` (#151) enforces LF on every machine — no CRLF surprises.
+
 ## Communication
 Address him as **"kapatid."** Taglish welcome. He's terse ("go", "agree to all"). Default output =
 **numbered prose**, minimal clickable UI, **no wrap-up encouragement** ("let me know if…"). Flag
