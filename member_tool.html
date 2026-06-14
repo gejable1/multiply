@@ -1030,6 +1030,7 @@ body.lang-tl .tl-text{display:inline;}
   justify-content:center;gap:7px;
 }
 .pr-compose-btn:active{transform:scale(.99);}
+.pr-compose-btn.secondary{background:var(--leaf);color:var(--forest-deep);}
 /* A single request / list item card */
 .pr-item{
   border:1px solid var(--line);border-radius:12px;padding:12px 12px;
@@ -2334,20 +2335,14 @@ body.lang-tl .tl-text{display:inline;}
       ✍️ <span class="en-text">Share a request</span><span class="tl-text">Magbahagi ng kahilingan</span>
     </button>
 
-    <div class="pr-tabs">
-      <button class="pr-tab active" id="prTabFeed" onclick="switchPrayerTab('feed')">
-        <span class="en-text">Requests</span><span class="tl-text">Mga kahilingan</span>
-      </button>
-      <button class="pr-tab" id="prTabList" onclick="switchPrayerTab('list')">
-        <span class="en-text">My list</span><span class="tl-text">Aking listahan</span>
-      </button>
-    </div>
+    <button class="pr-compose-btn secondary" onclick="openPrayerMyList()">
+      📋 <span class="en-text">My prayer list</span><span class="tl-text">Aking listahan</span>
+    </button>
 
-    <!-- Category filter (shared by both tabs) -->
-    <select class="pr-select" id="prCategoryFilter" style="margin-bottom:12px" onchange="renderPrayerActiveTab()"></select>
+    <!-- Requests feed category filter -->
+    <select class="pr-select" id="prCategoryFilter" style="margin-bottom:12px" onchange="renderPrayerFeed()"></select>
 
     <div id="prFeedBox"></div>
-    <div id="prListBox" style="display:none"></div>
 
     <button class="lc-detail-close" onclick="closePrayerSheet()">
       <span class="en-text">Close</span>
@@ -2400,6 +2395,26 @@ body.lang-tl .tl-text{display:inline;}
     </button>
     <button class="lc-detail-close" onclick="closePrayerCompose()">
       <span class="en-text">Cancel</span><span class="tl-text">Kanselahin</span>
+    </button>
+  </div>
+</div>
+
+<!-- Prayer "My list" overlay — layered OVER the Requests sheet (like compose), so
+     the main screen stays in the background and is still there when this closes. -->
+<div class="lc-detail-backdrop" id="prayerListBackdrop" onclick="closePrayerMyList(event)">
+  <div class="lc-detail" id="prayerListSheet" onclick="event.stopPropagation()">
+    <h2>
+      <span class="en-text">📋 My Prayer List</span>
+      <span class="tl-text">📋 Aking Listahan</span>
+    </h2>
+    <div class="lc-detail-meta">
+      <span class="en-text">Those you're carrying in prayer</span>
+      <span class="tl-text">Mga dinadala mo sa panalangin</span>
+    </div>
+    <select class="pr-select" id="prListCategoryFilter" style="margin-bottom:12px" onchange="renderMyPrayerList()"></select>
+    <div id="prListBox"></div>
+    <button class="lc-detail-close" onclick="closePrayerMyList()">
+      <span class="en-text">Close</span><span class="tl-text">Isara</span>
     </button>
   </div>
 </div>
@@ -10608,13 +10623,13 @@ let _prayerReqMembers = {};         // requester_id → member row (kind flags +
 let _prayerMyList = [];             // my prayer_list_items (status != removed)
 let _prayerPickPool = [];           // kind-scoped circle for the 'individuals' picker
 let _prayerSavedReqIds = new Set(); // request ids already saved to my list
+// (Wave 2) My-list is now its own overlay (not an in-place tab) — no _prayerTab state.
 // Wave 2 engagement aggregates (counts only — no names, no leaderboard). Same-kind
 // by construction: only same-kind viewers can see a request (kind-bubbled feed),
 // so only same-kind members can pray for / save it (Inv #164).
 let _prayerPrayingCounts = {};      // request_id → DISTINCT intercessor count
 let _prayerSavedByCounts = {};      // request_id → DISTINCT saver count (status<>removed)
 let _prayerMyPrayedIds = new Set(); // request ids I have interceded for (any time)
-let _prayerTab = 'feed';
 let _prayerRelevanceCount = 0;
 let _answeredTarget = null;         // { type:'request'|'list', id }
 
@@ -10759,50 +10774,43 @@ async function loadPrayerPickPool(){
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 }
 
-// ── Sheet open/close + tabs ──
+// ── Main Requests sheet open/close ──
 async function openPrayerSheet(){
-  _prayerTab = 'feed';
-  _populatePrayerCategoryFilter(false);
-  document.getElementById('prTabFeed').classList.add('active');
-  document.getElementById('prTabList').classList.remove('active');
-  document.getElementById('prFeedBox').style.display = '';
-  document.getElementById('prListBox').style.display = 'none';
-  document.getElementById('prCategoryFilter').style.display = '';
+  _populatePrayerCat('prCategoryFilter', false);
   document.getElementById('prayerBackdrop').classList.add('show');
   try{
     await Promise.allSettled([loadPrayerFeed(), loadPrayerMyList()]);
+    await _loadPrayerEngagement();
     _computePrayerRelevance(); renderPrayerCta();
   }catch(e){ console.warn('prayer refresh failed (non-fatal):', e); }
   renderPrayerFeed();
 }
 function closePrayerSheet(e){
   // Close ONLY via the explicit Close button (called with no event). A tap on the
-  // dimmed backdrop must NOT dismiss the sheet — the Pastor wants it to stay open
-  // until Close is pressed (the My-list tab can shrink the sheet, so an outside-tap
-  // dismiss closed it by accident).
+  // dimmed backdrop must NOT dismiss the main sheet — it stays open until Close.
   if(e) return;
   document.getElementById('prayerBackdrop').classList.remove('show');
 }
-async function switchPrayerTab(tab){
-  _prayerTab = tab;
-  document.getElementById('prTabFeed').classList.toggle('active', tab === 'feed');
-  document.getElementById('prTabList').classList.toggle('active', tab === 'list');
-  document.getElementById('prFeedBox').style.display = tab === 'feed' ? '' : 'none';
-  document.getElementById('prListBox').style.display = tab === 'list' ? '' : 'none';
-  // Wave 2: the category filter applies to BOTH tabs. Repopulate per tab (My List
-  // adds a Personal/EOLO bucket) and reset the value so a pick made on one tab
-  // doesn't silently empty the other.
-  _populatePrayerCategoryFilter(tab === 'list');
-  document.getElementById('prCategoryFilter').style.display = '';
-  if(tab === 'list'){
-    await _logPrayerListOpen();
-    renderMyPrayerList();
-  } else {
-    renderPrayerFeed();
-  }
+
+// ── My Prayer List — a SEPARATE overlay layered OVER the Requests sheet (like the
+//    compose modal). Opening it leaves the main sheet shown underneath; closing it
+//    only hides this overlay, so the main screen is still there waiting. ──
+async function openPrayerMyList(){
+  _populatePrayerCat('prListCategoryFilter', true);
+  document.getElementById('prayerListBackdrop').classList.add('show');
+  try{ await _logPrayerListOpen(); }catch(_){}
+  renderMyPrayerList();
 }
-function renderPrayerActiveTab(){
-  if(_prayerTab === 'list') renderMyPrayerList(); else renderPrayerFeed();
+function closePrayerMyList(e){
+  // Mirror compose: a backdrop tap closes THIS overlay only (never the main sheet).
+  if(e && e.target !== document.getElementById('prayerListBackdrop')) return;
+  document.getElementById('prayerListBackdrop').classList.remove('show');
+}
+// Re-render whichever prayer views are on screen (feed always; My-list if its
+// overlay is open) — used after an answer/save mutation.
+function _rerenderPrayerViews(){
+  renderPrayerFeed();
+  if(document.getElementById('prayerListBackdrop').classList.contains('show')) renderMyPrayerList();
 }
 async function _logPrayerListOpen(){
   // One row per open — a lightweight SVI signal (Wave 4). Fail-soft.
@@ -10814,8 +10822,8 @@ async function _logPrayerListOpen(){
   }catch(e){ console.warn('list-open log failed (non-fatal):', e); }
 }
 
-function _populatePrayerCategoryFilter(forList){
-  const sel = document.getElementById('prCategoryFilter');
+function _populatePrayerCat(selId, forList){
+  const sel = document.getElementById(selId);
   const tl = _prayerTL();
   let html = `<option value="">${tl ? 'Lahat ng kategorya' : 'All categories'}</option>`;
   PRAYER_CATEGORIES.forEach(c => { html += `<option value="${c.key}">${tl ? c.tl : c.en}</option>`; });
@@ -10936,7 +10944,7 @@ function renderMyPrayerList(){
   // the LINKED request's category; personal/EOLO items (no request_id) live in the
   // "__personal" bucket. A saved item whose source request isn't in the loaded feed
   // can't resolve its category, so it shows only under "All" (best-effort).
-  const cat = document.getElementById('prCategoryFilter').value;
+  const cat = document.getElementById('prListCategoryFilter').value;
   let items = _prayerMyList.slice();
   if(cat === '__personal'){
     items = items.filter(i => !i.request_id);
@@ -11194,7 +11202,7 @@ async function confirmAnswered(){
     _computePrayerRelevance(); renderPrayerCta();
     document.getElementById('prayerAnsweredBackdrop').classList.remove('show');
     _answeredTarget = null;
-    renderPrayerActiveTab();
+    _rerenderPrayerViews();
     showToast(tl ? 'Purihin ang Diyos! 🙌' : 'Praise God! 🙌');
   }catch(e){
     console.warn('mark answered failed:', e);
@@ -11311,8 +11319,9 @@ async function submitPrayerRequest(){
     if(error) throw error;
     document.getElementById('prayerComposeBackdrop').classList.remove('show');
     await Promise.allSettled([loadPrayerFeed(), loadPrayerMyList()]);
+    await _loadPrayerEngagement();
     _computePrayerRelevance(); renderPrayerCta();
-    switchPrayerTab('feed');
+    renderPrayerFeed();
     showToast(tl ? 'Naibahagi ang panalangin 🙏' : 'Prayer shared 🙏');
   }catch(e){
     console.warn('submit prayer failed:', e);
