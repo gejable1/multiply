@@ -2031,6 +2031,19 @@ Phase A (S34) applied this inside `multiply_dashboard.html` + `lc_leader_tool.ht
 
 **Established June 12, 2026 (Session 34). Invariant #164 added — count now 164.**
 
+### **165. PRAYER / PANALANGIN — audience-and-kind-scoped requests; Wave-1 surface is MMT-only, no gamification UI**
+
+Prayer ("Panalangin") is a member-facing prayer-request board. **Wave 1** (landed `1b3f2c8`→`2ca3411`, **Session 35**, on `main`) shipped the SQL + the **MMT** surface; the MD/MLT surfaces are later waves.
+
+- **Schema** — `migrations/003_prayer_wave1.sql` (run + verified in Supabase, `verify_003` JSON `all_ok:true`; rollback `003_rollback.sql`, NOT run). **Four** per-church tables, each idempotent and ending with `DISABLE ROW LEVEL SECURITY` (Inv #5/#10), each with nullable `church_id` + FK + indexes (Inv #153–#156): **`prayer_requests`** (`audience_type ∈ {lcg, individuals, all, discipler_pastor}`; `audience_lcl_id` for LCG, `audience_member_ids uuid[]` GIN-indexed for the individuals set; anonymity, category, status, `care_flag_by`, `expires_at`), **`prayer_list_items`** (saved-to-list, partial `UNIQUE(member_id,request_id) WHERE request_id NOT NULL`), **`prayer_list_opens`** (logs each My-List open), **`intercessions`** (exists for Waves 2–4; unused in W1).
+- **Audience semantics:** `lcg` = requester's LC group (LCL linkage, Inv #1/#46, never `lc_group` text); `individuals` = a hand-picked set drawn from the **full same-kind church roster** (reach outside the requester's LCG, per spec — `share_with_lc` opt-outs + self excluded); `all` = everyone (still kind-bubbled); `discipler_pastor` = the requester's discipler **plus** any pastor, where pastor detection keys on **`pipeline_level >= 5`** (L5 Pastoral Staff, mirrors `_isSuperuser`'s L5 rule — MMT has no `_isSuperuser`), degrading to **discipler-only** inside a guest/test bubble with no L5.
+- **Kind bubble (Inv #164):** every audience, picklist, and feed row is bounded by `requesterKind === viewerKind`, viewer read from the member's own `members` row (Inv #162 — never the session shim). Helpers are **local to the prayer block** in `member_tool.html`; **Phase B:** centralize a shared `sameKind` in `multiply_shared.js`.
+- **No gamification UI (Pastor's standing intent):** the prayer surface shows **no points / score / badges**. Wave 4 will feed an **invisible** SVI prayer category (`count_rows`) — gamification stays hidden; SVI factors it silently.
+- **Waves HELD until Pastor's go:** W2 (prayed-tap "N praying", praise→celebration feed, notify-on-save, soft care-flag, category filter), W3 (reminders + EOLO seeding + auto-expiry via `expires_at`), W4 (silent SVI prayer category). `intercessions` / `prayer_list_items` / `prayer_list_opens` exist to serve these.
+- No `multiply_shared.js` change → consumers stay `?v=4`. `node --check` clean; 22/22 audience/kind/picker truth-table per commit.
+
+**Established June 14, 2026 (Session 35). Invariant #165 added — count now 165.**
+
 ---
 
 *"A student who is fully trained will be like their teacher." — Luke 6:40*

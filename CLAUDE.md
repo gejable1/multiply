@@ -62,4 +62,13 @@ design trade-offs as numbered options before building; accept corrections withou
 ## When asked "what's next?"
 Refresh from `HANDOFF.md`'s PENDING list — don't brainstorm new scope (#43).
 **Top item now: BTLI L12 — Understanding My Unique Design** (UNLAD-L2, Eph 2:10, the
-assessment-battery lesson) — needs the UNLAD-L2 scan. Also pending: bump the 4 report HTMLs to `?v=4`.
+assessment-battery lesson) — needs the UNLAD-L2 scan. Also live but waiting on the Pastor's
+go: **Prayer/Panalangin Waves 2–4** (W1 landed S35, Inv #165) and **kind-mirroring Phase B**
+(reports viewer-aware + centralize helpers → bump `?v=`). (The 4 report HTMLs are already at
+`?v=4` — that lockstep is done.)
+
+## Cloud vs desktop sessions
+Cloud (claude.ai) sessions on this repo are **read-only** — git push 403, MCP 403, no signing key.
+Ship from a cloud session via `git format-patch` → apply + push from the desktop clone (the preferred
+push surface). Durable fix pending: grant the Claude GitHub App write on `gejable1/multiply`. Always
+**pull-first; ask before push.**
