@@ -1064,6 +1064,8 @@ body.lang-tl .tl-text{display:inline;}
   font-size:12px;color:var(--ink-soft);
 }
 .pr-item .pr-answered .pr-ans-label{font-weight:700;color:var(--gold);font-size:10.5px;letter-spacing:.05em;}
+.pr-item .pr-metrics{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:8px;font-size:11px;color:var(--muted);font-weight:600;}
+.pr-item .pr-metrics .sep{opacity:.5;}
 .pr-kind-badge{font-size:9px;padding:1px 5px;border-radius:8px;white-space:nowrap;margin-left:4px;}
 .pr-kind-test{background:rgba(167,139,250,.18);color:#7c3aed;border:1px solid rgba(167,139,250,.4);}
 .pr-kind-guest{background:rgba(74,144,226,.16);color:#3a7bd1;border:1px solid rgba(74,144,226,.35);}
@@ -6661,8 +6663,44 @@ async function loadCelebrationFeed(){
   }
   bdayWins.sort((a,b) => (b.isToday - a.isToday) || (a.bday - b.bday)); // today first, then earliest
 
-  // ── INDIVIDUAL ORDER: birthdays → streaks → assessments; cap 8.
-  celebrationWins = [...bdayWins, ...streakWins, ...wins].slice(0, 8);
+  // ── (E) ANSWERED-PRAYER PRAISE REPORTS (Wave 2) ──
+  // A requester who marked a prayer answered with a praise note → a celebration.
+  // Same scope as every other win (eligible = same-LCG, sharing, kind-filtered set),
+  // so it inherits this feed's kind+LCG scoping. Anonymous answers are celebrated
+  // WITHOUT a name/photo — anonymity is preserved on this public surface.
+  const eligibleById = new Map(eligible.map(m => [m.id, m]));
+  const prayerWins = [];
+  if(lcIds.length){
+    const { data: ansRows, error: aerr } = await db.from('prayer_requests')
+      .select('requester_id, praise_note, answered_at, is_anonymous, status')
+      .eq('status','answered')
+      .in('requester_id', lcIds)
+      .gte('answered_at', new Date(cutoff).toISOString())
+      .not('praise_note','is',null);
+    if(aerr) throw aerr;
+    for(const pr of (ansRows || [])){
+      const m = eligibleById.get(pr.requester_id);
+      if(!m) continue;                                  // outside the sharing/kind scope
+      const note = (pr.praise_note || '').trim();
+      if(!note) continue;
+      const anon = !!pr.is_anonymous;
+      const snippet = note.length > 90 ? note.slice(0,87).trimEnd() + '…' : note;
+      prayerWins.push({
+        memberId: anon ? null : m.id,
+        memberName: anon ? (document.body.classList.contains('lang-tl') ? 'Isang kapatid' : 'A member') : m.name,
+        photoUrl: anon ? '' : (m.photo_url || ''),
+        isTest: !!m.is_test_member,
+        icon: '🙏',
+        label_en: `praises God — answered prayer: “${snippet}”`,
+        label_tl: `nagpupuri sa Diyos — sinagot na panalangin: “${snippet}”`,
+        whenIso: pr.answered_at, sortKey: pr.answered_at ? Date.parse(pr.answered_at) : 0
+      });
+    }
+    prayerWins.sort((a,b) => b.sortKey - a.sortKey);
+  }
+
+  // ── INDIVIDUAL ORDER: birthdays → answered prayers → streaks → assessments; cap 8.
+  celebrationWins = [...bdayWins, ...prayerWins, ...streakWins, ...wins].slice(0, 8);
 
   // ── (D) GROUP BADGES (pinned atop, not counted in the cap)
   // 1) Perfect attendance last Sunday — fires ONLY if the whole sharing LCG
@@ -10570,6 +10608,12 @@ let _prayerReqMembers = {};         // requester_id → member row (kind flags +
 let _prayerMyList = [];             // my prayer_list_items (status != removed)
 let _prayerPickPool = [];           // kind-scoped circle for the 'individuals' picker
 let _prayerSavedReqIds = new Set(); // request ids already saved to my list
+// Wave 2 engagement aggregates (counts only — no names, no leaderboard). Same-kind
+// by construction: only same-kind viewers can see a request (kind-bubbled feed),
+// so only same-kind members can pray for / save it (Inv #164).
+let _prayerPrayingCounts = {};      // request_id → DISTINCT intercessor count
+let _prayerSavedByCounts = {};      // request_id → DISTINCT saver count (status<>removed)
+let _prayerMyPrayedIds = new Set(); // request ids I have interceded for (any time)
 let _prayerTab = 'feed';
 let _prayerRelevanceCount = 0;
 let _answeredTarget = null;         // { type:'request'|'list', id }
@@ -10580,7 +10624,44 @@ function _prayerFeedById(id){ return _prayerFeed.find(r => r.id === id) || null;
 // ── Boot loader (added to initMMT's parallel _loaders) ──
 async function loadPrayerData(){
   await Promise.allSettled([loadPrayerFeed(), loadPrayerMyList()]);
+  await _loadPrayerEngagement();
   _computePrayerRelevance();
+}
+
+// Wave 2: aggregate "N praying" + "saved by N" for the visible feed. Distinct
+// member counts only — never names, never a leaderboard, no points (Inv #10
+// spirit). Reads all rows for the visible request ids; those interactions are
+// same-kind by construction (kind-bubbled visibility, Inv #164). Fail-soft.
+async function _loadPrayerEngagement(){
+  _prayerPrayingCounts = {}; _prayerSavedByCounts = {}; _prayerMyPrayedIds = new Set();
+  const ids = _prayerFeed.map(r => r.id);
+  if(!ids.length) return;
+  try{
+    const { data: inter, error: ierr } = await db.from('prayer_intercessions')
+      .select('request_id, member_id')
+      .in('request_id', ids);
+    if(ierr) throw ierr;
+    const interSets = {};
+    (inter || []).forEach(row => {
+      (interSets[row.request_id] = interSets[row.request_id] || new Set()).add(row.member_id);
+      if(row.member_id === MEMBER.memberId) _prayerMyPrayedIds.add(row.request_id);
+    });
+    Object.keys(interSets).forEach(k => { _prayerPrayingCounts[k] = interSets[k].size; });
+
+    const { data: saves, error: serr } = await db.from('prayer_list_items')
+      .select('request_id, member_id')
+      .in('request_id', ids)
+      .neq('status', 'removed');
+    if(serr) throw serr;
+    const saveSets = {};
+    (saves || []).forEach(row => {
+      if(!row.request_id) return;
+      (saveSets[row.request_id] = saveSets[row.request_id] || new Set()).add(row.member_id);
+    });
+    Object.keys(saveSets).forEach(k => { _prayerSavedByCounts[k] = saveSets[k].size; });
+  }catch(e){
+    console.warn('prayer engagement load failed (non-fatal):', e);
+  }
 }
 
 async function loadPrayerFeed(){
@@ -10681,7 +10762,7 @@ async function loadPrayerPickPool(){
 // ── Sheet open/close + tabs ──
 async function openPrayerSheet(){
   _prayerTab = 'feed';
-  _populatePrayerCategoryFilter();
+  _populatePrayerCategoryFilter(false);
   document.getElementById('prTabFeed').classList.add('active');
   document.getElementById('prTabList').classList.remove('active');
   document.getElementById('prFeedBox').style.display = '';
@@ -10704,8 +10785,11 @@ async function switchPrayerTab(tab){
   document.getElementById('prTabList').classList.toggle('active', tab === 'list');
   document.getElementById('prFeedBox').style.display = tab === 'feed' ? '' : 'none';
   document.getElementById('prListBox').style.display = tab === 'list' ? '' : 'none';
-  // Wave 1: the category filter applies to the Requests feed only (Wave 2 adds it to My List).
-  document.getElementById('prCategoryFilter').style.display = tab === 'feed' ? '' : 'none';
+  // Wave 2: the category filter applies to BOTH tabs. Repopulate per tab (My List
+  // adds a Personal/EOLO bucket) and reset the value so a pick made on one tab
+  // doesn't silently empty the other.
+  _populatePrayerCategoryFilter(tab === 'list');
+  document.getElementById('prCategoryFilter').style.display = '';
   if(tab === 'list'){
     await _logPrayerListOpen();
     renderMyPrayerList();
@@ -10726,11 +10810,14 @@ async function _logPrayerListOpen(){
   }catch(e){ console.warn('list-open log failed (non-fatal):', e); }
 }
 
-function _populatePrayerCategoryFilter(){
+function _populatePrayerCategoryFilter(forList){
   const sel = document.getElementById('prCategoryFilter');
   const tl = _prayerTL();
   let html = `<option value="">${tl ? 'Lahat ng kategorya' : 'All categories'}</option>`;
   PRAYER_CATEGORIES.forEach(c => { html += `<option value="${c.key}">${tl ? c.tl : c.en}</option>`; });
+  // My List groups personal/EOLO items (no linked request → no category) under one
+  // bucket (Wave 2, decision D — no new column). Feed has no such items.
+  if(forList) html += `<option value="__personal">${tl ? 'Sarili / EOLO' : 'Personal / EOLO'}</option>`;
   sel.innerHTML = html;
 }
 
@@ -10783,15 +10870,42 @@ function _prayerItemHTML(r){
   // "Answered 🙌" badge instead, mirroring the My-List badge.
   const acts = [];
   if(r.status === 'open'){
+    // 🙏 Pray (intercession) — everyone but the requester; re-tap allowed (each tap
+    // logs a row = W4 frequency signal), the visible count de-dups by member.
+    if(!isMine){
+      const prayed = _prayerMyPrayedIds.has(r.id);
+      acts.push(`<button class="pr-act${prayed ? ' is-done' : ' primary'}" onclick="prayForRequest('${r.id}', this)">🙏 ${prayed ? (tl ? 'Naipanalangin ✓ · muli' : 'Prayed ✓ · pray again') : (tl ? 'Ipanalangin' : 'Pray')}</button>`);
+    }
     const saved = _prayerSavedReqIds.has(r.id);
     acts.push(saved
       ? `<span class="pr-act is-done">✓ ${tl ? 'Nasa listahan' : 'On my list'}</span>`
-      : `<button class="pr-act primary" onclick="savePrayerToList('${r.id}')">＋ ${tl ? 'I-save sa listahan' : 'Save to my list'}</button>`);
+      : `<button class="pr-act" onclick="savePrayerToList('${r.id}')">＋ ${tl ? 'I-save sa listahan' : 'Save to my list'}</button>`);
     if(isMine){
       acts.push(`<button class="pr-act" onclick="markRequestAnswered('${r.id}')">🙌 ${tl ? 'Markahang sinagot' : 'Mark answered'}</button>`);
     }
+    // 🤲 Soft pastoral-care flag — gentle, not an alarm (Inv #16). Any viewer;
+    // once flagged it's disabled to avoid duplicate notifications.
+    if(r.care_flag){
+      acts.push(`<span class="pr-act is-done">🤲 ${tl ? 'Naipaabot sa pastor' : 'Pastor notified'}</span>`);
+    } else {
+      acts.push(`<button class="pr-act" onclick="flagForCare('${r.id}', this)">🤲 ${tl ? 'Sabihin sa pastor' : 'Flag for care'}</button>`);
+    }
   } else if(r.status === 'answered'){
     acts.push(`<span class="pr-act is-done">🙌 ${tl ? 'Sinagot' : 'Answered'}</span>`);
+  }
+  // Aggregate encouragement (counts only, no names). The requester sees both
+  // "saved by N" and "N praying" (PULL — read in-feature, no inbox); others see
+  // just "N praying" on any request that has intercessors.
+  const pc = _prayerPrayingCounts[r.id] || 0;
+  const sc = _prayerSavedByCounts[r.id] || 0;
+  let metrics = '';
+  if(isMine){
+    const parts = [];
+    if(sc > 0) parts.push(`💾 ${tl ? ('na-save ng ' + sc) : ('saved by ' + sc)}`);
+    if(pc > 0) parts.push(`🙏 ${pc} ${tl ? 'nagdarasal' : 'praying'}`);
+    if(parts.length) metrics = `<div class="pr-metrics">${parts.join('<span class="sep">·</span>')}</div>`;
+  } else if(pc > 0){
+    metrics = `<div class="pr-metrics">🙏 ${pc} ${tl ? 'nagdarasal' : 'praying'}</div>`;
   }
   const youTag = isMine ? ` <span style="font-size:9px;color:var(--gold);font-weight:700">${tl ? '(ikaw)' : '(you)'}</span>` : '';
   return `<div class="pr-item">
@@ -10805,6 +10919,7 @@ function _prayerItemHTML(r){
     </div>
     <div class="pr-body">${MultiplyShared.escapeHTML(r.body)}</div>
     ${answered}
+    ${metrics}
     <div class="pr-actions">${acts.join('')}</div>
   </div>`;
 }
@@ -10813,11 +10928,25 @@ function _prayerItemHTML(r){
 function renderMyPrayerList(){
   const box = document.getElementById('prListBox');
   const tl = _prayerTL();
-  const items = _prayerMyList.slice();
+  // Category filter (Wave 2, decision D — no new column): saved items filter by
+  // the LINKED request's category; personal/EOLO items (no request_id) live in the
+  // "__personal" bucket. A saved item whose source request isn't in the loaded feed
+  // can't resolve its category, so it shows only under "All" (best-effort).
+  const cat = document.getElementById('prCategoryFilter').value;
+  let items = _prayerMyList.slice();
+  if(cat === '__personal'){
+    items = items.filter(i => !i.request_id);
+  } else if(cat){
+    items = items.filter(i => {
+      if(!i.request_id) return false;                 // personal/EOLO excluded from category buckets
+      const src = _prayerFeedById(i.request_id);
+      return !!(src && src.category === cat);
+    });
+  }
   if(!items.length){
     box.innerHTML = `<div class="pr-empty">${tl
-      ? 'Wala pang nasa iyong listahan. I-save ang isang kahilingan o magdagdag ng sarili.'
-      : 'Your list is empty. Save a request, or add your own.'}</div>`;
+      ? (cat ? 'Walang item sa kategoryang ito.' : 'Wala pang nasa iyong listahan. I-save ang isang kahilingan o magdagdag ng sarili.')
+      : (cat ? 'No items in this category.' : 'Your list is empty. Save a request, or add your own.')}</div>`;
     return;
   }
   box.innerHTML = items.map(_prayerListItemHTML).join('');
@@ -10906,12 +11035,102 @@ async function savePrayerToList(reqId){
     }
     _prayerSavedReqIds.add(reqId);
     await loadPrayerMyList();
+    await _loadPrayerEngagement();      // refresh "saved by N"
     _computePrayerRelevance(); renderPrayerCta();
     renderPrayerFeed();
     showToast(tl ? 'Idinagdag sa listahan 🙏' : 'Added to your list 🙏');
   }catch(e){
     console.warn('save to list failed:', e);
     showToast(tl ? 'Hindi na-save. Subukan ulit.' : 'Could not save. Try again.');
+  }
+}
+
+// ── 🙏 Pray for this (intercession) ──
+// Each tap logs a prayer_intercessions row (W4 frequency signal). Re-tap allowed;
+// the visible "N praying" is DISTINCT members, so a repeat tap doesn't inflate it.
+// Cross-member write (works under RLS-disabled now; Phase-2 RLS → RPC, logged).
+async function prayForRequest(reqId, btnEl){
+  const tl = _prayerTL();
+  if(btnEl) btnEl.disabled = true;
+  try{
+    const { error } = await db.from('prayer_intercessions').insert({
+      request_id: reqId,
+      member_id:  MEMBER.memberId,
+      church_id:  memberRow.church_id || null
+    });
+    if(error) throw error;
+    if(!_prayerMyPrayedIds.has(reqId)){            // first time I pray → +1 distinct
+      _prayerMyPrayedIds.add(reqId);
+      _prayerPrayingCounts[reqId] = (_prayerPrayingCounts[reqId] || 0) + 1;
+    }
+    renderPrayerFeed();
+    showToast(tl ? 'Naipanalangin. Salamat sa pagdarasal 🙏' : 'Prayed. Thank you for interceding 🙏');
+  }catch(e){
+    console.warn('prayForRequest failed:', e);
+    if(btnEl) btnEl.disabled = false;
+    showToast(tl ? 'Hindi naitala. Subukan ulit.' : 'Could not record. Try again.');
+  }
+}
+
+// ── 🤲 Flag for pastoral care (soft) ──
+// Sets prayer_requests.care_flag + care_flag_by, then sends a SOFT notification
+// (Inv #16 — a nudge, not an alarm) to the requester's discipler + same-kind
+// pastor(s) (pipeline_level >= 5). Anonymity exception: the care notification
+// names the requester so they CAN be shepherded; the public feed stays anonymous.
+// Cross-member write (Phase-2 RLS → RPC, logged).
+async function flagForCare(reqId, btnEl){
+  const tl = _prayerTL();
+  const r = _prayerFeedById(reqId);
+  if(!r) return;
+  if(r.care_flag){ showToast(tl ? 'Naipaabot na sa pastor.' : 'Already flagged for care.'); return; }
+  if(btnEl) btnEl.disabled = true;
+  try{
+    // 1) Mark the request (columns already exist — no SQL).
+    const { error: uerr } = await db.from('prayer_requests')
+      .update({ care_flag: true, care_flag_by: MEMBER.memberId })
+      .eq('id', reqId);
+    if(uerr) throw uerr;
+    r.care_flag = true; r.care_flag_by = MEMBER.memberId;
+
+    // 2) Recipients = requester's discipler + same-kind pastor(s). The requester's
+    //    discipler_id + kind aren't in _prayerReqMembers, so fetch them now.
+    const recipients = new Set();
+    let requesterName = r.requester_name || '';
+    let reqKind = 'real';
+    const { data: rq } = await db.from('members')
+      .select('name, discipler_id, is_test_member, is_external_user')
+      .eq('id', r.requester_id).maybeSingle();
+    if(rq){
+      requesterName = rq.name || requesterName;
+      reqKind = prayerMemberKind(rq);
+      if(rq.discipler_id) recipients.add(rq.discipler_id);
+    }
+    const { data: pastors } = await db.from('members')
+      .select('id, is_test_member, is_external_user')
+      .gte('pipeline_level', 5);
+    (pastors || []).forEach(p => { if(prayerMemberKind(p) === reqKind) recipients.add(p.id); });
+    recipients.delete(MEMBER.memberId);            // no self-notify
+
+    // 3) Soft notifications (mirrors notifyDiscipler's notifications shape).
+    const nameForCare = requesterName || (tl ? 'Isang kapatid' : 'a member');
+    const snippet = (r.body || '').slice(0, 180);
+    const rows = [...recipients].map(rid => ({
+      recipient_id: rid,
+      kind: 'prayer_care',
+      title: nameForCare + ' may welcome a gentle check-in',
+      body: nameForCare + ' has a prayer request a kapatid felt could use some pastoral care. No alarm — just a nudge to reach out when you can. Request: "' + snippet + '"',
+      payload: { request_id: reqId, requester_id: r.requester_id, flagged_by: MEMBER.memberId, is_anonymous: !!r.is_anonymous }
+    }));
+    if(rows.length){
+      const { error: nerr } = await db.from('notifications').insert(rows);
+      if(nerr) console.warn('care notification insert failed (non-fatal):', nerr);
+    }
+    renderPrayerFeed();
+    showToast(tl ? 'Naipaabot nang marahan sa discipler/pastor 🤲' : 'Gently shared with the discipler/pastor 🤲');
+  }catch(e){
+    console.warn('flagForCare failed:', e);
+    if(btnEl) btnEl.disabled = false;
+    showToast(tl ? 'Hindi naipaabot. Subukan ulit.' : 'Could not send. Try again.');
   }
 }
 
@@ -10959,6 +11178,12 @@ async function confirmAnswered(){
       if(propErr) console.warn('answer propagation to savers failed (non-fatal):', propErr);
       await loadPrayerFeed();
       await loadPrayerMyList();   // my own saved copy, if any, now shows answered
+      await _loadPrayerEngagement();
+      // Praise report → celebration feed (Wave 2). The feed is COMPUTED, so just
+      // recompute it: loadCelebrationFeed now reads answered prayers as a source.
+      // Anonymity is preserved there (anonymous answers celebrate without a name).
+      try{ await loadCelebrationFeed(); renderCelebrationFeed(); }
+      catch(ce){ console.warn('celebration refresh failed (non-fatal):', ce); }
     } else {
       const { error } = await db.from('prayer_list_items').update({
         status: 'answered',
@@ -10988,6 +11213,7 @@ async function removeListItem(itemId){
       .eq('id', itemId).eq('member_id', MEMBER.memberId);
     if(error) throw error;
     await loadPrayerMyList();
+    await _loadPrayerEngagement();      // refresh "saved by N"
     _computePrayerRelevance(); renderPrayerCta();
     renderMyPrayerList();
     showToast(tl ? 'Inalis sa listahan' : 'Removed from your list');
