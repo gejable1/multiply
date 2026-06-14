@@ -6267,37 +6267,37 @@ setTimeout(_pwaMaybeShowBanner, 1500);
 let pendingNotices = [];
 
 async function loadHeadsUps(){
-  // Resolve the LC group(s) we should query for
-  const lcGroup = (LEADER && LEADER.leaderLcGroup) ? LEADER.leaderLcGroup : null;
   const leaderId = (LEADER && LEADER.leaderId) ? LEADER.leaderId : null;
-  if(!lcGroup && !leaderId){
+  if(!leaderId){
     pendingNotices = [];
     renderHeadsUpBanner();
     return;
   }
 
   try{
-    // Pastor (Level 5) sees all unacknowledged notices.
-    // Other leaders see only those from their own LC group OR addressed to them.
-    let query = db.from('absence_notices')
-      .select('id,member_id,member_name,member_lc_group,event_label,event_date,reason_label,reason_note,return_date,created_at,acknowledged_at,discipler_id')
+    // Tier 4 (Inv #16/#166): a "heads up to my leader" belongs to the leader the
+    // member is under NOW, resolved by members.discipler_id — NEVER member_lc_group
+    // text (sparse / null / drifts on transfer → false positives from non-flock
+    // members sharing a group label, and false negatives for own disciples with a
+    // null/stale lc_group, e.g. a NULL-lc_group flock).
+    //
+    // Default for EVERYONE (Pastor included) = the viewing leader's OWN disciples —
+    // personal heads-up, no church-wide bleed (the symptom the Pastor reported).
+    // Resolve the flock from live members first, then fetch only those members'
+    // notices (Inv #38 — no !inner; member set bounds the query precisely).
+    const {data: flock, error: ferr} = await db.from('members')
+      .select('id')
+      .eq('discipler_id', leaderId);
+    if(ferr) throw ferr;
+    const memberIds = (flock || []).map(m => m.id);
+    memberIds.push(leaderId);   // include a heads-up the leader filed for themselves
+
+    const {data, error} = await db.from('absence_notices')
+      .select('id,member_id,member_name,member_lc_group,event_label,event_date,reason_label,reason_note,return_date,created_at,acknowledged_at')
       .is('acknowledged_at', null)
+      .in('member_id', memberIds)
       .order('created_at', { ascending:false })
-      .limit(100);
-
-    const isPastor = (LEADER && (LEADER.leaderLevel || 0) >= 5);
-    if(!isPastor){
-      // Filter: same LC group OR me as discipler
-      // Supabase: use .or() with comma-separated conditions
-      const conditions = [];
-      if(lcGroup)  conditions.push(`member_lc_group.eq.${lcGroup}`);
-      if(leaderId) conditions.push(`discipler_id.eq.${leaderId}`);
-      if(conditions.length){
-        query = query.or(conditions.join(','));
-      }
-    }
-
-    const {data, error} = await query;
+      .limit(200);
     if(error) throw error;
     pendingNotices = data || [];
   }catch(e){
