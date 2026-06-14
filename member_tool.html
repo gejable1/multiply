@@ -2897,18 +2897,27 @@ function computeStreak(rows){
   return streak;
 }
 
-// ───── Devotional reflection reminder (Session 21) ─────
-// Checks whether this member has written a devotional REFLECTION (non-empty
-// text in devotional_reflections) for YESTERDAY or TODAY. If neither has a
-// reflection, we surface a GENTLE, dismissible reminder on the home screen —
-// NOT a forceful gate (members are in a more tender place than leaders; a hard
-// block on a devotional habit can read as guilt rather than encouragement).
+// ───── Devotional reflection reminder (Session 21; existence-gated S35) ─────
+// Surfaces a GENTLE, dismissible reminder on the home screen when there IS a
+// devotional to do today and the member hasn't done it — NOT a forceful gate
+// (members are in a more tender place than leaders; a hard block on a devotional
+// habit can read as guilt rather than encouragement).
 //
-// Lookback semantics (Pastor's choice #2): remind ONLY if BOTH yesterday and
-// today are empty — so a member who already reflected yesterday morning is not
-// nagged, matching the gentleness of the streak logic. Blank/whitespace text
-// counts as "no reflection". Dates use the member's local device date (Manila
-// phone = Manila local), the same basis the devo card uses via _ymd().
+// TWO gates, both required (S35 bugfix):
+//   (a) EXISTENCE — a devotionals row must exist for TODAY's date. On Sundays /
+//       gap days / holidays the guide publishes no row, so there is nothing to
+//       complete → suppress the nag entirely. (The home card already shows the
+//       gentle "no devotional today — see you in church" state via
+//       renderAnchorCard, so no separate one-liner is needed.) Before this gate
+//       the nag fired on every devotional-less day, which was the reported bug.
+//   (b) COMPLETION — the member has no non-empty reflection for TODAY. (The
+//       existence gate makes the old yesterday-lookback workaround obsolete: it
+//       only existed to dodge the Sunday false-positive, which (a) now solves at
+//       the source, so completion is TODAY-only.)
+// Dates use the device-local YMD (Manila on a Manila phone, Inv #12) — the same
+// basis loadTodaysDevo() uses, so the two always agree. NB: loadReflectionGap
+// runs in PARALLEL with loadTodaysDevo at boot, so it must query the devotionals
+// table itself rather than read the todayDevo global (which may not be set yet).
 let _devoReflectionGap = false;  // true → show the reminder
 let _reflectionReminderDismissed = false;  // per-session "maybe later" dismiss
 
@@ -2983,22 +2992,28 @@ async function loadReflectionGap(){
   try{
     if(!MEMBER || !MEMBER.memberId){ _devoReflectionGap = false; return; }
     const _ymd = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
-    const today = new Date();
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-    const todayStr = _ymd(today);
-    const yestStr  = _ymd(yesterday);
+    const todayStr = _ymd(new Date());
 
+    // (a) Existence gate — is there a devotional published for TODAY? If not
+    // (Sunday / gap / holiday) there is nothing to complete, so never nag.
+    // Self-contained query (loadTodaysDevo runs in parallel; can't read todayDevo).
+    const {data: devoRow, error: devoErr} = await db.from('devotionals')
+      .select('id')
+      .eq('entry_date', todayStr)
+      .maybeSingle();
+    if(devoErr) throw devoErr;
+    if(!devoRow){ _devoReflectionGap = false; return; }   // no devotional today → no nag
+
+    // (b) Completion gate — has the member written a non-empty reflection TODAY?
     const {data, error} = await db.from('devotional_reflections')
-      .select('entry_date, reflection')
+      .select('reflection')
       .eq('member_id', MEMBER.memberId)
-      .in('entry_date', [todayStr, yestStr]);
+      .eq('entry_date', todayStr);
     if(error) throw error;
-
-    // A day "counts" only if it has a row with non-empty (trimmed) reflection text.
-    const hasReflection = (data || []).some(r =>
+    const doneToday = (data || []).some(r =>
       r.reflection && String(r.reflection).trim().length > 0);
-    // Gap (remind) only when NEITHER day has a real reflection.
-    _devoReflectionGap = !hasReflection;
+    // Remind only when today's devotional exists AND is not yet done.
+    _devoReflectionGap = !doneToday;
   }catch(e){
     // Fail-soft: if we can't read, do NOT nag (never guilt on a read error).
     console.warn('reflection-gap check failed (non-fatal, no reminder):', e);
