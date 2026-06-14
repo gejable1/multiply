@@ -12419,19 +12419,17 @@ async function openAnnAckDetails(annId){
 function _annAudienceMatchesMemberMD(filter, member){
   if (!filter) return false;
   if (filter.all === true) return true;
-  // Real LC group match (whitespace-tolerant — picker stores trimmed names but
-  // raw member.lc_group may have stray spaces from imports or manual edits).
+  // LC group match — CANONICAL by the member's LCL (discipler_id → LCL), Inv #166.
+  // Never key on lc_group text. A member's LCG key is 'lcl:<discipler_id>' (their
+  // leader) or 'lcl:<own id>' if they ARE that leader. New announcements store
+  // these keys (the picker emits one per LC Leader), so null/stale-lc_group flocks
+  // are reached. The raw-name branch is a best-effort fallback for LEGACY drafts
+  // that stored a group NAME (can't reach null-lc_group members — that was the bug).
   if (filter.lc_groups?.length) {
+    if (member.discipler_id && filter.lc_groups.includes('lcl:' + member.discipler_id)) return true;
+    if (filter.lc_groups.includes('lcl:' + member.id)) return true;
     const myGroup = (member.lc_group || '').trim();
-    if (myGroup) {
-      const wanted = filter.lc_groups.map(g => (typeof g === 'string' ? g.trim() : g));
-      if (wanted.includes(myGroup)) return true;
-    }
-    // Virtual "Unassigned (LCL: ...)" — id format "lcl:<discipler_id>"
-    if (!myGroup && member.discipler_id) {
-      const virtKey = 'lcl:' + member.discipler_id;
-      if (filter.lc_groups.includes(virtKey)) return true;
-    }
+    if (myGroup && filter.lc_groups.some(g => (typeof g === 'string' ? g.trim() : g) === myGroup)) return true;
   }
   if (filter.levels?.includes(member.pipeline_level)) return true;
   if (filter.ministries?.some(m => [member.ministry, member.ministry2, member.ministry3].includes(m))) return true;
@@ -12868,34 +12866,18 @@ async function _ensureAudPickerCache(){
     if (error) throw error;
     _audPickerCache.members = members || [];
 
-    // Build LC Groups: real groups (from .lc_group) + virtual LCL-derived groups.
-    // Virtual groups (the LCL's flock with no lc_group set) are labelled
-    // "{first name}'s LCG" per Inv #59's _lcgDisplayName fallback — same
-    // convention MMT/MLT use, so the picker + chip + member tools all agree.
-    const realGroups = new Set();
-    const virtualGroups = new Map();  // key = "lcl:<id>" → label
-    _audPickerCache.members.forEach(m => {
-      if (m.lc_group && m.lc_group.trim()) {
-        realGroups.add(m.lc_group.trim());
-      } else if (m.discipler_id) {
-        // Virtual group: members under this LCL
-        const lcl = _audPickerCache.members.find(x => x.id === m.discipler_id);
-        if (lcl) {
-          const key = `lcl:${lcl.id}`;
-          if (!virtualGroups.has(key)) {
-            virtualGroups.set(key, _lclLcgLabel(lcl.name));
-          }
-        }
-      }
-    });
-    // Combined A–Z list (Session 19): real + virtual groups interleaved and
-    // sorted together by display label, case-insensitive. A Pastor picks by
-    // name, not by whether a group is real or LCL-derived — so "Tonette's LCG"
-    // sorts under T regardless of type. No (virtual) tag is shown.
-    _audPickerCache.lcGroups = [
-      ...Array.from(realGroups).map(g => ({id: g, label: g, real: true})),
-      ...Array.from(virtualGroups.entries()).map(([id, label]) => ({id, label, real: false}))
-    ].sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+    // Build LC Groups: ONE canonical entry per LC Leader, keyed by 'lcl:<leaderId>'
+    // (Inv #166) — the exact key the matcher resolves from a member's discipler_id.
+    // This replaces the old "real name text + virtual lcl: key" split, so a group
+    // is targeted by its LEADER, never by lc_group text; null/stale-lc_group flocks
+    // are now reachable. Label = the LCL's display name (leader.lc_group if set,
+    // else "{first name}'s LCG", Inv #16/#59). Sorted A–Z by label.
+    const _leaders = _audPickerCache.members.filter(m => m.is_facilitator || (m.facilitator_role && String(m.facilitator_role).trim()));
+    _audPickerCache.lcGroups = _leaders.map(l => ({
+      id: 'lcl:' + l.id,
+      label: (l.lc_group && l.lc_group.trim()) ? l.lc_group.trim() : _lclLcgLabel(l.name),
+      real: false
+    })).sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
 
     // Build Ministries: distinct values from ministry / ministry2 / ministry3
     const minSet = new Set();

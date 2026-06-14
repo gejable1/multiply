@@ -8937,26 +8937,18 @@ function _annAudienceMatchesMember(filter, member){
   if (!filter) return false;
   if (filter.all === true) return true;
 
-  // ── LC group match — must mirror MD's _annAudienceMatchesMemberMD logic ──
-  // The audience picker stores TWO kinds of LC group ids in filter.lc_groups:
-  //   1. Real names like "VALSPIRE"           → match against member.lc_group
-  //   2. Virtual keys like "lcl:<discipler_id>" → for members with no lc_group
-  //      who are bucketed under a Life-Community-Leader. These appear in the
-  //      picker as "Unassigned (LCL: <name>)".
-  // The previous implementation only checked #1, so any member with a null
-  // lc_group never received announcements targeted to their virtual group.
-  // Both sides are also trimmed to defend against trailing-whitespace mismatches.
+  // ── LC group match — CANONICAL by the member's LCL (discipler_id → LCL), Inv
+  // #166. Must mirror MD's _annAudienceMatchesMemberMD + MLT's
+  // _annAudienceMatchesLeader. Never key on lc_group text: a member's LCG key is
+  // 'lcl:<discipler_id>' (their leader) or 'lcl:<own id>' if they ARE the leader.
+  // New announcements store these keys, so members with a null/stale/drifted
+  // lc_group now receive announcements aimed at their group (the bug this fixes).
+  // The raw-name branch is a best-effort fallback for LEGACY drafts only.
   if (filter.lc_groups?.length) {
+    if (member.discipler_id && filter.lc_groups.includes('lcl:' + member.discipler_id)) return true;
+    if (filter.lc_groups.includes('lcl:' + member.id)) return true;
     const myGroup = (member.lc_group || '').trim();
-    if (myGroup) {
-      const wanted = filter.lc_groups.map(g => (typeof g === 'string' ? g.trim() : g));
-      if (wanted.includes(myGroup)) return true;
-    }
-    // Virtual "Unassigned (LCL: ...)" bucket for members without a real LC group.
-    if (!myGroup && member.discipler_id) {
-      const virtKey = 'lcl:' + member.discipler_id;
-      if (filter.lc_groups.includes(virtKey)) return true;
-    }
+    if (myGroup && filter.lc_groups.some(g => (typeof g === 'string' ? g.trim() : g) === myGroup)) return true;
   }
 
   if (filter.levels?.includes(member.pipeline_level)) return true;

@@ -6777,17 +6777,15 @@ function _annAudienceMatchesLeader(filter, leaderRow){
   if (filter.all === true) return true;
   if (!leaderRow) return false;
 
-  // LC group match — mirrors MD/MMT logic, including virtual "lcl:<id>" key
+  // LC group match — CANONICAL by the member's LCL (discipler_id → LCL), Inv #166.
+  // Mirrors MD/MMT. Never key on lc_group text: key is 'lcl:<discipler_id>' (their
+  // leader) or 'lcl:<own id>' if they ARE the leader. Raw-name branch = legacy
+  // best-effort fallback only.
   if (filter.lc_groups?.length) {
+    if (leaderRow.discipler_id && filter.lc_groups.includes('lcl:' + leaderRow.discipler_id)) return true;
+    if (filter.lc_groups.includes('lcl:' + leaderRow.id)) return true;
     const myGroup = (leaderRow.lc_group || '').trim();
-    if (myGroup) {
-      const wanted = filter.lc_groups.map(g => (typeof g === 'string' ? g.trim() : g));
-      if (wanted.includes(myGroup)) return true;
-    }
-    if (!myGroup && leaderRow.discipler_id) {
-      const virtKey = 'lcl:' + leaderRow.discipler_id;
-      if (filter.lc_groups.includes(virtKey)) return true;
-    }
+    if (myGroup && filter.lc_groups.some(g => (typeof g === 'string' ? g.trim() : g) === myGroup)) return true;
   }
 
   if (filter.levels?.includes(leaderRow.pipeline_level)) return true;
@@ -7709,16 +7707,15 @@ async function _annComputeAudienceSize(filter){
     if (filter && !filter.all) {
       // Build OR clauses — Supabase REST doesn't easily compose this client-side,
       // so we do a coarse "fetch all and filter" for v1
-      const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3')
+      // Fetch discipler_id + facilitator_role too, then reuse the canonical matcher
+      // (Inv #166 — LCG by discipler_id, not lc_group text). Note: preacher role
+      // counts need the preachers table; size preview omits that (matches MD's
+      // best-effort preview), so a preacher-only filter under-counts in the preview.
+      const {data: all} = await db.from('members').select('id,lc_group,pipeline_level,ministry,ministry2,ministry3,discipler_id,facilitator_role')
         .or('is_test_member.is.null,is_test_member.eq.false')
         .or('is_external_user.is.null,is_external_user.eq.false');
       let n = 0;
-      (all||[]).forEach(m => {
-        if (filter.lc_groups?.includes(m.lc_group)) n++;
-        else if (filter.levels?.includes(m.pipeline_level)) n++;
-        else if (filter.ministries?.some(min => [m.ministry, m.ministry2, m.ministry3].includes(min))) n++;
-        else if (filter.member_ids?.includes(m.id)) n++;
-      });
+      (all||[]).forEach(m => { if (_annAudienceMatchesLeader(filter, m)) n++; });
       return n;
     }
     const {count} = await q;
@@ -7749,6 +7746,18 @@ function _mltRenderAudChips(kind, ids){
       const m = (_mltAudCache.members || []).find(x => x.id === id);
       if (m) label = m.name;
       else label = String(id).slice(0, 8) + '…';
+    } else if (kind === 'lc_groups') {
+      // Resolve the LCL display label — never show a raw "lcl:<uuid>" (Inv #87).
+      const g = (_mltAudCache.lcGroups || []).find(x => x.id === id);
+      if (g) label = g.label;
+      else if (String(id).startsWith('lcl:')) {
+        const lcl = (_mltAudCache.members || []).find(x => x.id === String(id).slice(4));
+        if (lcl) {
+          const first = String(lcl.name || '').trim().split(/\s+/)[0] || 'LCL';
+          label = (lcl.lc_group && lcl.lc_group.trim()) ? lcl.lc_group.trim()
+                : (/s$/i.test(first) ? first + "'" : first + "'s") + ' LCG';
+        } else label = 'an LCG';
+      }
     }
     return `<span style="display:inline-flex;align-items:center;gap:.3rem;background:#fff;border:1px solid var(--gold);border-radius:999px;padding:.2rem .5rem .2rem .65rem;font-size:11px;color:#1a1612;">
       ${MultiplyShared.escapeHTML(label)}
@@ -7801,25 +7810,21 @@ async function _mltEnsureAudCache(){
     if (error) throw error;
     _mltAudCache.members = members || [];
 
-    const realGroups = new Set();
-    const virtualGroups = new Map();
-    _mltAudCache.members.forEach(m => {
-      if (m.lc_group && m.lc_group.trim()) {
-        realGroups.add(m.lc_group.trim());
-      } else if (m.discipler_id) {
-        const lcl = _mltAudCache.members.find(x => x.id === m.discipler_id);
-        if (lcl) {
-          const key = `lcl:${lcl.id}`;
-          if (!virtualGroups.has(key)) {
-            virtualGroups.set(key, `Unassigned (LCL: ${lcl.name})`);
-          }
-        }
-      }
-    });
-    _mltAudCache.lcGroups = [
-      ...Array.from(realGroups).sort().map(g => ({id: g, label: g, real: true})),
-      ...Array.from(virtualGroups.entries()).map(([id, label]) => ({id, label, real: false}))
-    ];
+    // ONE canonical entry per LC Leader, keyed by 'lcl:<leaderId>' (Inv #166) — the
+    // exact key the matcher resolves from a member's discipler_id. Replaces the old
+    // name-text + virtual split so groups are targeted by LEADER, not lc_group text;
+    // null/stale-lc_group flocks are reachable. Label = LCL's display name
+    // (lc_group if set, else "{first name}'s LCG", Inv #16/#59).
+    const _lcgLabel = (full) => {
+      const first = String(full || '').trim().split(/\s+/)[0] || 'LCL';
+      return (/s$/i.test(first) ? first + "'" : first + "'s") + ' LCG';
+    };
+    const _leaders = _mltAudCache.members.filter(m => m.is_facilitator || (m.facilitator_role && String(m.facilitator_role).trim()));
+    _mltAudCache.lcGroups = _leaders.map(l => ({
+      id: 'lcl:' + l.id,
+      label: (l.lc_group && l.lc_group.trim()) ? l.lc_group.trim() : _lcgLabel(l.name),
+      real: false
+    })).sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
 
     const minSet = new Set();
     _mltAudCache.members.forEach(m => {
