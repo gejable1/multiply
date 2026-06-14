@@ -333,6 +333,7 @@ html,body{
 }
 .hm-cell.met{background:var(--green)}
 .hm-cell.weak{background:var(--amber)}
+.hm-cell.selfattest{background:#a78bfa}
 .hm-cell.miss{background:var(--surface3);border:1px dashed var(--border-strong)}
 .hm-cell[title]{cursor:help}
 .hm-legend{
@@ -773,14 +774,15 @@ function buildWeekBuckets() {
 // ─────────────────────── Data loading ───────────────────────
 async function loadMembers() {
   const { data, error } = await db.from('members')
-    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member');
+    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member, is_external_user');
   if (error) throw error;
   allMembers = data || [];
-  // ─── TEST-MEMBER FILTER (Pastor's call, May 2026) ───
-  // Test members count for nobody — never appear as LC Leaders, never
-  // count toward any LCG's flock size. Filter at the source so the rest
-  // of the report doesn't have to think about it.
-  const liveOnly = allMembers.filter(m => !m.is_test_member);
+  // ─── TEST + GUEST EXCLUSION (Inv #15/#16) ───
+  // Statistical reports exclude BOTH test members AND guests (is_external_user) —
+  // they never appear as LC Leaders, never count toward any LCG's flock size, and
+  // their attendance rows never inflate a tally. Filter at the source so the rest
+  // of the report doesn't have to think about it. (Was test-only before S35.)
+  const liveOnly = allMembers.filter(m => !m.is_test_member && !m.is_external_user);
   // LC Leaders per HANDOFF architecture key 1: is_facilitator OR facilitator_role
   lcLeaders = liveOnly.filter(m => m.is_facilitator || (m.facilitator_role && m.facilitator_role.trim()));
   // Build LCG map
@@ -800,7 +802,7 @@ async function loadMeetings() {
   const fromIso = isoDate(periodFrom);
   const toIso   = isoDate(periodTo);
   const { data, error } = await db.from('attendance')
-    .select('id, event_date, event_type, event_lc_group, logged_by, logged_by_id, member_id, present')
+    .select('id, event_date, event_type, member_id, present, source')
     .eq('event_type', 'LC Meeting')
     .gte('event_date', fromIso)
     .lte('event_date', toIso);
@@ -810,30 +812,34 @@ async function loadMeetings() {
 }
 
 function indexMeetingsByLCG() {
-  // For each LCG, group its meetings into the week buckets.
-  // We attribute a meeting row to a leader by:
-  //   1. logged_by_id (most reliable — matches the leader's member id), else
-  //   2. event_lc_group string match against leader.lc_group
-  // Then we de-dupe per week per LCG (multiple member rows from same meeting
-  // shouldn't count multiple times).
+  // Attribute every attendance row to an LCG by the ATTENDED MEMBER's discipler_id
+  // → LCL (Inv #16/#166) — NEVER event_lc_group/logged_by_id/lc_group text. Those
+  // are NULL on self-attest rows (logged_by_id = the member), which used to drop the
+  // row and make the LCG's week look "missed." A row counts for the LCG the member
+  // currently belongs to, whoever logged it.
+  //
+  // Three-state heartbeat per week-cell (mirrors the LACR):
+  //   • met + leaderLogged          → confirmed meeting (green / weak-amber).
+  //   • met + selfAttestedOnly      → members self-reported, no leader log yet →
+  //                                   awaiting the leader's confirmation (purple).
+  //   • !met                        → no attendance of any source → missed.
   lcgMap.forEach(entry => {
-    entry.meetingsByWeek = weekBuckets.map(() => ({ met: false, attendance: 0, weak: false, dates: new Set() }));
+    entry.meetingsByWeek = weekBuckets.map(() => ({
+      met: false, attendance: 0, weak: false,
+      leaderLogged: false, selfAttestPresent: 0, selfAttestedOnly: false,
+      dates: new Set()
+    }));
   });
-  const leaderById = new Map(lcLeaders.map(l => [l.id, l]));
-  // Set of test member IDs — their attendance rows shouldn't count toward
-  // an LCG's "people present" tally even if logged during testing.
-  const testIds = new Set(allMembers.filter(m => m.is_test_member).map(m => m.id));
+  const memberById = new Map(allMembers.map(m => [m.id, m]));
+  const LEADER_SOURCES = new Set(['lcl_logged','stand_in','pastor_admin','backfill']);
 
   meetings.forEach(row => {
-    let leader = null;
-    if (row.logged_by_id && leaderById.has(row.logged_by_id)) {
-      leader = leaderById.get(row.logged_by_id);
-    } else if (row.event_lc_group) {
-      leader = lcLeaders.find(l => (l.lc_group||'') === row.event_lc_group);
-    }
-    if (!leader) return; // can't attribute — skip
-    const entry = lcgMap.get(leader.id);
-    if (!entry) return;
+    const m = memberById.get(row.member_id);
+    if (!m || m.is_test_member || m.is_external_user) return;  // live members only (Inv #15)
+    const did = m.discipler_id;
+    if (!did || did === m.id) return;            // orphan / self-discipled → no LCG
+    const entry = lcgMap.get(did);
+    if (!entry) return;                          // discipler isn't a flagged LC Leader
     // Find which week bucket this date belongs to
     const dt = new Date(row.event_date + 'T12:00:00'); // noon to dodge DST
     const wIdx = weekBuckets.findIndex(w => dt >= w.from && dt <= w.to);
@@ -841,15 +847,20 @@ function indexMeetingsByLCG() {
     const wk = entry.meetingsByWeek[wIdx];
     wk.met = true;
     wk.dates.add(row.event_date);
-    // Skip test members from attendance count; meeting still counts as "met"
-    // because the leader logged something — just don't inflate the headcount.
-    if (row.present && !testIds.has(row.member_id)) wk.attendance += 1;
+    const src = row.source || 'lcl_logged';
+    if (LEADER_SOURCES.has(src)) wk.leaderLogged = true;
+    if (row.present) {
+      wk.attendance += 1;
+      if (src === 'self_attest') wk.selfAttestPresent += 1;
+    }
   });
 
-  // Mark "weak" weeks — met but only 1 person logged present (suspicious)
+  // Derive per-week flags: "weak" (met but ≤1 present) and "self-attested only"
+  // (met with no leader-authoritative row → awaiting confirmation).
   lcgMap.forEach(entry => {
     entry.meetingsByWeek.forEach(wk => {
       if (wk.met && wk.attendance <= 1) wk.weak = true;
+      if (wk.met && !wk.leaderLogged) wk.selfAttestedOnly = true;
     });
   });
 }
@@ -1091,9 +1102,9 @@ function render() {
                   <span class="sub">${escapeHTML(e.leader.lc_group || 'LC Group')} · ${e.members.length}m</span>
                 </td>
                 ${e.meetingsByWeek.map((wk, idx) => {
-                  const cls = wk.met ? (wk.weak ? 'weak' : 'met') : 'miss';
+                  const cls = wk.met ? (wk.selfAttestedOnly ? 'selfattest' : (wk.weak ? 'weak' : 'met')) : 'miss';
                   const tip = wk.met
-                    ? `${humanRange(weekBuckets[idx].from, weekBuckets[idx].to)} — met (${wk.attendance} present${wk.weak ? ', weak' : ''})`
+                    ? `${humanRange(weekBuckets[idx].from, weekBuckets[idx].to)} — ${wk.selfAttestedOnly ? 'self-attested, awaiting confirmation' : 'met'} (${wk.attendance} present${wk.weak ? ', weak' : ''})`
                     : `${humanRange(weekBuckets[idx].from, weekBuckets[idx].to)} — no meeting`;
                   return `<td><div class="hm-cell ${cls}" title="${escapeHTML(tip)}"></div></td>`;
                 }).join('')}
@@ -1104,6 +1115,7 @@ function render() {
       <div class="hm-legend">
         <span><span class="swatch" style="background:var(--green)"></span>Met</span>
         <span><span class="swatch" style="background:var(--amber)"></span>Met but weak (≤1 attended)</span>
+        <span><span class="swatch" style="background:#a78bfa"></span>Self-attested · awaiting confirmation</span>
         <span><span class="swatch" style="background:var(--surface3);border:1px dashed var(--border-strong)"></span>No meeting</span>
       </div>
     </div>
