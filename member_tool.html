@@ -10541,10 +10541,12 @@ function _prayerKindOptTag(m){
   const k = prayerMemberKind(m);
   return k==='test' ? ' · 🧪 test' : (k==='guest' ? ' · 👤 guest' : '');
 }
-// Pastor viewer (for the discipler_pastor audience): pastoral-staff role or L5+.
+// Pastor viewer (for the discipler_pastor audience). MMT has no LeaderScope /
+// _isSuperuser (those are leader-tool constructs); the operative signal is
+// pipeline_level >= 5 (L5 = Pastoral Staff), mirroring _isSuperuser's L5 rule.
+// Inside a guest/test bubble with no L5 member, this degrades to discipler-only.
 function _viewerIsPastor(){
-  return !!(memberRow && (memberRow.facilitator_role === 'Pastoral Staff' ||
-            (typeof memberRow.pipeline_level === 'number' && memberRow.pipeline_level >= 5)));
+  return !!(memberRow && typeof memberRow.pipeline_level === 'number' && memberRow.pipeline_level >= 5);
 }
 
 // ── Prayer state ──
@@ -10643,24 +10645,21 @@ function renderPrayerCta(){
   }
 }
 
-// Kind-scoped circle for the 'individuals' picker: my LCG co-members, my own
-// disciples, and my discipler — bounded to my kind (Inv #164).
+// Full same-kind church roster for the 'individuals' picker — reachable even
+// outside your own LCG (per spec), still bounded by memberKind === viewerKind
+// (Inv #164). Yourself and anyone who opted out of LC sharing are excluded.
 async function loadPrayerPickPool(){
   const myId = MEMBER.memberId;
-  const myDisc = memberRow.discipler_id || null;
   const vk = _prayerViewerKind();
   let q = db.from('members')
-    .select('id,name,photo_url,is_test_member,is_external_user,discipler_id,share_with_lc');
+    .select('id,name,photo_url,is_test_member,is_external_user,share_with_lc');
   if(vk === 'test')       q = q.eq('is_test_member', true);
   else if(vk === 'guest') q = q.eq('is_external_user', true).neq('is_test_member', true);
   else                    q = q.neq('is_test_member', true).neq('is_external_user', true);
   const { data, error } = await q;
   if(error) throw error;
-  const inCircle = m =>
-    (m.discipler_id && (m.discipler_id === myDisc || m.discipler_id === myId)) ||
-    (myDisc && m.id === myDisc);
   _prayerPickPool = (data || [])
-    .filter(m => m.id !== myId && m.share_with_lc !== false && inCircle(m))
+    .filter(m => m.id !== myId && m.share_with_lc !== false)
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 }
 
