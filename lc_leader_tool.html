@@ -8849,8 +8849,11 @@ function _renderBatchesRoster(){
   const editPerm = MultiplyShared.cohorts.canEdit(actor, c);
   const gradPerm = MultiplyShared.cohorts.canGraduate(actor, c);
 
-  const enrolledActive = (c._members || []).filter(cm => cm.status === 'active');
-  const enrolledOther  = (c._members || []).filter(cm => cm.status !== 'active');
+  // Participants sorted alphabetically by member name (A→Z), matching the
+  // add-member picker and the MD roster ordering.
+  const _byName = (a, b) => ((a.members && a.members.name) || '').localeCompare((b.members && b.members.name) || '');
+  const enrolledActive = (c._members || []).filter(cm => cm.status === 'active').sort(_byName);
+  const enrolledOther  = (c._members || []).filter(cm => cm.status !== 'active').sort(_byName);
   const levelText = prog.pipeline_level != null ? ('L' + prog.pipeline_level) : 'cross-level';
   const isMine = c.owner_id === L.leaderId;
 
