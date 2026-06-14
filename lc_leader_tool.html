@@ -8593,10 +8593,8 @@ function _renderBatchesList(){
   const myId = L.leaderId;
   const isPastor = (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
 
-  // Partition visible cohorts: mine vs pastor-owned (or any non-mine for Pastor)
   const cohorts = _batchesState.cohorts || [];
-  const mine = cohorts.filter(c => c.owner_id === myId);
-  const others = cohorts.filter(c => c.owner_id !== myId);
+  const mine = cohorts.filter(c => c.owner_id === myId);   // count shown in the header
 
   const renderCohortCard = (c) => {
     const prog = c.cohort_programs || {};
@@ -8656,16 +8654,38 @@ function _renderBatchesList(){
             No batches visible to you yet.<br>
             <span style="font-size:11.5px">Pastor creates batches in the Dashboard, or you can create your own below for your training group.</span>
           </div>
-        ` : `
-          ${others.length > 0 ? `
-            <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:.4rem 0 .6rem">Available Batches</div>
-            ${others.map(renderCohortCard).join('')}
-          ` : ''}
-          ${mine.length > 0 ? `
-            <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:1rem 0 .6rem">My Batches</div>
-            ${mine.map(renderCohortCard).join('')}
-          ` : ''}
-        `}
+        ` : (() => {
+          // Group by PROGRAM (clear heading), then sort batches A→Z within each.
+          // Flat lists get crowded — especially for Pastor, who sees every batch.
+          // Programs ordered by sort_order then name; owner pills on each card keep
+          // the My Batch / Pastor distinction.
+          const groups = new Map();
+          cohorts.forEach(c => {
+            const prog = c.cohort_programs || {};
+            const key = c.program_id || prog.id || '∅';
+            if (!groups.has(key)) groups.set(key, { prog, list: [] });
+            groups.get(key).list.push(c);
+          });
+          const ordered = [...groups.values()].sort((a, b) => {
+            const sa = a.prog.sort_order ?? 9999, sb = b.prog.sort_order ?? 9999;
+            if (sa !== sb) return sa - sb;
+            return (a.prog.name || '').localeCompare(b.prog.name || '');
+          });
+          ordered.forEach(g => g.list.sort((x, y) => (x.name || '').localeCompare(y.name || '')));
+          return ordered.map(g => {
+            const prog = g.prog;
+            const lvl = prog.pipeline_level != null ? ('L' + prog.pipeline_level) : 'cross-level';
+            const code = prog.btli_course_code ? ' · ' + MultiplyShared.escapeHTML(prog.btli_course_code) : '';
+            return `
+              <div style="position:sticky;top:0;z-index:1;background:var(--surface);display:flex;align-items:center;gap:8px;margin:1.1rem 0 .55rem;padding:.4rem .15rem;border-bottom:2px solid var(--gold,#b8882a)">
+                <span style="font-size:13.5px;font-weight:800;color:var(--text)">${MultiplyShared.escapeHTML(prog.name || '(no program)')}</span>
+                <span style="font-size:10.5px;color:var(--muted);font-weight:600">${lvl}${code}</span>
+                <span style="margin-left:auto;font-size:10px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:2px 8px">${g.list.length} batch${g.list.length===1?'':'es'}</span>
+              </div>
+              ${g.list.map(renderCohortCard).join('')}
+            `;
+          }).join('');
+        })()}
         <div style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--border)">
           <button onclick="_batchesOpenCreate()" style="width:100%;padding:.75rem;background:var(--surface2);color:var(--text);border:1.5px dashed var(--border);border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer">
             + Create my own batch
