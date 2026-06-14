@@ -139,6 +139,7 @@ html,body{
 .rh-stat.gold .rh-stat-num{color:var(--gold-deep);}
 .rh-stat.blue .rh-stat-num{color:var(--faith-line-deep);}
 .rh-stat.orange .rh-stat-num{color:var(--await-line-deep);}
+.rh-stat.purple .rh-stat-num{color:#7c3aed;}
 
 /* ─────────── SECTION WRAPPER (the colored band per category) ─────────── */
 .section{
@@ -558,7 +559,7 @@ async function loadReport(){
 
     // ── 2. Pull attendance rows for the selected date + event ──
     const {data:attRows, error:aErr} = await db.from('attendance')
-      .select('member_id,member_name,present,event_lc_group,member_lc_group,logged_by,logged_by_id,created_at,updated_at,attendance_mode')
+      .select('member_id,member_name,present,source,logged_by,logged_by_id,created_at,updated_at,attendance_mode')
       .eq('event_date', date)
       .eq('event_type', eventType);
     if(aErr) throw aErr;
@@ -593,9 +594,19 @@ async function loadReport(){
 //     facilitator_role set. (Same rule populateDisciplerSelect uses.)
 //   • Group membership = members whose discipler_id points to the leader.
 //   • Group display name = leader.lc_group if set, else "[FirstName] LC".
-//   • Attendance match = by event_lc_group string (case-insensitive
-//     trim) AND by logged_by_id as a secondary key. Whichever finds
-//     the leader first wins.
+//   • Attendance attribution = by the ATTENDED MEMBER's discipler_id → LCL
+//     (Inv #16 / #166). NEVER event_lc_group / member_lc_group / lc_group text:
+//     those are NULL on self-attest rows (and for unnamed groups), which used to
+//     drop the rows and falsely show "Awaiting Your Heartbeat." A row counts for
+//     the group its member currently belongs to, regardless of who logged it.
+//
+// Three-state heartbeat (per group, per date):
+//   • Logged                — ≥1 leader-authoritative row (lcl_logged / stand_in /
+//                             pastor_admin / backfill).
+//   • Self-attested (N/M)   — no leader row, but ≥1 self_attest present row;
+//                             awaiting the leader's confirmation.
+//   • Awaiting Your Heartbeat — no attendance of any source.
+// Present/absent counts always include EVERY source.
 // ═══════════════════════════════════════════════════════════════
 function buildGroups(allMembers, attRows){
   // ─── TEST-MEMBER FILTER (Pastor's call, May 2026) ───
@@ -666,73 +677,60 @@ function buildGroups(allMembers, attRows){
   //    as "absent" when they didn't tick their own checkbox even though
   //    they were obviously present (they ran the meeting).
 
-  // ── Map attendance rows. Key by NORMALIZED lc group string (for backward
-  //    compatibility with rows using event_lc_group), and ALSO build a
-  //    secondary index by logged_by_id (more reliable since user IDs don't
-  //    drift like text strings do).
-  const attByLcName = {};     // key = lowercased trimmed lc group string
-  const attByLogger = {};     // key = logged_by_id (user UUID)
+  // ── Attribute each attendance row to a group by the ATTENDED MEMBER's
+  //    discipler_id → LCL (Inv #16/#166) — NEVER event_lc_group/logged_by_id/text.
+  //    The member→group mapping is exact (the member was assigned to
+  //    lcMap[did].members above), so self-attest rows (logged_by_id = the member,
+  //    lc_group = NULL) now land in the correct group instead of being dropped and
+  //    falsely flagged "Awaiting." The attendance UNIQUE (member_id,event_type,
+  //    event_date) guarantees ≤1 row per member, so totals can never exceed
+  //    memberCount.
+  const memberById = {};
+  liveMembers.forEach(m => { memberById[m.id] = m; });
+  const LEADER_SOURCES = new Set(['lcl_logged','stand_in','pastor_admin','backfill']);
+  Object.values(lcMap).forEach(g => { g.attResolved = null; });
   attRows.forEach(r => {
-    const nameKey = (r.event_lc_group||r.member_lc_group||'').trim().toLowerCase();
-    const idKey   = r.logged_by_id || null;
-    [
-      nameKey ? [attByLcName, nameKey] : null,
-      idKey   ? [attByLogger, idKey]   : null,
-    ].filter(Boolean).forEach(([bag, key]) => {
-      if(!bag[key]) bag[key] = {present:0, absent:0, total:0, loggedBy:null, loggedAt:null, loggedById:null};
-      // Avoid double-counting: each row contributes once per leader, not twice.
-      // We'll de-dupe at the leader-resolution step below.
-    });
-  });
-  // Now actually accumulate (single pass per row), deciding which leader to credit
-  Object.values(lcMap).forEach(g => {
-    g.attResolved = null;  // attendance bucket once we find one
-  });
-  attRows.forEach(r => {
-    // Try to match this row to a leader: by logged_by_id first, then by name
-    let matchedLeader = null;
-    if(r.logged_by_id && lcMap[r.logged_by_id]) matchedLeader = lcMap[r.logged_by_id];
-    if(!matchedLeader){
-      const nameKey = (r.event_lc_group||r.member_lc_group||'').trim().toLowerCase();
-      if(nameKey){
-        matchedLeader = Object.values(lcMap).find(g => g.lcGroupNorm === nameKey);
-      }
-    }
-    if(!matchedLeader) return;  // attendance row that doesn't match any current leader
+    const m = memberById[r.member_id];
+    if(!m) return;                          // unknown / test / guest (already filtered)
+    const did = m.discipler_id;
+    if(!did || did === m.id) return;        // orphan / self-discipled → unassigned
+    const g = lcMap[did];
+    if(!g) return;                          // discipler isn't a flagged leader → unassigned
+    if(!g.members.some(x => x.id === m.id)) return;  // not in current flock (defensive)
 
-    // ── GUARD: drop stale attendance rows.
-    //   A row is "stale" if the member it points to is no longer in this
-    //   leader's current flock (transferred away, re-assigned, removed).
-    //   Without this check, old rows pad bag.total and inflate sumCardTotals
-    //   above the real liveMembers count — that's the dashboard/LCAR
-    //   discrepancy we hunted in May 2026 (Pastor Gerry's 201 vs 206).
-    //   Note: the MLT itself only allows logging of current flock; this
-    //   guard catches HISTORICAL rows that became stale after the fact.
-    const memberInCurrentFlock = matchedLeader.members.some(m => m.id === r.member_id);
-    if(!memberInCurrentFlock) return;
-
-    if(!matchedLeader.attResolved){
-      matchedLeader.attResolved = {present:0, absent:0, total:0, presentOnline:0, loggedBy:null, loggedAt:null};
+    if(!g.attResolved){
+      g.attResolved = {present:0, absent:0, total:0, presentOnline:0,
+                       hasLeaderLog:false, selfAttestPresent:new Set(),
+                       loggedBy:null, loggedAt:null};
     }
-    const bag = matchedLeader.attResolved;
+    const bag = g.attResolved;
     if(r.present) bag.present++;
     else bag.absent++;
     bag.total++;
-    // Session 8: count online attendances among the present.
-    // Only meaningful when event_type is Sunday Service or Prayer Meeting;
-    // for other event_types the value is always 0 since the mode defaults
-    // to in_person.
+    // Session 8: count online attendances among the present (only meaningful for
+    // Sunday Service / Prayer Meeting; else the mode defaults to in_person → 0).
     if(r.present && r.attendance_mode === 'online') bag.presentOnline++;
-    if(!bag.loggedBy && r.logged_by){
-      bag.loggedBy = r.logged_by;
-      bag.loggedAt = r.created_at || r.updated_at;
+
+    // ── Heartbeat source (three-state). Leader-authoritative sources mean the
+    //    group is "Logged"; a present self_attest with no leader row means
+    //    "awaiting leader confirmation".
+    const src = r.source || 'lcl_logged';
+    if(LEADER_SOURCES.has(src)){
+      bag.hasLeaderLog = true;
+      if(!bag.loggedBy && r.logged_by){   // prefer a leader row for the "Logged by" line
+        bag.loggedBy = r.logged_by;
+        bag.loggedAt = r.created_at || r.updated_at;
+      }
+    } else if(src === 'self_attest' && r.present){
+      bag.selfAttestPresent.add(r.member_id);
     }
   });
 
-  // ── Now classify every leader's group into one of 3 tiers
-  const champions = [];
-  const runners = [];
-  const awaiting = [];
+  // ── Now classify every leader's group by its heartbeat state.
+  const champions = [];     // Logged + 100% present
+  const runners = [];       // Logged + partial
+  const selfAttested = [];  // self-attest only — awaiting the leader's confirmation
+  const awaiting = [];      // no attendance of any source
 
   Object.values(lcMap).forEach(g => {
     const att = g.attResolved;
@@ -741,37 +739,38 @@ function buildGroups(allMembers, attRows){
     const displayName = lcDisplayName(g.lcGroupName, leaderName);
 
     if(!att || att.total === 0){
-      // No attendance log submitted at all — this LC Leader's group
-      // appears in the Awaiting section (the whole point of this report).
-      awaiting.push({
-        displayName, leaderName,
-        memberCount,
-        lcKey: g.leader.id
-      });
-    } else {
-      // Use real memberCount as denominator (not att.total). Stale rows
-      // have already been dropped by the guard above, so att.total now
-      // never exceeds memberCount.
-      const denominator = memberCount;
-      const pct = denominator > 0 ? Math.round((att.present / denominator) * 100) : 0;
-      const card = {
-        displayName, leaderName,
-        present: att.present,
-        presentOnline: att.presentOnline || 0,
-        total: denominator,
-        pct,
-        loggedBy: att.loggedBy,
-        loggedAt: att.loggedAt,
-        lcKey: g.leader.id
-      };
+      // No attendance of ANY source — Awaiting Your Heartbeat.
+      awaiting.push({ displayName, leaderName, memberCount, lcKey: g.leader.id });
+      return;
+    }
+    // Real memberCount is the denominator (the UNIQUE row constraint means
+    // att.total never exceeds it).
+    const denominator = memberCount;
+    const pct = denominator > 0 ? Math.round((att.present / denominator) * 100) : 0;
+    const card = {
+      displayName, leaderName,
+      present: att.present,
+      presentOnline: att.presentOnline || 0,
+      total: denominator,
+      pct,
+      loggedBy: att.loggedBy,
+      loggedAt: att.loggedAt,
+      selfAttestCount: att.selfAttestPresent.size,
+      lcKey: g.leader.id
+    };
+    if(att.hasLeaderLog){
       if(pct === 100) champions.push(card);
       else runners.push(card);
+    } else {
+      // Members self-reported present but the leader hasn't logged/confirmed yet.
+      selfAttested.push(card);
     }
   });
 
   // Sort
   champions.sort((a,b) => b.total - a.total);  // bigger groups first when 100%
   runners.sort((a,b) => b.pct - a.pct);
+  selfAttested.sort((a,b) => b.present - a.present);
   awaiting.sort((a,b) => a.displayName.localeCompare(b.displayName));
 
   // Totals for header — derived from real member counts so the headline
@@ -779,8 +778,9 @@ function buildGroups(allMembers, attRows){
   const totalLcGroups = Object.keys(lcMap).length;
   const sumChampions = champions.reduce((s,c) => s + (c.total||0), 0);
   const sumRunners   = runners.reduce((s,c) => s + (c.total||0), 0);
+  const sumSelfAttested = selfAttested.reduce((s,c) => s + (c.total||0), 0);
   const sumAwaiting  = awaiting.reduce((s,c) => s + (c.memberCount||0), 0);
-  const totalMembersInLcs = sumChampions + sumRunners + sumAwaiting;
+  const totalMembersInLcs = sumChampions + sumRunners + sumSelfAttested + sumAwaiting;
   const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
   const totalUnassigned = unassigned.length;
   // Church total comes straight from liveMembers — single source of truth,
@@ -809,14 +809,14 @@ function buildGroups(allMembers, attRows){
     });
   } catch(e){}
 
-  return {champions, runners, awaiting, totalLcGroups, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers};
+  return {champions, runners, selfAttested, awaiting, totalLcGroups, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers};
 }
 
 // ═══════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderReport(report, date, eventType){
-  const {champions, runners, awaiting, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers} = report;
+  const {champions, runners, selfAttested, awaiting, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers} = report;
 
   // ── Header ──
   document.getElementById('headerSlot').innerHTML = `
@@ -834,6 +834,10 @@ function renderReport(report, date, eventType){
         <div class="rh-stat blue">
           <div class="rh-stat-num">${runners.length}</div>
           <div class="rh-stat-label">Partial</div>
+        </div>
+        <div class="rh-stat purple">
+          <div class="rh-stat-num">${selfAttested.length}</div>
+          <div class="rh-stat-label">Self-attested</div>
         </div>
         <div class="rh-stat orange">
           <div class="rh-stat-num">${awaiting.length}</div>
@@ -919,6 +923,34 @@ function renderReport(report, date, eventType){
     `;
   }
 
+  // 2.5 Self-attested — awaiting leader confirmation
+  if(selfAttested.length){
+    slot.innerHTML += `
+      <div class="section selfattest">
+        <div class="section-head">
+          <span class="section-icon">✋</span>
+          <span class="section-title">Self-Attested · Awaiting Your Confirmation</span>
+          <span class="section-tagline">Members marked themselves present — a leader log will confirm it</span>
+          <span class="section-count">${selfAttested.length} group${selfAttested.length===1?'':'s'}</span>
+        </div>
+        ${selfAttested.map(s => `
+          <div class="runner-row">
+            <div class="runner-rank" style="background:rgba(124,58,237,.12);color:#7c3aed">✋</div>
+            <div>
+              <div class="runner-name">${escapeHtml(s.displayName)}</div>
+              <div class="runner-leader">Led by ${escapeHtml(s.leaderName)} · <strong style="color:#7c3aed">${s.selfAttestCount}/${s.total} self-attested</strong> — awaiting confirmation</div>
+            </div>
+            <div class="runner-bar-wrap">
+              <div class="runner-bar-track"><div class="runner-bar-fill" style="width:${s.pct}%;background:#a78bfa"></div></div>
+              <div class="runner-bar-meta"><span>${s.present} of ${s.total}${s.presentOnline ? ` <span style="display:inline-block;background:rgba(94,135,176,.15);color:#1e4d80;font-size:9px;font-weight:700;padding:1px 5px;border-radius:7px;margin-left:3px" title="${s.presentOnline} attended online (livestream)">🌐 ${s.presentOnline}</span>` : ''}</span><span>${s.total - s.present} absent</span></div>
+            </div>
+            <div class="runner-pct" style="color:#7c3aed">${s.pct}%</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
   // 3. Awaiting
   if(awaiting.length){
     slot.innerHTML += `
@@ -955,7 +987,7 @@ function renderReport(report, date, eventType){
   // ── Grand Total card — shown only when there's at least one logged group.
   //    Placed AFTER the three sections so it reads as a summary, BEFORE the
   //    celebration footer. Hidden in the empty state.
-  if(champions.length || runners.length){
+  if(champions.length || runners.length || selfAttested.length){
     const overallPct = totalMembersInLcs > 0
       ? Math.round((totalPresent / totalMembersInLcs) * 100)
       : 0;
@@ -979,7 +1011,7 @@ function renderReport(report, date, eventType){
   }
 
   // ── Empty state if nothing at all ──
-  if(!champions.length && !runners.length && !awaiting.length){
+  if(!champions.length && !runners.length && !selfAttested.length && !awaiting.length){
     slot.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🌱</div>
