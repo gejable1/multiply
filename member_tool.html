@@ -10890,9 +10890,9 @@ function _prayerItemHTML(r){
     } else {
       acts.push(`<button class="pr-act" onclick="flagForCare('${r.id}', this)">🤲 ${tl ? 'Sabihin sa pastor' : 'Flag for care'}</button>`);
     }
-  } else if(r.status === 'answered'){
-    acts.push(`<span class="pr-act is-done">🙌 ${tl ? 'Sinagot' : 'Answered'}</span>`);
   }
+  // Answered/archived: the gold "✦ ANSWERED" panel above IS the answered indicator
+  // — no separate pill (that was the duplicate), and no active action.
   // Aggregate encouragement (counts only, no names). The requester sees both
   // "saved by N" and "N praying" (PULL — read in-feature, no inbox); others see
   // just "N praying" on any request that has intercessors.
@@ -10920,7 +10920,7 @@ function _prayerItemHTML(r){
     <div class="pr-body">${MultiplyShared.escapeHTML(r.body)}</div>
     ${answered}
     ${metrics}
-    <div class="pr-actions">${acts.join('')}</div>
+    ${acts.length ? `<div class="pr-actions">${acts.join('')}</div>` : ''}
   </div>`;
 }
 
@@ -10976,18 +10976,12 @@ function _prayerListItemHTML(i){
     const note = rawNote ? MultiplyShared.escapeHTML(rawNote) : (tl ? 'Sinagot ng Diyos. 🙌' : 'Answered. 🙌');
     answered = `<div class="pr-answered"><span class="pr-ans-label">${tl ? '✦ SINAGOT' : '✦ ANSWERED'}</span><br>${note}</div>`;
   }
+  // When answered, the gold "✦ ANSWERED" panel above is the indicator — no extra
+  // pill. A saver still gets NO answered button (read-only); personal/EOLO items
+  // keep the owner's "Mark answered" button while still open.
   const acts = [];
-  if(isSaved){
-    // A saver must NOT mutate someone else's request — answered is read-only here,
-    // driven by the linked request's status (set when the requester marks it answered).
-    if(isAnswered) acts.push(`<span class="pr-act is-done">🙌 ${tl ? 'Sinagot' : 'Answered'}</span>`);
-  } else {
-    // Personal/EOLO items are the owner's own — keep their answered button.
-    if(isAnswered){
-      acts.push(`<span class="pr-act is-done">✓ ${tl ? 'Sinagot' : 'Answered'}</span>`);
-    } else {
-      acts.push(`<button class="pr-act primary" onclick="markListItemAnswered('${i.id}')">🙌 ${tl ? 'Sinagot na' : 'Mark answered'}</button>`);
-    }
+  if(!isSaved && !isAnswered){
+    acts.push(`<button class="pr-act primary" onclick="markListItemAnswered('${i.id}')">🙌 ${tl ? 'Sinagot na' : 'Mark answered'}</button>`);
   }
   acts.push(`<button class="pr-act" onclick="removeListItem('${i.id}')">🗑 ${tl ? 'Alisin' : 'Remove'}</button>`);
   return `<div class="pr-item">
