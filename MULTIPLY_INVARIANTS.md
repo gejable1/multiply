@@ -2044,6 +2044,17 @@ Prayer ("Panalangin") is a member-facing prayer-request board. **Wave 1** (lande
 
 **Established June 14, 2026 (Session 35). Invariant #165 added — count now 165.**
 
+### **166. `lc_group` / `member_lc_group` / `event_lc_group` are DECORATIVE / display-only — canonical grouping is ALWAYS via `discipler_id` → LCL**
+
+`lc_group` (member text label), `member_lc_group` and `event_lc_group` (attendance snapshot columns) are **display-only**. They are sparse (most are NULL), drift on transfer, and are NULL on **self-attest** rows. They must **NEVER** be used for **grouping, matching, filtering, counting, joining, or categorizing**. The single canonical key for "which LC group" is the member's **`discipler_id` → LC Leader (LCL)** (generalizes Inv #1/#16/#45/#59).
+
+- **Allowed (DISPLAY):** showing a group's name. Even then, prefer resolving the name via `discipler_id` → LCL → display name (`leader.lc_group` if set, else `"{FirstName}'s LCG"`), not a member's stale stored text.
+- **Forbidden (BUG):** `.eq('lc_group', …)` / `.eq('member_lc_group', …)` as a query scope; building group buckets keyed by an lc_group string; matching attendance to a leader by `event_lc_group`/`member_lc_group`; `GROUP BY member_lc_group|event_lc_group|lc_group` in any SQL view/function; counting audience membership via `lc_groups.includes(m.lc_group)`. Transfer state is decided by `pending_facilitator_id` vs `facilitator_id`, **never** `pending_lc_group !== lc_group`.
+- **Root case (S35):** the LACR grouped members by `discipler_id` but **matched** attendance by `event_lc_group`/`logged_by_id`. Self-attest rows (lc_group NULL, logged_by_id = the member) never matched → groups falsely shown "Awaiting Your Heartbeat." Fixed by attributing each attendance row via the **attended member's** `discipler_id` (`lc_attendance_report.html`, `e23554f`).
+- **Audit (S35, read-only — Pastor to prioritize):** repo-wide sweep filed a classified inventory of every `lc_group`/`member_lc_group`/`event_lc_group` occurrence (DISPLAY vs GROUPING/MATCHING bug). Known live-DB suspects not in the repo: SQL views **`v_member_attendance_rates`, `v_attendance_summary`, `v_consecutive_absences`** (definitions live only in Supabase) — verify their GROUP BY and rewrite to `discipler_id` (human-gated SQL).
+
+**Established June 14, 2026 (Session 35). Invariant #166 added — count now 166.**
+
 ---
 
 *"A student who is fully trained will be like their teacher." — Luke 6:40*

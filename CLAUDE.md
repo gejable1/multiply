@@ -37,6 +37,7 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 9. **Preaching (#146–#149):** derive Sun/Wed from the `preach_date` **weekday**, not `service_type`. The swap modal is `MultiplyShared.preaching.openSwapRequest` (one source; MMT/MLT/calendar are thin wrappers). Sessions live in **sessionStorage** (use `getValidSession`/`getValidMemberSession`), not localStorage.
 10. **AI surfaces are conversation-starters, not verdicts** — soft framing, no auto-alerts.
 11. **PPTX is blind without rendering** — LibreOffice → PDF → PNG inspect before declaring a deck done. (#82)
+12. **`lc_group`/`member_lc_group`/`event_lc_group` are DECORATIVE / display-only (#166).** Canonical grouping, matching, filtering, counting, and categorizing is ALWAYS via `discipler_id` → LCL. Never group, match, or report by lc_group text (it's sparse, drifts on transfer, and is NULL on self-attest rows). Display a group's name resolved via `discipler_id` → LCL (`leader.lc_group` else `"{FirstName}'s LCG"`). Transfer state = `pending_facilitator_id` vs `facilitator_id`, never `pending_lc_group`.
 
 ## Workflow
 - Propose design/metadata → **Pastor confirms** → build → verify (`node --check` + harness + browser) → `git commit` + `push`.
