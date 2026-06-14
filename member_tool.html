@@ -6182,16 +6182,18 @@ async function loadLcDetails(){
   // NOTE: no pipeline_level filter — an LCL disciples their Pre-Pipeline
   // (level 0) people too, and they are just as much LC family. The old
   // `.gte('pipeline_level', 1)` silently dropped every Level-0 co-disciple.
-  let q = db.from('members')
-    .select('id,name,photo_url,facilitator_role,is_facilitator,share_with_lc,is_test_member,discipler_name,discipler_id')
-    .neq('is_external_user', true);
-  if(hasGroupText){
-    q = q.eq('lc_group', memberRow.lc_group);
-  } else {
-    q = q.eq('discipler_id', memberRow.discipler_id);
+  // Canonical LC family = members under the same LCL (discipler_id), Inv
+  // #1/#16/#59/#166 — NEVER the sparse lc_group text. A member with no discipler
+  // has no resolvable LC family roster (falls through to an empty list below).
+  let data = null;
+  if(memberRow.discipler_id){
+    const res = await db.from('members')
+      .select('id,name,photo_url,facilitator_role,is_facilitator,share_with_lc,is_test_member,discipler_name,discipler_id')
+      .neq('is_external_user', true)
+      .eq('discipler_id', memberRow.discipler_id);
+    if(res.error) throw res.error;
+    data = res.data;
   }
-  const {data, error} = await q;
-  if(error) throw error;
 
   // Test members are visible only to a test viewer (Invariant #69): a real
   // member never sees 🧪 records in their LC family. Guests already excluded above.
@@ -6551,25 +6553,19 @@ function normalizePHPhone(raw){
 // CELEBRATION FEED — synthesize wins from existing LC data
 // ═══════════════════════════════════════════════════════════════
 async function loadCelebrationFeed(){
-  const hasGroupText = !!(memberRow.lc_group && memberRow.lc_group.trim());
-  // Same LCG-resolution rule as loadLcDetails: proceed when the member has
-  // either an lc_group text OR an LCL (discipler_id), per Invariant #59.
-  if(!hasGroupText && !memberRow.discipler_id){
+  // Canonical LC family = members under the same LCL (discipler_id), Inv
+  // #1/#16/#59/#166 — NEVER lc_group text. No discipler → no LC family feed.
+  if(!memberRow.discipler_id){
     celebrationWins = []; celebrationGroupBadges = [];
     return;
   }
   const wins = [];
 
-  // Get LC member rows. Adds `birthday` (date) for the birthday-this-month win.
-  // Group by lc_group text when present, else by shared LCL (discipler_id).
-  let cq = db.from('members')
+  // Get LC member rows (same LCL). Adds `birthday` (date) for the birthday win.
+  const cq = db.from('members')
     .select('id,name,photo_url,share_with_lc,is_test_member,pipeline_level,facilitator_role,spiritual_gifts,disc_primary,enneagram_type,love_language_primary,strengths_top5,conflict_primary,diagnostic_zone,birthday,updated_at')
-    .neq('is_external_user', true);
-  if(hasGroupText){
-    cq = cq.eq('lc_group', memberRow.lc_group);
-  } else {
-    cq = cq.eq('discipler_id', memberRow.discipler_id);
-  }
+    .neq('is_external_user', true)
+    .eq('discipler_id', memberRow.discipler_id);
   const {data: lcRows, error} = await cq;
   if(error) throw error;
   // No pipeline_level gate (Pre-Pipeline LC family count too). Test members

@@ -1491,7 +1491,9 @@ async function selectLeader(){ /* no-op */ }
 // HOME
 // ═══════════════════════════════════════════════════════
 function getPendingTransfers(){
-  return myMembers.filter(m => m.pending_lc_group && m.pending_lc_group !== m.lc_group);
+  // Pending transfer = destination LCL set and differs from current (Inv #166 —
+  // never lc_group text, which is sparse/drifts).
+  return myMembers.filter(m => m.pending_facilitator_id && m.pending_facilitator_id !== m.facilitator_id);
 }
 
 function renderTransferAlerts(){
@@ -1996,7 +1998,7 @@ function renderMemberList(){
     // For incoming, we pull from allMembers (not myMembers) because they
     // are still in someone else's LCG until the transfer is approved.
     const outgoing = members.filter(m =>
-      m.pending_lc_group && m.pending_lc_group !== m.lc_group &&
+      m.pending_facilitator_id && m.pending_facilitator_id !== m.facilitator_id &&
       m.facilitator_id === LEADER.leaderId
     );
     const incoming = (allMembers||[]).filter(m =>
@@ -2023,7 +2025,7 @@ function renderMemberList(){
     const z = mem.diagnostic_zone||0;
     const zd = ZONE_DATA[z]||{color:'var(--muted)',bg:'var(--surface2)',label:'No Zone'};
     const pendingAssess = ASSESSMENTS.filter(a=>!hasFormalAssessment(mem, a)).length;
-    const hasPendingOutgoing = mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group && mem.facilitator_id === LEADER.leaderId;
+    const hasPendingOutgoing = mem.pending_facilitator_id && mem.pending_facilitator_id !== mem.facilitator_id && mem.facilitator_id === LEADER.leaderId;
     const hasPendingIncoming = mem.pending_facilitator_id === LEADER.leaderId;
     const tags = [];
     if(mem.spiritual_gifts) tags.push({text:'🎁 '+mem.spiritual_gifts.split(',')[0].trim(),cls:'done'});
@@ -2381,7 +2383,7 @@ function buildDetailSections(mem){
   let html = '';
 
   // Transfer info if pending
-  if(mem.pending_lc_group && mem.pending_lc_group !== mem.lc_group){
+  if(mem.pending_facilitator_id && mem.pending_facilitator_id !== mem.facilitator_id){
     const iProposed = mem.pending_transfer_by && mem.pending_transfer_by === LEADER.leaderId;
     const proposerName = _findMemberName(mem.pending_transfer_by);
     html += `<div class="ds-card open" style="border-color:rgba(251,191,36,.3)">
@@ -2843,7 +2845,7 @@ function _refreshTransferBtn(mem){
   const isMyDisc    = mem.discipler_id   === LEADER.leaderId;
   const isMyMember  = isMyFac || isMyDisc;
   const isPastor    = (LEADER.leaderLevel || 0) >= 5;
-  const hasPending  = !!mem.pending_lc_group;
+  const hasPending  = !!(mem.pending_facilitator_id && mem.pending_facilitator_id !== mem.facilitator_id);
   btn.style.display = ((isMyMember || isPastor) && !hasPending) ? '' : 'none';
 }
 

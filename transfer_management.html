@@ -511,7 +511,7 @@ function lclNameFor(id){
   if(lclMap[id]) return lclMap[id].name;
   return null;
 }
-function isPending(m)  { return !!(m.pending_facilitator_id || (m.pending_lc_group && m.pending_lc_group !== m.lc_group)); }
+function isPending(m)  { return !!(m.pending_facilitator_id && m.pending_facilitator_id !== m.facilitator_id); }
 function isOverdue(m)  { return isPending(m) && m.transfer_date && m.transfer_date < today; }
 function isApprovedThisMonth(m) {
   return m.transfer_date && m.transfer_date >= thisMonthStart && m.transfer_date <= today
@@ -791,7 +791,7 @@ async function _loadModalHistory(memberId){
 async function approveTransfer(memberId, fromModal = false) {
   const m = memberMap[memberId];
   if (!m) return;
-  if (!m.pending_facilitator_id && !m.pending_lc_group) {
+  if (!(m.pending_facilitator_id && m.pending_facilitator_id !== m.facilitator_id)) {
     showToast('No pending transfer to approve', true);
     return;
   }
