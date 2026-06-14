@@ -2039,10 +2039,12 @@ Prayer ("Panalangin") is a member-facing prayer-request board. **Wave 1** (lande
 - **Audience semantics:** `lcg` = requester's LC group (LCL linkage, Inv #1/#46, never `lc_group` text); `individuals` = a hand-picked set drawn from the **full same-kind church roster** (reach outside the requester's LCG, per spec — `share_with_lc` opt-outs + self excluded); `all` = everyone (still kind-bubbled); `discipler_pastor` = the requester's discipler **plus** any pastor, where pastor detection keys on **`pipeline_level >= 5`** (L5 Pastoral Staff, mirrors `_isSuperuser`'s L5 rule — MMT has no `_isSuperuser`), degrading to **discipler-only** inside a guest/test bubble with no L5.
 - **Kind bubble (Inv #164):** every audience, picklist, and feed row is bounded by `requesterKind === viewerKind`, viewer read from the member's own `members` row (Inv #162 — never the session shim). Helpers are **local to the prayer block** in `member_tool.html`; **Phase B:** centralize a shared `sameKind` in `multiply_shared.js`.
 - **No gamification UI (Pastor's standing intent):** the prayer surface shows **no points / score / badges**. Wave 4 will feed an **invisible** SVI prayer category (`count_rows`) — gamification stays hidden; SVI factors it silently.
-- **Waves HELD until Pastor's go:** W2 (prayed-tap "N praying", praise→celebration feed, notify-on-save, soft care-flag, category filter), W3 (reminders + EOLO seeding + auto-expiry via `expires_at`), W4 (silent SVI prayer category). `intercessions` / `prayer_list_items` / `prayer_list_opens` exist to serve these.
-- No `multiply_shared.js` change → consumers stay `?v=4`. `node --check` clean; 22/22 audience/kind/picker truth-table per commit.
+- **Wave 1 bugfixes (S36):** (1) **"Mark answered" is requester-only** — in the feed, only `viewer.id === requester_id` sees it; My-List saved items (request_id NOT NULL) get a **read-only badge** driven by the linked request's status, never a saver button (`2133d79`). (2) **Answer propagates to savers** — on requester-answer, `prayer_list_items` for that request are stamped answered (`answer_note = COALESCE(praise, answer_note)`); saving an already-answered request stamps the new item answered at insert (keeps the W4 `prayers_answered` signal correct) (`2133d79`). (3) **No active action on a non-open request** — answered/archived show the read-only "Answered 🙌" state; Save + Mark-answered are gated to `status==='open'` (`84b134d`). (4) **Single answered indicator** — the gold "✦ ANSWERED" panel is canonical; the duplicate green pill was dropped (`486c3eb`). (5) **My-List is a layered overlay** over the Requests sheet (like compose), so closing it returns to the main sheet; the main sheet closes only via its Close button, not a backdrop tap (`9877dbe`, `938ad3f`).
+- **Wave 2 SHIPPED (S36, `7daca68`)** — encouragement layer, all in `member_tool.html`, no SQL (tables already existed), no `?v=` bump: 🙏 **intercession** ("Prayed" tap → `prayer_intercessions` row; aggregate "N praying" = COUNT(DISTINCT member_id), no names/leaderboard); **pull aggregates** for the requester ("💾 saved by N · 🙏 N praying", read in-feature, no inbox); **praise → celebration feed** (answered+praise becomes a computed celebration win, anonymity preserved); **soft care flag** (`care_flag`/`care_flag_by` + a `kind='prayer_care'` notification to the requester's discipler + same-kind pastors, Inv #16 soft; anonymity exception names the requester to discipler/pastor only); **My-List category filter** (saved items by linked-request category; personal/EOLO bucketed). Counts are same-kind by construction (kind-bubbled visibility).
+- **Phase-2 RLS flag (cross-member writes):** intercession insert, care flag + notification, and answer-propagation write OTHER members' rows — fine now under RLS-disabled, but under Phase-2 RLS they must route through **`SECURITY DEFINER` RPCs**. Logged for the tenancy arc.
+- **W3 still HELD until Pastor's go:** reminders + EOLO seeding + auto-expiry via `expires_at`. **W4** = silent SVI prayer category (`count_rows`, lowercase). No `multiply_shared.js` change → consumers stay `?v=4`.
 
-**Established June 14, 2026 (Session 35). Invariant #165 added — count now 165.**
+**Established June 14, 2026 (Session 35; Wave 2 + bugfixes S36). Invariant #165 added — count now 165.**
 
 ### **166. `lc_group` / `member_lc_group` / `event_lc_group` are DECORATIVE / display-only — canonical grouping is ALWAYS via `discipler_id` → LCL**
 
@@ -2051,9 +2053,32 @@ Prayer ("Panalangin") is a member-facing prayer-request board. **Wave 1** (lande
 - **Allowed (DISPLAY):** showing a group's name. Even then, prefer resolving the name via `discipler_id` → LCL → display name (`leader.lc_group` if set, else `"{FirstName}'s LCG"`), not a member's stale stored text.
 - **Forbidden (BUG):** `.eq('lc_group', …)` / `.eq('member_lc_group', …)` as a query scope; building group buckets keyed by an lc_group string; matching attendance to a leader by `event_lc_group`/`member_lc_group`; `GROUP BY member_lc_group|event_lc_group|lc_group` in any SQL view/function; counting audience membership via `lc_groups.includes(m.lc_group)`. Transfer state is decided by `pending_facilitator_id` vs `facilitator_id`, **never** `pending_lc_group !== lc_group`.
 - **Root case (S35):** the LACR grouped members by `discipler_id` but **matched** attendance by `event_lc_group`/`logged_by_id`. Self-attest rows (lc_group NULL, logged_by_id = the member) never matched → groups falsely shown "Awaiting Your Heartbeat." Fixed by attributing each attendance row via the **attended member's** `discipler_id` (`lc_attendance_report.html`, `e23554f`).
-- **Audit (S35, read-only — Pastor to prioritize):** repo-wide sweep filed a classified inventory of every `lc_group`/`member_lc_group`/`event_lc_group` occurrence (DISPLAY vs GROUPING/MATCHING bug). Known live-DB suspects not in the repo: SQL views **`v_member_attendance_rates`, `v_attendance_summary`, `v_consecutive_absences`** (definitions live only in Supabase) — verify their GROUP BY and rewrite to `discipler_id` (human-gated SQL).
+- **Decommission tiers (S35–S36):**
+  - **Tier 1 ✅** attendance reports re-attributed by member `discipler_id` — LACR (`e23554f`) + LCG Pulse (`bca7871`); both gained the three-state heartbeat (Inv #167) and now exclude test+guest (Inv #15).
+  - **Tier 2 ✅** repo-wide classified audit + read-only `diag_lc_group_views.sql` (`ba8d647`) — the 3 SQL views have **zero repo/Edge consumers** (dormant); their defs are live-only (awaiting Pastor paste-back for any rewrite/drop).
+  - **Tier 3 ✅** announcement LCG targeting → `lcl:<leaderId>` keys + `discipler_id` matching across MD + MLT + MMT (`e889be1`); legacy text drafts fall back; new ones reach null/stale-`lc_group` flocks.
+  - **Tier 4 ✅** absence-notice heads-up filtered by live `discipler_id` (own disciples only, no church-wide bleed) (`dc15c8f`); transfer-state by `pending_facilitator_id !== facilitator_id` (MLT + transfer_management) and MMT LC-family by `discipler_id` (`0dfc641`).
+  - **Tier 4B (proposed, human-gated — NOT run):** `migrations/004` rewrites `promote_pending_lc_transfers()` to promote by `facilitator_id`/`discipler_id` (the old fn moved only text); `005` drops the 6 dormant lc_group indexes (full rollback); `006` drops the 3 dormant views (⛔ blocked on captured defs in `006_rollback`). All in `migrations/` with rollbacks.
+  - **Tier 4C (deferred):** `index.ts` (compute-svi-weekly) writes `lc_group` into `svi_snapshots` as a **passenger** column (`v_svi_latest` keys on `member_id` — decorative). Changing to `discipler_id` needs an Edge redeploy; defer unless full purity wanted.
 
-**Established June 14, 2026 (Session 35). Invariant #166 added — count now 166.**
+**Established June 14, 2026 (Session 35; sweep completed S36). Invariant #166 added — count now 166.**
+
+### **167. ATTENDANCE REPORTS use the three-state heartbeat, attributed by the member's `discipler_id`**
+
+LACR + LCG Pulse classify each LCG/week by a three-state heartbeat (generalizes #166 for the attendance-report family):
+- **Logged** — ≥1 leader-authoritative attendance row (`source ∈ {lcl_logged, stand_in, pastor_admin, backfill}`).
+- **Self-Attested · Awaiting Confirmation (N/M)** — no leader row but ≥1 `self_attest` present row → the group/week met but awaits the leader's log; shown distinctly (LACR section + tile; Pulse purple heatmap cell), counted as "met" so it is **not** falsely flagged.
+- **Awaiting Your Heartbeat** — no attendance of any source.
+
+Every row is attributed by the **attended member's `discipler_id` → LCL** (Inv #16/#166), never `event_lc_group`/`logged_by_id`/text. Present/absent counts include ALL sources. Both reports exclude **test AND guests** (Inv #15) — the Pulse was test-only before S36 (latent guest-inflation gap, now closed). The attendance `UNIQUE(member_id,event_type,event_date)` means counts never exceed the member count.
+
+**Established June 14, 2026 (Session 36). Invariant #167 added — count now 167.**
+
+### **168. DEVOTIONAL reflection nag is EXISTENCE-GATED — never fires on a devo-less day**
+
+The MMT gentle reflection reminder (`loadReflectionGap`) fires only when **(a)** a `devotionals` row exists for **today's** date AND **(b)** the member has no non-empty reflection for today. No devotional today (Sundays / gaps / holidays) → suppressed entirely (the home card already shows the gentle "no devotional today" state). The gap query runs in parallel with `loadTodaysDevo`, so it does its OWN existence query rather than reading the `todayDevo` global. Date basis = device-local YMD (Manila on a Manila phone, Inv #12) — not UTC. Completion is **today-only** (the existence gate retired the old yesterday-lookback workaround). Fail-soft: a read error never nags (`c0f41aa`).
+
+**Established June 14, 2026 (Session 36). Invariant #168 added — count now 168.**
 
 ---
 

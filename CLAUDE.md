@@ -37,7 +37,8 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 9. **Preaching (#146–#149):** derive Sun/Wed from the `preach_date` **weekday**, not `service_type`. The swap modal is `MultiplyShared.preaching.openSwapRequest` (one source; MMT/MLT/calendar are thin wrappers). Sessions live in **sessionStorage** (use `getValidSession`/`getValidMemberSession`), not localStorage.
 10. **AI surfaces are conversation-starters, not verdicts** — soft framing, no auto-alerts.
 11. **PPTX is blind without rendering** — LibreOffice → PDF → PNG inspect before declaring a deck done. (#82)
-12. **`lc_group`/`member_lc_group`/`event_lc_group` are DECORATIVE / display-only (#166).** Canonical grouping, matching, filtering, counting, and categorizing is ALWAYS via `discipler_id` → LCL. Never group, match, or report by lc_group text (it's sparse, drifts on transfer, and is NULL on self-attest rows). Display a group's name resolved via `discipler_id` → LCL (`leader.lc_group` else `"{FirstName}'s LCG"`). Transfer state = `pending_facilitator_id` vs `facilitator_id`, never `pending_lc_group`.
+12. **`lc_group`/`member_lc_group`/`event_lc_group` are DECORATIVE / display-only (#166).** Canonical grouping, matching, filtering, counting, and categorizing is ALWAYS via `discipler_id` → LCL. Never group, match, or report by lc_group text (it's sparse, drifts on transfer, and is NULL on self-attest rows). Display a group's name resolved via `discipler_id` → LCL (`leader.lc_group` else `"{FirstName}'s LCG"`). Transfer state = `pending_facilitator_id` vs `facilitator_id`, never `pending_lc_group`. Announcement LCG audiences use `lcl:<leaderId>` keys. Attendance reports use the **three-state heartbeat** (Logged / Self-Attested·Awaiting / Awaiting) attributed by member `discipler_id`, test+guest excluded (#167).
+13. **Devotional reflection nag is existence-gated (#168)** — fire only when a `devotionals` row exists for today AND the member hasn't reflected today; never on a devo-less day.
 
 ## Workflow
 - Propose design/metadata → **Pastor confirms** → build → verify (`node --check` + harness + browser) → `git commit` + `push`.
@@ -64,9 +65,12 @@ design trade-offs as numbered options before building; accept corrections withou
 Refresh from `HANDOFF.md`'s PENDING list — don't brainstorm new scope (#43).
 **Top item now: BTLI L12 — Understanding My Unique Design** (UNLAD-L2, Eph 2:10, the
 assessment-battery lesson) — needs the UNLAD-L2 scan. Also live but waiting on the Pastor's
-go: **Prayer/Panalangin Waves 2–4** (W1 landed S35, Inv #165) and **kind-mirroring Phase B**
-(reports viewer-aware + centralize helpers → bump `?v=`). (The 4 report HTMLs are already at
-`?v=4` — that lockstep is done.)
+go: **Prayer/Panalangin W3/W4** (W1+W2 shipped S35–S36, Inv #165) and **kind-mirroring Phase B**
+(reports viewer-aware + centralize helpers → bump `?v=`). **Human-gated SQL pending the Pastor's
+run/decision** (S36, Inv #166): `migrations/004` (promote_pending_lc_transfers by id — recommend
+run), `005` (drop dormant lc_group indexes — optional), `006` (drop 3 dormant views — ⛔ run
+`diag_lc_group_views.sql` + paste defs into `006_rollback` first). The lc_group frontend sweep
+(Tiers 1–4) is DONE.
 
 ## Cloud vs desktop sessions
 Cloud (claude.ai) sessions on this repo are **read-only** — git push 403, MCP 403, no signing key.
