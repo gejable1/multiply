@@ -198,6 +198,13 @@ Wave 1 (MMT board) landed S35. The tables for the rest already exist (`intercess
 ### **🪞 Kind-mirroring — Phase B** (Inv #164)
 Phase A (S34) covered MD + MLT. Phase B: (1) make the **report HTMLs** viewer-aware (`memberKind === viewerKind`), retiring the strict Inv #58 predicate; (2) **centralize** the mirrored helpers (`memberKind`/`viewerKind`/`_kindVisible`/`_sameKind`) + the prayer `sameKind` into `multiply_shared.js` and **bump `?v=` lockstep** (Inv #138). ~30 min per report.
 
+### **🧹 lc_group decommission (Inv #166)** — Tiers 1–3 SHIPPED · Tier 4 remaining
+Canonical grouping is `discipler_id` → LCL; `lc_group`/`member_lc_group`/`event_lc_group` are decorative. Progress:
+- **Tier 1 ✅** LACR (`lc_attendance_report.html`, `e23554f`) + LCG Pulse (`lcg_pulse_report.html`, `bca7871`) — attendance attributed by member `discipler_id`; three-state heartbeat; both reports now exclude test+guest.
+- **Tier 2 ✅** repo-wide classified audit (chat report) + read-only DB diagnostic [diag_lc_group_views.sql](diag_lc_group_views.sql) (`ba8d647`) — **awaiting Pastor's paste-back** of the 3-view defs/deps.
+- **Tier 3 ✅** announcement LCG targeting → `discipler_id` resolution across MD + MLT + MMT (`e889be1`): matchers key on `lcl:<discipler_id>`/`lcl:<own id>`; pickers emit one `lcl:<leaderId>` entry per LC Leader; legacy text-name drafts keep working via fallback. Fixes null/stale-lc_group flocks (e.g. Roce's) missing announcements.
+- **Tier 4 (remaining):** code cleanup of the residual decorative `lc_group` writes/reads flagged in the Tier-2 audit (transfer-state text comparisons `pending_lc_group !== lc_group` → `pending_facilitator_id`; `member_tool` `.eq('lc_group')` hasGroupText branch → always `discipler_id`; `index.ts` svi_snapshots passenger column) **and** dropping the dormant SQL views/indexes (`v_member_attendance_rates`/`v_attendance_summary`/`v_consecutive_absences` + `idx_*_lc_group`) once the diagnostic confirms zero live consumers (human-gated SQL). Fold the full tier tracker into the next `m.md` with Inv #166.
+
 ### **🔧 Infra — cloud-session write access (durable fix)**
 Laptop **cloud** sessions are read-only (git push 403 + MCP 403 + no signing key) — work had to ship via `git format-patch` → apply/push from the desktop. **Durable fix:** grant the **Claude GitHub App** write on `gejable1/multiply` (Contents + Pull requests) so future cloud sessions push directly. Standing workflow either way: **pull-first; ask before push**; the desktop clone is the preferred push surface.
 
