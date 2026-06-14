@@ -10802,9 +10802,17 @@ function renderMyPrayerList(){
 
 function _prayerListItemHTML(i){
   const tl = _prayerTL();
-  const isAnswered = i.status === 'answered';
-  // For saved items, prefer the live source request's current body if we have it.
-  const src = i.request_id ? _prayerFeedById(i.request_id) : null;
+  // 'saved' items link a foreign request (request_id NOT NULL); 'personal'/'eolo'
+  // items are the member's OWN (request_id IS NULL).
+  const isSaved = !!i.request_id;
+  // For saved items, prefer the live source request if we have it — its status is
+  // AUTHORITATIVE for the answered state (correct regardless of save-vs-answer order),
+  // and we use its current body/praise note. Fall back to the stamped row when the
+  // source isn't loaded.
+  const src = isSaved ? _prayerFeedById(i.request_id) : null;
+  const isAnswered = isSaved
+    ? (src ? src.status === 'answered' : i.status === 'answered')
+    : i.status === 'answered';
   const body = (src && src.body) || i.body || i.title || '';
   const title = i.title || (tl ? 'Panalangin' : 'Prayer');
   const srcTag = i.source === 'eolo'
@@ -10812,14 +10820,22 @@ function _prayerListItemHTML(i){
     : (i.source === 'personal' ? `<span class="pr-cat">${tl ? 'Sarili' : 'Personal'}</span>` : '');
   let answered = '';
   if(isAnswered){
-    const note = i.answer_note ? MultiplyShared.escapeHTML(i.answer_note) : (tl ? 'Sinagot ng Diyos. 🙌' : 'Answered. 🙌');
+    const rawNote = isSaved ? (src && src.praise_note) : i.answer_note;
+    const note = rawNote ? MultiplyShared.escapeHTML(rawNote) : (tl ? 'Sinagot ng Diyos. 🙌' : 'Answered. 🙌');
     answered = `<div class="pr-answered"><span class="pr-ans-label">${tl ? '✦ SINAGOT' : '✦ ANSWERED'}</span><br>${note}</div>`;
   }
   const acts = [];
-  if(isAnswered){
-    acts.push(`<span class="pr-act is-done">✓ ${tl ? 'Sinagot' : 'Answered'}</span>`);
+  if(isSaved){
+    // A saver must NOT mutate someone else's request — answered is read-only here,
+    // driven by the linked request's status (set when the requester marks it answered).
+    if(isAnswered) acts.push(`<span class="pr-act is-done">🙌 ${tl ? 'Sinagot' : 'Answered'}</span>`);
   } else {
-    acts.push(`<button class="pr-act primary" onclick="markListItemAnswered('${i.id}')">🙌 ${tl ? 'Sinagot na' : 'Mark answered'}</button>`);
+    // Personal/EOLO items are the owner's own — keep their answered button.
+    if(isAnswered){
+      acts.push(`<span class="pr-act is-done">✓ ${tl ? 'Sinagot' : 'Answered'}</span>`);
+    } else {
+      acts.push(`<button class="pr-act primary" onclick="markListItemAnswered('${i.id}')">🙌 ${tl ? 'Sinagot na' : 'Mark answered'}</button>`);
+    }
   }
   acts.push(`<button class="pr-act" onclick="removeListItem('${i.id}')">🗑 ${tl ? 'Alisin' : 'Remove'}</button>`);
   return `<div class="pr-item">
@@ -10841,14 +10857,20 @@ function _prayerListItemHTML(i){
 async function savePrayerToList(reqId){
   const tl = _prayerTL();
   const r = _prayerFeedById(reqId);
+  // If the request is ALREADY answered when saved, stamp the new list item answered
+  // at insert (so the W4 SVI prayers_answered signal stays correct even if the member
+  // never re-opens the source). Display still derives from the request (authoritative).
+  const preAnswered = !!(r && r.status === 'answered');
   try{
     const { error } = await db.from('prayer_list_items').insert({
-      member_id:  MEMBER.memberId,
-      request_id: reqId,
-      source:     'saved',
-      body:       r ? r.body : null,
-      status:     'praying',
-      church_id:  memberRow.church_id || null
+      member_id:   MEMBER.memberId,
+      request_id:  reqId,
+      source:      'saved',
+      body:        r ? r.body : null,
+      status:      preAnswered ? 'answered' : 'praying',
+      answered_at: preAnswered ? (r.answered_at || new Date().toISOString()) : null,
+      answer_note: preAnswered ? (r.praise_note || null) : null,
+      church_id:   memberRow.church_id || null
     });
     if(error){
       if(error.code === '23505'){                 // already saved (partial-unique)
@@ -10893,13 +10915,27 @@ async function confirmAnswered(){
   const note = document.getElementById('prAnsweredNote').value.trim();
   try{
     if(t.type === 'request'){
+      const nowIso = new Date().toISOString();
       const { error } = await db.from('prayer_requests').update({
         status: 'answered',
-        answered_at: new Date().toISOString(),
+        answered_at: nowIso,
         praise_note: note || null
       }).eq('id', t.id).eq('requester_id', MEMBER.memberId);   // guard: only my own request
       if(error) throw error;
+      // Propagate to everyone who saved this request so their My-List reflects the
+      // answer. Only same-kind members could have saved it (the feed is kind-bubbled,
+      // Inv #164) and the answerer IS the requester, so this stays in-bubble. The
+      // conditional answer_note gives COALESCE(<praise>, answer_note): overwrite the
+      // saver's note only when a praise note was given, else leave theirs intact.
+      const propPayload = { status:'answered', answered_at: nowIso };
+      if(note) propPayload.answer_note = note;
+      const { error: propErr } = await db.from('prayer_list_items')
+        .update(propPayload)
+        .eq('request_id', t.id)
+        .neq('status', 'removed');
+      if(propErr) console.warn('answer propagation to savers failed (non-fatal):', propErr);
       await loadPrayerFeed();
+      await loadPrayerMyList();   // my own saved copy, if any, now shows answered
     } else {
       const { error } = await db.from('prayer_list_items').update({
         status: 'answered',
