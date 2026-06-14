@@ -37,7 +37,7 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 9. **Preaching (#146–#149):** derive Sun/Wed from the `preach_date` **weekday**, not `service_type`. The swap modal is `MultiplyShared.preaching.openSwapRequest` (one source; MMT/MLT/calendar are thin wrappers). Sessions live in **sessionStorage** (use `getValidSession`/`getValidMemberSession`), not localStorage.
 10. **AI surfaces are conversation-starters, not verdicts** — soft framing, no auto-alerts.
 11. **PPTX is blind without rendering** — LibreOffice → PDF → PNG inspect before declaring a deck done. (#82)
-12. **`lc_group`/`member_lc_group`/`event_lc_group` are DECORATIVE / display-only (#166).** Canonical grouping, matching, filtering, counting, and categorizing is ALWAYS via `discipler_id` → LCL. Never group, match, or report by lc_group text (it's sparse, drifts on transfer, and is NULL on self-attest rows). Display a group's name resolved via `discipler_id` → LCL (`leader.lc_group` else `"{FirstName}'s LCG"`). Transfer state = `pending_facilitator_id` vs `facilitator_id`, never `pending_lc_group`. Announcement LCG audiences use `lcl:<leaderId>` keys. Attendance reports use the **three-state heartbeat** (Logged / Self-Attested·Awaiting / Awaiting) attributed by member `discipler_id`, test+guest excluded (#167).
+12. **DENORMALIZED TEXT MIRRORS are DECORATIVE — resolve `id` → current record, never stored text (#166).** Applies to the whole lc_group family (`lc_group`/`member_lc_group`/`event_lc_group`) AND every stored name mirror (`discipler_name`/`member_name`/`facilitator_name`/legacy `discipler`/…) — they go stale on renames/transfers/drift. Canonical grouping, matching, filtering, counting, categorizing, and (where practical) display is ALWAYS via the **id → live record** (`discipler_id`/`facilitator_id`/`member_id`). Never group/match/report by a stored text label. Display a group's name resolved via `discipler_id` → LCL (`leader.lc_group` else `"{FirstName}'s LCG"`). Transfer state = `pending_facilitator_id` vs `facilitator_id`, never `pending_lc_group`. Announcement LCG audiences use `lcl:<leaderId>` keys. Attendance reports use the **three-state heartbeat** (Logged / Self-Attested·Awaiting / Awaiting) attributed by member `discipler_id`, test+guest excluded (#167). **lc_group decommission is COMPLETE** (frontend Tiers 1–4 + `migrations/004`+`005` run; phantom `006` removed).
 13. **Devotional reflection nag is existence-gated (#168)** — fire only when a `devotionals` row exists for today AND the member hasn't reflected today; never on a devo-less day.
 
 ## Workflow
@@ -66,11 +66,10 @@ Refresh from `HANDOFF.md`'s PENDING list — don't brainstorm new scope (#43).
 **Top item now: BTLI L12 — Understanding My Unique Design** (UNLAD-L2, Eph 2:10, the
 assessment-battery lesson) — needs the UNLAD-L2 scan. Also live but waiting on the Pastor's
 go: **Prayer/Panalangin W3/W4** (W1+W2 shipped S35–S36, Inv #165) and **kind-mirroring Phase B**
-(reports viewer-aware + centralize helpers → bump `?v=`). **Human-gated SQL pending the Pastor's
-run/decision** (S36, Inv #166): `migrations/004` (promote_pending_lc_transfers by id — recommend
-run), `005` (drop dormant lc_group indexes — optional), `006` (drop 3 dormant views — ⛔ run
-`diag_lc_group_views.sql` + paste defs into `006_rollback` first). The lc_group frontend sweep
-(Tiers 1–4) is DONE.
+(reports viewer-aware + centralize helpers → bump `?v=`). **lc_group decommission is COMPLETE**
+(S37, Inv #166): frontend Tiers 1–4 shipped; `migrations/004` (promote-by-id) + `005` (drop dormant
+indexes) RUN; `006` removed (phantom views never existed). Optional cosmetic only: `migrations/007`
+(refresh stale `discipler_name`) — human-gated, at the Pastor's discretion.
 
 ## Cloud vs desktop sessions
 Cloud (claude.ai) sessions on this repo are **read-only** — git push 403, MCP 403, no signing key.
