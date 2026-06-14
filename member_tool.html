@@ -10777,13 +10777,21 @@ function _prayerItemHTML(r){
     const note = r.praise_note ? MultiplyShared.escapeHTML(r.praise_note) : (tl ? 'Sinagot ng Diyos. 🙌' : 'Answered. 🙌');
     answered = `<div class="pr-answered"><span class="pr-ans-label">${tl ? '✦ SINAGOT' : '✦ ANSWERED'}</span><br>${note}</div>`;
   }
+  // Actions are LIVE only on an OPEN request. Once answered/archived, NO active
+  // action is offered to anyone (you can't save a closed request, and the
+  // requester's "Mark answered" must not re-appear) — we show the read-only
+  // "Answered 🙌" badge instead, mirroring the My-List badge.
   const acts = [];
-  const saved = _prayerSavedReqIds.has(r.id);
-  acts.push(saved
-    ? `<span class="pr-act is-done">✓ ${tl ? 'Nasa listahan' : 'On my list'}</span>`
-    : `<button class="pr-act primary" onclick="savePrayerToList('${r.id}')">＋ ${tl ? 'I-save sa listahan' : 'Save to my list'}</button>`);
-  if(isMine && r.status === 'open'){
-    acts.push(`<button class="pr-act" onclick="markRequestAnswered('${r.id}')">🙌 ${tl ? 'Markahang sinagot' : 'Mark answered'}</button>`);
+  if(r.status === 'open'){
+    const saved = _prayerSavedReqIds.has(r.id);
+    acts.push(saved
+      ? `<span class="pr-act is-done">✓ ${tl ? 'Nasa listahan' : 'On my list'}</span>`
+      : `<button class="pr-act primary" onclick="savePrayerToList('${r.id}')">＋ ${tl ? 'I-save sa listahan' : 'Save to my list'}</button>`);
+    if(isMine){
+      acts.push(`<button class="pr-act" onclick="markRequestAnswered('${r.id}')">🙌 ${tl ? 'Markahang sinagot' : 'Mark answered'}</button>`);
+    }
+  } else if(r.status === 'answered'){
+    acts.push(`<span class="pr-act is-done">🙌 ${tl ? 'Sinagot' : 'Answered'}</span>`);
   }
   const youTag = isMine ? ` <span style="font-size:9px;color:var(--gold);font-weight:700">${tl ? '(ikaw)' : '(you)'}</span>` : '';
   return `<div class="pr-item">
