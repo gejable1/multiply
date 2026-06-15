@@ -267,10 +267,14 @@ window.addEventListener('message', function(ev){
 // redirects. Member-only users go through logoutMember. Both end at login.
 async function signOut(){
   try { sessionStorage.removeItem('multiply_member_session'); } catch(e){}
+  // Return to THIS shell after re-login (mirror boot's ?next= computation) —
+  // a bare member_login.html would fall back to its MMT default.
+  const here = location.pathname.split('/').pop() || 'shell.html';
+  const loginUrl = 'member_login.html?next=' + encodeURIComponent(here);
   if (MultiplyShared.getValidSession()){
-    await MultiplyShared.logoutLeader('member_login.html');
+    await MultiplyShared.logoutLeader(loginUrl);
   } else {
-    MultiplyShared.logoutMember('member_login.html');
+    MultiplyShared.logoutMember(loginUrl);
   }
 }
 </script>
