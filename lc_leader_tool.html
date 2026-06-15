@@ -423,7 +423,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      dashboard. If no valid session exists, redirect to the central
      login page. This replaces the old open-name-search login.
 ─────────────────────────────────────────────────────────────── -->
-<script src="multiply_shared.js?v=5"></script>
+<script src="multiply_shared.js?v=6"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -441,10 +441,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     location.replace('leader_login.html');
     return;
   }
-  if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
-  document.body.classList.add('leader-authenticated');
-  const blackout = document.getElementById('leaderGateBlackout');
-  if (blackout) blackout.remove();
+  function _gate(){
+    if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+    document.body.classList.add('leader-authenticated');
+    const blackout = document.getElementById('leaderGateBlackout');
+    if (blackout) blackout.remove();
+  }
+  // Embed mode (?embed=1): defer gating until the parent shell passes a
+  // session in via postMessage. Fails safe to login on 3s timeout.
+  if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()){
+    MultiplyShared.embedSessionReady(3000).then(_gate);
+  } else {
+    _gate();
+  }
 })();
 </script>
 
@@ -1260,13 +1269,24 @@ function showScreen(id){
   if(id==='screenSendLinks') renderSendLinks();
   window.scrollTo(0,0);
 
-  // Push to screen history (skip if same as current)
+  // Push to screen history (skip if same as current).
+  // In embed mode (?embed=1) the shell owns the back-button, so MLT does not
+  // push its own history entries — see the guarded popstate wiring below.
   if(screenStack[screenStack.length-1] !== id){
     screenStack.push(id);
-    // Push a history state so the browser back button comes here first
-    history.pushState({screen:id, t:Date.now()}, '', '');
+    if(!(MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode())){
+      // Push a history state so the browser back button comes here first
+      history.pushState({screen:id, t:Date.now()}, '', '');
+    }
   }
 }
+
+// History/back-button management. SUPPRESSED in embed mode (?embed=1): the
+// unified shell owns the back-button and would fight MLT's per-screen history.
+// Standalone keeps the full behavior (per-screen back, exit confirm, unsaved
+// attendance guard). Only the registration is gated — no behavior change
+// standalone.
+if(!(MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode())){
 
 // Handle browser back button / swipe-back gesture
 window.addEventListener('popstate', function(e){
@@ -1321,6 +1341,8 @@ window.addEventListener('beforeunload', function(e){
 
 // Initial history entry so the very first back-press doesn't exit
 history.replaceState({screen:'screenHome', t:Date.now()}, '', '');
+
+} // end history wiring (skipped in embed mode)
 
 // ═══════════════════════════════════════════════════════
 // BOOT — load members + apply scope
@@ -1465,7 +1487,14 @@ function updateScopeCountsMobile(){
 }
 
 // Boot
-loadMyMembers();
+// Embed mode (?embed=1): the gate is deferred until the shell passes a
+// session in, so window.LEADER isn't set at parse time — wait for the same
+// handshake before loading data. Standalone calls it immediately as before.
+if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()){
+  MultiplyShared.embedSessionReady(3000).then(loadMyMembers);
+} else {
+  loadMyMembers();
+}
 
 // Logout — replaces the old switchLeader. Uses the shared module's
 // session helpers so behavior matches the desktop dashboard.

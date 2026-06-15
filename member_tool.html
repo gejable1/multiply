@@ -40,7 +40,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
-<script src="multiply_shared.js?v=5" onerror="__mmtMarkDepFailed('shared')"></script>
+<script src="multiply_shared.js?v=6" onerror="__mmtMarkDepFailed('shared')"></script>
 
 <!-- YOUTUBE IFRAME PLAYER API
      Loaded async — it's optional. If it fails to load, podcasts still play
@@ -2563,15 +2563,34 @@ const __masterTimeout = setTimeout(function(){
   throw new Error('MMT dependencies missing: ' + missing.join(', '));
 })();
 
-if(!MultiplyShared.gateMemberOrRedirect('member_login.html')){
-  // gateMemberOrRedirect already replaced location; nothing else to do.
+function __mmtGateAndInit(){
+  if(!MultiplyShared.gateMemberOrRedirect('member_login.html')){
+    // gateMemberOrRedirect already replaced location; nothing else to do.
+  } else {
+    // Has a valid session. window.MEMBER is set.
+    window.__mmtPhase('Session OK');
+    // readyState-aware: in embed mode the gate runs AFTER the handshake, which
+    // may resolve once DOMContentLoaded has already fired — so init directly
+    // in that case. Standalone runs during parse (readyState 'loading') → the
+    // listener branch, identical to the prior behavior.
+    if (document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', function(){
+        window.__mmtPhase('DOM ready');
+        initMMT();
+      });
+    } else {
+      window.__mmtPhase('DOM ready');
+      initMMT();
+    }
+  }
+}
+// Embed mode (?embed=1): wait for the parent shell to pass a session in
+// (the handshake persists it), THEN gate — so the gate passes instead of
+// redirecting. Standalone behavior is unchanged. Fails safe on timeout.
+if (MultiplyShared.isEmbedMode()){
+  MultiplyShared.embedSessionReady(3000).then(__mmtGateAndInit);
 } else {
-  // Has a valid session. window.MEMBER is set.
-  window.__mmtPhase('Session OK');
-  document.addEventListener('DOMContentLoaded', function(){
-    window.__mmtPhase('DOM ready');
-    initMMT();
-  });
+  __mmtGateAndInit();
 }
 
 // ═══════════════════════════════════════════════════════════════
