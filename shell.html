@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>MULTIPLY</title>
+<!-- Single generic PWA manifest for the unified shell (A3a). No church name.
+     index.html + per-tool manifests/service workers are retired in A3b. -->
+<link rel="manifest" href="shell.webmanifest">
+<meta name="theme-color" content="#0e3a2c">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon_512.png">
 <!--
   ─────────────────────────────────────────────────────────────────────────
   UNIFIED SHELL (A2b) — NEW, non-disruptive page.
@@ -254,13 +260,18 @@ window.addEventListener('message', function(ev){
 });
 
 // ── Sign out: clear both sessions, return to login ────────────────────
-function signOut(){
-  // Clear BOTH sessions (the shell may hold a real + a bridged one) and
-  // return to login. We clear directly rather than via logoutMember/
-  // logoutLeader so neither helper's own redirect races our own.
-  try { sessionStorage.removeItem('multiply_leader_session'); } catch(e){}
+// A leader may hold a real leader session (possibly alongside a bridged one).
+// Clear the member key FIRST (so its gate can't race the redirect), then if a
+// leader session is present hand off to logoutLeader — which stamps
+// leader_sessions.ended_at server-side (Inv #167), clears the leader key, and
+// redirects. Member-only users go through logoutMember. Both end at login.
+async function signOut(){
   try { sessionStorage.removeItem('multiply_member_session'); } catch(e){}
-  location.replace('member_login.html');
+  if (MultiplyShared.getValidSession()){
+    await MultiplyShared.logoutLeader('member_login.html');
+  } else {
+    MultiplyShared.logoutMember('member_login.html');
+  }
 }
 </script>
 </body>
