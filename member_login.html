@@ -555,7 +555,25 @@ async function loginSuccess(){
     }).eq('id', selectedMember.id);
   }catch(e){ console.warn('last-login update failed (non-fatal):', e); }
 
-  location.replace(MMT_URL);
+  // Optional ?next= redirect (additive — used by the unified shell). Only a
+  // SAME-ORIGIN RELATIVE .html path is honored (no scheme, no leading / or //,
+  // no host, no control chars); anything else fails safe to the default MMT.
+  location.replace(_safeNextUrl() || MMT_URL);
+}
+
+// Returns a safe same-origin relative redirect target from ?next=, or null.
+function _safeNextUrl(){
+  try{
+    const raw = new URLSearchParams(location.search).get('next');
+    if(!raw) return null;
+    const n = raw.trim();
+    if(!n) return null;
+    if(n.startsWith('/') || n.startsWith('\\')) return null;        // absolute / UNC / protocol-relative
+    if(/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(n)) return null;           // any scheme (http:, javascript:, data:)
+    if(/[\x00-\x1f]/.test(n)) return null;                          // control chars
+    if(!/^[a-zA-Z0-9._\-]+\.html([?#].*)?$/.test(n)) return null;   // same-dir .html (+optional query/hash)
+    return n;
+  }catch(e){ return null; }
 }
 
 // ═══════════════════════════════════════════════════════════
