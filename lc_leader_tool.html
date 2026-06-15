@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>LC Leader Tool · MULTIPLY</title>
-<!-- ─── PWA manifest + iOS standalone hints (added May 2026) ─── -->
-<link rel="manifest" href="manifest.json">
+<!-- A3b: per-tool PWA manifest removed — the unified shell (index.html) is the
+     sole installable PWA. iOS standalone hints left dormant (harmless). -->
 <meta name="theme-color" content="#2a5c3f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -6151,19 +6151,11 @@ document.addEventListener('click',e=>{
 //   4. Hide the banner once installed or dismissed (remembered for 14 days)
 // ═══════════════════════════════════════════════════════════════
 
-// ── 1. Register service worker ─────────────────────────────────
-// IMPORTANT: scope is narrowed to MLT's own URL so it doesn't intercept
-// member_tool.html navigations (which would make MMT appear "installed"
-// when MLT is the only one actually installed).
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('service-worker.js', { scope: '/multiply/lc_leader_tool.html' })
-      .then(reg => {
-        console.log('[pwa] service worker registered, scope:', reg.scope);
-      })
-      .catch(err => console.warn('[pwa] SW registration failed:', err.message));
-  });
-}
+// ── 1. Service worker retired (A3b) ────────────────────────────
+// The unified shell (index.html) registers ONE consolidated /multiply/-scoped
+// SW (multiply-sw.js) that controls this tool when embedded. MLT no longer
+// registers its own SW; service-worker.js is now a kill-switch stub that
+// unregisters any legacy registration on the next visit.
 
 // ── 2. Capture the install prompt event (Android/Chrome) ──────
 let _pwaDeferredPrompt = null;

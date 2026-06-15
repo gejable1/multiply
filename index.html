@@ -2,22 +2,317 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="0;url=lc_leader_tool.html">
-<title>MULTIPLY · Rosehill</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2a5c3f">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MULTIPLY</title>
+<!-- Single generic PWA manifest for the unified shell. No church name. -->
+<link rel="manifest" href="shell.webmanifest">
+<meta name="theme-color" content="#0e3a2c">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon_512.png">
+<!--
+  ─────────────────────────────────────────────────────────────────────────
+  UNIFIED SHELL — the directory entry (A3b promoted shell.html → index.html).
+  gejable1.github.io/multiply/ loads this. One login (member PIN), one
+  role-toolbar; opens MMT / MLT / MD as same-origin iframe overlays with
+  ?embed=1 and serves each tool its session via the A2a handshake.
+
+  PWA (A3b): this page is the SOLE installable surface (one shell.webmanifest)
+  and registers the ONE consolidated /multiply/-scoped service worker
+  (multiply-sw.js). The old per-tool service workers are kill-switched +
+  unregistered (see the SW block at the bottom of this script).
+
+  Boot: ensureBothSessions() (A1) → if neither session valid, bounce to
+  member_login.html?next=index.html → else render the role-toolbar by level
+  (MMT always · MLT >=2 · MD >=5; MD gate is shell-side, MD's own gate is
+  unchanged). Tools suppress their own history under ?embed=1 (A2a), so the
+  shell owns the back-button: opening an overlay pushes one history state;
+  Back (or Home/✕) closes the overlay and returns here.
+  ─────────────────────────────────────────────────────────────────────────
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap">
+<script src="multiply_shared.js?v=6"></script>
 <style>
-  body{font-family:system-ui,sans-serif;background:#0f0f13;color:#e6e6e6;
-       display:flex;align-items:center;justify-content:center;
-       min-height:100vh;margin:0;text-align:center;padding:1rem}
+  :root{
+    --forest:#0e3a2c; --forest-2:#1a5547; --forest-3:#2d6e5a;
+    --gold:#b8882a; --gold-bright:#d4af37; --gold-bg:#f5e8c4;
+    --cream:#f5f0e6; --paper:#fbf7ef;
+    --ink:#1c1810; --ink-soft:#3d342a; --muted:#6b5f4f; --lighter:#9b8e7e;
+    --line:#e2d8c6;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    font-family:'DM Sans',sans-serif; color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(45,110,90,.25), transparent 60%),
+      linear-gradient(160deg, var(--forest) 0%, #0b2f24 100%);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:24px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap{ width:100%; max-width:520px; margin:auto; }
+  .brand{ text-align:center; margin-bottom:18px; }
+  .logo-m{
+    font-family:'Fraunces',serif; font-weight:700; font-size:34px; color:var(--gold-bright);
+    width:64px; height:64px; line-height:64px; margin:0 auto 8px; border-radius:18px;
+    background:rgba(212,175,55,.10); border:1px solid rgba(212,175,55,.35);
+  }
+  .logo-sub{ font-family:'Caveat',cursive; font-size:20px; color:var(--gold-bg); letter-spacing:.06em; }
+  .greet{ color:var(--cream); text-align:center; margin:14px 0 2px; font-size:15px; }
+  .greet b{ color:#fff; }
+  .role{ color:var(--lighter); text-align:center; font-size:12.5px; margin-bottom:20px; }
+  .card{
+    background:var(--paper); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 16px 40px rgba(0,0,0,.28); overflow:hidden;
+  }
+  .card-head{
+    padding:13px 16px; font-family:'Fraunces',serif; font-size:13px; letter-spacing:.04em;
+    color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#fff,transparent);
+  }
+  .tool{
+    display:flex; align-items:center; gap:14px; width:100%; text-align:left;
+    padding:16px; background:none; border:none; border-bottom:1px solid var(--line);
+    font-family:inherit; cursor:pointer; color:var(--ink); transition:background .12s;
+  }
+  .tool:last-child{ border-bottom:none; }
+  .tool:hover, .tool:focus-visible{ background:var(--gold-bg); outline:none; }
+  .tool .ico{
+    flex:0 0 44px; height:44px; border-radius:12px; display:grid; place-items:center;
+    font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:#fff;
+    background:linear-gradient(150deg,var(--forest-3),var(--forest));
+  }
+  .tool .tx{ flex:1; min-width:0; }
+  .tool .en{ font-weight:600; font-size:15.5px; }
+  .tool .tl{ color:var(--muted); font-size:12.5px; margin-top:1px; }
+  .tool .arw{ color:var(--gold); font-size:20px; }
+  .foot{ text-align:center; margin-top:18px; }
+  .signout{
+    background:none; border:none; color:var(--gold-bg); font-family:inherit; font-size:12.5px;
+    text-decoration:underline; cursor:pointer; opacity:.85;
+  }
+  .verse{ color:var(--lighter); font-size:11px; text-align:center; margin-top:10px; font-style:italic; }
+
+  /* ── Overlay ── */
+  #overlay{
+    position:fixed; inset:0; z-index:1000; display:none; flex-direction:column;
+    background:var(--forest);
+  }
+  #overlay.open{ display:flex; }
+  .ov-head{
+    flex:0 0 auto; display:flex; align-items:center; gap:12px;
+    padding:calc(10px + env(safe-area-inset-top)) 14px 10px;
+    background:var(--forest); color:#fff; border-bottom:1px solid rgba(212,175,55,.3);
+  }
+  .ov-title{ font-family:'Fraunces',serif; font-size:16px; flex:1; min-width:0; }
+  .ov-title small{ display:block; font-family:'DM Sans',sans-serif; font-weight:400; font-size:11.5px; color:var(--gold-bg); }
+  .ov-btn{
+    background:rgba(212,175,55,.14); color:var(--gold-bright); border:1px solid rgba(212,175,55,.4);
+    border-radius:10px; padding:8px 12px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .ov-btn:hover{ background:rgba(212,175,55,.24); }
+  #ovFrame{ flex:1; width:100%; border:none; background:#fff; }
+  .hide{ display:none !important; }
 </style>
 </head>
 <body>
-  <div>
-    <p>Loading MULTIPLY Leader's Tool…</p>
-    <p style="font-size:13px;opacity:.7">If nothing happens, <a href="lc_leader_tool.html" style="color:#fbbf24">tap here</a>.</p>
+  <div class="wrap" id="home">
+    <div class="brand">
+      <div class="logo-m">M</div>
+      <div class="logo-sub">MULTIPLY</div>
+    </div>
+    <div class="greet">Kumusta, <b id="who">…</b></div>
+    <div class="role" id="roleLine"></div>
+
+    <div class="card">
+      <div class="card-head"><span class="en-only">Your tools</span> · <span>Mga gamit mo</span></div>
+      <div id="toolList"></div>
+    </div>
+
+    <div class="foot">
+      <button class="signout" onclick="signOut()">Sign out · Mag-sign out</button>
+      <div class="verse">“A student who is fully trained will be like their teacher.” — Luke 6:40</div>
+    </div>
   </div>
-  <script>location.replace('lc_leader_tool.html');</script>
+
+  <!-- Tool overlay -->
+  <div id="overlay" role="dialog" aria-modal="true" aria-label="Open tool">
+    <div class="ov-head">
+      <div class="ov-title"><span id="ovEn">Tool</span><small id="ovTl"></small></div>
+      <button class="ov-btn" onclick="closeOverlay(false)" aria-label="Home">⌂ <span>Home · Tahanan</span></button>
+    </div>
+    <iframe id="ovFrame" title="MULTIPLY tool" src="about:blank"></iframe>
+  </div>
+
+<script>
+const ORIGIN = location.origin;
+
+// Tool registry — HUMAN labels only (Inv #57: never show file paths/slugs).
+const TOOLS = {
+  mmt: { file:'member_tool.html',       en:'Member Tool',      tl:'Gamit ng Miyembro',  initial:'M', minLevel:0 },
+  mlt: { file:'lc_leader_tool.html',    en:'Leader Tool',      tl:'Gamit ng Lider',     initial:'L', minLevel:2 },
+  md:  { file:'multiply_dashboard.html',en:'Pastor Dashboard', tl:'Dashboard ng Pastor',initial:'P', minLevel:5 },
+};
+
+let _overlayOpen = false;
+let _curFrameWin = null;
+
+// ── Boot ──────────────────────────────────────────────────────────────
+(function boot(){
+  if (!window.MultiplyShared){ location.replace('member_login.html'); return; }
+  // Cover a pre-existing single session (A1): mint the counterpart if eligible.
+  try { MultiplyShared.ensureBothSessions(); } catch(e){}
+
+  const leader = MultiplyShared.getValidSession();
+  const member = MultiplyShared.getValidMemberSession();
+
+  if (!leader && !member){
+    // Return here after login. At the bare directory URL pathname.pop() is '',
+    // so fall back to index.html (member_login._safeNextUrl accepts a same-dir
+    // .html and brings the user back to this shell).
+    const here = location.pathname.split('/').pop() || 'index.html';
+    location.replace('member_login.html?next=' + encodeURIComponent(here));
+    return;
+  }
+
+  const name  = (leader && leader.leaderName) || (member && member.memberName) || 'kapatid';
+  const level = (leader && leader.leaderLevel != null) ? leader.leaderLevel
+              : (member && member.memberLevel != null) ? member.memberLevel : 0;
+  const role  = (leader && leader.leaderRole) || (member && member.memberRole) || '';
+
+  // MMT-only fast-path: a member who can reach only the Member Tool (level < 2,
+  // no MLT/MD) never sees the shell — go straight there. Placed BEFORE the DOM
+  // writes/renderToolbar so there's no flash of the one-button shell.
+  // location.replace keeps the shell OUT of back-history (Back from MMT won't
+  // bounce here). Dynamic: a later promotion to L2+ restores the shell + toolbar.
+  if (level < 2){ location.replace('member_tool.html'); return; }
+
+  document.getElementById('who').textContent = name;
+  document.getElementById('roleLine').textContent =
+    role ? (role + ' · Level ' + level) : ('Level ' + level);
+
+  renderToolbar(level);
+})();
+
+// ── Role-toolbar ──────────────────────────────────────────────────────
+function renderToolbar(level){
+  const order = ['mmt','mlt','md'];
+  const list = document.getElementById('toolList');
+  list.innerHTML = '';
+  order.forEach(function(key){
+    const t = TOOLS[key];
+    if (level < t.minLevel) return;                 // shell-side role gate
+    const btn = document.createElement('button');
+    btn.className = 'tool';
+    btn.type = 'button';
+    btn.onclick = function(){ openOverlay(key); };
+    btn.innerHTML =
+      '<span class="ico">' + t.initial + '</span>' +
+      '<span class="tx"><span class="en">' + t.en + '</span>' +
+        '<span class="tl">' + t.tl + '</span></span>' +
+      '<span class="arw">›</span>';
+    list.appendChild(btn);
+  });
+}
+
+// ── Overlay open/close + back-button ──────────────────────────────────
+function openOverlay(key){
+  const t = TOOLS[key];
+  if (!t) return;
+  document.getElementById('ovEn').textContent = t.en;
+  document.getElementById('ovTl').textContent = t.tl;
+  const frame = document.getElementById('ovFrame');
+  frame.src = t.file + '?embed=1';
+  _curFrameWin = null;
+  frame.onload = function(){ try { _curFrameWin = frame.contentWindow; } catch(e){ _curFrameWin = null; } };
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('home').classList.add('hide');
+  _overlayOpen = true;
+  // One history entry so the browser Back closes the overlay, not the site.
+  history.pushState({ shellOverlay:true }, '');
+}
+
+function closeOverlay(viaBack){
+  if (!_overlayOpen) return;
+  _overlayOpen = false;
+  _curFrameWin = null;
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('home').classList.remove('hide');
+  const frame = document.getElementById('ovFrame');
+  frame.onload = null;
+  frame.src = 'about:blank';                 // unload the tool
+  // If closed via Home/✕ (not a popstate), pop our pushed state to keep the
+  // history stack clean. Guarded by _overlayOpen=false so the resulting
+  // popstate is a no-op.
+  if (!viaBack){ try { history.back(); } catch(e){} }
+}
+
+window.addEventListener('popstate', function(){
+  if (_overlayOpen){ closeOverlay(true); }     // Back closes overlay → home
+  // At home, popstate is left to the browser (normal behavior).
+});
+
+// ── Shell-side handshake: serve the session to a same-origin embedded tool ─
+// Validates event.origin AND that the sender is our open iframe. Reads the
+// sessions fresh from sessionStorage at reply time. targetOrigin = our origin.
+window.addEventListener('message', function(ev){
+  if (ev.origin !== ORIGIN) return;
+  if (!ev.data || ev.data.type !== 'MULTIPLY_EMBED_READY') return;
+  const frame = document.getElementById('ovFrame');
+  if (!_overlayOpen || ev.source !== frame.contentWindow) return;   // only our open child
+  let leaderSession = null, memberSession = null;
+  try {
+    const ls = sessionStorage.getItem('multiply_leader_session');
+    const ms = sessionStorage.getItem('multiply_member_session');
+    leaderSession = ls ? JSON.parse(ls) : null;
+    memberSession = ms ? JSON.parse(ms) : null;
+  } catch(e){ /* fail-safe: tool will time out and redirect to login */ }
+  ev.source.postMessage({ type:'MULTIPLY_SESSION', leaderSession:leaderSession, memberSession:memberSession }, ORIGIN);
+});
+
+// ── Sign out: clear both sessions, return to login ────────────────────
+// A leader may hold a real leader session (possibly alongside a bridged one).
+// Clear the member key FIRST (so its gate can't race the redirect), then if a
+// leader session is present hand off to logoutLeader — which stamps
+// leader_sessions.ended_at server-side (Inv #167), clears the leader key, and
+// redirects. Member-only users go through logoutMember. Both end at login.
+async function signOut(){
+  try { sessionStorage.removeItem('multiply_member_session'); } catch(e){}
+  // Return to THIS shell after re-login (mirror boot's ?next= computation) —
+  // a bare member_login.html would fall back to its MMT default.
+  const here = location.pathname.split('/').pop() || 'index.html';
+  const loginUrl = 'member_login.html?next=' + encodeURIComponent(here);
+  if (MultiplyShared.getValidSession()){
+    await MultiplyShared.logoutLeader(loginUrl);
+  } else {
+    MultiplyShared.logoutMember(loginUrl);
+  }
+}
+
+// ── PWA: one consolidated /multiply/-scoped service worker (A3b) ───────────
+// Register multiply-sw.js (scope ./ = /multiply/), and unregister any LEGACY
+// per-tool SW still installed in a returning browser (the old service-worker.js
+// / service-worker-member.js, scoped to a single tool's URL). The legacy SWs
+// also self-kill (their files are now kill-switch stubs), but this actively
+// clears them so a stale pre-embed tool is never served into the overlay iframe.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('multiply-sw.js', { scope: './' })
+      .catch(function(err){ console.warn('[shell] SW register failed:', err && err.message); });
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(reg){
+        // Keep ONLY the consolidated SW (scope ends with /multiply/). Any other
+        // scope (…/member_tool.html, …/lc_leader_tool.html) is legacy → drop it.
+        if (!/\/multiply\/$/.test(reg.scope)) {
+          reg.unregister().then(function(ok){ if(ok) console.log('[shell] unregistered legacy SW:', reg.scope); });
+        }
+      });
+    }).catch(function(){});
+  });
+}
+</script>
 </body>
 </html>
