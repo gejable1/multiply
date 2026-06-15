@@ -150,6 +150,80 @@
     global.location.replace(loginUrl || 'member_login.html');
   }
 
+  // ═════════════════════════════════════════════════════════════
+  // SESSION BRIDGE (A1 — additive, DORMANT plumbing)
+  // ───────────────────────────────────────────────────────────
+  // ensureBothSessions(): if the device holds exactly ONE of the two
+  // sessions, mint the matching counterpart so that, under the future
+  // unified shell, a single unified PIN login can satisfy BOTH gates.
+  //
+  // A1 SCOPE: this helper is reachable BY NAME ONLY. It is called from
+  // NOWHERE — no login, no logout, no boot path, no tool. A2 wires the
+  // call site. Until then it is inert and changes no behavior.
+  //
+  // The two real logins each write exactly ONE key today:
+  //   member_login.html loginSuccess() → multiply_member_session
+  //   leader_login.html loginSuccess() → multiply_leader_session
+  // The minted object MIRRORS the exact field shape that login writes, so
+  // the existing gates (getValidSession / getValidMemberSession) accept it
+  // unchanged — NO invented fields. Timestamps (expiresAt / sessionStart)
+  // are CARRIED OVER from the source session so both sessions share ONE
+  // clock; a minted session never outlives the login that seeded it.
+  //
+  // Rules:
+  //   • member-only + memberLevel >= 2 → mint leader (leaderLevel = level)
+  //   • member-only + memberLevel <  2 → NO-OP (fail closed: a pure member
+  //       never gains a leader session — mirrors the leader_login >= 2 floor
+  //       and getValidSession's level gate)
+  //   • leader-only                    → mint member (every leader is a member)
+  //   • both valid, or neither present → NO-OP
+  //   • never overwrite a VALID session (idempotent)
+  //
+  // Does NOT modify the four gate functions (Inv #84). Returns a status
+  // string for harness/diagnostics.
+  function ensureBothSessions() {
+    const leader = getValidSession();        // valid leader session, else null
+    const member = getValidMemberSession();  // valid member session, else null
+
+    // Member present, leader absent → mint leader only if level qualifies.
+    if (member && !leader) {
+      const level = member.memberLevel || 0;
+      if (level < 2) return 'noop-member-below-floor'; // fail closed
+      const minted = {
+        leaderId:      member.memberId,
+        leaderName:    member.memberName,
+        leaderLevel:   level,
+        leaderRole:    member.memberRole,
+        leaderLcGroup: member.memberLcGroup || null,
+        expiresAt:     member.expiresAt,
+        sessionStart:  member.sessionStart,
+      };
+      try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(minted)); }
+      catch (e) { return 'error'; }
+      return 'minted-leader';
+    }
+
+    // Leader present, member absent → mint member (always safe).
+    if (leader && !member) {
+      const minted = {
+        memberId:            leader.leaderId,
+        memberName:          leader.leaderName,
+        memberLevel:         leader.leaderLevel || 0,
+        memberRole:          leader.leaderRole,
+        memberLcGroup:       leader.leaderLcGroup || null,
+        memberDisciplerName: null,
+        expiresAt:           leader.expiresAt,
+        sessionStart:        leader.sessionStart,
+      };
+      try { sessionStorage.setItem(MEMBER_SESSION_KEY, JSON.stringify(minted)); }
+      catch (e) { return 'error'; }
+      return 'minted-member';
+    }
+
+    // Both valid, or neither present → nothing to bridge.
+    return 'noop';
+  }
+
   // ───── LeaderScope ─────
   // Three views:
   //   'disciples' — m.discipler_id === LEADER.leaderId
@@ -3035,6 +3109,8 @@
     getValidMemberSession,
     gateMemberOrRedirect,
     logoutMember,
+    // Session bridge (A1 — additive, DORMANT; wired by A2)
+    ensureBothSessions,
     // Scoping + audit
     makeLeaderScope,
     logView,
