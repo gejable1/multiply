@@ -2034,7 +2034,7 @@ function openDebrief(id){
   const url = GH_BASE+'facilitator_debrief_guide.html?id='+encodeURIComponent(id);
   const w = window.open(url, '_blank');
   if(!w) toast('Popup blocked — allow popups for this site','⚠️');
-  else toast(`Opening debrief for ${MultiplyShared.escapeHTML(m.name)}`,'📋');
+  else toast(`Opening debrief for ${m.name}`,'📋');
 }
 function openTrack(id){
   const url = GH_BASE+'intervention_tracker.html?id='+encodeURIComponent(id);
@@ -2044,7 +2044,7 @@ function openTrack(id){
 }
 async function markIntComplete(id){
   const m=members.find(x=>x.id===id);
-  if(!m||!confirm(`Mark intervention complete for ${MultiplyShared.escapeHTML(m.name)}?`))return;
+  if(!m||!confirm(`Mark intervention complete for ${m.name}?`))return;
   m.intervention_status='completed';m.diagnostic_zone=1;m.zone=1;
   try{await upsert(m);const i=members.findIndex(x=>x.id===id);if(i>=0)members[i]=m;renderAll();toast('Intervention marked complete ✓');}
   catch(e){toast('Error: '+e.message,'❌');}
@@ -2211,7 +2211,7 @@ async function matchDiagnostic(diagId) {
       }
     }
 
-    toast(`Matched to ${MultiplyShared.escapeHTML(member.name)} ✓`);
+    toast(`Matched to ${member.name} ✓`);
     renderAll(); // Refresh alerts
   } catch(e) {
     toast('Error matching: ' + e.message, '❌');
@@ -3402,7 +3402,7 @@ async function saveMember(){
   // the leader's own LCL.
   if(_canEditLc && effLcGroup){
     const clash = members.find(x => x.id !== eid && (x.name||'').trim().toLowerCase() === effLcGroup.toLowerCase());
-    if(clash && !confirm(`"${effLcGroup}" is the name of a member (${MultiplyShared.escapeHTML(clash.name)}).\n\nThe LC Group name should be the name of the group this leader LEADS — not a person. Putting a person's name here is what mislabels groups in attendance reports.\n\nSave it anyway?`)) return;
+    if(clash && !confirm(`"${effLcGroup}" is the name of a member (${clash.name}).\n\nThe LC Group name should be the name of the group this leader LEADS — not a person. Putting a person's name here is what mislabels groups in attendance reports.\n\nSave it anyway?`)) return;
   }
   try{
     const saved=await upsert(data);
@@ -3414,7 +3414,7 @@ async function saveMember(){
 
 async function doDelete(){
   if(!eid)return;const m=members.find(x=>x.id===eid);
-  if(!confirm(`Delete ${MultiplyShared.escapeHTML(m?.name)}? Permanent.`))return;
+  if(!confirm(`Delete ${m?.name}? Permanent.`))return;
   try{await del(eid);members=members.filter(x=>x.id!==eid);closeMD();renderAll();toast('Deleted');}
   catch(e){toast('Error: '+e.message,'❌');}
 }
@@ -3472,7 +3472,7 @@ async function doResetPin(){
     m.member_pin_hash = null;
     m.member_pin_set_at = null;
 
-    toast(`PIN reset for ${MultiplyShared.escapeHTML(m.name)} ✓`, '🔑');
+    toast(`PIN reset for ${m.name} ✓`, '🔑');
     closeMD();
   } catch(e) {
     toast('Reset failed: ' + e.message, '❌');
@@ -6050,7 +6050,7 @@ async function _qrDoReset(memId){
     _qrCloseResetModal();
     _qrRender();
     const m = _quizReviewState.members[memId];
-    toast(`Cleared ${idsToDelete.length} attempts for ${MultiplyShared.escapeHTML(m?.name || 'member')}`, '🔄');
+    toast(`Cleared ${idsToDelete.length} attempts for ${m?.name || 'member'}`, '🔄');
   } catch(e){
     if(btn){ btn.disabled = false; btn.textContent = '🔄 Reset attempts'; }
     toast('Reset failed: ' + (e.message || e), '❌');
