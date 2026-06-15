@@ -1530,8 +1530,8 @@ function renderTransferAlerts(){
   if(!pending.length) return '';
   const rows = pending.map(m=>`
     <div class="ta-row">
-      <div class="ta-name">${m.name}${_kindBadge(m)}</div>
-      <div class="ta-to">→ ${m.pending_lc_group}</div>
+      <div class="ta-name">${MultiplyShared.escapeHTML(m.name)}${_kindBadge(m)}</div>
+      <div class="ta-to">→ ${MultiplyShared.escapeHTML(m.pending_lc_group)}</div>
       ${m.transfer_date?`<div class="ta-date">${m.transfer_date}</div>`:''}
     </div>`).join('');
   return `<div class="transfer-alert">
@@ -2067,8 +2067,8 @@ function renderMemberList(){
       <div class="mc-body">
         <div class="mc-av" style="background:${zd.bg};color:${zd.color}">${initials(mem.name)}${mltAvImg(mem)}</div>
         <div class="mc-info">
-          <div class="mc-name">${mem.name}${_kindBadge(mem)}</div>
-          <div class="mc-sub">${mem.contact||''} ${mem.lc_group?'· '+mem.lc_group:''}</div>
+          <div class="mc-name">${MultiplyShared.escapeHTML(mem.name)}${_kindBadge(mem)}</div>
+          <div class="mc-sub">${MultiplyShared.escapeHTML(mem.contact||'')} ${MultiplyShared.escapeHTML(mem.lc_group?'· '+mem.lc_group:'')}</div>
         </div>
         <div><span class="zone-badge z${z||0}-badge">${z?zd.label:'No Zone'}</span></div>
       </div>
@@ -2424,7 +2424,7 @@ function buildDetailSections(mem){
       </div>
       <div class="ds-body">
         <div style="font-size:12px;line-height:1.7">
-          <div><span style="color:var(--muted)">From:</span> <strong>${mem.lc_group||'—'}</strong></div>
+          <div><span style="color:var(--muted)">From:</span> <strong>${MultiplyShared.escapeHTML(mem.lc_group||'—')}</strong></div>
           <div><span style="color:var(--muted)">To:</span> <strong style="color:#fbbf24">${mem.pending_lc_group}</strong></div>
           ${mem.transfer_date?`<div><span style="color:var(--muted)">Effective:</span> <strong>${mem.transfer_date}</strong></div>`:''}
           ${proposerName?`<div><span style="color:var(--muted)">Proposed by:</span> <strong>${MultiplyShared.escapeHTML(proposerName)}</strong></div>`:''}
@@ -3131,7 +3131,7 @@ function _renderEnrollPicker(mem, eligible, meta){
         <div style="font-size:22px;margin-bottom:.4rem">📭</div>
         <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:.3rem">No eligible batches</div>
         <div style="font-size:11.5px;color:var(--muted);line-height:1.5">
-          ${mem.name} isn't eligible for any of your active or Pastor-owned batches right now.<br>
+          ${MultiplyShared.escapeHTML(mem.name)} isn't eligible for any of your active or Pastor-owned batches right now.<br>
           Possible reasons: level mismatch, already enrolled, or no matching batch exists yet.
         </div>
         <div style="margin-top:12px;font-size:11px;color:var(--muted)">
@@ -3337,7 +3337,7 @@ async function openProposeTransfer(){
     }
     sel.innerHTML = '<option value="">— Select destination shepherd —</option>' +
       choices.map(l => {
-        const tag = l.lc_group ? ` · ${l.lc_group}` : '';
+        const tag = l.lc_group ? ` · ${MultiplyShared.escapeHTML(l.lc_group)}` : '';
         return `<option value="${l.id}">${MultiplyShared.escapeHTML(l.name)} (${l.level_name})${MultiplyShared.escapeHTML(tag)}</option>`;
       }).join('');
   }catch(e){
@@ -4344,7 +4344,7 @@ function renderAttList(){
     return `<div class="att-member ${present?'present':''}" data-idx="${idx}" data-mid="${mem.id}">
       <div class="att-check">${present?'✓':''}</div>
       <div class="att-av" style="background:${present?'rgba(52,211,153,.15)':'var(--surface2)'};color:${present?'var(--z1)':'var(--muted)'}">${initials(mem.name)}${mltAvImg(mem)}</div>
-      <div class="att-name">${mem.name}${_kindBadge(mem)}</div>
+      <div class="att-name">${MultiplyShared.escapeHTML(mem.name)}${_kindBadge(mem)}</div>
       <div class="att-streak"></div>
       ${modeBtn}
     </div>`;
@@ -5357,7 +5357,7 @@ async function renderReports(){
           width:100%;background:var(--surface2);border:1px solid var(--border);
           border-radius:var(--r-sm);padding:9px 12px;color:var(--text);
           font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
-          ${myMembers.map(m => `<option value="${m.id}" ${m.id===reportMemberId?'selected':''}>${m.name}</option>`).join('')}
+          ${myMembers.map(m => `<option value="${m.id}" ${m.id===reportMemberId?'selected':''}>${MultiplyShared.escapeHTML(m.name)}</option>`).join('')}
         </select>
       ` : ''}
     </div>
@@ -5445,7 +5445,7 @@ async function renderReports(){
               display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;
               cursor:pointer;border:1px solid var(--border)">
               <div>
-                <div style="font-size:13px;font-weight:600">${m.name}</div>
+                <div style="font-size:13px;font-weight:600">${MultiplyShared.escapeHTML(m.name)}</div>
                 <div style="font-size:10px;color:var(--muted);margin-top:2px">
                   ${m.total === 0 ? 'No attendance logged'
                     : m.present + ' present · ' + m.absent + ' absent · ' + m.total + ' total'}
@@ -5560,8 +5560,8 @@ async function renderReports(){
     ${pendingTransfers.length?`<div class="report-card">
       <div class="rc-title">🔀 Pending Transfers</div>
       ${pendingTransfers.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div style="font-size:13px;font-weight:600;flex:1">${m.name}</div>
-        <div style="font-size:11px;color:var(--muted)">${m.lc_group||'—'} → <strong style="color:#fbbf24">${m.pending_lc_group}</strong></div>
+        <div style="font-size:13px;font-weight:600;flex:1">${MultiplyShared.escapeHTML(m.name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${m.lc_group||'—'} → <strong style="color:#fbbf24">${MultiplyShared.escapeHTML(m.pending_lc_group)}</strong></div>
         ${m.transfer_date?`<div style="font-size:10px;color:var(--muted)">${m.transfer_date}</div>`:''}
       </div>`).join('')}
     </div>`:''}
@@ -5571,7 +5571,7 @@ async function renderReports(){
       <div class="absent-list">
         ${frequentAbsent.map(m=>`<div class="absent-item" data-mid="${m.id}">
           <div class="ai-av" style="background:rgba(248,113,113,.15);color:var(--red)">${initials(m.name)}${mltAvImg(m)}</div>
-          <div class="ai-name">${m.name}</div>
+          <div class="ai-name">${MultiplyShared.escapeHTML(m.name)}</div>
           <div class="ai-streak">${m.absent} absence${m.absent>1?'s':''}</div>
         </div>`).join('')}
       </div>
@@ -5598,10 +5598,10 @@ async function renderReports(){
             ${initials(memberView.member.name)}${mltAvImg(memberView.member)}
           </div>
           <div style="flex:1">
-            <div style="font-family:'Syne',serif;font-size:17px;font-weight:700">${memberView.member.name}</div>
+            <div style="font-family:'Syne',serif;font-size:17px;font-weight:700">${MultiplyShared.escapeHTML(memberView.member.name)}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px">
               ${LEVEL_NAMES[memberView.member.pipeline_level]||'Pre-Pipeline'}
-              ${memberView.member.lc_group?' · '+memberView.member.lc_group:''}
+              ${MultiplyShared.escapeHTML(memberView.member.lc_group?' · '+memberView.member.lc_group:'')}
             </div>
           </div>
         </div>
@@ -5864,7 +5864,7 @@ function renderSendLinks(){
       ? '<span style="font-size:10px;color:var(--green);font-weight:700;margin-left:6px">📱</span>'
       : '<span style="font-size:10px;color:var(--red);font-weight:700;margin-left:6px" title="No phone on file">⚠️ no phone</span>';
     return `<div class="sl-member">
-      <div class="slm-name">${mem.name}${phoneBadge}</div>
+      <div class="slm-name">${MultiplyShared.escapeHTML(mem.name)}${phoneBadge}</div>
       <div class="slm-links">
         <div class="slm-link-row" style="background:rgba(52,211,153,.08);border-radius:6px;padding:6px 8px;margin-bottom:4px">
           <div class="slr-name">📝 Profile Edit (info update)</div>

@@ -1915,8 +1915,8 @@ function renderTable(){
     return`<tr onclick="openEdit('${m.id}')" ${memberKind(m)!=='real'?'style="opacity:.7"':''}>
       <td><div class="nc">
         <div class="av" style="${mdAvBg(m)}">${mdAvLabel(m)}${mdAvImg(m)}${m.is_facilitator?'<span style="position:absolute;top:-2px;right:-2px;font-size:8px;">⭐</span>':''}</div>
-        <div><div class="mn">${m.name}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${_kindBadge(m)}</div>
-        <div class="mi">${m.discipler_name||m.discipler||'No discipler'}</div></div>
+        <div><div class="mn">${MultiplyShared.escapeHTML(m.name)}${m.is_facilitator?' <span style="font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.2);">Facilitator</span>':''}${_kindBadge(m)}</div>
+        <div class="mi">${MultiplyShared.escapeHTML(m.discipler_name||m.discipler||'No discipler')}</div></div>
       </div></td>
       <td><span class="lb lb${l}">${LN[l]}</span></td>
       <td>${dz?`<span class="zb zb${dz}">${ZL[dz]}</span>${m.diagnostic_score!=null?`<span style="font-size:10px;color:var(--muted);margin-left:4px">${m.diagnostic_score}%</span>`:''}`:
@@ -1950,10 +1950,10 @@ function rPipe(){
       return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer;min-width:150px;box-shadow:var(--shadow)" onclick="openEdit('${m.id}')">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <div class="av" style="${mdAvBg(m)}width:28px;height:28px;font-size:10px">${mdAvLabel(m)}${mdAvImg(m)}</div>
-          <div style="font-size:12px;font-weight:600;color:var(--ink)">${m.name}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--ink)">${MultiplyShared.escapeHTML(m.name)}</div>
         </div>
         <div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${pct}% · ${m.ministry||'Unplaced'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${pct}% · ${MultiplyShared.escapeHTML(m.ministry||'Unplaced')}</div>
       </div>`;
     }).join('');
     return`<div style="margin-bottom:1.5rem">
@@ -2008,8 +2008,8 @@ function rInterventions(){
     return list.map(m=>`<div class="int-card">
       <div class="ic-track" style="background:${trackColor}20">${trackIcon}</div>
       <div class="ic-info">
-        <div class="ic-name">${m.name}</div>
-        <div class="ic-track-name">${trackName} · ${m.group||'No group'} · Facilitator: ${m.facilitator_name||m.discipler||'Unassigned'}</div>
+        <div class="ic-name">${MultiplyShared.escapeHTML(m.name)}</div>
+        <div class="ic-track-name">${trackName} · ${m.group||'No group'} · Facilitator: ${MultiplyShared.escapeHTML(m.facilitator_name||m.discipler||'Unassigned')}</div>
         <div class="ic-meta">Score: ${m.diagnostic_score!=null?m.diagnostic_score+'%':'Not recorded'} · Taken: ${m.diagnostic_date||'—'} · Status: ${m.intervention_status||'Not started'}</div>
       </div>
       <div class="ic-actions">
@@ -2081,13 +2081,13 @@ function rAlerts(){
   // generate "no discipler / no EOLO" noise on a real viewer's board.
   const al=[];
   liveMembers().forEach(m=>{
-    if(m.diagnostic_zone==4)al.push({i:'🔴',t:`${m.name} — Zone 4: Gospel Conversations needed`,s:`Score: ${m.diagnostic_score||'?'}% · Facilitator: ${m.facilitator_name||m.discipler||'Unassigned'} · Needs Pre-BTLI Gospel Conversations track (3–5 sessions).`,b:'abu',bt:'Priority',id:m.id,zone:4});
-    if(m.diagnostic_zone==2)al.push({i:'🟡',t:`${m.name} — Zone 2: Assurance Formation needed`,s:`Genuine believer with performance-based doubt. Enroll in BTLI 101-A (3 sessions).`,b:'abs',bt:'Enroll',id:m.id,zone:2});
-    if(m.diagnostic_zone==3)al.push({i:'🟠',t:`${m.name} — Zone 3: First Steps Track needed`,s:`Faith credible but habits absent. Assign discipler and begin 8-week First Steps.`,b:'abs',bt:'Enroll',id:m.id,zone:3});
-    if(!m.diagnostic_zone&&m.level>=1)al.push({i:'📋',t:`${m.name} — Salvation Assurance Diagnostic not taken`,s:`Every Level 1+ member should complete the diagnostic.`,b:'abi',bt:'Follow up',id:m.id,zone:0});
-    if(!m.discipler&&m.level>=1)al.push({i:'👤',t:`${m.name} — No discipler assigned`,s:'Every pipeline member needs an assigned discipler.',b:'abu',bt:'Action',id:m.id,zone:0});
-    if(m.level>=1&&(!m.eolo||!m.eolo[0]?.name))al.push({i:'🌏',t:`${m.name} — No EOLO person identified`,s:'Every Level 1+ member should have an EOLO person.',b:'abs',bt:'Follow up',id:m.id,zone:0});
-    if(m.level>=1&&!m.ministry)al.push({i:'⛪',t:`${m.name} — No ministry placement`,s:'Complete Spiritual Gifts Diagnostic and use Ministry Intake Form.',b:'abi',bt:'Assign',id:m.id,zone:0});
+    if(m.diagnostic_zone==4)al.push({i:'🔴',t:`${MultiplyShared.escapeHTML(m.name)} — Zone 4: Gospel Conversations needed`,s:`Score: ${m.diagnostic_score||'?'}% · Facilitator: ${MultiplyShared.escapeHTML(m.facilitator_name||m.discipler||'Unassigned')} · Needs Pre-BTLI Gospel Conversations track (3–5 sessions).`,b:'abu',bt:'Priority',id:m.id,zone:4});
+    if(m.diagnostic_zone==2)al.push({i:'🟡',t:`${MultiplyShared.escapeHTML(m.name)} — Zone 2: Assurance Formation needed`,s:`Genuine believer with performance-based doubt. Enroll in BTLI 101-A (3 sessions).`,b:'abs',bt:'Enroll',id:m.id,zone:2});
+    if(m.diagnostic_zone==3)al.push({i:'🟠',t:`${MultiplyShared.escapeHTML(m.name)} — Zone 3: First Steps Track needed`,s:`Faith credible but habits absent. Assign discipler and begin 8-week First Steps.`,b:'abs',bt:'Enroll',id:m.id,zone:3});
+    if(!m.diagnostic_zone&&m.level>=1)al.push({i:'📋',t:`${MultiplyShared.escapeHTML(m.name)} — Salvation Assurance Diagnostic not taken`,s:`Every Level 1+ member should complete the diagnostic.`,b:'abi',bt:'Follow up',id:m.id,zone:0});
+    if(!m.discipler&&m.level>=1)al.push({i:'👤',t:`${MultiplyShared.escapeHTML(m.name)} — No discipler assigned`,s:'Every pipeline member needs an assigned discipler.',b:'abu',bt:'Action',id:m.id,zone:0});
+    if(m.level>=1&&(!m.eolo||!m.eolo[0]?.name))al.push({i:'🌏',t:`${MultiplyShared.escapeHTML(m.name)} — No EOLO person identified`,s:'Every Level 1+ member should have an EOLO person.',b:'abs',bt:'Follow up',id:m.id,zone:0});
+    if(m.level>=1&&!m.ministry)al.push({i:'⛪',t:`${MultiplyShared.escapeHTML(m.name)} — No ministry placement`,s:'Complete Spiritual Gifts Diagnostic and use Ministry Intake Form.',b:'abi',bt:'Assign',id:m.id,zone:0});
   });
   // Also check for unmatched diagnostics
   checkUnmatchedDiagnostics(al);
@@ -2151,7 +2151,7 @@ async function checkUnmatchedDiagnostics(alArr) {
       ${data.map(d=>`<div class="ai">
         <div class="aico">📋</div>
         <div class="act2">
-          <div class="ati">${d.member_name||'Unknown'} — diagnostic not linked to any member record</div>
+          <div class="ati">${MultiplyShared.escapeHTML(d.member_name||'Unknown')} — diagnostic not linked to any member record</div>
           <div class="asu">Score: ${d.total_score||'?'}% · ${zoneLabels[d.diag_zone]||'?'} · Taken: ${d.date_taken||'?'}<br>
             <em>This result was submitted without a personalized link. Match it to the correct member below.</em>
           </div>
@@ -2162,7 +2162,7 @@ async function checkUnmatchedDiagnostics(alArr) {
               ${(()=>{const pool=members.filter(_kindVisible);return pool.filter(m=>(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0]))
                 .concat(pool.filter(m=>!(m.name||'').toLowerCase().includes((d.member_name||'').toLowerCase().split(' ')[0])))
                 .slice(0,30)
-                .map(m=>`<option value="${m.id}">${m.name}${_kindOptTag(m)}</option>`).join('');})()}
+                .map(m=>`<option value="${m.id}">${MultiplyShared.escapeHTML(m.name)}${_kindOptTag(m)}</option>`).join('');})()}
             </select>
             <button class="alert-link al-assign" onclick="matchDiagnostic('${d.id}')">✓ Link & Update</button>
           </div>
@@ -2263,7 +2263,7 @@ function rOvExtras(){
     '<div style="color:var(--muted);font-size:12px">No members yet.</div>':
     s.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
       <div class="av" style="${mdAvBg(m)}width:26px;height:26px;font-size:10px">${mdAvLabel(m)}${mdAvImg(m)}</div>
-      <div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--ink)">${m.name}</div><div style="font-size:10px;color:var(--muted)">${LN[m.level||0]} · ${m.ministry||'Unplaced'}</div></div>
+      <div style="flex:1"><div style="font-size:12px;font-weight:500;color:var(--ink)">${MultiplyShared.escapeHTML(m.name)}</div><div style="font-size:10px;color:var(--muted)">${LN[m.level||0]} · ${MultiplyShared.escapeHTML(m.ministry||'Unplaced')}</div></div>
       <div style="font-size:10px;color:var(--muted)">${m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—'}</div>
     </div>`).join('');
   const bz={1:0,2:0,3:0,4:0};
@@ -3161,7 +3161,7 @@ function rDiagTab(m){
       <div>
         <div style="font-size:14px;font-weight:700;color:var(--ink)">${zLabel[m.diagnostic_zone]||'—'}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">${zDesc[m.diagnostic_zone]||''}</div>
-        <div style="font-size:11px;color:var(--lighter);margin-top:4px">Date taken: ${m.diagnostic_date||'Not recorded'} · Facilitator: ${m.facilitator_name||m.discipler||'Not recorded'}</div>
+        <div style="font-size:11px;color:var(--lighter);margin-top:4px">Date taken: ${m.diagnostic_date||'Not recorded'} · Facilitator: ${MultiplyShared.escapeHTML(m.facilitator_name||m.discipler||'Not recorded')}</div>
       </div>
     </div>
     <div style="margin-bottom:1rem">
@@ -9837,7 +9837,7 @@ function searchFacilitators(q) {
         style="padding:.6rem 1rem;font-size:13px;color:#1a1612;cursor:pointer;border-bottom:1px solid #e2d8cc;transition:background .1s;"
         onmouseover="this.style.background='#eef6f1'" onmouseout="this.style.background='white'"
       >
-        <span style="font-weight:600">${m.name}</span>
+        <span style="font-weight:600">${MultiplyShared.escapeHTML(m.name)}</span>
         <span style="font-size:10px;color:#9a8f80;margin-left:8px">${m.facilitator_role||'Facilitator'}</span>
       </div>`
     ).join('');
@@ -9861,7 +9861,7 @@ function showFacList(event) {
         style="padding:.6rem 1rem;font-size:13px;color:#1a1612;cursor:pointer;border-bottom:1px solid #e2d8cc;transition:background .1s;"
         onmouseover="this.style.background='#eef6f1'" onmouseout="this.style.background='white'"
       >
-        <span style="font-weight:600">${m.name}</span>
+        <span style="font-weight:600">${MultiplyShared.escapeHTML(m.name)}</span>
         <span style="font-size:10px;color:#9a8f80;margin-left:8px">${m.facilitator_role||'Facilitator'}</span>
       </div>`
     ).join('');
@@ -9985,7 +9985,7 @@ function searchFamMember(idx, q) {
     `<div onclick="selectFamMember(${idx},'${m.id}','${m.name.replace(/'/g,"\'")}')"
       style="padding:.55rem 1rem;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--border);"
       onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background=''">
-      ${m.name} <span style="font-size:10px;color:var(--muted)">${m.is_facilitator?'⭐ ':''}</span>
+      ${MultiplyShared.escapeHTML(m.name)} <span style="font-size:10px;color:var(--muted)">${m.is_facilitator?'⭐ ':''}</span>
     </div>`
   ).join('');
   dd.style.display = 'block';
@@ -11995,7 +11995,7 @@ function renderDisputeQueue(){
     <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem;display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;">
       <div style="min-width:0;">
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.3rem;">
-          <strong style="font-size:14.5px;">${r.member_name || '—'}</strong>
+          <strong style="font-size:14.5px;">${MultiplyShared.escapeHTML(r.member_name || '—')}</strong>
           <span style="font-size:11.5px;color:var(--muted);">${r.member_lc_group || ''}</span>
         </div>
         <div style="font-size:12.5px;color:var(--text);margin-bottom:.4rem;">
@@ -12003,7 +12003,7 @@ function renderDisputeQueue(){
           ${r.nudge_count ? `<span style="margin-left:.5rem;background:#fef0c7;color:#7a5800;border-radius:8px;padding:1px 6px;font-size:10.5px;">nudged ${r.nudge_count}×</span>` : ''}
         </div>
         <div style="font-size:11.5px;color:#9a2727;background:#fde8e8;border-left:3px solid #c14545;padding:.4rem .6rem;border-radius:4px;">
-          <strong>${r._disputer_name}</strong> disputed ${r.disputed_at ? _disputeFmtDate(r.disputed_at) : ''}: "${r.dispute_reason || '(no reason)'}"
+          <strong>${MultiplyShared.escapeHTML(r._disputer_name)}</strong> disputed ${r.disputed_at ? _disputeFmtDate(r.disputed_at) : ''}: "${MultiplyShared.escapeHTML(r.dispute_reason || '(no reason)')}"
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:.4rem;min-width:140px;">
