@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MULTIPLY · Embed Handshake Dev Harness (A2a)</title>
+<!--
+  ─────────────────────────────────────────────────────────────────────────
+  A2a DEV HARNESS — proves the ?embed=1 session handshake end-to-end and is
+  the scaffold for the real shell (A2b). NOT a deployed surface; dev-only.
+
+  What it does (the PARENT/shell side of the handshake):
+    1. Seed ONE session (member or leader) — preset or custom JSON.
+    2. Call MultiplyShared.ensureBothSessions() (A1) to mint the counterpart.
+    3. Snapshot BOTH sessions into JS vars, then CLEAR sessionStorage — so the
+       iframe (same-origin → shares this tab's sessionStorage) starts clean and
+       MUST obtain its session via the handshake, not by reading storage.
+    4. iframe a selected tool with ?embed=1.
+    5. On MULTIPLY_EMBED_READY from the iframe (origin-validated), reply with
+       MULTIPLY_SESSION carrying the snapshot (targetOrigin = our origin).
+    6. Poll the (same-origin) iframe location + auth markers and report whether
+       the tool loaded PAST its gate (success) or redirected to login (fail).
+
+  Security mirrors the tool side: SEND targetOrigin = location.origin (never
+  '*'); RECEIVE validates event.origin === location.origin before trusting.
+  ─────────────────────────────────────────────────────────────────────────
+-->
+<script src="multiply_shared.js?v=6"></script>
+<style>
+  :root { --bg:#0e1512; --panel:#16201b; --ink:#e7efe9; --muted:#9fb3a8; --gold:#d4b87a; --green:#2a5c3f; --ok:#3ad29f; --bad:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--ink); display:flex; height:100vh; }
+  #left { width:420px; flex-shrink:0; padding:18px; overflow:auto; border-right:1px solid #243029; }
+  #right { flex:1; display:flex; flex-direction:column; }
+  h1 { font-size:16px; margin:0 0 4px; color:var(--gold); }
+  .sub { font-size:11.5px; color:var(--muted); margin-bottom:16px; line-height:1.5; }
+  fieldset { border:1px solid #2a382f; border-radius:10px; margin:0 0 14px; padding:12px; }
+  legend { font-size:11px; color:var(--gold); letter-spacing:.05em; text-transform:uppercase; padding:0 6px; }
+  label { display:block; font-size:13px; margin:6px 0; cursor:pointer; }
+  select, textarea { width:100%; background:#0c120f; color:var(--ink); border:1px solid #2a382f; border-radius:8px; padding:8px; font-size:12px; font-family:ui-monospace,monospace; }
+  textarea { height:120px; resize:vertical; }
+  .btn { display:block; width:100%; margin:8px 0 0; padding:11px; border:none; border-radius:9px; font-size:13.5px; font-weight:600; cursor:pointer; }
+  .btn.primary { background:var(--green); color:#fff; }
+  .btn.warn { background:#3a2a14; color:var(--gold); border:1px solid #5a431f; }
+  #status { font-size:14px; font-weight:700; padding:10px; border-radius:8px; margin:6px 0 12px; background:#0c120f; }
+  #status.ok { color:var(--ok); } #status.bad { color:var(--bad); } #status.wait { color:var(--gold); }
+  #log { background:#0c120f; border:1px solid #2a382f; border-radius:8px; padding:8px; font-family:ui-monospace,monospace; font-size:11px; height:200px; overflow:auto; white-space:pre-wrap; line-height:1.45; }
+  .toolbar { padding:8px 12px; background:var(--panel); font-size:12px; color:var(--muted); border-bottom:1px solid #243029; }
+  iframe { flex:1; width:100%; border:none; background:#fff; }
+  code { color:var(--gold); }
+</style>
+</head>
+<body>
+<div id="left">
+  <h1>Embed Handshake Harness · A2a</h1>
+  <div class="sub">Proves <code>?embed=1</code> session passing into MMT / MLT / MD via <code>postMessage</code>, using A1's <code>ensureBothSessions()</code> to mint the counterpart session.</div>
+
+  <fieldset>
+    <legend>1 · Tool to embed</legend>
+    <select id="toolSel">
+      <option value="member_tool.html">MMT — member_tool.html</option>
+      <option value="lc_leader_tool.html">MLT — lc_leader_tool.html</option>
+      <option value="multiply_dashboard.html">MD — multiply_dashboard.html</option>
+    </select>
+  </fieldset>
+
+  <fieldset>
+    <legend>2 · Seed session</legend>
+    <label><input type="radio" name="seed" value="memberL1" checked> Member · level 1 (below leader floor)</label>
+    <label><input type="radio" name="seed" value="memberL3"> Member · level 3 (is a leader)</label>
+    <label><input type="radio" name="seed" value="leaderL4"> Leader · level 4 (coach)</label>
+    <label><input type="radio" name="seed" value="custom"> Custom JSON below</label>
+    <textarea id="customJson" placeholder='{"memberSession": {...}}  or  {"leaderSession": {...}}'></textarea>
+  </fieldset>
+
+  <fieldset>
+    <legend>3 · Run</legend>
+    <button class="btn primary" onclick="runTest(true)">▶ Load embedded WITH session</button>
+    <button class="btn warn" onclick="runTest(false)">▶ Load embedded WITHOUT session (timeout test)</button>
+  </fieldset>
+
+  <div id="status" class="wait">Idle — pick a tool + seed, then run.</div>
+  <div id="log"></div>
+</div>
+
+<div id="right">
+  <div class="toolbar">Embedded tool (same-origin). Frame URL: <span id="frameUrl">—</span></div>
+  <iframe id="frame" title="embedded tool"></iframe>
+</div>
+
+<script>
+const ORIGIN = location.origin;
+const TOOL_PAGES  = ['member_tool.html','lc_leader_tool.html','multiply_dashboard.html'];
+const LOGIN_PAGES = ['member_login.html','leader_login.html'];
+let _armedPayload = null;   // {leaderSession, memberSession} to send on READY, or null
+let _pollTimer = null;
+
+function log(msg){
+  const el = document.getElementById('log');
+  el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+function setStatus(text, cls){
+  const el = document.getElementById('status');
+  el.textContent = text; el.className = cls || 'wait';
+}
+
+// ── Build a seed { leaderSession?, memberSession? } from the UI ──
+function buildSeed(){
+  const future = new Date(Date.now() + 8*3600*1000).toISOString();
+  const start  = new Date().toISOString();
+  const which = document.querySelector('input[name="seed"]:checked').value;
+  if (which === 'custom'){
+    try { return JSON.parse(document.getElementById('customJson').value); }
+    catch(e){ log('Custom JSON parse error: ' + e.message); return null; }
+  }
+  if (which === 'memberL1') return { memberSession: { memberId:'demo-m1', memberName:'Demo Member L1', memberLevel:1, memberRole:'Team Member', memberLcGroup:'Demo LCG', memberDisciplerName:'Pastor Demo', expiresAt:future, sessionStart:start } };
+  if (which === 'memberL3') return { memberSession: { memberId:'demo-m3', memberName:'Demo Leader L3', memberLevel:3, memberRole:'Leader', memberLcGroup:'Demo LCG', memberDisciplerName:'Pastor Demo', expiresAt:future, sessionStart:start } };
+  if (which === 'leaderL4') return { leaderSession: { leaderId:'demo-l4', leaderName:'Demo Coach L4', leaderLevel:4, leaderRole:'Coach', leaderLcGroup:'Coach LCG', expiresAt:future, sessionStart:start } };
+  return null;
+}
+
+// ── Derive BOTH sessions via A1's ensureBothSessions(), then snapshot + clear.
+// We write the seed to sessionStorage, let ensureBothSessions() mint the
+// counterpart, read both back, then REMOVE them so the iframe starts clean.
+function deriveBothViaA1(seed){
+  try { sessionStorage.removeItem('multiply_leader_session'); sessionStorage.removeItem('multiply_member_session'); } catch(e){}
+  if (seed.leaderSession) sessionStorage.setItem('multiply_leader_session', JSON.stringify(seed.leaderSession));
+  if (seed.memberSession) sessionStorage.setItem('multiply_member_session', JSON.stringify(seed.memberSession));
+  const result = MultiplyShared.ensureBothSessions();
+  log('ensureBothSessions() → ' + result);
+  const ls = sessionStorage.getItem('multiply_leader_session');
+  const ms = sessionStorage.getItem('multiply_member_session');
+  const snap = { leaderSession: ls ? JSON.parse(ls) : null, memberSession: ms ? JSON.parse(ms) : null };
+  // Clear so the embedded tool cannot read storage directly (proves handshake).
+  try { sessionStorage.removeItem('multiply_leader_session'); sessionStorage.removeItem('multiply_member_session'); } catch(e){}
+  log('Snapshot → leaderSession:' + (snap.leaderSession?'yes':'null') + ', memberSession:' + (snap.memberSession?'yes':'null') + ' · sessionStorage cleared');
+  return snap;
+}
+
+// ── PARENT receive side: reply to READY with the armed payload. STRICT origin. ──
+window.addEventListener('message', function(ev){
+  if (ev.origin !== ORIGIN){ log('IGNORED message from foreign origin: ' + ev.origin); return; }
+  if (!ev.data || ev.data.type !== 'MULTIPLY_EMBED_READY') return;
+  log('◀ received MULTIPLY_EMBED_READY from iframe');
+  if (!_armedPayload){ log('  (no payload armed — WITHOUT-session test; not replying → tool will time out)'); return; }
+  ev.source.postMessage(Object.assign({ type:'MULTIPLY_SESSION' }, _armedPayload), ORIGIN);
+  log('▶ sent MULTIPLY_SESSION (targetOrigin=' + ORIGIN + ')');
+});
+
+function runTest(withSession){
+  clearInterval(_pollTimer);
+  document.getElementById('log').textContent = '';
+  const tool = document.getElementById('toolSel').value;
+
+  if (withSession){
+    const seed = buildSeed();
+    if (!seed){ setStatus('Seed invalid — see log.', 'bad'); return; }
+    _armedPayload = deriveBothViaA1(seed);
+  } else {
+    _armedPayload = null;
+    try { sessionStorage.removeItem('multiply_leader_session'); sessionStorage.removeItem('multiply_member_session'); } catch(e){}
+    log('WITHOUT-session test: storage cleared, no payload armed.');
+  }
+
+  const url = tool + '?embed=1';
+  setStatus('Loading ' + url + ' …', 'wait');
+  log('Loading iframe: ' + url);
+  document.getElementById('frameUrl').textContent = url;
+  document.getElementById('frame').src = url;
+
+  // Poll the (same-origin) iframe for gate outcome.
+  let ticks = 0;
+  _pollTimer = setInterval(function(){
+    ticks++;
+    let path = '';
+    let authed = false, memberSet = false;
+    try {
+      const w = document.getElementById('frame').contentWindow;
+      path = (w.location.pathname || '').split('/').pop();
+      try { authed = !!(w.document.body && w.document.body.classList.contains('leader-authenticated')); } catch(e){}
+      try { memberSet = !!w.MEMBER; } catch(e){}
+    } catch(e){ /* transient cross-doc during load */ }
+    if (path) document.getElementById('frameUrl').textContent = path + (path.indexOf('?')<0?' ?embed=1':'');
+
+    if (LOGIN_PAGES.indexOf(path) >= 0){
+      clearInterval(_pollTimer);
+      const expected = !withSession || (path==='leader_login.html' && document.querySelector('input[name="seed"]:checked').value==='memberL1' && tool!=='member_tool.html');
+      setStatus('REDIRECTED → ' + path + (expected ? '  (fail-safe — EXPECTED)' : '  (GATE FAILED)'), expected ? 'ok' : 'bad');
+      log('Gate outcome: redirected to ' + path + (expected ? ' — expected fail-safe (PASS)' : ' — UNEXPECTED (FAIL)'));
+      return;
+    }
+    const isTool = TOOL_PAGES.indexOf(path) >= 0;
+    const tools_authed = (tool==='member_tool.html') ? memberSet : authed;
+    if (isTool && tools_authed){
+      clearInterval(_pollTimer);
+      setStatus('LOADED PAST GATE ✔  (' + path + ')', 'ok');
+      log('Gate outcome: passed (auth marker present) ✔');
+      return;
+    }
+    if (ticks > 14){ // ~7s (poll 500ms) — past the 3s timeout
+      clearInterval(_pollTimer);
+      setStatus('No clear outcome after 7s — see frame/log.', 'bad');
+      log('Gate outcome: indeterminate after 7s (path=' + path + ', authed=' + authed + ', memberSet=' + memberSet + ')');
+    }
+  }, 500);
+}
+</script>
+</body>
+</html>

@@ -427,7 +427,7 @@ tbody tr:hover{background:var(--green-light);}
 // when neither CommonJS nor AMD is available.
 window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 </script>
-<script src="multiply_shared.js?v=5"></script>
+<script src="multiply_shared.js?v=6"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -448,11 +448,20 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     location.replace('leader_login.html');
     return;
   }
-  if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
-  // Session is valid; reveal the dashboard.
-  document.body.classList.add('leader-authenticated');
-  const blackout = document.getElementById('leaderGateBlackout');
-  if (blackout) blackout.remove();
+  function _gate(){
+    if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+    // Session is valid; reveal the dashboard.
+    document.body.classList.add('leader-authenticated');
+    const blackout = document.getElementById('leaderGateBlackout');
+    if (blackout) blackout.remove();
+  }
+  // Embed mode (?embed=1): defer gating until the parent shell passes a
+  // session in via postMessage. Fails safe to login on 3s timeout.
+  if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()){
+    MultiplyShared.embedSessionReady(3000).then(_gate);
+  } else {
+    _gate();
+  }
 })();
 </script>
 
@@ -11770,8 +11779,15 @@ async function _shareSelfEditVia(method, btn){
 // BOOT
 // The leader-session gate at the top of <body> already ran.
 // If we're here, LEADER is valid and we can load member data.
+// Embed mode (?embed=1): the gate is deferred until the shell passes a
+// session in, so window.LEADER isn't set at parse time — wait for the same
+// handshake before loading data. Standalone calls it immediately as before.
 // ═══════════════════════════════════════════════════════════════
-loadMembers();
+if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()){
+  MultiplyShared.embedSessionReady(3000).then(loadMembers);
+} else {
+  loadMembers();
+}
 
 // ═══════════════════════════════════════════════════════════════
 // NOTIFICATIONS

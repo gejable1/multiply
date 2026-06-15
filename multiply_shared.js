@@ -224,6 +224,72 @@
     return 'noop';
   }
 
+  // ═════════════════════════════════════════════════════════════
+  // EMBED-MODE SESSION HANDSHAKE (A2a — additive)
+  // ───────────────────────────────────────────────────────────
+  // Under ?embed=1 a tool is hosted inside the unified shell (a same-origin
+  // parent frame) and does NOT carry its own session. The shell holds the
+  // one real session and PASSES it in via postMessage. This module provides
+  // the TOOL side of that handshake; A2b builds the shell side.
+  //
+  //   isEmbedMode()         → true when the URL carries ?embed=1
+  //   embedSessionReady(ms) → a memoized Promise the tool awaits BEFORE
+  //                           gating. It:
+  //     • attaches a message listener (FIRST, so no reply is missed)
+  //     • posts {type:'MULTIPLY_EMBED_READY'} to the parent, targetOrigin
+  //       = our own origin (NEVER '*')
+  //     • accepts a reply ONLY when event.origin === our origin AND
+  //       event.data.type === 'MULTIPLY_SESSION'
+  //     • persists leaderSession / memberSession VERBATIM under the existing
+  //       keys (exact shapes the gates already accept — same shapes A1 mints;
+  //       not reshaped)
+  //     • resolves(true) so the caller can run its NORMAL gate (now passes)
+  //     • FAILS SAFE: if no valid session arrives within `ms` (default 3000),
+  //       resolves(false) → the caller's gate runs and redirects to login,
+  //       so an orphaned embedded tool never hangs.
+  //
+  // Memoized so a tool's gate boot AND its later data boot can both await the
+  // SAME promise (one listener, one READY post). Never adds framebusting and
+  // never modifies the four gate functions (Inv #84).
+  function isEmbedMode() {
+    try { return new URLSearchParams(global.location.search).get('embed') === '1'; }
+    catch (e) { return false; }
+  }
+
+  let _embedSessionPromise = null;
+  function embedSessionReady(timeoutMs) {
+    if (_embedSessionPromise) return _embedSessionPromise;
+    _embedSessionPromise = new Promise(function (resolve) {
+      let settled = false;
+      function finish(received) {
+        if (settled) return;
+        settled = true;
+        try { global.removeEventListener('message', onMessage); } catch (e) {}
+        resolve(received);
+      }
+      function onMessage(ev) {
+        // STRICT: trust ONLY same-origin messages of the expected type.
+        if (ev.origin !== global.location.origin) return;
+        const d = ev.data;
+        if (!d || d.type !== 'MULTIPLY_SESSION') return;
+        try {
+          if (d.leaderSession) sessionStorage.setItem(SESSION_KEY, JSON.stringify(d.leaderSession));
+          if (d.memberSession) sessionStorage.setItem(MEMBER_SESSION_KEY, JSON.stringify(d.memberSession));
+        } catch (e) { /* storage failure → caller gate will fail safe */ }
+        finish(true);
+      }
+      try { global.addEventListener('message', onMessage); } catch (e) {}
+      // Announce readiness to the parent shell (same-origin only — never '*').
+      try {
+        if (global.parent && global.parent !== global) {
+          global.parent.postMessage({ type: 'MULTIPLY_EMBED_READY' }, global.location.origin);
+        }
+      } catch (e) { /* no parent / cross-origin → timeout fail-safe handles it */ }
+      setTimeout(function () { finish(false); }, (timeoutMs == null ? 3000 : timeoutMs));
+    });
+    return _embedSessionPromise;
+  }
+
   // ───── LeaderScope ─────
   // Three views:
   //   'disciples' — m.discipler_id === LEADER.leaderId
@@ -3111,6 +3177,9 @@
     logoutMember,
     // Session bridge (A1 — additive, DORMANT; wired by A2)
     ensureBothSessions,
+    // Embed-mode session handshake (A2a — tool side; shell side in A2b)
+    isEmbedMode,
+    embedSessionReady,
     // Scoping + audit
     makeLeaderScope,
     logView,
