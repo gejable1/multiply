@@ -183,6 +183,13 @@ let _curFrameWin = null;
               : (member && member.memberLevel != null) ? member.memberLevel : 0;
   const role  = (leader && leader.leaderRole) || (member && member.memberRole) || '';
 
+  // MMT-only fast-path: a member who can reach only the Member Tool (level < 2,
+  // no MLT/MD) never sees the shell — go straight there. Placed BEFORE the DOM
+  // writes/renderToolbar so there's no flash of the one-button shell.
+  // location.replace keeps the shell OUT of back-history (Back from MMT won't
+  // bounce here). Dynamic: a later promotion to L2+ restores the shell + toolbar.
+  if (level < 2){ location.replace('member_tool.html'); return; }
+
   document.getElementById('who').textContent = name;
   document.getElementById('roleLine').textContent =
     role ? (role + ' · Level ' + level) : ('Level ' + level);
