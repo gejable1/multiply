@@ -2563,11 +2563,19 @@ const __masterTimeout = setTimeout(function(){
   throw new Error('MMT dependencies missing: ' + missing.join(', '));
 })();
 
+// MEMBER session binding. Declared (mutable) BEFORE the gate so it can be
+// assigned AFTER the gate runs — in BOTH modes. Under ?embed=1 the gate is
+// deferred until the handshake resolves, so a parse-time snapshot of
+// window.MEMBER would capture undefined and initMMT would throw on
+// MEMBER.memberId (A2c fix). Assigned in the gate-success branch below.
+let MEMBER = null;
+
 function __mmtGateAndInit(){
   if(!MultiplyShared.gateMemberOrRedirect('member_login.html')){
     // gateMemberOrRedirect already replaced location; nothing else to do.
   } else {
-    // Has a valid session. window.MEMBER is set.
+    // Has a valid session. window.MEMBER is set — bind it now (post-gate).
+    MEMBER = window.MEMBER;
     window.__mmtPhase('Session OK');
     // readyState-aware: in embed mode the gate runs AFTER the handshake, which
     // may resolve once DOMContentLoaded has already fired — so init directly
@@ -2728,7 +2736,8 @@ const MILESTONES = {
   }
 };
 
-const MEMBER = window.MEMBER;
+// MEMBER is bound post-gate in __mmtGateAndInit (A2c) — not snapshotted here,
+// because under ?embed=1 the gate runs after this parse point.
 const db = MultiplyShared.getDB();
 let memberRow = null;       // fresh row from members table
 let devoStreak = 0;
