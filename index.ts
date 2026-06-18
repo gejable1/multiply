@@ -155,22 +155,111 @@ async function runComputation(supabase: any, params: any) {
     .or("is_test_member.is.null,is_test_member.eq.false");
   const liteById = new Map<string, any>((allLite || []).map((m: any) => [m.id, m]));
 
-  const lcWin = new Date(weekStart + "T00:00:00Z");
-  const lcLower = new Date(lcWin); lcLower.setUTCDate(lcLower.getUTCDate() - 55); // 8 weeks
-  const lcLowerStr = lcLower.toISOString().slice(0, 10);
-  const { data: lcAtt } = await supabase
-    .from("attendance")
-    .select("member_id,event_date")
-    .eq("event_type", "LC Meeting").eq("present", true)
-    .gte("event_date", lcLowerStr).lte("event_date", weekStart);
+  // ── BULK PREFETCH: every per-member data source fetched ONCE for ALL members,
+  //    each over its widest needed window ending at weekStart, FULLY PAGINATED
+  //    (no 1000-row truncation). The per-member loop then reads these maps with
+  //    ZERO queries. Scores are byte-identical — same windows/filters/aggregation;
+  //    only data acquisition moved from per-call queries to here.
+  const allLiteById = liteById; // (alias for clarity in the prefetch below)
+  const dayStr = (base: string, minusDays: number) => {
+    const d = new Date(base + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - minusDays);
+    return d.toISOString().slice(0, 10);
+  };
+  // widest configured lookback (weeks) per source, falling back to known defaults
+  const maxWeeks = (pred: (m: any) => boolean, def: number) => {
+    let w = def;
+    for (const m of metrics) { if (pred(m)) { const lw = Number(m.compute_config?.lookback_weeks) || def; if (lw > w) w = lw; } }
+    return w;
+  };
+  const attDays    = maxWeeks((m) => m.compute_config?.table === "attendance" || m.compute_config?.computed === "lc_attendance_rate", 8) * 7;
+  const devoDays   = maxWeeks((m) => m.compute_config?.table === "devotional_reflections", 4) * 7;
+  const intervDays = maxWeeks((m) => m.compute_config?.table === "interventions", 26) * 7;
+  const attLower    = dayStr(weekStart, attDays - 1);
+  const devoLower   = dayStr(weekStart, devoDays - 1);
+  const intervLower = dayStr(weekStart, intervDays - 1);
 
+  // Attendance (Sunday Service + LC Meeting), present AND absent — widest window.
+  const attRows = await fetchAllPaged((f, t) => supabase.from("attendance")
+    .select("member_id,event_type,event_date,present")
+    .in("event_type", ["Sunday Service", "LC Meeting"])
+    .gte("event_date", attLower).lte("event_date", weekStart).range(f, t));
+  const attendanceByMember = new Map<string, any[]>();
+  for (const r of attRows) { (attendanceByMember.get(r.member_id) || attendanceByMember.set(r.member_id, []).get(r.member_id))!.push(r); }
+
+  // Devotional reflections — widest window.
+  const devoRows = await fetchAllPaged((f, t) => supabase.from("devotional_reflections")
+    .select("member_id,entry_date,reflection")
+    .gte("entry_date", devoLower).lte("entry_date", weekStart).range(f, t));
+  const devotionalByMember = new Map<string, any[]>();
+  for (const r of devoRows) { (devotionalByMember.get(r.member_id) || devotionalByMember.set(r.member_id, []).get(r.member_id))!.push(r); }
+
+  // Interventions — widest window; status is filtered in-memory by the handler.
+  const intervRows = await fetchAllPaged((f, t) => supabase.from("interventions")
+    .select("member_id,status,start_date")
+    .gte("start_date", intervLower).lte("start_date", weekStart).range(f, t));
+  const interventionsByMember = new Map<string, any[]>();
+  for (const r of intervRows) { (interventionsByMember.get(r.member_id) || interventionsByMember.set(r.member_id, []).get(r.member_id))!.push(r); }
+
+  // Diagnostics — latest date_taken per member (no window; date_recency uses latest ever).
+  const diagRows = await fetchAllPaged((f, t) => supabase.from("diagnostic_results")
+    .select("member_id,date_taken").range(f, t));
+  const diagnosticLatestByMember = new Map<string, string | null>();
+  for (const r of diagRows) { if (!r.date_taken) continue; const prev = diagnosticLatestByMember.get(r.member_id); if (!prev || r.date_taken > prev) diagnosticLatestByMember.set(r.member_id, r.date_taken); }
+
+  // count_rows metrics (the Wave-4 prayer ×4) — one bulk per metric, grouped by
+  // member, applying each metric's exact window/filter (same as computeCountRows).
+  const countByMetric = new Map<string, Map<string, number>>();
+  for (const m of metrics) {
+    if (m.compute_type !== "count_rows") continue;
+    const cfg = m.compute_config || {};
+    const table = cfg.table; if (!table) continue;
+    const memberCol = cfg.member_col || "member_id";
+    const dateCol = cfg.date_col || null;
+    const lookbackDays = Number(cfg.lookback_days || (cfg.lookback_weeks ? cfg.lookback_weeks * 7 : 30));
+    const cols = [memberCol].concat(dateCol ? [dateCol] : []).join(",");
+    const rows = await fetchAllPaged((f, t) => {
+      let q = supabase.from(table).select(cols);
+      const filter = cfg.filter || {};
+      for (const [c, v] of Object.entries(filter)) q = Array.isArray(v) ? q.in(c, v) : q.eq(c, v);
+      if (dateCol) {
+        const ws = new Date(weekStart + "T00:00:00Z");
+        const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - lookbackDays + 1);
+        const upper = new Date(ws); upper.setUTCDate(upper.getUTCDate() + 1); // include weekStart day
+        q = q.gte(dateCol, lower.toISOString()).lt(dateCol, upper.toISOString());
+      }
+      return q.range(f, t);
+    });
+    const cm = new Map<string, number>();
+    for (const r of rows) { const id = (r as any)[memberCol]; if (!id) continue; cm.set(id, (cm.get(id) || 0) + 1); }
+    countByMetric.set(m.metric_key, cm);
+  }
+
+  // Prior snapshots @ weekStart−28d (trend baseline).
+  const priorStr = dayStr(weekStart, 28);
+  const priorRowsAll = await fetchAllPaged((f, t) => supabase.from("svi_snapshots")
+    .select("member_id,total_score").eq("week_start", priorStr).range(f, t));
+  const priorScoreByMember = new Map<string, number | null>();
+  for (const r of priorRowsAll) { priorScoreByMember.set(r.member_id, r.total_score); }
+
+  // ── meetingsHeld: which LC groups actually MET (≥1 member present at an LC
+  //    Meeting) over the last 8 weeks — DERIVED from the attendance bulk above
+  //    (same window/result as the old separate lcAtt query). allLite resolves
+  //    each member's lcKey so groups stay complete even on single-member runs.
+  const lcLowerStr = dayStr(weekStart, 56 - 1); // exact 8-week window (weekStart−55)
   const meetingsHeld = new Map<string, Set<string>>(); // lcKey -> Set(event_date)
-  for (const a of (lcAtt || [])) {
-    const att = liteById.get(a.member_id); if (!att) continue;
+  for (const r of attRows) {
+    if (r.event_type !== "LC Meeting" || r.present !== true) continue;
+    if (r.event_date < lcLowerStr) continue; // hold to the exact 8-week window
+    const att = allLiteById.get(r.member_id); if (!att) continue;
     const key = lcKeyOf(att); if (!key) continue;
     if (!meetingsHeld.has(key)) meetingsHeld.set(key, new Set());
-    meetingsHeld.get(key)!.add(a.event_date);
+    meetingsHeld.get(key)!.add(r.event_date);
   }
+
+  const prefetch = {
+    attendanceByMember, devotionalByMember, interventionsByMember,
+    diagnosticLatestByMember, countByMetric, priorScoreByMember,
+  };
 
   // Compute per member
   const results: any[] = [];
@@ -178,8 +267,8 @@ async function runComputation(supabase: any, params: any) {
 
   for (const member of members) {
     try {
-      const snapshot = await computeMemberSnapshot(
-        supabase, member, metrics, profilesByLevel, defaultProfile, weekStart, systemStartDate, meetingsHeld
+      const snapshot = computeMemberSnapshot(
+        member, metrics, profilesByLevel, defaultProfile, weekStart, systemStartDate, meetingsHeld, prefetch
       );
       results.push(snapshot);
     } catch (e) {
@@ -223,11 +312,11 @@ async function runComputation(supabase: any, params: any) {
 // =====================================================================
 // PER-MEMBER SNAPSHOT
 // =====================================================================
-async function computeMemberSnapshot(
-  supabase: any, member: any, metrics: any[],
+function computeMemberSnapshot(
+  member: any, metrics: any[],
   profilesByLevel: Map<any, any>, defaultProfile: any,
   weekStart: string, systemStartDate: string | null,
-  meetingsHeld: Map<string, Set<string>>
+  meetingsHeld: Map<string, Set<string>>, prefetch: any
 ) {
   const level = member.pipeline_level ?? 0;
   const profile = profilesByLevel.get(level) || defaultProfile;
@@ -269,7 +358,7 @@ async function computeMemberSnapshot(
 
     let raw: any = null;
     try {
-      raw = await computeMetric(supabase, member, metric, weekStart, systemStartDate);
+      raw = computeMetric(member, metric, weekStart, systemStartDate, prefetch);
     } catch (e) {
       console.error(`Metric ${metric.metric_key} failed for ${member.name}:`, e);
       raw = null;
@@ -321,22 +410,12 @@ async function computeMemberSnapshot(
   //  was incorrectly marking everyone as insufficient. Letting metrics
   //  speak for themselves is more honest anyway.)
 
-  // Trend: compare to snapshot 4 weeks ago
-  const fourWeeksAgo = new Date(weekStart);
-  fourWeeksAgo.setUTCDate(fourWeeksAgo.getUTCDate() - 28);
-  const fourWeeksAgoStr = fourWeeksAgo.toISOString().slice(0, 10);
-
-  const { data: priorRows } = await supabase
-    .from("svi_snapshots")
-    .select("total_score")
-    .eq("member_id", member.id)
-    .eq("week_start", fourWeeksAgoStr)
-    .limit(1);
-
+  // Trend: compare to the snapshot 4 weeks ago (prefetched).
+  const priorScore = prefetch.priorScoreByMember.get(member.id);
   let trend = "new";
   let trendDelta: number | null = null;
-  if (priorRows && priorRows.length > 0 && priorRows[0].total_score !== null && total !== null) {
-    trendDelta = total - Number(priorRows[0].total_score);
+  if (priorScore !== undefined && priorScore !== null && total !== null) {
+    trendDelta = total - Number(priorScore);
     if (trendDelta >= trendThresholds.up) trend = "up";
     else if (trendDelta <= trendThresholds.down) trend = "down";
     else trend = "steady";
@@ -368,13 +447,13 @@ async function computeMemberSnapshot(
 // =====================================================================
 // METRIC COMPUTERS (dispatcher by compute_type)
 // =====================================================================
-async function computeMetric(supabase: any, member: any, metric: any, weekStart: string, systemStartDate: string | null): Promise<any> {
+function computeMetric(member: any, metric: any, weekStart: string, systemStartDate: string | null, prefetch: any): any {
   switch (metric.compute_type) {
-    case "sql_query":      return await computeSqlQuery(supabase, member, metric, weekStart, systemStartDate);
-    case "jsonb_extract":  return await computeJsonbExtract(supabase, member, metric, weekStart);
-    case "boolean_check":  return await computeBooleanCheck(supabase, member, metric);
-    case "date_recency":   return await computeDateRecency(supabase, member, metric, weekStart);
-    case "count_rows":     return await computeCountRows(supabase, member, metric, weekStart);
+    case "sql_query":      return computeSqlQuery(member, metric, weekStart, systemStartDate, prefetch);
+    case "jsonb_extract":  return computeJsonbExtract(member, metric);
+    case "boolean_check":  return computeBooleanCheck(member, metric);
+    case "date_recency":   return computeDateRecency(member, metric, weekStart, prefetch);
+    case "count_rows":     return computeCountRows(member, metric, prefetch);
     default:
       throw new Error(`Unknown compute_type: ${metric.compute_type}`);
   }
@@ -387,17 +466,17 @@ async function computeMetric(supabase: any, member: any, metric: any, weekStart:
 // Adaptive lookback: if systemStartDate is set, the actual lookback
 // is capped to days_since_start, so brand-new deployments don't
 // suffer from "expected 8 Sundays, found 1" math.
-async function computeSqlQuery(
-  supabase: any,
+function computeSqlQuery(
   member: any,
   metric: any,
   weekStart: string,
-  systemStartDate: string | null
-): Promise<number> {
+  systemStartDate: string | null,
+  prefetch: any
+): number {
   const cfg = metric.compute_config;
   const weekStartDate = new Date(weekStart);
 
-  // ----- compute effective lookback -----
+  // ----- compute effective lookback (UNCHANGED) -----
   const configuredLookbackDays = (cfg.lookback_weeks || 4) * 7;
   let effectiveLookbackDays = configuredLookbackDays;
   if (systemStartDate) {
@@ -417,18 +496,11 @@ async function computeSqlQuery(
 
   // Special computed: lc_attendance_rate (already returns a percentage)
   if (cfg.computed === "lc_attendance_rate") {
-    const { data, error } = await supabase
-      .from("attendance")
-      .select("present")
-      .eq("member_id", member.id)
-      .eq("event_type", "LC Meeting")
-      .gte("event_date", cutoffStr)
-      .lte("event_date", weekStart);
-    if (error) throw error;
-
-    const total = (data || []).length;
+    const data = (prefetch.attendanceByMember.get(member.id) || [])
+      .filter((r: any) => r.event_type === "LC Meeting" && r.event_date >= cutoffStr && r.event_date <= weekStart);
+    const total = data.length;
     if (total === 0) return 0;
-    const present = (data || []).filter((r: any) => r.present === true).length;
+    const present = data.filter((r: any) => r.present === true).length;
     return Math.round((present / total) * 100);
   }
 
@@ -440,21 +512,15 @@ async function computeSqlQuery(
     const eventTypeFilter = cfg.filter?.event_type;
     const aggregate = cfg.aggregate || "count_rows";
 
-    const { data, error } = await supabase
-      .from("attendance")
-      .select("event_date")
-      .eq("member_id", member.id)
-      .eq("event_type", eventTypeFilter)
-      .eq("present", true)
-      .gte("event_date", cutoffStr)
-      .lte("event_date", weekStart);
-    if (error) throw error;
+    const data = (prefetch.attendanceByMember.get(member.id) || [])
+      .filter((r: any) => r.event_type === eventTypeFilter && r.present === true
+        && r.event_date >= cutoffStr && r.event_date <= weekStart);
 
     let actualCount: number;
     if (aggregate === "count_distinct_dates") {
-      actualCount = new Set((data || []).map((r: any) => r.event_date)).size;
+      actualCount = new Set(data.map((r: any) => r.event_date)).size;
     } else {
-      actualCount = (data || []).length;
+      actualCount = data.length;
     }
 
     if (isRateBased) {
@@ -466,15 +532,10 @@ async function computeSqlQuery(
 
   // DEVOTIONAL_REFLECTIONS
   if (table === "devotional_reflections") {
-    const { data, error } = await supabase
-      .from("devotional_reflections")
-      .select("reflection,entry_date")
-      .eq("member_id", member.id)
-      .gte("entry_date", cutoffStr)
-      .lte("entry_date", weekStart);
-    if (error) throw error;
+    const data = (prefetch.devotionalByMember.get(member.id) || [])
+      .filter((r: any) => r.entry_date >= cutoffStr && r.entry_date <= weekStart);
 
-    const actualCount = (data || []).filter(
+    const actualCount = data.filter(
       (r: any) => r.reflection && r.reflection.trim().length > 0
     ).length;
 
@@ -494,23 +555,17 @@ async function computeSqlQuery(
   // INTERVENTIONS
   if (table === "interventions") {
     const statusList = cfg.filter?.status_in || ["in_progress", "completed"];
-    const { data, error } = await supabase
-      .from("interventions")
-      .select("id")
-      .eq("member_id", member.id)
-      .in("status", statusList)
-      .gte("start_date", cutoffStr)
-      .lte("start_date", weekStart);
-    if (error) throw error;
-
-    return (data || []).length;
+    const data = (prefetch.interventionsByMember.get(member.id) || [])
+      .filter((r: any) => statusList.includes(r.status)
+        && r.start_date >= cutoffStr && r.start_date <= weekStart);
+    return data.length;
   }
 
   throw new Error(`No handler implemented for table: ${table}`);
 }
 
-// --- jsonb_extract handler (EOLO) ---
-async function computeJsonbExtract(_supabase: any, member: any, metric: any, _weekStart: string): Promise<number> {
+// --- jsonb_extract handler (EOLO) — in-memory already ---
+function computeJsonbExtract(member: any, metric: any): number {
   if (metric.metric_key === "mission_eolo_active") {
     const eolo = member.eolo;
     if (!Array.isArray(eolo)) return 0;
@@ -519,8 +574,8 @@ async function computeJsonbExtract(_supabase: any, member: any, metric: any, _we
   throw new Error(`No jsonb_extract handler for ${metric.metric_key}`);
 }
 
-// --- boolean_check handler (ministry role) ---
-async function computeBooleanCheck(_supabase: any, member: any, metric: any): Promise<boolean> {
+// --- boolean_check handler (ministry role) — in-memory already ---
+function computeBooleanCheck(member: any, metric: any): boolean {
   const cfg = metric.compute_config;
   if (cfg.check === "ministry_role_or_secondary_present") {
     return !!(
@@ -533,63 +588,29 @@ async function computeBooleanCheck(_supabase: any, member: any, metric: any): Pr
   throw new Error(`No boolean_check handler for: ${cfg.check}`);
 }
 
-// --- date_recency handler (diagnostic recency) ---
-async function computeDateRecency(supabase: any, member: any, metric: any, weekStart: string): Promise<number> {
+// --- date_recency handler (diagnostic recency) — reads prefetch ---
+function computeDateRecency(member: any, metric: any, weekStart: string, prefetch: any): number {
   const cfg = metric.compute_config;
   if (cfg.table === "diagnostic_results") {
-    const { data, error } = await supabase
-      .from("diagnostic_results")
-      .select("date_taken")
-      .eq("member_id", member.id)
-      .order("date_taken", { ascending: false })
-      .limit(1);
-    if (error) throw error;
-    if (!data || data.length === 0) return 99999;
-    const latest = new Date(data[0].date_taken);
+    const latestStr = prefetch.diagnosticLatestByMember.get(member.id) || null;
+    if (!latestStr) return 99999;
+    const latest = new Date(latestStr);
     const ws = new Date(weekStart);
     return Math.max(0, Math.floor((ws.getTime() - latest.getTime()) / (86400 * 1000)));
   }
   throw new Error(`No date_recency handler for table: ${cfg.table}`);
 }
 
-// --- count_rows handler (GENERIC, table-agnostic) ---
-// Counts rows for this member in compute_config.table within a lookback window.
-// compute_config:
-//   table        (required)  e.g. "prayer_list_items"
-//   member_col   (default "member_id")  the column holding the member id
-//   date_col     (optional)  timestamptz/date column for the lookback window
-//   lookback_days(default 30; or lookback_weeks*7)
-//   filter       (optional)  { col: value | [values] }  → eq / in
-// Table-generic: a NEW count metric needs only an svi_metrics row, no EF edit.
-// Used by the Wave-4 prayer metrics (prayer_saved_30d / prayer_opens_14d /
-// prayer_answered_90d / prayer_intercessions_30d).
-async function computeCountRows(supabase: any, member: any, metric: any, weekStart: string): Promise<number> {
-  const cfg = metric.compute_config || {};
-  const table = cfg.table;
-  if (!table) throw new Error(`compute_config.table missing for ${metric.metric_key}`);
-
-  const memberCol = cfg.member_col || "member_id";
-  const dateCol = cfg.date_col || null;
-  const lookbackDays = Number(cfg.lookback_days || (cfg.lookback_weeks ? cfg.lookback_weeks * 7 : 30));
-
-  // head:true + count:exact → server-side count, no row payload.
-  let q = supabase.from(table).select(memberCol, { count: "exact", head: true }).eq(memberCol, member.id);
-
-  const filter = cfg.filter || {};
-  for (const [col, val] of Object.entries(filter)) {
-    q = Array.isArray(val) ? q.in(col, val) : q.eq(col, val);
+// --- count_rows handler (GENERIC, table-agnostic) — reads prefetch ---
+// The bulk prefetch already applied each metric's table/member_col/date_col/
+// lookback/filter and grouped a per-member count into prefetch.countByMetric.
+// (window/filter semantics identical to the prior per-member count query.)
+function computeCountRows(member: any, metric: any, prefetch: any): number {
+  if (!metric.compute_config?.table) {
+    throw new Error(`compute_config.table missing for ${metric.metric_key}`);
   }
-
-  if (dateCol) {
-    const ws = new Date(weekStart + "T00:00:00Z");
-    const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - lookbackDays + 1);
-    const upper = new Date(ws); upper.setUTCDate(upper.getUTCDate() + 1); // include the weekStart day
-    q = q.gte(dateCol, lower.toISOString()).lt(dateCol, upper.toISOString());
-  }
-
-  const { count, error } = await q;
-  if (error) throw error;
-  return count || 0;
+  const cm = prefetch.countByMetric.get(metric.metric_key);
+  return cm ? (cm.get(member.id) || 0) : 0;
 }
 
 // =====================================================================
@@ -682,6 +703,24 @@ async function writeSnapshots(supabase: any, snapshots: any[], weekStart: string
 // everyone else is keyed by their discipler_id (the LC they belong to).
 function lcKeyOf(m: any): string | null {
   return ((m?.pipeline_level ?? 0) >= 2 ? m?.id : m?.discipler_id) || null;
+}
+
+// Fetch ALL rows for a paginated query — avoids Supabase's default 1000-row cap
+// (truncation = missing data = wrong scores). `makeQuery(from,to)` must build a
+// FRESH query each call with a .range(from,to) so the range isn't reused.
+async function fetchAllPaged(makeQuery: (from: number, to: number) => any): Promise<any[]> {
+  const PAGE = 1000;
+  let from = 0;
+  const out: any[] = [];
+  while (true) {
+    const { data, error } = await makeQuery(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = data || [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+  return out;
 }
 
 function mostRecentMonday(): string {
