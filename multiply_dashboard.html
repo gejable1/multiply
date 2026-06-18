@@ -1479,6 +1479,22 @@ const ZONE_COLORS_CSS=['','var(--green)','#d4a010','var(--orange)','var(--red)']
 // ═══════════════════════════════════════
 const LEADER = window.LEADER || {}; // populated by gateOrRedirect
 
+// Embed mode: the real session arrives asynchronously via the shell's
+// postMessage handshake, AFTER this `const LEADER` binds (window.LEADER is
+// still empty then). embedSessionReady is memoized, so awaiting it here adds
+// no extra handshake. Once it resolves, re-sync the session fields INTO the
+// existing LEADER object in place (const objects can be mutated) so every
+// reader of LEADER — leaderLevel gates, _crScopedIds, the SVI report — sees
+// the real level instead of undefined.
+if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()) {
+  MultiplyShared.embedSessionReady(3000).then(function(){
+    try {
+      var s = MultiplyShared.getValidSession();
+      if (s) Object.assign(LEADER, s);
+    } catch (e) {}
+  });
+}
+
 // Boot: render the leader badge in the topbar
 (function paintLeaderBadge(){
   const el = (id) => document.getElementById(id);
