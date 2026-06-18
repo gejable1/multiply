@@ -492,9 +492,44 @@ async function computeDateRecency(supabase: any, member: any, metric: any, weekS
   throw new Error(`No date_recency handler for table: ${cfg.table}`);
 }
 
-// --- count_rows handler ---
-async function computeCountRows(_supabase: any, _member: any, metric: any, _weekStart: string): Promise<number> {
-  throw new Error(`count_rows handler not yet implemented for ${metric.metric_key}`);
+// --- count_rows handler (GENERIC, table-agnostic) ---
+// Counts rows for this member in compute_config.table within a lookback window.
+// compute_config:
+//   table        (required)  e.g. "prayer_list_items"
+//   member_col   (default "member_id")  the column holding the member id
+//   date_col     (optional)  timestamptz/date column for the lookback window
+//   lookback_days(default 30; or lookback_weeks*7)
+//   filter       (optional)  { col: value | [values] }  → eq / in
+// Table-generic: a NEW count metric needs only an svi_metrics row, no EF edit.
+// Used by the Wave-4 prayer metrics (prayer_saved_30d / prayer_opens_14d /
+// prayer_answered_90d / prayer_intercessions_30d).
+async function computeCountRows(supabase: any, member: any, metric: any, weekStart: string): Promise<number> {
+  const cfg = metric.compute_config || {};
+  const table = cfg.table;
+  if (!table) throw new Error(`compute_config.table missing for ${metric.metric_key}`);
+
+  const memberCol = cfg.member_col || "member_id";
+  const dateCol = cfg.date_col || null;
+  const lookbackDays = Number(cfg.lookback_days || (cfg.lookback_weeks ? cfg.lookback_weeks * 7 : 30));
+
+  // head:true + count:exact → server-side count, no row payload.
+  let q = supabase.from(table).select(memberCol, { count: "exact", head: true }).eq(memberCol, member.id);
+
+  const filter = cfg.filter || {};
+  for (const [col, val] of Object.entries(filter)) {
+    q = Array.isArray(val) ? q.in(col, val) : q.eq(col, val);
+  }
+
+  if (dateCol) {
+    const ws = new Date(weekStart + "T00:00:00Z");
+    const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - lookbackDays + 1);
+    const upper = new Date(ws); upper.setUTCDate(upper.getUTCDate() + 1); // include the weekStart day
+    q = q.gte(dateCol, lower.toISOString()).lt(dateCol, upper.toISOString());
+  }
+
+  const { count, error } = await q;
+  if (error) throw error;
+  return count || 0;
 }
 
 // =====================================================================
