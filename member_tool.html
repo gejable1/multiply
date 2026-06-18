@@ -1005,6 +1005,30 @@ body.lang-tl .tl-text{display:inline;}
   font-size:19px;line-height:1;color:var(--muted);border-radius:50%;
 }
 .pr-top-close:active{background:var(--cream);}
+/* Wave 3 — "pray today" Home surface (soft, opt-in, no-nag) */
+.ptoday-banner{
+  margin-bottom:1rem;padding:12px 14px;border-radius:14px;
+  background:linear-gradient(135deg,rgba(31,107,58,.10),rgba(184,136,42,.08));
+  border:1px solid rgba(31,107,58,.22);
+}
+.ptoday-banner .ptoday-text{font-size:13px;color:var(--ink-soft);line-height:1.45;}
+.ptoday-banner .ptoday-actions{display:flex;gap:8px;margin-top:10px;}
+.ptoday-btn{
+  font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  padding:7px 14px;border-radius:99px;border:1px solid var(--line);
+  background:var(--cream);color:var(--ink-soft);
+}
+.ptoday-btn.primary{background:var(--forest);color:#fef9ec;border-color:transparent;}
+/* Wave 3 — My List controls (EOLO seed + reminder cadence) */
+.pr-list-controls{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.pr-reminder-ctl{
+  display:flex;align-items:center;gap:6px;margin-left:auto;
+  font-size:11.5px;font-weight:600;color:var(--ink-soft);white-space:nowrap;
+}
+.pr-reminder-ctl .pr-select{width:auto;padding:6px 8px;font-size:12px;}
 
 /* ═══════════════ PRAYER / PANALANGIN (Wave 1) ═══════════════ */
 /* Home CTA card — prominent, primary action + light relevance badge. NO points. */
@@ -1750,6 +1774,10 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
+      <!-- "Pray today" reminder surface (Wave 3) — opt-in, no-nag; populated by
+           renderPrayTodaySurface() and hidden when not due / nothing to pray for. -->
+      <div id="prayerTodayBanner" class="ptoday-banner" style="display:none"></div>
+
       <!-- Prayer of the day (EOLO — God's Word prayed back over the people on your heart) -->
       <div class="section-label">
         <div class="title">
@@ -2438,6 +2466,16 @@ body.lang-tl .tl-text{display:inline;}
       <span class="en-text">Those you're carrying in prayer</span>
       <span class="tl-text">Mga dinadala mo sa panalangin</span>
     </div>
+
+    <!-- Wave 3 controls: seed EOLO names + the opt-in "pray today" reminder -->
+    <div class="pr-list-controls">
+      <button class="pr-act primary" onclick="seedEoloToList()">➕ <span class="en-text">Add my EOLO ones</span><span class="tl-text">Idagdag ang EOLO ko</span></button>
+      <label class="pr-reminder-ctl">
+        <span class="en-text">🔔 Pray-today reminder</span><span class="tl-text">🔔 Paalala</span>
+        <select id="prReminderSelect" class="pr-select" onchange="setPrayerReminder(this.value)"></select>
+      </label>
+    </div>
+
     <select class="pr-select" id="prListCategoryFilter" style="margin-bottom:12px" onchange="renderMyPrayerList()"></select>
     <div id="prListBox"></div>
     <button class="lc-detail-close" onclick="closePrayerMyList()">
@@ -3230,6 +3268,8 @@ function renderHome(){
 
   // Prayer / Panalangin CTA relevance badge (Wave 1)
   renderPrayerCta();
+  // "Pray today" reminder surface (Wave 3) — conservative, opt-in, no-nag.
+  renderPrayTodaySurface();
 
   // Next steps — dynamically suggest based on what's missing
   const container = document.getElementById('nextStepsContainer');
@@ -10679,7 +10719,7 @@ function _prayerFeedById(id){ return _prayerFeed.find(r => r.id === id) || null;
 
 // ── Boot loader (added to initMMT's parallel _loaders) ──
 async function loadPrayerData(){
-  await Promise.allSettled([loadPrayerFeed(), loadPrayerMyList()]);
+  await Promise.allSettled([loadPrayerFeed(), loadPrayerMyList(), loadPrayerReminder()]);
   await _loadPrayerEngagement();
   _computePrayerRelevance();
 }
@@ -10721,9 +10761,15 @@ async function _loadPrayerEngagement(){
 }
 
 async function loadPrayerFeed(){
+  // Auto-expiry (Wave 3, lazy/read-only): a request whose expires_at is in the
+  // past is treated as archived — excluded from the active feed. NULL = never
+  // expires. Nothing currently SETS expires_at, so today this is a harmless,
+  // future-ready no-op (no expiry-setting UI — out of scope).
+  const nowIso = new Date().toISOString();
   const { data, error } = await db.from('prayer_requests')
     .select('*')
     .neq('status', 'archived')
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .order('created_at', { ascending:false })
     .limit(500);
   if(error) throw error;                       // fail-closed (Inv #38) — never swallow as []
@@ -10838,6 +10884,7 @@ function closePrayerSheet(e){
 //    only hides this overlay, so the main screen is still there waiting. ──
 async function openPrayerMyList(){
   _populatePrayerCat('prListCategoryFilter', true);
+  _populateReminderSelect();          // reflect current cadence + language (Wave 3)
   document.getElementById('prayerListBackdrop').classList.add('show');
   try{ await _logPrayerListOpen(); }catch(_){}
   renderMyPrayerList();
@@ -10861,6 +10908,170 @@ async function _logPrayerListOpen(){
       church_id: memberRow.church_id || null
     });
   }catch(e){ console.warn('list-open log failed (non-fatal):', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRAYER — Wave 3 (Proactive + integrations)
+//   Part 1: per-member "pray today" reminder (client-side surface, fail-closed)
+//   Part 2: "Add my EOLO ones" → seed members.eolo into the personal list
+//   (Part 3 auto-expiry lives in loadPrayerFeed — read-only.)
+// Honors: kind bubble (Inv #164), no points, bilingual, fail-soft, church_id
+// on inserts, soft framing (Inv #16). No multiply_shared.js change.
+// ═══════════════════════════════════════════════════════════════
+let _prayerReminder = null;   // member's prayer_reminders row (null = none / unset / table absent)
+
+// Fail-CLOSED loader: if prayer_reminders doesn't exist yet (008 not run) or any
+// error occurs, _prayerReminder stays null → no surface, no toast.
+async function loadPrayerReminder(){
+  _prayerReminder = null;
+  try{
+    const { data, error } = await db.from('prayer_reminders')
+      .select('*').eq('member_id', MEMBER.memberId).maybeSingle();
+    if(error) throw error;
+    _prayerReminder = data || null;
+  }catch(e){
+    console.warn('prayer reminder load failed (non-fatal, surface stays hidden):', e);
+    _prayerReminder = null;
+  }
+}
+
+// Items I'm actively praying for (status 'praying'); answered/removed excluded.
+function _prayerActiveListCount(){
+  return _prayerMyList.filter(i => i.status === 'praying').length;
+}
+
+// Is a "pray today" nudge DUE? enabled + something to pray for + the cadence
+// window since last_prompted_at has elapsed (Manila-local day boundaries). No-nag.
+function _prayerReminderDue(){
+  const rem = _prayerReminder;
+  if(!rem || !rem.enabled) return false;
+  if(_prayerActiveListCount() === 0) return false;
+  const last = rem.last_prompted_at ? new Date(rem.last_prompted_at) : null;
+  if(!last) return true;
+  const now = new Date();
+  if(rem.cadence === 'weekly') return (now - last) >= 7 * 86400000;
+  // daily: due once the local calendar day has rolled over
+  const _ymd = d => (window.MultiplyShared && MultiplyShared.dates)
+    ? MultiplyShared.dates.toYMD(d)
+    : (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+  return _ymd(last) !== _ymd(now);
+}
+
+// Home "pray today" surface. Conservative: at most once per cadence window
+// (stamps last_prompted_at on show), opt-in, hidden when nothing to pray for.
+function renderPrayTodaySurface(){
+  const el = document.getElementById('prayerTodayBanner');
+  if(!el) return;
+  if(!_prayerReminderDue()){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const tl = _prayerTL();
+  const n = _prayerActiveListCount();
+  el.innerHTML = `
+    <div class="ptoday-text">
+      <span class="en-text">🙏 You have ${n} on your prayer list — take a moment to pray today?</span>
+      <span class="tl-text">🙏 May ${n} sa iyong listahan — manalangin ka ba ngayon?</span>
+    </div>
+    <div class="ptoday-actions">
+      <button class="ptoday-btn primary" onclick="openPrayerMyList()"><span class="en-text">Pray now</span><span class="tl-text">Manalangin</span></button>
+      <button class="ptoday-btn" onclick="dismissPrayToday()"><span class="en-text">Not now</span><span class="tl-text">Hindi muna</span></button>
+    </div>`;
+  el.style.display = '';
+  _stampReminderPrompted();   // show at most once per cadence window
+}
+function dismissPrayToday(){
+  const el = document.getElementById('prayerTodayBanner');
+  if(el){ el.style.display = 'none'; el.innerHTML = ''; }
+}
+// Persist last_prompted_at = now (fire-and-forget). Local copy updated first so a
+// re-render this session won't re-show it even if the write is slow/fails.
+async function _stampReminderPrompted(){
+  if(!_prayerReminder) return;
+  const nowIso = new Date().toISOString();
+  _prayerReminder.last_prompted_at = nowIso;
+  try{
+    await db.from('prayer_reminders')
+      .update({ last_prompted_at: nowIso, updated_at: nowIso })
+      .eq('member_id', MEMBER.memberId);
+  }catch(e){ console.warn('reminder stamp failed (non-fatal):', e); }
+}
+
+// Cadence control (My List overlay): 'off' | 'daily' | 'weekly'. Upserts the
+// member's single prayer_reminders row (onConflict member_id). Fail-soft.
+async function setPrayerReminder(value){
+  const tl = _prayerTL();
+  const enabled = value !== 'off';
+  const cadence = value === 'weekly' ? 'weekly' : 'daily';
+  const nowIso = new Date().toISOString();
+  try{
+    const { error } = await db.from('prayer_reminders').upsert({
+      member_id: MEMBER.memberId,
+      enabled, cadence,
+      church_id: memberRow.church_id || null,
+      updated_at: nowIso
+    }, { onConflict: 'member_id' });
+    if(error) throw error;
+    const prev = _prayerReminder || {};
+    _prayerReminder = { ...prev, member_id: MEMBER.memberId, enabled, cadence };
+    showToast(enabled
+      ? (tl ? (cadence==='weekly' ? 'Lingguhang paalala — naka-on 🔔' : 'Araw-araw na paalala — naka-on 🔔')
+            : (cadence==='weekly' ? 'Weekly reminder on 🔔' : 'Daily reminder on 🔔'))
+      : (tl ? 'Naka-off ang paalala' : 'Reminder off'));
+  }catch(e){
+    console.warn('setPrayerReminder failed:', e);
+    showToast(tl ? 'Hindi na-save ang paalala.' : "Couldn't save the reminder.");
+  }
+}
+function _populateReminderSelect(){
+  const sel = document.getElementById('prReminderSelect');
+  if(!sel) return;
+  const tl = _prayerTL();
+  sel.innerHTML =
+    `<option value="off">${tl?'Naka-off':'Off'}</option>` +
+    `<option value="daily">${tl?'Araw-araw':'Daily'}</option>` +
+    `<option value="weekly">${tl?'Lingguhan':'Weekly'}</option>`;
+  const rem = _prayerReminder;
+  sel.value = (rem && rem.enabled) ? (rem.cadence === 'weekly' ? 'weekly' : 'daily') : 'off';
+}
+
+// "Add my EOLO ones" — seed each NAMED EOLO person into the personal prayer list
+// (source='eolo'). IDEMPOTENT: skip names already seeded (case-insensitive). No
+// SQL. Own items → kind bubble is trivially the member's own kind.
+async function seedEoloToList(){
+  const tl = _prayerTL();
+  const arr = (typeof getMyEolo === 'function') ? getMyEolo() : [];
+  const names = [...new Set((arr || []).map(p => (p && p.name || '').trim()).filter(Boolean))];
+  if(!names.length){
+    showToast(tl ? 'Wala ka pang pangalan sa EOLO.' : 'No EOLO names yet.');
+    return;
+  }
+  const existing = new Set(
+    _prayerMyList.filter(i => i.source === 'eolo').map(i => (i.title || '').trim().toLowerCase())
+  );
+  const toAdd = names.filter(n => !existing.has(n.toLowerCase()));
+  if(!toAdd.length){
+    showToast(tl ? 'Nasa listahan mo na lahat ng EOLO. 🙏' : 'All your EOLO names are already on your list. 🙏');
+    return;
+  }
+  const rows = toAdd.map(n => ({
+    member_id: MEMBER.memberId,
+    source:    'eolo',
+    title:     n,
+    body:      (tl ? 'Idinadalangin ang kaligtasan ni ' : 'Praying for the salvation of ') + n,
+    status:    'praying',
+    church_id: memberRow.church_id || null
+  }));
+  try{
+    const { error } = await db.from('prayer_list_items').insert(rows);
+    if(error) throw error;
+    await loadPrayerMyList();
+    _computePrayerRelevance(); renderPrayerCta();
+    renderMyPrayerList();
+    showToast(tl
+      ? ('Naidagdag ang ' + toAdd.length + ' EOLO 🙏')
+      : ('Added ' + toAdd.length + ' EOLO name' + (toAdd.length>1?'s':'') + ' 🙏'));
+  }catch(e){
+    console.warn('seedEoloToList failed:', e);
+    showToast(tl ? 'Hindi naidagdag. Subukan ulit.' : 'Could not add them. Try again.');
+  }
 }
 
 function _populatePrayerCat(selId, forList){
