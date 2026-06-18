@@ -13472,6 +13472,8 @@ async function openAiInsightsForMember(memberId){
 // chrome lives here (Inv #91). Read-only v1 (no override column yet).
 // ═══════════════════════════════════════════════════════════════
 let _crWeek = null, _crSnaps = [], _crZoneFilter = '';
+let _crMetricMeta = null;   // metric_key -> {display_name, category, sort_order}
+let _crProfileMeta = null;  // profile_key -> {zone_thresholds}
 
 function _crScopedIds(){
   // Coach+ (L3+) / Pastor → church-wide (null = no filter).
@@ -13491,6 +13493,12 @@ async function loadCareRadar(){
     const ids = _crScopedIds();
     const { weekStart, snapshots } = await MultiplyShared.svi.fetchLatest(ids ? { memberIds: ids } : {});
     _crWeek = weekStart; _crSnaps = snapshots || [];
+    // Metric labels/order + profile zone cutoffs — fetched once, cached, fail-soft
+    // (anon-readable). Powers the nested + transparent care-detail modal.
+    if (!_crMetricMeta){ _crMetricMeta = {}; try { const { data } = await db.from('svi_metrics')
+      .select('metric_key,display_name,category,sort_order'); (data||[]).forEach(r => _crMetricMeta[r.metric_key] = r); } catch(e){} }
+    if (!_crProfileMeta){ _crProfileMeta = {}; try { const { data } = await db.from('svi_weight_profiles')
+      .select('profile_key,zone_thresholds'); (data||[]).forEach(r => _crProfileMeta[r.profile_key] = r); } catch(e){} }
     const wkEl = document.getElementById('crWeek');
     if (wkEl) wkEl.textContent = weekStart
       ? `Week of ${weekStart}${(LEADER.leaderLevel||0) >= 3 ? ' · church-wide' : ' · your disciples'} · ${_crSnaps.length} members`
@@ -13582,36 +13590,112 @@ function openCareDetail(memberId){
   if (!s) return;
   const zm = svi.zoneMeta(s.zone), tm = svi.trendMeta(s.trend), act = svi.actionFor(s.zone, s.trend);
 
-  // Category bars (tolerant of 0-10 or 0-100 scoring)
+  // ── Transparent, nested care detail: metrics grouped under their DIMENSION,
+  //    each metric showing score × weight = contribution, plus an exact
+  //    total-score computation panel (faithful to the Edge Function formula). ──
+  const esc = MultiplyShared.escapeHTML;
+  const MUT = 'color:var(--muted)';
+  const prettyKey  = k => String(k||'').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+  const metricLabel = k => (_crMetricMeta && _crMetricMeta[k] && _crMetricMeta[k].display_name) || prettyKey(k);
+  const catLabel   = c => String(c||'other').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+  const fmtRaw = r => (r == null) ? 'n/a'
+    : (typeof r === 'number' && !Number.isInteger(r)) ? String(Math.round(r*100)/100) : String(r);
+  const fmtNum = n => {
+    if (n == null || isNaN(n)) return '—';
+    const r = Math.round(Number(n)*100)/100;          // ≤2dp
+    const str = r.toFixed(2).replace(/\.?0+$/,'');      // drop trailing zeros + dot
+    return (str === '' || str === '-0') ? '0' : str;
+  };
+  function metricRowHtml(k, obj){
+    const score  = (obj.score == null) ? null : Number(obj.score);
+    const weight = Number(obj.weight) || 0;
+    const raw    = ('raw' in obj) ? obj.raw : null;
+    const noteBadge = (obj.note === 'no_meeting_held')
+      ? ' <span style="font-size:10.5px;font-weight:700;color:var(--gold,#a07a28);background:var(--warn-bg,#fef7e0);border-radius:6px;padding:1px 6px;">⚠ no LC meeting held</span>'
+      : '';
+    const right = (score === null)
+      ? `<span style="${MUT}">— · no data (not counted)</span>`
+      : `${fmtNum(score)} × ${fmtNum(weight)} = ${fmtNum(score*weight)} <span style="${MUT}">(raw ${esc(fmtRaw(raw))})</span>`;
+    return `<div class="crm-metric" style="padding-left:14px"><span>${esc(metricLabel(k))}${noteBadge}</span><span style="white-space:nowrap">${right}</span></div>`;
+  }
+
+  // Stored dimension (category) scores — tolerant of 0-10 or 0-100 scoring.
   let cats = s.category_scores || {};
   if (typeof cats === 'string'){ try { cats = JSON.parse(cats); } catch(e){ cats = {}; } }
   const catVals = Object.values(cats).filter(v => typeof v === 'number');
   const catMax = catVals.length && Math.max.apply(null, catVals) > 10 ? 100 : 10;
-  const catHtml = Object.keys(cats).length
-    ? Object.entries(cats).map(([k,v]) => {
-        const num = (typeof v === 'number') ? v : 0;
-        const pct = Math.max(0, Math.min(100, (num / catMax) * 100));
-        return `<div class="crm-cat">
-          <div class="crm-cat-top"><span>${MultiplyShared.escapeHTML(k)}</span><span>${(Math.round(num*10)/10)}</span></div>
-          <div class="crm-cat-bar"><div class="crm-cat-fill" style="width:${pct}%"></div></div>
-        </div>`;
-      }).join('')
-    : '<div class="cr-empty">No category breakdown stored.</div>';
 
-  // Per-metric detail ({ metric_key: { raw, score } })
+  // Per-metric scores — group by dimension, accumulate the exact sums.
   let mets = s.metric_scores || {};
   if (typeof mets === 'string'){ try { mets = JSON.parse(mets); } catch(e){ mets = {}; } }
-  const metHtml = Object.keys(mets).length
-    ? Object.entries(mets).map(([k,v]) => {
-        const sc = (v && typeof v === 'object') ? v.score : v;
-        const raw = (v && typeof v === 'object' && 'raw' in v) ? ` (raw ${v.raw})` : '';
-        const note = (v && typeof v === 'object') ? v.note : null;
-        const noteBadge = note === 'no_meeting_held'
-          ? ' <span style="font-size:10.5px;font-weight:700;color:var(--gold,#a07a28);background:var(--warn-bg,#fef7e0);border-radius:6px;padding:1px 6px;">⚠ no LC meeting held</span>'
-          : '';
-        return `<div class="crm-metric"><span>${MultiplyShared.escapeHTML(k)}${noteBadge}</span><span>${sc != null ? sc : '—'}${raw}</span></div>`;
-      }).join('')
-    : '';
+  const groups = {};                 // category -> [ [key, obj], ... ]
+  let sumSW = 0, sumW = 0;           // Σ(score×weight), Σweight over non-null scores
+  const catSW = {}, catW = {};
+  Object.entries(mets).forEach(([k,v]) => {
+    const obj = (v && typeof v === 'object') ? v : { score: v };
+    const cat = obj.category || (_crMetricMeta && _crMetricMeta[k] && _crMetricMeta[k].category) || 'other';
+    (groups[cat] = groups[cat] || []).push([k, obj]);
+    if (obj.score !== null && obj.score !== undefined){
+      const sc = Number(obj.score), w = Number(obj.weight) || 0;
+      sumSW += sc*w; sumW += w;
+      catSW[cat] = (catSW[cat]||0) + sc*w; catW[cat] = (catW[cat]||0) + w;
+    }
+  });
+  Object.keys(groups).forEach(cat => groups[cat].sort((a,b) => {
+    const oa = (_crMetricMeta && _crMetricMeta[a[0]] && _crMetricMeta[a[0]].sort_order);
+    const ob = (_crMetricMeta && _crMetricMeta[b[0]] && _crMetricMeta[b[0]].sort_order);
+    const va = (oa == null ? 999 : oa), vb = (ob == null ? 999 : ob);
+    return (va !== vb) ? (va - vb) : String(a[0]).localeCompare(String(b[0]));
+  }));
+
+  // Dimensions = stored category scores (bar + nested metric rows).
+  const rendered = new Set();
+  let dimHtml = Object.entries(cats).map(([cat,v]) => {
+    rendered.add(cat);
+    const num = (typeof v === 'number') ? v : 0;
+    const pct = Math.max(0, Math.min(100, (num / catMax) * 100));
+    const derived = (catW[cat] > 0)
+      ? ` <span style="font-weight:400;${MUT}">(${fmtNum(catSW[cat])} ÷ ${fmtNum(catW[cat])})×10</span>` : '';
+    const rows = (groups[cat]||[]).map(([k,obj]) => metricRowHtml(k,obj)).join('');
+    return `<div class="crm-cat">
+      <div class="crm-cat-top"><span>${esc(catLabel(cat))}${derived}</span><span>${fmtNum(num)}</span></div>
+      <div class="crm-cat-bar"><div class="crm-cat-fill" style="width:${pct}%"></div></div>
+      <div style="margin-top:4px">${rows}</div>
+    </div>`;
+  }).join('');
+
+  // Orphan categories (metrics with no stored dimension score) → "Other".
+  const orphans = Object.keys(groups).filter(c => !rendered.has(c));
+  if (orphans.length){
+    const rows = orphans.map(c => (groups[c]||[]).map(([k,obj]) => metricRowHtml(k,obj)).join('')).join('');
+    dimHtml += `<div class="crm-cat">
+      <div class="crm-cat-top"><span style="text-transform:uppercase;letter-spacing:.04em;font-size:11px;font-weight:800;${MUT}">Other</span><span></span></div>
+      <div style="margin-top:4px">${rows}</div>
+    </div>`;
+  }
+  if (!dimHtml) dimHtml = '<div class="cr-empty">No metric breakdown stored.</div>';
+
+  // Score computation panel — the exact derivation.
+  const compLines = [
+    `<div>Σ (score × weight) = ${fmtNum(sumSW)}</div>`,
+    `<div>Σ weight = ${fmtNum(sumW)}</div>`
+  ];
+  if (sumW > 0){
+    const computed = (sumSW / sumW) * 10;
+    const stored = (s.total_score == null) ? null : Number(s.total_score);
+    const match = (stored != null && Math.abs(computed - stored) <= 0.5) ? ' ✓' : '';
+    compLines.push(`<div>Total = (${fmtNum(sumSW)} ÷ ${fmtNum(sumW)}) × 10 = ${fmtNum(computed)} → stored ${stored == null ? '—' : fmtNum(stored)}${match}</div>`);
+  } else {
+    compLines.push(`<div style="${MUT}">Insufficient data to score (needs ≥ half the metrics with data)</div>`);
+  }
+  const zt = _crProfileMeta && _crProfileMeta[s.profile_used] && _crProfileMeta[s.profile_used].zone_thresholds;
+  const zoneExtra = (zt && zt.thriving != null && zt.warming != null)
+    ? ` (this profile — Thriving ≥ ${fmtNum(zt.thriving)} · Warming ≥ ${fmtNum(zt.warming)})` : '';
+  compLines.push(`<div style="margin-top:4px">Zone: ${esc(zm.label)}${zoneExtra}</div>`);
+  const compHtml = `<div style="border:1px solid var(--border,#e0dccb);border-radius:10px;padding:10px 12px;margin-top:14px;font-size:12px;line-height:1.7">
+    <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;${MUT};margin-bottom:6px">Score computation</div>
+    ${compLines.join('')}
+  </div>`;
 
   document.getElementById('crModal').innerHTML = `
     <div class="crm-head">
@@ -13625,8 +13709,8 @@ function openCareDetail(memberId){
     <div class="crm-body">
       <div class="cr-row-action cr-act-${act.level}" style="display:inline-block;margin-bottom:12px">Next step: ${MultiplyShared.escapeHTML(act.text)}</div>
       <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Dimensions</div>
-      ${catHtml}
-      ${metHtml ? `<div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px">Metric detail</div>${metHtml}` : ''}
+      ${dimHtml}
+      ${compHtml}
     </div>`;
   document.getElementById('crModalOverlay').classList.add('show');
 }
