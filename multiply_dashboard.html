@@ -13496,7 +13496,7 @@ async function loadCareRadar(){
     // Metric labels/order + profile zone cutoffs — fetched once, cached, fail-soft
     // (anon-readable). Powers the nested + transparent care-detail modal.
     if (!_crMetricMeta){ _crMetricMeta = {}; try { const { data } = await db.from('svi_metrics')
-      .select('metric_key,display_name,category,sort_order'); (data||[]).forEach(r => _crMetricMeta[r.metric_key] = r); } catch(e){} }
+      .select('metric_key,display_name,category,sort_order,compute_type,compute_config,score_rules'); (data||[]).forEach(r => _crMetricMeta[r.metric_key] = r); } catch(e){} }
     if (!_crProfileMeta){ _crProfileMeta = {}; try { const { data } = await db.from('svi_weight_profiles')
       .select('profile_key,zone_thresholds'); (data||[]).forEach(r => _crProfileMeta[r.profile_key] = r); } catch(e){} }
     const wkEl = document.getElementById('crWeek');
@@ -13697,6 +13697,89 @@ function openCareDetail(memberId){
     ${compLines.join('')}
   </div>`;
 
+  // ── "How each number is derived": data-driven, plain-language per-metric
+  //    explanation from compute_config + score_rules + the lookback window. ──
+  const WS = s.week_start;
+  const winStr = (meta) => {
+    if (!meta) return '';
+    const cfg = meta.compute_config || {};
+    let lookback = 0;
+    if (meta.compute_type === 'sql_query')      lookback = (cfg.lookback_weeks || 4) * 7;
+    else if (meta.compute_type === 'count_rows') lookback = cfg.lookback_days || (cfg.lookback_weeks ? cfg.lookback_weeks * 7 : 0) || 30;
+    else return ''; // jsonb_extract / boolean_check / date_recency have no window
+    if (!lookback || !WS) return '';
+    const ws = new Date(WS + 'T00:00:00Z');
+    const lo = new Date(ws); lo.setUTCDate(lo.getUTCDate() - lookback + 1);
+    const fmtD = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric', timeZone:'UTC' });
+    return fmtD(lo) + '–' + fmtD(ws);
+  };
+  const rawMeaning = (meta, v) => {
+    const cfg = (meta && meta.compute_config) || {};
+    const ct = meta && meta.compute_type;
+    const raw = v.raw;
+    const n = Number(raw) || 0;
+    if (ct === 'sql_query') {
+      if (cfg.computed === 'lc_attendance_rate') return `attended ${Math.round(n)}% of LC meetings held`;
+      if (cfg.computed === 'lc_meetings_led' || (meta && meta.metric_key === 'service_lc_led')) return `your LC met ${fmtRaw(raw)} week${n === 1 ? '' : 's'} (≥1 member present)`;
+      if (cfg.table === 'devotional_reflections') return `devotionals with a reflection ${Math.round(n * 100)}% of expected days (Sundays skipped)`;
+      if (cfg.table === 'interventions') return `${fmtRaw(raw)} active intervention${n === 1 ? '' : 's'} started`;
+      if (cfg.rate_based) return `attendance ${Math.round(n * 100)}% of expected (~1 per ${cfg.typical_interval_days || 7}d)`;
+      return `count ${fmtRaw(raw)}`;
+    }
+    if (ct === 'jsonb_extract') return `${fmtRaw(raw)} ${n === 1 ? 'person' : 'people'} on your EOLO list`;
+    if (ct === 'boolean_check') return raw ? 'has an active ministry role' : 'no active ministry role';
+    if (ct === 'date_recency') return (raw == null || n >= 99999) ? 'no diagnostic on record' : `last diagnostic ${fmtRaw(raw)} day${n === 1 ? '' : 's'} ago`;
+    if (ct === 'count_rows') return `${fmtRaw(raw)} record${n === 1 ? '' : 's'} in the period`;
+    return `raw ${fmtRaw(raw)}`;
+  };
+  const tierStr = (meta, v) => {
+    const rules = meta && meta.score_rules;
+    if (!rules || !rules.type) return '';
+    const raw = Number(v.raw);
+    if (rules.type === 'rate_to_score') {
+      let rate = raw; if (rules.input_is_percentage) rate = rate / 100;
+      const sorted = [...(rules.ranges || [])].sort((a, b) => b.min_rate - a.min_rate);
+      for (const r of sorted) if (rate >= r.min_rate) return `rate ${r.min_rate}+ → ${r.score}`;
+      return 'below lowest tier → 0';
+    }
+    if (rules.type === 'linear_threshold') {
+      const sorted = [...(rules.thresholds || [])].sort((a, b) => b.value - a.value);
+      for (const t of sorted) if (raw >= t.value) return `${t.value}+ → ${t.score}`;
+      return 'below lowest tier → 0';
+    }
+    if (rules.type === 'percentage_to_score') {
+      const sorted = [...(rules.ranges || [])].sort((a, b) => b.min - a.min);
+      for (const r of sorted) if (raw >= r.min) return `${r.min}%+ → ${r.score}`;
+      return 'below lowest tier → 0';
+    }
+    if (rules.type === 'days_to_score') {
+      const sorted = [...(rules.ranges || [])].sort((a, b) => a.max_days - b.max_days);
+      for (const r of sorted) if (raw <= r.max_days) return `≤${r.max_days} days → ${r.score}`;
+      return 'beyond all tiers → 0';
+    }
+    if (rules.type === 'boolean_to_score') return `yes → ${rules.true_score ?? 10} / no → ${rules.false_score ?? 0}`;
+    return '';
+  };
+  const explainMetric = (key, v, meta, weekStart) => {
+    const score = (v.score == null) ? null : Number(v.score);
+    const weight = Number(v.weight) || 0;
+    if (score === null) return 'no data recorded — not counted.';
+    if (!meta) return `raw ${fmtRaw(v.raw)} → score ${fmtNum(v.score)} × weight ${fmtNum(weight)} = ${fmtNum(Number(v.score) * weight)}.`;
+    const win = winStr(meta);
+    return `${rawMeaning(meta, v)}${win ? (' (' + win + ')') : ''}. ${tierStr(meta, v)} → score ${fmtNum(score)}. × weight ${fmtNum(weight)} = ${fmtNum(score * weight)}.`;
+  };
+
+  // Grouped by dimension, same order/labels as the dimension list above.
+  const explLine = (k, obj) => `<div style="padding-left:14px;font-size:12px;line-height:1.55;margin:3px 0"><b>${esc(metricLabel(k))}</b> — ${esc(explainMetric(k, obj, (_crMetricMeta && _crMetricMeta[k]) || null, WS))}</div>`;
+  const explHead = (label, upper) => `<div style="font-weight:700;font-size:11.5px;margin:8px 0 2px;${upper ? ('text-transform:uppercase;letter-spacing:.04em;' + MUT) : ''}">${esc(label)}</div>`;
+  let explBody = '';
+  Object.keys(cats).forEach(cat => { const rows = (groups[cat] || []).map(([k, o]) => explLine(k, o)).join(''); if (rows) explBody += explHead(catLabel(cat), false) + rows; });
+  if (orphans.length) { const rows = orphans.map(c => (groups[c] || []).map(([k, o]) => explLine(k, o)).join('')).join(''); if (rows) explBody += explHead('Other', true) + rows; }
+  const explainHtml = explBody ? `<div style="margin-top:14px">
+    <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;${MUT};margin-bottom:2px">How each number is derived</div>
+    ${explBody}
+  </div>` : '';
+
   document.getElementById('crModal').innerHTML = `
     <div class="crm-head">
       <span class="cr-zone-dot" style="background:${zm.color};width:14px;height:14px"></span>
@@ -13711,6 +13794,7 @@ function openCareDetail(memberId){
       <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Dimensions</div>
       ${dimHtml}
       ${compHtml}
+      ${explainHtml}
       <div style="margin-top:12px;font-size:11px;line-height:1.6;color:var(--muted)">
         ℹ️ <strong>About LC meetings:</strong> For an LC leader (L2+), "LC Meetings Led" is scored from whether their LC actually met (≥1 member present at an LC Meeting). For members, if their LC did NOT meet, "LC Group Attendance" and "LC Engagement Rate" are softened to a floor (not a full zero) and flagged "no LC meeting held" — the impact is felt even when it isn't the member's fault, surfacing that LC fellowship is missing so the LC/leader gets attention.
       </div>
