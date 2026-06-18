@@ -994,6 +994,17 @@ body.lang-tl .tl-text{display:inline;}
   font-family:inherit;font-size:13px;font-weight:600;
   cursor:pointer;margin-top:14px;
 }
+/* Top-right ✕ close for the prayer modals — sticky so it stays reachable as the
+   feed scrolls; reuses each modal's existing (no-arg) close handler. ≥44px tap. */
+.pr-top-close{
+  position:sticky;top:0;float:right;z-index:6;
+  width:44px;height:44px;min-width:44px;
+  margin:-8px -6px 0 8px;
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;border:none;cursor:pointer;
+  font-size:19px;line-height:1;color:var(--muted);border-radius:50%;
+}
+.pr-top-close:active{background:var(--cream);}
 
 /* ═══════════════ PRAYER / PANALANGIN (Wave 1) ═══════════════ */
 /* Home CTA card — prominent, primary action + light relevance badge. NO points. */
@@ -2335,6 +2346,7 @@ body.lang-tl .tl-text{display:inline;}
 <!-- ═══════════════ PRAYER / PANALANGIN sheet (Wave 1) ═══════════════ -->
 <div class="lc-detail-backdrop" id="prayerBackdrop" onclick="closePrayerSheet(event)">
   <div class="lc-detail" id="prayerSheet" onclick="event.stopPropagation()">
+    <button class="pr-top-close" onclick="closePrayerSheet()" aria-label="Close · Isara">✕</button>
     <h2>
       <span class="en-text">🙏 Prayer / Panalangin</span>
       <span class="tl-text">🙏 Panalangin</span>
@@ -2367,6 +2379,7 @@ body.lang-tl .tl-text{display:inline;}
 <!-- Prayer compose modal -->
 <div class="lc-detail-backdrop" id="prayerComposeBackdrop" onclick="closePrayerCompose(event)">
   <div class="lc-detail" id="prayerComposeSheet" onclick="event.stopPropagation()">
+    <button class="pr-top-close" onclick="closePrayerCompose()" aria-label="Close · Isara">✕</button>
     <h2 id="prComposeTitle">
       <span class="en-text">Share a prayer request</span>
       <span class="tl-text">Magbahagi ng panalangin</span>
@@ -2416,6 +2429,7 @@ body.lang-tl .tl-text{display:inline;}
      the main screen stays in the background and is still there when this closes. -->
 <div class="lc-detail-backdrop" id="prayerListBackdrop" onclick="closePrayerMyList(event)">
   <div class="lc-detail" id="prayerListSheet" onclick="event.stopPropagation()">
+    <button class="pr-top-close" onclick="closePrayerMyList()" aria-label="Close · Isara">✕</button>
     <h2>
       <span class="en-text">📋 My Prayer List</span>
       <span class="tl-text">📋 Aking Listahan</span>
@@ -2435,6 +2449,7 @@ body.lang-tl .tl-text{display:inline;}
 <!-- Prayer "mark answered" modal (captures an optional praise note) -->
 <div class="lc-detail-backdrop" id="prayerAnsweredBackdrop" onclick="closeAnsweredModal(event)">
   <div class="lc-detail" id="prayerAnsweredSheet" onclick="event.stopPropagation()" style="max-width:380px">
+    <button class="pr-top-close" onclick="closeAnsweredModal()" aria-label="Close · Isara">✕</button>
     <h2><span class="en-text">🙌 Mark as answered</span><span class="tl-text">🙌 Markahang sinagot</span></h2>
     <div class="lc-detail-meta">
       <span class="en-text">Give thanks — share how God answered (optional)</span>
@@ -11070,10 +11085,48 @@ async function savePrayerToList(reqId){
     await _loadPrayerEngagement();      // refresh "saved by N"
     _computePrayerRelevance(); renderPrayerCta();
     renderPrayerFeed();
+    // B-3: one-time soft "first save" nudge to the requester (fire-and-forget,
+    // never blocks the save). The PULL "saved by N" count above is untouched.
+    _maybeNotifyFirstSave(reqId, r);
     showToast(tl ? 'Idinagdag sa listahan 🙏' : 'Added to your list 🙏');
   }catch(e){
     console.warn('save to list failed:', e);
     showToast(tl ? 'Hindi na-save. Subukan ulit.' : 'Could not save. Try again.');
+  }
+}
+
+// ── B-3: first-ever-save soft notification to the requester (Wave 2) ──
+// Fires at most ONCE per request — only when the save we just inserted is the
+// very first 'saved' row for it (saves soft-delete to 'removed' but the row
+// persists, so a count of exactly 1 means first-ever). SOFT framing (Inv #16),
+// no saver name (privacy), kind-bubbled (memberKind === requesterKind), and
+// never self-notify. Reuses the existing notifications table — no SQL.
+async function _maybeNotifyFirstSave(reqId, r){
+  try{
+    if(!r || !r.requester_id) return;
+    if(r.requester_id === MEMBER.memberId) return;        // no self-notify
+    // Kind bubble: the requester must be the same kind as me. The feed is already
+    // kind-filtered, so this is normally true — but guard explicitly (Inv #164).
+    const reqM = _prayerReqMembers[r.requester_id];
+    if(prayerMemberKind(reqM) !== _prayerViewerKind()) return;
+    // First-ever save? Count 'saved' rows for this request (ANY status).
+    const { count, error } = await db.from('prayer_list_items')
+      .select('id', { count:'exact', head:true })
+      .eq('request_id', reqId)
+      .eq('source', 'saved');
+    if(error) throw error;
+    if(count !== 1) return;                                // not the first save → send nothing
+    await db.from('notifications').insert({
+      recipient_id: r.requester_id,
+      kind: 'prayer_save',
+      title: 'Someone is praying with you 🙏 · May kasama kang nananalangin 🙏',
+      body: 'Someone added your prayer request to their list — people are praying with you 🙏'
+          + '\n\nMay nagdagdag ng iyong kahilingan sa kanilang listahan — may mga nananalangin nang kasama mo 🙏',
+      payload: { request_id: reqId, event: 'first_save' },
+      church_id: memberRow.church_id || null
+    });
+  }catch(e){
+    console.warn('first-save notification failed (non-fatal):', e);
   }
 }
 
