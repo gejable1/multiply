@@ -130,7 +130,7 @@ async function runComputation(supabase: any, params: any) {
   // Load active members
   let memberQuery = supabase
     .from("members")
-    .select("id,name,lc_group,pipeline_level,ministry_role,ministry,ministry2,ministry3,eolo,enrolled_date,is_test_member")
+    .select("id,name,lc_group,pipeline_level,discipler_id,ministry_role,ministry,ministry2,ministry3,eolo,enrolled_date,is_test_member")
     .or("is_test_member.is.null,is_test_member.eq.false");
 
   if (params.member_id) {
@@ -145,6 +145,33 @@ async function runComputation(supabase: any, params: any) {
   if (memErr) throw new Error(`Loading members: ${memErr.message}`);
   if (!members) return { error: "No members returned" };
 
+  // ── PRECOMPUTE: which LC groups actually MET (≥1 member present at an LC
+  //    Meeting), per LC key, over the last 8 weeks. An UNFILTERED active-member
+  //    lite map is loaded so groups stay complete even on single-member dry
+  //    runs (the filtered `members` above may hold just one person).
+  const { data: allLite } = await supabase
+    .from("members")
+    .select("id,pipeline_level,discipler_id")
+    .or("is_test_member.is.null,is_test_member.eq.false");
+  const liteById = new Map<string, any>((allLite || []).map((m: any) => [m.id, m]));
+
+  const lcWin = new Date(weekStart + "T00:00:00Z");
+  const lcLower = new Date(lcWin); lcLower.setUTCDate(lcLower.getUTCDate() - 55); // 8 weeks
+  const lcLowerStr = lcLower.toISOString().slice(0, 10);
+  const { data: lcAtt } = await supabase
+    .from("attendance")
+    .select("member_id,event_date")
+    .eq("event_type", "LC Meeting").eq("present", true)
+    .gte("event_date", lcLowerStr).lte("event_date", weekStart);
+
+  const meetingsHeld = new Map<string, Set<string>>(); // lcKey -> Set(event_date)
+  for (const a of (lcAtt || [])) {
+    const att = liteById.get(a.member_id); if (!att) continue;
+    const key = lcKeyOf(att); if (!key) continue;
+    if (!meetingsHeld.has(key)) meetingsHeld.set(key, new Set());
+    meetingsHeld.get(key)!.add(a.event_date);
+  }
+
   // Compute per member
   const results: any[] = [];
   const errors: any[] = [];
@@ -152,7 +179,7 @@ async function runComputation(supabase: any, params: any) {
   for (const member of members) {
     try {
       const snapshot = await computeMemberSnapshot(
-        supabase, member, metrics, profilesByLevel, defaultProfile, weekStart, systemStartDate
+        supabase, member, metrics, profilesByLevel, defaultProfile, weekStart, systemStartDate, meetingsHeld
       );
       results.push(snapshot);
     } catch (e) {
@@ -199,7 +226,8 @@ async function runComputation(supabase: any, params: any) {
 async function computeMemberSnapshot(
   supabase: any, member: any, metrics: any[],
   profilesByLevel: Map<any, any>, defaultProfile: any,
-  weekStart: string, systemStartDate: string | null
+  weekStart: string, systemStartDate: string | null,
+  meetingsHeld: Map<string, Set<string>>
 ) {
   const level = member.pipeline_level ?? 0;
   const profile = profilesByLevel.get(level) || defaultProfile;
@@ -220,6 +248,25 @@ async function computeMemberSnapshot(
     if (weight <= 0) continue;
 
     metricsTotal++;
+
+    // SERVICE_LC_LED (L2+ only): scored from whether THIS leader's LC actually
+    // met, evidenced by member LC-attendance (meetingsHeld keyed by leader id).
+    // L0/L1 don't lead an LC → null (not counted).
+    if (metric.metric_key === "service_lc_led") {
+      if (level < 2) {
+        metricScores[metric.metric_key] = { raw: null, score: null, weight, category: metric.category };
+      } else {
+        const raw = meetingsHeld.get(member.id)?.size || 0;
+        const score = applyScoreRules(raw, metric.score_rules);
+        metricScores[metric.metric_key] = { raw, score, weight, category: metric.category };
+        metricsWithData++; weightedSum += score * weight; totalWeight += weight;
+        if (!categoryScores[metric.category]) categoryScores[metric.category] = { total: 0, weight: 0 };
+        categoryScores[metric.category].total += score * weight;
+        categoryScores[metric.category].weight += weight;
+      }
+      continue;
+    }
+
     let raw: any = null;
     try {
       raw = await computeMetric(supabase, member, metric, weekStart, systemStartDate);
@@ -228,10 +275,23 @@ async function computeMemberSnapshot(
       raw = null;
     }
 
-    const score = (raw === null || raw === undefined) ? null : applyScoreRules(raw, metric.score_rules);
+    let score = (raw === null || raw === undefined) ? null : applyScoreRules(raw, metric.score_rules);
+    let note: string | null = null;
+
+    // Soften LC-fellowship metrics to a FLOOR when the member's LC did NOT meet
+    // (vs a full penalty when it met but they were absent). The impact is still
+    // felt — surfacing that LC fellowship is missing — but it isn't a hard zero.
+    if (metric.metric_key === "gather_lc" || metric.metric_key === "fellowship_lc_rate") {
+      const lcKey = lcKeyOf(member);
+      const lcMet = !!(lcKey && meetingsHeld.get(lcKey)?.size);
+      if (!lcMet && score !== null) {
+        score = (metric.compute_config?.no_meeting_floor_score ?? 4);
+        note = "no_meeting_held";
+      }
+    }
 
     metricScores[metric.metric_key] = {
-      raw, score, weight, category: metric.category,
+      raw, score, weight, category: metric.category, ...(note ? { note } : {}),
     };
 
     if (score !== null) {
@@ -618,6 +678,12 @@ async function writeSnapshots(supabase: any, snapshots: any[], weekStart: string
 // =====================================================================
 // HELPERS
 // =====================================================================
+// LC key for a member: an L2+ leader is keyed by their OWN id (they lead an LC);
+// everyone else is keyed by their discipler_id (the LC they belong to).
+function lcKeyOf(m: any): string | null {
+  return ((m?.pipeline_level ?? 0) >= 2 ? m?.id : m?.discipler_id) || null;
+}
+
 function mostRecentMonday(): string {
   const d = new Date();
   const day = d.getUTCDay();
