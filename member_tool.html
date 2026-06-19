@@ -5271,6 +5271,9 @@ function isAssessmentDone(a){
 }
 
 function openAssessment(a){
+  // Remember the screen we launched from (e.g. Discover) so Close lands back here,
+  // not the default Home, when the assessment navigates back in-frame.
+  try{ sessionStorage.setItem('mmt_return_screen', sessionStorage.getItem('mmt_current_screen') || 'assess'); }catch(e){}
   // Open with member id query param so the assessment page knows whose data to load
   location.href = a.file + '?id=' + encodeURIComponent(MEMBER.memberId);
 }
@@ -5676,6 +5679,7 @@ async function saveModalField(){
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
 function goTo(pageName){
+  try{ sessionStorage.setItem('mmt_current_screen', pageName); }catch(e){}
   document.querySelectorAll('.screen-page').forEach(p => p.classList.remove('active'));
   const page = document.getElementById('page-'+pageName);
   if(page) page.classList.add('active');
@@ -5688,6 +5692,16 @@ function goTo(pageName){
     if(content) content.scrollTop = 0;
   }
 }
+
+// After returning from an assessment (in-frame nav), land back on the launching
+// screen (e.g. Discover) instead of the default Home — covers full reloads AND
+// bfcache restores. One-shot: the key is consumed on use.
+window.addEventListener('pageshow', function(){
+  try{
+    const _rs = sessionStorage.getItem('mmt_return_screen');
+    if(_rs){ sessionStorage.removeItem('mmt_return_screen'); goTo(_rs); }
+  }catch(e){}
+});
 
 // ═══════════════════════════════════════════════════════════════
 // SUNDAY SERMONS — read, review, share
