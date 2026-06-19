@@ -1491,6 +1491,11 @@ if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()) {
     try {
       var s = MultiplyShared.getValidSession();
       if (s) Object.assign(LEADER, s);
+      // Re-run the pastor-only / scope UI now that the real session is known —
+      // these were gated at boot when the embed session hadn't arrived yet.
+      if (typeof revealPastorTab === 'function') revealPastorTab();
+      if (typeof _refreshMyMinistryNav === 'function') _refreshMyMinistryNav();
+      if (typeof updateScopeCounts === 'function') updateScopeCounts();
     } catch (e) {}
   });
 }
@@ -1597,13 +1602,15 @@ function setActiveScopeTab(btn){
   if(el) el.textContent = hints[LeaderScope.getCurrent()] || '';
 }
 
-// On boot, reveal the "All Members" tab for pastors.
-(function revealPastorTab(){
+// On boot, reveal the "All Members" tab for pastors. A named function (not an
+// IIFE) so the embed session re-sync can re-run it once the async session lands.
+function revealPastorTab(){
   if(LeaderScope.isPastor()){
     const b = document.getElementById('scopeBtnAll');
     if(b){ b.style.display = 'flex'; }
   }
-})();
+}
+revealPastorTab();
 
 // Audit log helper — delegated to shared module.
 function logView(viewedMemberId, context){
