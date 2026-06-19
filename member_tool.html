@@ -2822,11 +2822,29 @@ let _sysSettingsMMT = { meta: {} };
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
+// Time-of-day greeting, pinned to Manila (the app is Manila-centric). Picks
+// umaga / hapon / gabi by the current Manila hour. Both en-text and tl-text stay
+// Tagalog, matching the existing design. Updates only the greeting phrase spans
+// (the name span has class "sub", so it's untouched).
+function _setGreeting(){
+  try {
+    const h = parseInt(new Intl.DateTimeFormat('en-US',
+      { timeZone:'Asia/Manila', hour:'numeric', hour12:false }).format(new Date()), 10);
+    // 0-4 & 18-23 → gabi · 5-11 → umaga · 12-17 → hapon
+    const word = (h < 5 || h >= 18) ? 'gabi' : (h < 12 ? 'umaga' : 'hapon');
+    const txt = 'Magandang ' + word + ',';
+    const g = document.getElementById('greetingTxt');
+    if (g) g.querySelectorAll('.en-text, .tl-text').forEach(s => s.textContent = txt);
+  } catch (e) { /* leave the static greeting on any failure */ }
+}
+
 async function initMMT(){
   window.__mmtPhase('initMMT start');
   // Apply saved language + font scale early to avoid flash
   applySavedLang();
   applySavedFontScale();
+  // Time-of-day greeting (Manila), independent of member data.
+  _setGreeting();
 
   // Spinner safety net: if loadMember takes longer than 8 seconds, swap the
   // "Loading…" text for a "Taking longer than usual" hint so the user knows
