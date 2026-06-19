@@ -2807,6 +2807,7 @@ const MILESTONES = {
 const db = MultiplyShared.getDB();
 let memberRow = null;       // fresh row from members table
 let devoStreak = 0;
+let _devoExitConfirmedShort = false; // one-shot override: member chose "Exit anyway" on the <10-word reminder
 let currentEditField = null;
 
 // Caveat-banner state (May 2026 — instrument redesign bridge):
@@ -3139,8 +3140,10 @@ async function loadReflectionGap(){
       .eq('member_id', MEMBER.memberId)
       .eq('entry_date', todayStr);
     if(error) throw error;
-    const doneToday = (data || []).some(r =>
-      r.reflection && String(r.reflection).trim().length > 0);
+    // A reflection counts as "done" ONLY at >=10 words — must agree with the
+    // streak-completion gate in closeDevoReader (Inv #62 + 10-word rule), else
+    // the home nag would clear at 1 word while the streak still needs 10.
+    const doneToday = (data || []).some(r => _wordCount(r.reflection) >= 10);
     // Remind only when today's devotional exists AND is not yet done.
     _devoReflectionGap = !doneToday;
   }catch(e){
@@ -7274,6 +7277,27 @@ function renderReaderBody(){
   }
 }
 
+// ───── Reflection-completion helpers (Inv #62 + 10-word rule) ─────
+function _wordCount(s){
+  const t = (s||'').trim();
+  return t ? t.split(/\s+/).filter(Boolean).length : 0;
+}
+
+async function _devoCompleteToday(){
+  try{
+    const {data} = await db.from('attendance')
+      .select('id')
+      .eq('member_id', MEMBER.memberId)
+      .eq('event_type', 'devotional')
+      .eq('event_date', todayIso())
+      .maybeSingle();
+    return !!data;
+  }catch(e){
+    console.warn('devo-complete check failed (non-fatal):', e);
+    return true; // fail-soft: don't trap the member on a DB hiccup
+  }
+}
+
 async function closeDevoReader(){
   if(!currentReaderEntry){
     document.getElementById('devoReader').classList.remove('show');
@@ -7283,6 +7307,22 @@ async function closeDevoReader(){
   // Read final reflection text
   const ref = document.getElementById('reflectionInput');
   const finalText = ref ? ref.value : currentReflection;
+
+  const isToday   = currentReaderEntry.entry_date === todayIso();
+  const wordCount = _wordCount(finalText);
+  const meetsMin  = wordCount >= 10;
+
+  // Reflection-completion gate (Inv #62 + 10-word rule). If exiting TODAY's
+  // entry under 10 words and today isn't complete yet, remind once; they may
+  // keep writing or exit anyway (words still saved, no streak credit).
+  if(isToday && !meetsMin && !_devoExitConfirmedShort){
+    const alreadyComplete = await _devoCompleteToday();
+    if(!alreadyComplete){
+      showDevoMinWordModal(wordCount);
+      return; // hold the reader open
+    }
+  }
+  _devoExitConfirmedShort = false; // consume any override
 
   // Save reflection if changed
   let savedReflection = false;
@@ -7310,9 +7350,9 @@ async function closeDevoReader(){
     }
   }
 
-  // Mark today as read (silent) ONLY when reading TODAY's entry
+  // Mark today complete (silent) ONLY for TODAY's entry with a >=10-word reflection (Inv #62)
   let streakAdvanced = false;
-  if(currentReaderEntry.entry_date === todayIso()){
+  if(isToday && meetsMin){
     streakAdvanced = await markDevoReadSilent();
   }
 
@@ -7342,6 +7382,32 @@ async function closeDevoReader(){
     }
   }, savedReflection || streakAdvanced ? 700 : 0);
 }
+
+// ───── <10-word reflection reminder (Inv #62 + 10-word rule) ─────
+function showDevoMinWordModal(n){
+  let modal = document.getElementById('devoMinWordModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'devoMinWordModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:22px;';
+    document.body.appendChild(modal);
+  }
+  const tl = document.body.classList.contains('lang-tl');
+  const titleEn = 'Almost there 🌱', titleTl = 'Halos tapos na 🌱';
+  const bodyEn = `Your reflection is ${n} word${n===1?'':'s'}. Write at least 10 words to mark today's devotional complete and keep your streak going.`;
+  const bodyTl = `${n} salita pa lang ang iyong reflection. Sumulat ng hindi bababa sa 10 salita para mabilang na kompleto ang devotional ngayon at magpatuloy ang iyong streak.`;
+  modal.innerHTML = `
+    <div style="background:var(--paper,#fff);max-width:360px;width:100%;border-radius:18px;padding:22px 20px;box-shadow:0 18px 50px rgba(0,0,0,.3);font-family:inherit;">
+      <div style="font-size:18px;font-weight:800;color:var(--forest,#2a5c40);margin-bottom:8px;">${tl?titleTl:titleEn}</div>
+      <div style="font-size:14.5px;line-height:1.5;color:var(--ink,#26312b);margin-bottom:18px;">${tl?bodyTl:bodyEn}</div>
+      <button onclick="_devoMinKeepWriting()" style="width:100%;padding:12px;background:var(--forest,#2a5c40);color:#fff;border:none;border-radius:12px;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:9px;">${tl?'Magpatuloy sa pagsulat':'Keep writing'}</button>
+      <button onclick="_devoMinExitAnyway()" style="width:100%;padding:11px;background:transparent;color:var(--muted,#6a6a6a);border:1px solid rgba(0,0,0,.12);border-radius:11px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;">${tl?'Lumabas muna':'Exit anyway'}</button>
+    </div>`;
+  modal.style.display = 'flex';
+}
+function _hideDevoMinWordModal(){ const m=document.getElementById('devoMinWordModal'); if(m) m.style.display='none'; }
+function _devoMinKeepWriting(){ _hideDevoMinWordModal(); const r=document.getElementById('reflectionInput'); if(r) r.focus(); }
+function _devoMinExitAnyway(){ _hideDevoMinWordModal(); _devoExitConfirmedShort = true; closeDevoReader(); }
 
 // ═══════════════════════════════════════════════════════════════
 // BROWSE-MONTH SHEET
