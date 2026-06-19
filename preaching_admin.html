@@ -851,14 +851,26 @@ async function autofillNext12(){
   }
   const mainstay = mainstays[0];
 
-  // Compute date window: today → today + 12 weeks (84 days)
+  // Anchor the fill window to the end of the current schedule
+  const { data: _lastA } = await db.from('wednesday_preaching')
+    .select('preach_date')
+    .order('preach_date', { ascending: false })
+    .limit(1);
+  const lastAssignedStr = (_lastA && _lastA[0]) ? _lastA[0].preach_date : null;
+
+  // Start from the later of (last assigned date, today); never backfill the past
   const today = new Date(); today.setHours(0,0,0,0);
-  const todayStr = ymd(today);
-  const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 84);
+  let startDate = today;
+  if (lastAssignedStr) {
+    const la = new Date(lastAssignedStr + 'T00:00:00'); la.setHours(0,0,0,0);
+    if (la > today) startDate = la;
+  }
+  const startStr = ymd(startDate);
+  const windowEnd = new Date(startDate); windowEnd.setDate(windowEnd.getDate() + 84);
 
   // Generate all Sundays and Wednesdays in window
   const serviceDays = [];
-  let cursor = new Date(today);
+  let cursor = new Date(startDate);
   while (cursor <= windowEnd) {
     const dow = cursor.getDay();
     if (dow === 0 || dow === 3) {
@@ -909,7 +921,7 @@ async function autofillNext12(){
       .select('preach_date')
       .eq('preacher_member_id', rec.member_id)
       .eq('service_type', 'wednesday')
-      .lt('preach_date', todayStr)
+      .lt('preach_date', startStr)
       .order('preach_date', { ascending: false })
       .limit(1);
     const lastDate = (pastA && pastA[0]) ? pastA[0].preach_date : null;
@@ -1105,7 +1117,8 @@ async function autofillNext12(){
 
   const sunCount = inserts.filter(i => i.service_type === 'sunday').length;
   const wedCount = inserts.length - sunCount;
-  const msg = `Auto-fill ${inserts.length} unassigned slot${inserts.length > 1 ? 's' : ''}?\n\n` +
+  const msg = `Auto-fill ${inserts.length} unassigned slot${inserts.length > 1 ? 's' : ''}?\n` +
+              `From ${fmtDate(parseDate(winStart))} to ${fmtDate(parseDate(winEnd))}\n\n` +
               `  • ${wedCount} Wednesday slot${wedCount !== 1 ? 's' : ''}\n` +
               `  • ${sunCount} Sunday slot${sunCount !== 1 ? 's' : ''}\n\n` +
               `Rotation: ${rotation.length} non-mainstay preacher${rotation.length !== 1 ? 's' : ''}\n` +
