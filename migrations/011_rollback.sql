@@ -1,6 +1,7 @@
 -- ============================================================================
 -- migrations/011_rollback.sql  — emergency undo for 011_devo_reflection_streak_cleanup.sql
---   NOT run by default. Restores every deleted row from the Step-1 backup.
+--   NOT run unless restoring. Restores every deleted row from the Step-1 backup;
+--   drop the backup table only after a confirmed restore.
 --   Idempotent: rows already present in attendance are skipped (matched by id).
 --   HUMAN-GATED (Inv #153/#157) — the Pastor runs this in Supabase only if needed.
 -- ============================================================================
