@@ -6667,9 +6667,24 @@ function normalizePHPhone(raw){
 // CELEBRATION FEED — synthesize wins from existing LC data
 // ═══════════════════════════════════════════════════════════════
 async function loadCelebrationFeed(){
-  // Canonical LC family = members under the same LCL (discipler_id), Inv
-  // #1/#16/#59/#166 — NEVER lc_group text. No discipler → no LC family feed.
-  if(!memberRow.discipler_id){
+  // LC anchor (Inv #59/#166 — key on discipler_id, never lc_group):
+  //  • Viewer HAS a discipler (every member AND every normal LCL with an upline)
+  //    → show the LC they BELONG to (their discipler's flock). UNCHANGED.
+  //  • ONLY top-of-tree pastoral staff (NO discipler) who actually lead a flock
+  //    anchor on the LC they LEAD (their own flock), so they aren't left empty.
+  let lcLeaderId = memberRow.discipler_id || null;
+  const _noDiscipler = !memberRow.discipler_id || memberRow.discipler_id === MEMBER.memberId;
+  if(_noDiscipler){
+    lcLeaderId = null;
+    try{
+      const { count: _flock } = await db.from('members')
+        .select('id', { count:'exact', head:true })
+        .eq('discipler_id', MEMBER.memberId)
+        .neq('is_external_user', true);
+      if(_flock && _flock > 0) lcLeaderId = MEMBER.memberId;
+    }catch(e){ console.warn('LC-leader detection failed (non-fatal):', e); }
+  }
+  if(!lcLeaderId){
     celebrationWins = []; celebrationGroupBadges = [];
     return;
   }
@@ -6679,7 +6694,7 @@ async function loadCelebrationFeed(){
   const cq = db.from('members')
     .select('id,name,photo_url,share_with_lc,is_test_member,pipeline_level,facilitator_role,spiritual_gifts,disc_primary,enneagram_type,love_language_primary,strengths_top5,conflict_primary,diagnostic_zone,birthday,updated_at')
     .neq('is_external_user', true)
-    .eq('discipler_id', memberRow.discipler_id);
+    .eq('discipler_id', lcLeaderId);
   const {data: lcRows, error} = await cq;
   if(error) throw error;
   // No pipeline_level gate (Pre-Pipeline LC family count too). Test members
@@ -6688,7 +6703,7 @@ async function loadCelebrationFeed(){
   // Privacy: drop anyone who opted out of LC sharing (but never hide self).
   // One `eligible` set drives EVERY win type + both group badges, so scope is
   // identical across the feed — strictly same-LCG, sharing members only.
-  const eligible = all.filter(m => !(m.share_with_lc === false && m.id !== MEMBER.memberId));
+  const eligible = all.filter(m => !(m.share_with_lc === false && m.id !== MEMBER.memberId) && m.id !== lcLeaderId);
   const lcIds = eligible.map(m => m.id);
   const recent_threshold_days = 21; // ~3 weeks of recent wins
   const cutoff = Date.now() - recent_threshold_days * 24*3600*1000;
@@ -6728,19 +6743,20 @@ async function loadCelebrationFeed(){
   // ── (B) DEVOTIONAL STREAKS (per-member) — batched, paginated (Inv: never
   // trust a single 1000-row page; the MAR truncation bug came from exactly that).
   // Streak source matches loadDevoStreak: attendance rows event_type='devotional'.
-  // LC leader (discipler) is a STREAK-ONLY modeling subject: ALWAYS ON (ignores
-  // share_with_lc), kind-filtered (Inv #164), guest-excluded, and skipped when the
-  // viewer IS their own discipler (they'd already render as "You").
+  // LC leader = the LC's anchor (lcLeaderId): the STREAK-ONLY modeling subject,
+  // ALWAYS ON (ignores share_with_lc), kind-filtered (Inv #164), guest-excluded.
+  // For a member this is their discipler; for no-discipler staff it's the viewer
+  // → renders as "You 👑 LC LEADER".
   let leaderRow = null;
-  if(memberRow.discipler_id && memberRow.discipler_id !== MEMBER.memberId){
+  if(lcLeaderId){
     const { data: lr } = await db.from('members')
       .select('id,name,photo_url,is_test_member,is_external_user')
-      .eq('id', memberRow.discipler_id).maybeSingle();
+      .eq('id', lcLeaderId).maybeSingle();
     if(lr && lr.is_external_user !== true && (_viewerIsTestMember() || !lr.is_test_member)){
       leaderRow = lr;
     }
   }
-  const streakIds = leaderRow ? [...lcIds, leaderRow.id] : lcIds.slice();
+  const streakIds = leaderRow ? [...new Set([...lcIds, leaderRow.id])] : lcIds.slice();
 
   const streakByMember = new Map();
   if(streakIds.length){
