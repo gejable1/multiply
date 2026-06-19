@@ -229,6 +229,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 </style>
 </head>
 <body data-lang="en">
+<!-- Always-visible Close — returns to the launching tool (MMT) without closing it (Inv #12). -->
+<button id="strengthsCloseBtn" onclick="strengthsClose()" aria-label="Close" title="Close"
+  style="position:fixed;top:.6rem;right:.6rem;z-index:99999;background:rgba(20,16,14,.66);color:#fff;border:none;border-radius:999px;padding:.55rem 1rem;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.28);font-family:inherit;line-height:1;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);">
+  <span class="tl-text">✕ Isara</span><span class="en-text">✕ Close</span>
+</button>
 
 <!-- Font size control (assessment standard, May 2026) -->
 <div class="font-toggle" role="group" aria-label="Font size">
@@ -580,6 +585,23 @@ let _consecutiveTimeouts = 0;
 // ═══════════════════════════════════════════════════════
 // LANGUAGE TOGGLE
 // ═══════════════════════════════════════════════════════
+// Close the assessment and return to the launching tool (MMT) WITHOUT closing it (Inv #12).
+// Same-frame nav from MMT → history.back() returns to MMT with its state preserved;
+// window.close() handles any new-tab case; referrer/home are last-resort fallbacks.
+function strengthsClose(){
+  try { window.close(); } catch(e) {}
+  setTimeout(() => {
+    try {
+      const ref = document.referrer;
+      const sameHost = ref && new URL(ref).host === location.host;
+      if (sameHost && history.length > 1) { history.back(); return; } // back to MMT, state preserved
+      if (sameHost) { location.href = ref; return; }                  // reload the firing page
+    } catch(e) {}
+    if (history.length > 1) { history.back(); return; }
+    location.href = 'index.html';                                     // safe home (shell)
+  }, 200);
+}
+
 function setLang(lang){
   if (lang !== 'tl' && lang !== 'en') lang = 'en';
   _lang=lang;
