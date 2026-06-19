@@ -6728,8 +6728,22 @@ async function loadCelebrationFeed(){
   // ── (B) DEVOTIONAL STREAKS (per-member) — batched, paginated (Inv: never
   // trust a single 1000-row page; the MAR truncation bug came from exactly that).
   // Streak source matches loadDevoStreak: attendance rows event_type='devotional'.
+  // LC leader (discipler) is a STREAK-ONLY modeling subject: ALWAYS ON (ignores
+  // share_with_lc), kind-filtered (Inv #164), guest-excluded, and skipped when the
+  // viewer IS their own discipler (they'd already render as "You").
+  let leaderRow = null;
+  if(memberRow.discipler_id && memberRow.discipler_id !== MEMBER.memberId){
+    const { data: lr } = await db.from('members')
+      .select('id,name,photo_url,is_test_member,is_external_user')
+      .eq('id', memberRow.discipler_id).maybeSingle();
+    if(lr && lr.is_external_user !== true && (_viewerIsTestMember() || !lr.is_test_member)){
+      leaderRow = lr;
+    }
+  }
+  const streakIds = leaderRow ? [...lcIds, leaderRow.id] : lcIds.slice();
+
   const streakByMember = new Map();
-  if(lcIds.length){
+  if(streakIds.length){
     const since = new Date(); since.setDate(since.getDate() - 120); // covers up to ~100-day streaks
     const sinceYMD = _toYMD(since);
     const devoRows = [];
@@ -6738,7 +6752,7 @@ async function loadCelebrationFeed(){
       const { data, error: derr } = await db.from('attendance')
         .select('member_id,event_date')
         .eq('event_type','devotional').eq('present', true)
-        .in('member_id', lcIds).gte('event_date', sinceYMD)
+        .in('member_id', streakIds).gte('event_date', sinceYMD)
         .order('event_date', { ascending:false })
         .range(from, from+PAGE-1);
       if(derr) throw derr;
@@ -6752,7 +6766,7 @@ async function loadCelebrationFeed(){
     }
     for(const [mid, rows] of grouped){ streakByMember.set(mid, computeStreak(rows)); }
   }
-  const STREAK_FLOOR = 7; // 7+ days qualifies (Pastor's call)
+  const STREAK_FLOOR = 6; // 6+ days qualifies (Pastor's call)
   const streakWins = [];
   for(const m of eligible){
     const s = streakByMember.get(m.id) || 0;
@@ -6763,6 +6777,20 @@ async function loadCelebrationFeed(){
         label_en:`is on a ${s}-day devotional streak`,
         label_tl:`${s} araw nang sunud-sunod sa devotional`,
         streak:s
+      });
+    }
+  }
+  // LC leader modeling streak (always-on; flagged for the LC LEADER tag in render).
+  if(leaderRow){
+    const ls = streakByMember.get(leaderRow.id) || 0;
+    if(ls >= STREAK_FLOOR){
+      streakWins.push({
+        memberId: leaderRow.id, memberName: leaderRow.name, photoUrl: leaderRow.photo_url||'',
+        isTest: !!leaderRow.is_test_member, isLeader: true,
+        icon:'🔥',
+        label_en:`is on a ${ls}-day devotional streak`,
+        label_tl:`${ls} araw nang sunud-sunod sa devotional`,
+        streak: ls
       });
     }
   }
@@ -6847,14 +6875,14 @@ async function loadCelebrationFeed(){
       };
     }
   }
-  // 2) LCG devotional streak — how many are on a 7+ day streak this week.
+  // 2) LCG devotional streak — how many are on a 6+ day streak this week.
   let streakBadge = null;
   const streakerCount = eligible.filter(m => (streakByMember.get(m.id) || 0) >= STREAK_FLOOR).length;
   if(streakerCount >= 1){
     streakBadge = {
       icon:'🔥',
-      label_en:`Your LCG: ${streakerCount} ${streakerCount===1?'member is':'members are'} on a 7+ day devotional streak`,
-      label_tl:`Ang LCG mo: ${streakerCount} miyembro ang 7+ araw nang sunud-sunod sa devotional`
+      label_en:`Your LCG: ${streakerCount} ${streakerCount===1?'member is':'members are'} on a 6+ day devotional streak`,
+      label_tl:`Ang LCG mo: ${streakerCount} miyembro ang 6+ araw nang sunud-sunod sa devotional`
     };
   }
   celebrationGroupBadges = [attendanceBadge, streakBadge].filter(Boolean);
@@ -6892,6 +6920,9 @@ function renderCelebrationFeed(){
     const testTag = w.isTest
       ? '<span style="background:#fde2d3;color:#9a3412;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em;vertical-align:middle">🧪 TEST</span>'
       : '';
+    const leaderTag = w.isLeader
+      ? '<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;margin-left:5px;letter-spacing:.04em;vertical-align:middle">👑 LC LEADER</span>'
+      : '';
     // Only assessment wins carry a timestamp; streaks/birthdays don't.
     const whenHtml = w.whenIso
       ? `<div class="win-when">${MultiplyShared.escapeHTML(timeAgo(w.whenIso))}</div>`
@@ -6908,7 +6939,7 @@ function renderCelebrationFeed(){
         <div class="win-av">${MultiplyShared.escapeHTML(initials)}${photoImg}<span class="win-badge">${w.icon}</span></div>
         <div class="win-body">
           <div class="win-text">
-            <span class="name">${MultiplyShared.escapeHTML(displayName)}</span>${testTag}
+            <span class="name">${MultiplyShared.escapeHTML(displayName)}</span>${testTag}${leaderTag}
             <span class="en-text"> ${MultiplyShared.escapeHTML(w.label_en)}</span>
             <span class="tl-text"> ${MultiplyShared.escapeHTML(w.label_tl)}</span>
           </div>
