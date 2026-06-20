@@ -41,6 +41,18 @@
   const PASTOR_LEVEL = 5;
 
   // ───── Supabase client (singleton) ─────
+  // Phase-2 tenancy (C2): read the stored church-scoped JWT (NULL if absent/expired).
+  function _readTenancyJwt() {
+    try {
+      const raw = sessionStorage.getItem('multiply_jwt');
+      if (!raw) return null;
+      const j = JSON.parse(raw);
+      if (!j || !j.token) return null;
+      if (j.expires_at && Date.parse(j.expires_at) <= Date.now()) return null;
+      return j.token;
+    } catch (e) { return null; }
+  }
+
   let _db = null;
   function getDB() {
     if (_db) return _db;
@@ -48,9 +60,14 @@
       console.error('Supabase SDK not loaded. Include @supabase/supabase-js BEFORE multiply_shared.js.');
       return null;
     }
-    _db = global.supabase.createClient(SB_URL, SB_KEY, {
+    const opts = {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-    });
+    };
+    // C2: attach the church-scoped JWT if present → request runs as `authenticated`
+    // with a church_id claim. Absent/expired → anon (today's behavior, unchanged).
+    const _jwt = _readTenancyJwt();
+    if (_jwt) opts.global = { headers: { Authorization: 'Bearer ' + _jwt } };
+    _db = global.supabase.createClient(SB_URL, SB_KEY, opts);
     return _db;
   }
 
