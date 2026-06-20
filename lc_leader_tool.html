@@ -513,12 +513,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <div class="leader-role" id="homeRole">LC Leader</div>
         <div class="leader-lc" id="homeLc"></div>
       </div>
-      <div onclick="switchLeader()" title="Switch to another leader" style="
+      <div onclick="showScreen('screenMyProfile')" title="My Profile" style="
         width:38px;height:38px;border-radius:10px;background:var(--surface3);
         border:1px solid var(--border);display:flex;align-items:center;
         justify-content:center;cursor:pointer;color:var(--muted);font-size:16px;
         flex-shrink:0;transition:all .15s">
-        🔄
+        👤
       </div>
     </div>
   </div>
@@ -675,6 +675,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-label">How to install</div>
       <div class="qa-desc">Add to home screen</div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: MY PROFILE ══════════════════ -->
+<!-- Self-service: the leader views/edits their OWN record + takes/reviews
+     their own assessments. Entry is the 👤 button in the home header.
+     Reuses the existing ASSESSMENTS registry + self-edit-token machinery;
+     no MD modal, no share/WhatsApp modal — direct window.open only. -->
+<div class="screen" id="screenMyProfile">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">My Profile</div>
+  </div>
+  <!-- 2-tab toggle (mirrors .filter-tabs/.ftab), default = My Info -->
+  <div class="filter-tabs" id="mpTabs">
+    <button class="ftab active" data-mp="info" onclick="_mpSwitchTab('info',this)">My Info</button>
+    <button class="ftab" data-mp="assess" onclick="_mpSwitchTab('assess',this)">My Assessments</button>
+  </div>
+  <div style="padding:14px">
+    <div id="mpTabInfo"></div>
+    <div id="mpTabAssess" style="display:none"></div>
   </div>
 </div>
 
@@ -1270,6 +1291,7 @@ function showScreen(id){
   if(id==='screenMembers') renderMemberList();
   if(id==='screenReports') renderReports();
   if(id==='screenSendLinks') renderSendLinks();
+  if(id==='screenMyProfile') renderMyProfile();
   window.scrollTo(0,0);
 
   // Push to screen history (skip if same as current).
@@ -2741,6 +2763,185 @@ function viewAssessmentResult(key){
   }
   const url = BASE_URL + 'profile_results_viewer.html?id=' + encodeURIComponent(currentMember.id) + '&type=' + encodeURIComponent(type);
   window.open(url, '_blank');
+}
+
+// ═══════════════════════════════════════════════════════
+// MY PROFILE — self-service screen (Session 41)
+// The leader views/edits their OWN record and takes/reviews their own
+// assessments. Reuses ASSESSMENTS, hasFormalAssessment, createSelfEditToken,
+// BASE_URL, and the profile_results_viewer — no MD modal, no share modal.
+// ═══════════════════════════════════════════════════════
+let _myProfileRow = null;  // the leader's own members row, resolved on open
+
+function _mpEsc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Tab toggle for the My Info / My Assessments panels.
+function _mpSwitchTab(which, btn){
+  document.querySelectorAll('#mpTabs .ftab').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const info = document.getElementById('mpTabInfo');
+  const assess = document.getElementById('mpTabAssess');
+  if(info)   info.style.display   = (which==='info')   ? '' : 'none';
+  if(assess) assess.style.display = (which==='assess') ? '' : 'none';
+}
+
+// Open the self-edit page for the leader's OWN record (direct, no share modal).
+async function openMyProfile(){
+  const memberId = window.LEADER && window.LEADER.leaderId;
+  if(!memberId){ toast('Could not find your record.', 'error'); return; }
+  try{
+    const url = await createSelfEditToken(memberId);
+    window.open(url, '_blank', 'noopener');
+  }catch(e){
+    console.error('My Profile self-edit link error:', e);
+    toast('Could not open editor: ' + (e.message || e), 'error');
+  }
+}
+
+// Resolve the leader's own member row reliably. Prefer the already-loaded
+// roster (allMembers); if the leader is outside the loaded scope, fetch the
+// row directly using the SAME column set as loadMyMembers so all assessment
+// fields are present. Caches into _myProfileRow for take/view actions.
+async function _getMyRow(){
+  const id = window.LEADER && window.LEADER.leaderId;
+  if(!id) return null;
+  const found = (allMembers || []).find(m => m.id === id);
+  if(found){ _myProfileRow = found; return found; }
+  try{
+    const {data, error} = await db.from('members')
+      .select('id,created_at,updated_at,name,photo_url,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
+      .eq('id', id).single();
+    if(error) throw error;
+    _myProfileRow = data || null;
+    return _myProfileRow;
+  }catch(e){
+    console.error('_getMyRow fetch failed:', e);
+    return null;
+  }
+}
+
+// Render the My Profile screen — info summary + assessments grid. Fail-soft.
+async function renderMyProfile(){
+  // Always land on My Info when the screen opens.
+  _mpSwitchTab('info', document.querySelector('#mpTabs .ftab[data-mp="info"]'));
+
+  const infoEl = document.getElementById('mpTabInfo');
+  const assessEl = document.getElementById('mpTabAssess');
+  if(infoEl)   infoEl.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:13px">Loading…</div>';
+  if(assessEl) assessEl.innerHTML = '';
+
+  let myRow = null;
+  try{ myRow = await _getMyRow(); }catch(e){ myRow = null; }
+
+  if(!myRow){
+    if(infoEl) infoEl.innerHTML =
+      '<div style="padding:1rem;background:#fdecea;border-radius:8px;color:#7a2020;font-size:13px;text-align:center">' +
+      '⚠️ Could not load your profile right now. Please try again.</div>';
+    return;
+  }
+
+  // ── Read-only info summary (only rows that have content) ──
+  const lvl = myRow.pipeline_level;
+  const levelName = (MultiplyShared.LEVEL_NAMES && lvl != null) ? MultiplyShared.LEVEL_NAMES[lvl] : null;
+  const roleTxt = myRow.facilitator_role || levelName || (lvl != null ? ('Level ' + lvl) : null);
+
+  const rows = [];
+  const addRow = (label, val) => {
+    if(val == null || String(val).trim() === '') return;
+    rows.push(
+      '<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">' +
+        '<div style="min-width:104px;color:var(--muted);font-size:12px;font-weight:600">' + _mpEsc(label) + '</div>' +
+        '<div style="flex:1;color:var(--text);font-size:13px;line-height:1.4">' + _mpEsc(val) + '</div>' +
+      '</div>');
+  };
+  addRow('Name', myRow.name);
+  addRow('Role / Level', roleTxt);
+  addRow('LC Group', myRow.lc_group);
+  addRow('Contact', myRow.contact);
+  addRow('Address', myRow.address);
+  addRow('Birthday', myRow.birthday);
+
+  if(infoEl){
+    infoEl.innerHTML =
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px">' +
+        (rows.length ? rows.join('') : '<div style="color:var(--muted);font-size:13px">No details on file yet.</div>') +
+      '</div>' +
+      '<button onclick="openMyProfile()" title="Open and edit your own personal information" ' +
+        'style="width:100%;margin-top:14px;padding:12px;background:var(--gold);color:#0f0f13;border:none;' +
+        'border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">✏️ Edit my info</button>';
+  }
+
+  await renderMyAssessments(myRow);
+}
+
+// Assessments grid — mirrors the member-detail assessment card, but with SELF
+// actions (take/view the leader's OWN results). Status via hasFormalAssessment.
+async function renderMyAssessments(myRow){
+  const wrap = document.getElementById('mpTabAssess');
+  if(!wrap) return;
+  if(!myRow){
+    wrap.innerHTML = '<div style="padding:1rem;color:var(--muted);font-size:13px">Could not load your assessments.</div>';
+    return;
+  }
+
+  // The leader may be outside the loaded scope, so _membersWithGiftsDiag might
+  // not include him — confirm his gifts_diagnostic row directly so the gifts
+  // status is correct (fail-soft: leave as not-formal on error).
+  let giftsFormal = _membersWithGiftsDiag.has(myRow.id);
+  if(!giftsFormal){
+    try{
+      const {data} = await db.from('gifts_diagnostic').select('member_id').eq('member_id', myRow.id).maybeSingle();
+      if(data) giftsFormal = true;
+    }catch(e){ /* fail-soft */ }
+  }
+
+  // Salvation intentionally absent — no viewer (pastoral guardrail).
+  const VIEWER_TYPE = {gifts:'gifts', disc:'disc', strengths:'strengths', love:'love_language', enneagram:'enneagram', conflict:'conflict_style'};
+
+  wrap.innerHTML = ASSESSMENTS.map(a => {
+    const formal     = (a.key === 'gifts') ? giftsFormal : hasFormalAssessment(myRow, a);
+    const noted      = hasAssessment(myRow, a);
+    const val        = noted ? (Array.isArray(myRow[a.field]) ? myRow[a.field].slice(0,2).join(', ') : String(myRow[a.field]).split(',')[0].trim()) : null;
+    const viewerType = VIEWER_TYPE[a.key];
+    const canView    = formal && !!viewerType;
+
+    const statusHtml = formal
+      ? `<div class="ar-result">${_mpEsc(val || 'Done')}</div>`
+      : `<div class="ar-result" style="color:var(--red)">Not taken</div>`;
+
+    const takeLabel = formal ? 'Retake' : 'Take now';
+    const takeClass = formal ? 'ar-done' : 'ar-send';
+
+    return `<div class="assess-row">
+      <div class="ar-icon">${a.icon}</div>
+      <div class="ar-info">
+        <div class="ar-name">${_mpEsc(a.name)}</div>
+        ${statusHtml}
+      </div>
+      <div class="ar-actions">
+        ${canView ? `<button class="ar-action ar-view" onclick="viewMyAssessment('${viewerType}')" title="View results">👁 View</button>` : ''}
+        <button class="ar-action ${takeClass}" onclick="takeMyAssessment('${a.file}')">${takeLabel}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Launch an assessment with the leader's OWN id so results save to his record.
+function takeMyAssessment(file){
+  const id = window.LEADER && window.LEADER.leaderId;
+  if(!id){ toast('Could not find your record.', 'error'); return; }
+  const nm = (_myProfileRow && _myProfileRow.name) || '';
+  window.open(BASE_URL + file + '?id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(nm), '_blank');
+}
+
+// Open the leader's OWN results in the shared viewer.
+function viewMyAssessment(type){
+  const id = window.LEADER && window.LEADER.leaderId;
+  if(!id){ toast('Could not find your record.', 'error'); return; }
+  window.open(BASE_URL + 'profile_results_viewer.html?id=' + encodeURIComponent(id) + '&type=' + encodeURIComponent(type), '_blank');
 }
 
 // ─────────────────────────────────────────────────────────────
