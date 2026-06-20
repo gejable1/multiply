@@ -533,6 +533,26 @@ async function handlePinConfirmSubmit(){
 // ═══════════════════════════════════════════════════════════
 // LOGIN SUCCESS — write session, log, redirect
 // ═══════════════════════════════════════════════════════════
+// Phase-2 tenancy (C1): call the auth-login EF → store {token,church_id,exp} under
+// 'multiply_jwt'. INERT plumbing — stored but NOT consumed until C2 (getDB attach).
+async function _mintTenancyJwt(memberId, pin){
+  if(!memberId || !pin) return;
+  const res = await fetch(SB_URL + '/functions/v1/auth-login', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY },
+    body: JSON.stringify({ member_id: memberId, pin: String(pin) }),
+  });
+  if(!res.ok) throw new Error('auth-login HTTP ' + res.status);
+  const data = await res.json();
+  if(!data || !data.token) throw new Error('no token in response');
+  sessionStorage.setItem('multiply_jwt', JSON.stringify({
+    token: data.token,
+    church_id: (data.profile && data.profile.church_id) || null,
+    expires_at: data.expires_at || null,
+    member_id: memberId,
+  }));
+}
+
 async function loginSuccess(){
   const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
   const session = {
@@ -546,6 +566,10 @@ async function loginSuccess(){
     sessionStart: new Date().toISOString(),
   };
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+  // Phase-2 tenancy (C1): mint + store church-scoped JWT (inert; best-effort, non-fatal).
+  try { await _mintTenancyJwt(selectedMember.id, pinEntry); }
+  catch(e){ console.warn('tenancy JWT mint failed (non-fatal):', e); }
 
   // Update last-login (best-effort, non-fatal)
   try{
