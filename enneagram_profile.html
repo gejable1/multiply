@@ -99,9 +99,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:white;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;}
 .toast.show{opacity:1;transform:translateY(0);}
 /* Language Toggle — standard rounded-pill style (matches love_language, disc, strengths) */
-.lang-toggle{position:fixed;top:12px;right:12px;z-index:300;display:flex;background:var(--paper);border:1.5px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.12);}
+.lang-toggle{position:fixed;bottom:18px;right:18px;z-index:300;display:flex;background:var(--paper);border:1.5px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.12);}
 .lt-btn{padding:5px 14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;border:none;background:transparent;cursor:pointer;color:var(--muted);transition:all .15s;letter-spacing:.03em;}
 .lt-btn.active{background:var(--gold,#b8882a);color:white;}
+/* ── FONT SIZE CONTROL (assessment standard) ── */
+.font-toggle{position:fixed;bottom:18px;right:178px;z-index:300;display:flex;align-items:center;gap:2px;background:var(--paper);border:1.5px solid var(--border);border-radius:30px;padding:3px;box-shadow:0 2px 12px rgba(0,0,0,.12);font-family:'DM Sans',sans-serif;}
+.ft-btn{border:none;background:transparent;font-family:inherit;font-weight:700;cursor:pointer;border-radius:25px;color:var(--lighter);transition:all .15s;padding:7px 11px;line-height:1;}
+.ft-btn.ft-minus{font-size:13px;}
+.ft-btn.ft-plus{font-size:16px;}
+.ft-btn:hover{background:rgba(184,136,42,.10);}
+.ft-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.ft-label{font-size:10.5px;font-weight:700;color:var(--ink);padding:0 6px;min-width:38px;text-align:center;}
 
 /* Language-specific display */
 .q-text-en, .desc-en { display: block; }
@@ -112,8 +120,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 .lang-tl .en-text { display: none !important; }
 
 @media (max-width: 768px) {
-  .lang-toggle { top: 10px; right: 10px; }
+  .lang-toggle { bottom: 14px; right: 12px; }
   .lt-btn { padding: 4px 11px; font-size: 10px; }
+  .font-toggle { bottom: 54px; right: 12px; padding: 2px; }
+  .ft-btn { padding: 6px 9px; }
 }
 </style>
 </head>
@@ -122,6 +132,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 <div class="lang-toggle">
   <button class="lt-btn active" id="lt-en" onclick="setLanguage('en')">English</button>
   <button class="lt-btn" id="lt-tl" onclick="setLanguage('tl')">Filipino</button>
+</div>
+
+<!-- Font size control (assessment standard) -->
+<div class="font-toggle" role="group" aria-label="Font size">
+  <button class="ft-btn ft-minus" id="ft-down" onclick="changeFontScale(-1)" aria-label="Decrease text size">A−</button>
+  <span class="ft-label" id="ft-label">100%</span>
+  <button class="ft-btn ft-plus" id="ft-up" onclick="changeFontScale(1)" aria-label="Increase text size">A+</button>
 </div>
 
 <div class="cover">
@@ -477,6 +494,33 @@ function setLanguage(lang) {
   // Save preference
   localStorage.setItem('enneagram_language', lang);
 }
+
+// ── FONT SIZE SLIDER (assessment standard) ──
+const _ENN_FONT_KEY = 'multiply_enneagram_fontscale';
+const _ENN_FONT_STEPS = [0.90, 1.00, 1.10, 1.25, 1.40];
+let _enn_fontIdx = 1;
+function applyFontScale(){
+  const scale = _ENN_FONT_STEPS[_enn_fontIdx];
+  document.body.style.zoom = scale;
+  const lbl = document.getElementById('ft-label');
+  if (lbl) lbl.textContent = Math.round(scale * 100) + '%';
+  const dn = document.getElementById('ft-down');
+  const up = document.getElementById('ft-up');
+  if (dn) dn.disabled = (_enn_fontIdx <= 0);
+  if (up) up.disabled = (_enn_fontIdx >= _ENN_FONT_STEPS.length - 1);
+}
+function changeFontScale(direction){
+  _enn_fontIdx = Math.max(0, Math.min(_ENN_FONT_STEPS.length - 1, _enn_fontIdx + direction));
+  applyFontScale();
+  try { localStorage.setItem(_ENN_FONT_KEY, String(_enn_fontIdx)); } catch(e){}
+}
+(function initFontScale(){
+  try {
+    const saved = parseInt(localStorage.getItem(_ENN_FONT_KEY), 10);
+    if (!isNaN(saved) && saved >= 0 && saved < _ENN_FONT_STEPS.length) _enn_fontIdx = saved;
+  } catch(e){}
+  applyFontScale();
+})();
 </script>
 <script src="multiply_close.js?v=1"></script>
 </body>
