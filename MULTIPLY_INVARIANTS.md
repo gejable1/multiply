@@ -2121,4 +2121,60 @@ The SVI `service_lc_led`, `gather_lc`, and `fellowship_lc_rate` metrics are driv
 
 ---
 
+### **173. Devotional streak + SVI credit require a ≥10-WORD reflection — never a bare reader-close**
+
+`member_tool.html` `closeDevoReader()` must NOT write a devotional `attendance` row (`event_type='devotional'`) on reader-close alone — that inflated streaks/SVI off pure reads and violated Inv #62 (a devotional row = reflection COMPLETION). A devotional counts (streak advances, SVI credit, home-nag clears) ONLY when **today's** reflection has **≥10 words** — `_wordCount()` splits on `\s+`; `_devoCompleteToday()` is the single source of truth (also used by `loadReflectionGap`). Closing with <10 words shows an exit-reminder modal ("Keep writing" / "Exit anyway"): the partial text is still saved, but no streak/SVI credit. Historical inflated rows were cleaned by `migrations/011` (diagnostic + cleanup + rollback), **RUN by the Pastor** (today-inclusive, idempotent), backup table `_backup_devo_attendance_cleanup_20260620`; deleted rows were all 0-word reads, lowest kept = 18 words (clean separation).
+
+**Established June 20, 2026 (Session 39). Invariant #173 added — count now 173.**
+
+---
+
+### **174. LC Celebration feed — streak floor 6 + the LC leader's own streak is an always-on modeling win**
+
+In `member_tool.html` `loadCelebrationFeed()`/`renderCelebrationFeed()`: streak celebrations show **continuously while the streak is ≥6 days** (floor was 7), group badge reads "6+". The **LC leader's own streak** is pushed as a modeling win with a **👑 LC LEADER** tag and is **always-on** — it ignores `share_with_lc` (the leader models the habit for the flock). Self appears as "You"/"Ikaw" when they have a qualifying win.
+
+**Established June 20, 2026 (Session 39). Invariant #174 added — count now 174.**
+
+---
+
+### **175. LC Celebration feed — self-anchor only for no-discipler pastoral staff who lead a flock**
+
+The feed is scoped to an LC. For **top-of-tree pastoral staff with no discipler** (`!memberRow.discipler_id || discipler_id===self`) who **lead a flock** (a count of members with `discipler_id===self` > 0), anchor the feed to **self** (`lcLeaderId = MEMBER.memberId`) so they see their own LC's wins. **Normal LCLs who have an upline keep seeing the LC they belong to** (`lcLeaderId = memberRow.discipler_id`) — do NOT anchor every LCL to self. The flock query, eligible filter, and leaderRow all key on `lcLeaderId`; `streakIds = [...new Set([...lcIds, leaderRow.id])]`.
+
+**Established June 20, 2026 (Session 39). Invariant #175 added — count now 175.**
+
+---
+
+### **176. Inside a `zoom:var(--fs)` container, centered-column padding must divide 100vw by var(--fs)**
+
+When a container carries `zoom:var(--fs)` (MMT A−/A+ font slider on `.content-wrap`/`.reader-body`), its available width becomes `100vw ÷ fs`, but a centered-column padding written as `calc((100vw − 520px)/2)` still uses the **un-zoomed** 100vw → at fs>1 the padding exceeds the shrunken width and content collapses to a 1-letter-per-line sliver. **Rule:** every centered-column padding **inside** a zoomed element must use `100vw / var(--fs, 1)` (the four inside-zoom sites in MMT were fixed; native chrome **outside** the zoom — topbar, tabbar, reader-topbar, fab-controls — stays unchanged).
+
+**Established June 20, 2026 (Session 39). Invariant #176 added — count now 176.**
+
+---
+
+### **177. Shared Close affordance lives in a sibling module `multiply_close.js` — NOT in multiply_shared.js**
+
+Standalone pages (assessments, viewers) get their ✕ Close from repo-root `multiply_close.js?v=1` — an Inv #74-style **sibling module** with **independent `?v=`** (like `multiply_slides_nav.js`). It self-injects a fixed top-right ✕ Close (idempotent, bilingual `.tl-text`/`.en-text`) and returns to the launcher **without closing it** (Inv #12): `window.close()` → same-host `history.back()` → referrer → safe home (`data-home`, default `index.html`); exposes `window.MultiplyClose={mount,close}`; auto-mounts (handles early/late load). It is **deliberately NOT folded into `multiply_shared.js`** — none of the 7 assessments load shared.js, so folding it in would add a shared.js+Supabase dependency to 7 files AND force a lockstep `?v=` bump across all ~15 shared.js consumers (Inv #138) for ~10 lines of DB-free logic. **Launch contract:** MD opens assessments via `window.open(getProfileUrl(...), '_blank')` (NEW TAB → `window.close()` returns to MD with the modal intact); MMT opens them same-frame via `location.href = a.file+'?id='+id`. All 7 assessment instruments now load the module.
+
+**Established June 20, 2026 (Session 39). Invariant #177 added — count now 177.**
+
+---
+
+### **178. MMT lands back on the launching screen (Discover) after an assessment — sessionStorage + pageshow**
+
+Because MMT opens assessments same-frame (Inv #177), Close → `history.back()` returns to MMT but a reload boots to the default Home — the active screen is SPA state, not in the URL. Fix (all in `member_tool.html`): `goTo(pageName)` persists `sessionStorage.mmt_current_screen`; `openAssessment()` stamps `sessionStorage.mmt_return_screen` (= current, fallback `'assess'`) before navigating; a top-level `pageshow` listener does a **one-shot** restore — read `mmt_return_screen`, remove it, `goTo()` it — so MMT returns to **Discover** (`page-assess`). Covers both full reloads AND bfcache restores; because the key is set only by `openAssessment` and consumed once, fresh logins still land on Home. MD is unaffected (separate file/tab).
+
+**Established June 20, 2026 (Session 39). Invariant #178 added — count now 178.**
+
+---
+
+### **179. Assessment font-slider standard = `document.body.style.zoom`, 5 steps, per-instrument key — only safe on max-width-centered pages**
+
+Every assessment's A−/A+ slider applies `document.body.style.zoom = scale` with steps `[0.90, 1.00, 1.10, 1.25, 1.40]` (idx 1 = 100%), a unique localStorage key `multiply_<instrument>_fontscale`, label `Math.round(scale*100)+'%'`, A− disabled at idx 0 / A+ at idx 4. This is **only safe on pages centered by `max-width + margin:auto`** (the assessments) — never on vw-padding layouts (cf. Inv #176, which is why MMT uses container-`zoom` + `100vw/var(--fs)` instead). `body.style.zoom` is a style, so it survives a `setLanguage()` `body.className` reset. **Enneagram parity (this session):** its language toggle was moved top-right → **bottom-right floating** to clear the ✕ Close, and the missing font slider was added — so **all 7 instruments now have Close + font + language parity**.
+
+**Established June 20, 2026 (Session 39). Invariant #179 added — count now 179.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
