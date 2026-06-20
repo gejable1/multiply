@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="icon_dashboard.svg?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icon_dashboard_192.png?v=2">
+<link rel="shortcut icon" href="icon_dashboard_192.png?v=2">
+<link rel="apple-touch-icon" href="icon_dashboard_192.png?v=2">
+<title>Quiz Scores — MULTIPLY</title>
+<!-- Non-blocking font load — protects against slow PH networks. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"></noscript>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js?v=6"></script>
+<style>
+:root{
+  --bg:#f5f0e8;--surface:#ffffff;--surface2:#faf6ef;--surface3:#f0ebe0;
+  --border:#e2d8cc;--border2:#ccc0b0;
+  --ink:#1a1612;--ink2:#2a2218;--muted:#6b5f4f;--lighter:#9a8f80;--text:#3a3028;
+  --gold:#b8882a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;
+  --green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;--green-dim:#1a3a28;
+  --amber:#8a6010;--amber-bg:#fff8e8;
+  --red:#7a2020;--red-bg:#fdecea;
+  --grey-bg:#eee9e0;--grey-ink:#8a8072;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:13px;}
+/* English-only report — hide the close-module's Tagalog span. */
+.tl-text{display:none;}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--surface);border-bottom:2px solid var(--border);padding:0 1.25rem;display:flex;align-items:center;gap:1rem;height:54px;position:sticky;top:0;z-index:200;box-shadow:var(--shadow);}
+.brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.brand-logo{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--green);white-space:nowrap;}
+.brand-sub{font-size:11px;color:var(--muted);border-left:1px solid var(--border);padding-left:8px;white-space:nowrap;}
+.spacer{flex:1;}
+
+/* ── PAGE LAYOUT ── */
+.wrap{max-width:1100px;margin:0 auto;padding:1.25rem 1rem 3rem;}
+.page-h{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--ink);margin-bottom:.25rem;letter-spacing:-.01em;}
+.page-sub{font-size:12.5px;color:var(--muted);margin-bottom:1.25rem;}
+
+/* ── CONTROLS ── */
+.controls{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.1rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.75rem .9rem;}
+.controls input[type=search],.controls select{font-family:inherit;font-size:12.5px;padding:.5rem .6rem;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--ink);outline:none;}
+.controls input[type=search]{flex:1;min-width:160px;}
+.controls label{font-size:11px;color:var(--muted);font-weight:600;display:inline-flex;align-items:center;gap:.35rem;}
+.btn{font-family:inherit;font-size:12px;font-weight:700;padding:.55rem 1rem;border:none;border-radius:8px;cursor:pointer;background:var(--green);color:#fff;}
+.btn:hover{filter:brightness(1.06);}
+
+/* ── LEGEND ── */
+.legend{display:flex;flex-wrap:wrap;gap:.9rem;align-items:center;font-size:11px;color:var(--text);margin-bottom:1rem;}
+.legend .chip{display:inline-flex;align-items:center;gap:5px;}
+.dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+
+/* ── TABLE / ROWS ── */
+.qtable{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.qhead,.qrow{display:grid;grid-template-columns:1.7fr 90px 90px 34px;gap:.5rem;align-items:center;padding:.7rem .95rem;}
+.qhead{background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+.qrow{border-bottom:1px solid var(--border);cursor:pointer;}
+.qrow:last-child{border-bottom:none;}
+.qrow:hover{background:var(--surface2);}
+.qname{font-size:13px;font-weight:600;color:var(--ink);}
+.qmeta{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.kbadge{font-size:9px;padding:1px 5px;border-radius:8px;margin-left:.35rem;vertical-align:middle;font-weight:600;border:1px solid;}
+.kbadge.test{background:rgba(167,139,250,.18);color:#7c3aed;border-color:rgba(167,139,250,.4);}
+.kbadge.guest{background:rgba(74,144,226,.16);color:#3a7bd1;border-color:rgba(74,144,226,.35);}
+.cell{font-size:12px;font-weight:700;text-align:center;border-radius:7px;padding:.35rem .2rem;}
+.cell.green{background:var(--green-bg);color:var(--green);}
+.cell.amber{background:var(--amber-bg);color:var(--amber);}
+.cell.grey{background:var(--grey-bg);color:var(--grey-ink);font-weight:600;}
+.cell.muted{background:var(--surface3);color:var(--muted);font-weight:500;font-style:italic;}
+.caret{font-size:13px;color:var(--muted);text-align:center;transition:transform .15s;}
+.qrow.open .caret{transform:rotate(90deg);}
+
+/* ── EXPAND ── */
+.qexp{display:none;padding:.4rem .95rem 1rem;background:var(--surface2);border-bottom:1px solid var(--border);}
+.qrow.open + .qexp{display:block;}
+.exp-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.exp-track h4{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--gold-dim);font-weight:700;margin:.35rem 0 .45rem;}
+.sub{width:100%;border-collapse:collapse;font-size:11.5px;}
+.sub th{text-align:left;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:.25rem .4rem;border-bottom:1px solid var(--border);}
+.sub td{padding:.3rem .4rem;border-bottom:1px solid var(--surface3);color:var(--text);}
+.sub td.score{font-weight:700;text-align:right;white-space:nowrap;}
+.tag{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:7px;}
+.tag.pass{background:var(--green-bg);color:var(--green);}
+.tag.fail{background:var(--red-bg);color:var(--red);}
+.empty-track{font-size:11px;color:var(--muted);font-style:italic;padding:.4rem;}
+
+/* ── EMPTY/LOAD ── */
+.empty-card{background:var(--surface);border:1.5px dashed var(--border);border-radius:12px;padding:2rem 1rem;text-align:center;color:var(--muted);font-size:13px;}
+.empty-card .emoji{font-size:1.75rem;margin-bottom:.4rem;}
+.spin-wrap{display:flex;flex-direction:column;align-items:center;gap:.85rem;padding:3rem 1rem;color:var(--muted);font-size:13px;}
+.spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .9s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PRINT ── */
+@media print{
+  body{background:white;}
+  .topbar,.controls,#multiplyCloseBtn{display:none !important;}
+  .qexp{display:block !important;}
+  .qrow,.qexp{break-inside:avoid;}
+}
+
+/* ── MOBILE ── */
+@media (max-width:640px){
+  .wrap{padding:1rem .6rem 2rem;}
+  .page-h{font-size:1.35rem;}
+  .qhead,.qrow{grid-template-columns:1.4fr 72px 72px 28px;}
+  .exp-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═════════ TOPBAR ═════════ -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">MULTIPLY</div>
+    <div class="brand-sub">Quiz Scores</div>
+  </div>
+  <div class="spacer"></div>
+</div>
+
+<!-- ═════════ MAIN ═════════ -->
+<div class="wrap">
+  <div class="page-h">Quiz Scores</div>
+  <div class="page-sub" id="pageSub">Loading…</div>
+
+  <div id="content">
+    <div class="spin-wrap">
+      <div class="spinner"></div>
+      <div>Loading members and quiz scores…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Shared ✕ Close — returns to the launcher tab WITHOUT closing it (Inv #177). -->
+<script src="multiply_close.js?v=1" data-home="index.html"></script>
+
+<!-- ═════════ SCRIPT ═════════ -->
+<script>
+'use strict';
+
+// ─── Leader-session gate (Inv #29) — do NOT rebuild from memory. ───
+if (!MultiplyShared.gateOrRedirect('leader_login.html')) {
+  throw new Error('No valid leader session');
+}
+
+const db = MultiplyShared.getDB();
+const LEADER = window.LEADER || {};
+const _esc = MultiplyShared.escapeHTML;
+const PASTOR_LEVEL = MultiplyShared.PASTOR_LEVEL || 5;
+const LEVEL_NAMES = MultiplyShared.LEVEL_NAMES || [];
+
+// ─── State ───
+let members = [];          // ALL members (needed for the discipler graph)
+let perMember = {};        // memberId → { usbong:{...}, btli:{...} }
+let scoped = [];           // members in this viewer's scope
+let viewerKind = 'real';
+let scopeLabel = '';
+
+// ─── Helpers ───
+function kindOf(m){ return m.is_test_member ? 'test' : (m.is_external_user ? 'guest' : 'real'); }
+
+// Defensive: views may store a percentage as 0–100 OR a 0–1 fraction.
+// A value ≤ 1 is treated as a fraction (a literal 1% score is not a real case).
+function normPct(v){
+  if (v == null || isNaN(v)) return null;
+  const n = Number(v);
+  return n <= 1 ? n * 100 : n;
+}
+
+// Chunk every .in() to ≤150 ids (no Edge Function → no 150s limit, but keep
+// PostgREST URLs sane). Returns {data, error}; the caller decides on error.
+async function fetchByIds(table, cols, ids, idCol){
+  idCol = idCol || 'member_id';
+  const out = [];
+  for (let i = 0; i < ids.length; i += 150){
+    const chunk = ids.slice(i, i + 150);
+    if (!chunk.length) continue;
+    const res = await db.from(table).select(cols).in(idCol, chunk);
+    if (res.error) return { data: null, error: res.error };
+    (res.data || []).forEach(r => out.push(r));
+  }
+  return { data: out, error: null };
+}
+
+// ─── BFS downline tree (discipler_id chain rooted at rootId; excludes root) ───
+function downlineTree(rootId){
+  const byDiscipler = new Map();
+  members.forEach(m => {
+    if (!m.discipler_id) return;
+    if (!byDiscipler.has(m.discipler_id)) byDiscipler.set(m.discipler_id, []);
+    byDiscipler.get(m.discipler_id).push(m);
+  });
+  const visited = new Set();
+  const result = [];
+  const queue = [rootId];
+  while (queue.length){
+    const node = queue.shift();
+    (byDiscipler.get(node) || []).forEach(child => {
+      if (visited.has(child.id)) return;   // cycle guard
+      visited.add(child.id);
+      result.push(child);
+      queue.push(child.id);
+    });
+  }
+  return result;
+}
+
+// ─── Scope (Inv #162: kind flags from the viewer's OWN members row) ───
+function computeScope(){
+  const me = members.find(m => m.id === LEADER.leaderId) || {};
+  viewerKind = kindOf(me);
+  const lvl = (LEADER.leaderLevel || me.pipeline_level || 0);
+  const isPastor = lvl >= PASTOR_LEVEL;
+  const isSuperuser = lvl >= PASTOR_LEVEL && !me.discipler_id;   // L5 with no discipler
+  const isPastorView = isPastor || isSuperuser;
+
+  if (isPastorView && viewerKind === 'real'){
+    // Church-wide; strict inline exclusion of test + guest (Inv #58 spirit).
+    scoped = members.filter(m => m.is_test_member !== true && m.is_external_user !== true);
+    scopeLabel = `${scoped.length} member${scoped.length === 1 ? '' : 's'} (church-wide)`;
+  } else {
+    // Self + own downline tree, filtered to the viewer's kind.
+    const tree = downlineTree(LEADER.leaderId);
+    const pool = (me.id ? [me] : []).concat(tree);
+    scoped = pool.filter(m => kindOf(m) === viewerKind);
+    scopeLabel = `your group · ${scoped.length} member${scoped.length === 1 ? '' : 's'}`;
+  }
+}
+
+// ─── Enrollment is-Usbong / is-BTLI program predicates ───
+function progIsUsbong(p){ return !!p && (p.usbong_course_code != null || /usbong/i.test(p.category || '')); }
+function progIsBtli(p){   return !!p && (p.btli_course_code   != null || /btli/i.test(p.category   || '')); }
+// Active cohort_members row = not exited / not dropped.
+function cmActive(cm){
+  if (cm.exited_at) return false;
+  const s = String(cm.status || '').toLowerCase();
+  return !(s === 'exited' || s === 'dropped');
+}
+
+// ─── FALLBACK: derive per-lesson best from raw attempts (only on a view error) ───
+async function fallbackBest(track, ids){
+  console.warn(`quiz_scores: ${track} best-view unavailable — falling back to raw attempts.`);
+  const attTable  = track === 'btli' ? 'btli_quiz_attempts' : 'usbong_quiz_attempts';
+  const quizTable = track === 'btli' ? 'btli_quizzes'        : 'usbong_quizzes';
+  const aRes = await fetchByIds(attTable, '*', ids, 'member_id');
+  if (aRes.error) return [];
+  const attempts = aRes.data || [];
+  // Quiz metadata (labels + passing) for the quiz_ids we saw.
+  const quizIds = Array.from(new Set(attempts.map(a => a.quiz_id).filter(Boolean)));
+  let quizById = {};
+  if (quizIds.length){
+    const qRes = await fetchByIds(quizTable, '*', quizIds, 'id');
+    if (!qRes.error) (qRes.data || []).forEach(q => { quizById[q.id] = q; });
+  }
+  // MAX(score) per (member_id, quiz_id) over counts_for_grade rows (else all).
+  const byKey = {};
+  attempts.forEach(a => {
+    const key = a.member_id + '|' + a.quiz_id;
+    if (!byKey[key]) byKey[key] = { counted: [], all: [] };
+    byKey[key].all.push(a);
+    if (a.counts_for_grade) byKey[key].counted.push(a);
+  });
+  const rows = [];
+  Object.keys(byKey).forEach(key => {
+    const grp = byKey[key];
+    const pool = grp.counted.length ? grp.counted : grp.all;
+    const best = pool.reduce((mx, a) => (Number(a.score) > Number(mx.score) ? a : mx), pool[0]);
+    const q = quizById[best.quiz_id] || {};
+    const passing = q.passing_score != null ? Number(q.passing_score) : null;
+    rows.push({
+      member_id: best.member_id,
+      lesson_number: q.lesson_number != null ? q.lesson_number : null,
+      lesson_title: q.lesson_title || q.title || '',
+      passing_score: passing,
+      best_score: Number(best.score),
+      passed: passing != null ? Number(best.score) >= passing : null,
+      counted_attempts: grp.counted.length,
+      total_attempts: grp.all.length
+    });
+  });
+  return rows;
+}
+
+// ─── Load everything ───
+async function loadAll(){
+  try {
+    const mRes = await db.from('members').select(
+      'id,name,pipeline_level,discipler_id,is_facilitator,facilitator_role,is_test_member,is_external_user'
+    ).order('name', { ascending: true });
+    if (mRes.error) throw mRes.error;
+    members = mRes.data || [];
+
+    computeScope();
+    const scopedIds = scoped.map(m => m.id);
+
+    if (!scopedIds.length){ render(); return; }
+
+    // ── Parallel fetch: best-views, course-rollups, enrollment chain ──
+    const [
+      uBestR, bBestR, uCourseR, bCourseR, cmR
+    ] = await Promise.all([
+      fetchByIds('v_usbong_lesson_grade',
+        'member_id,course_code,lesson_number,lesson_title,passing_score,best_score,passed,counted_attempts,total_attempts', scopedIds),
+      fetchByIds('v_btli_member_best',
+        'member_id,course_code,lesson_number,lesson_title,passing_score,best_score,passed,counted_attempts,total_attempts', scopedIds),
+      fetchByIds('v_usbong_course_grade', 'member_id,course_grade,attempted_lessons,total_lessons', scopedIds),
+      fetchByIds('v_btli_course_grade',   'member_id,course_grade,attempted_lessons,total_lessons', scopedIds),
+      fetchByIds('cohort_members', '*', scopedIds)
+    ]);
+
+    // Best-rows (view → else fallback). Course rollups degrade to null (we
+    // can still derive a % from the best rows).
+    let uBest = uBestR.error ? await fallbackBest('usbong', scopedIds) : (uBestR.data || []);
+    let bBest = bBestR.error ? await fallbackBest('btli',   scopedIds) : (bBestR.data || []);
+    if (uCourseR.error) console.warn('quiz_scores: v_usbong_course_grade unavailable — deriving from best rows.');
+    if (bCourseR.error) console.warn('quiz_scores: v_btli_course_grade unavailable — deriving from best rows.');
+    const uCourse = uCourseR.error ? [] : (uCourseR.data || []);
+    const bCourse = bCourseR.error ? [] : (bCourseR.data || []);
+
+    // ── Enrollment chain: cohort_members → cohorts → cohort_programs ──
+    let enrolledUsbong = new Set(), enrolledBtli = new Set();
+    if (!cmR.error){
+      const cms = (cmR.data || []).filter(cmActive);
+      const cohortIds = Array.from(new Set(cms.map(c => c.cohort_id).filter(Boolean)));
+      let cohortById = {}, programById = {};
+      if (cohortIds.length){
+        const coR = await fetchByIds('cohorts', '*', cohortIds, 'id');
+        if (!coR.error){
+          (coR.data || []).forEach(c => { cohortById[c.id] = c; });
+          const progIds = Array.from(new Set((coR.data || []).map(c => c.program_id).filter(Boolean)));
+          if (progIds.length){
+            const pR = await fetchByIds('cohort_programs', '*', progIds, 'id');
+            if (!pR.error) (pR.data || []).forEach(p => { programById[p.id] = p; });
+          }
+        }
+      }
+      cms.forEach(cm => {
+        const co = cohortById[cm.cohort_id];
+        const prog = co ? programById[co.program_id] : null;
+        if (progIsUsbong(prog)) enrolledUsbong.add(cm.member_id);
+        if (progIsBtli(prog))   enrolledBtli.add(cm.member_id);
+      });
+    } else {
+      console.warn('quiz_scores: cohort_members unavailable — "Unenrolled" tags may be approximate.');
+    }
+
+    // ── Stitch per member ──
+    perMember = {};
+    scopedIds.forEach(id => {
+      perMember[id] = { usbong: blankTrack(), btli: blankTrack() };
+      perMember[id].usbong.enrolled = enrolledUsbong.has(id);
+      perMember[id].btli.enrolled   = enrolledBtli.has(id);
+    });
+    stitchLessons(uBest, 'usbong');
+    stitchLessons(bBest, 'btli');
+    stitchCourse(uCourse, 'usbong');
+    stitchCourse(bCourse, 'btli');
+
+    render();
+  } catch(err){
+    handleLoadError(err);
+  }
+}
+
+function blankTrack(){ return { lessons: [], courseGrade: null, attempted: null, total: null, enrolled: false }; }
+
+function stitchLessons(rows, track){
+  rows.forEach(r => {
+    const t = perMember[r.member_id] && perMember[r.member_id][track];
+    if (!t) return;
+    t.lessons.push(r);
+  });
+  // Sort lessons by number, then derive a representative passing threshold.
+  Object.keys(perMember).forEach(id => {
+    const t = perMember[id][track];
+    t.lessons.sort((a, b) => (Number(a.lesson_number) || 0) - (Number(b.lesson_number) || 0));
+  });
+}
+
+function stitchCourse(rows, track){
+  // One row per member expected; if a member has >1, average the grade and
+  // sum the lesson counts.
+  const grp = {};
+  rows.forEach(r => {
+    if (!grp[r.member_id]) grp[r.member_id] = [];
+    grp[r.member_id].push(r);
+  });
+  Object.keys(grp).forEach(id => {
+    const t = perMember[id] && perMember[id][track];
+    if (!t) return;
+    const list = grp[id];
+    const grades = list.map(r => normPct(r.course_grade)).filter(v => v != null);
+    t.courseGrade = grades.length ? grades.reduce((a, b) => a + b, 0) / grades.length : null;
+    t.attempted = list.reduce((a, r) => a + (Number(r.attempted_lessons) || 0), 0);
+    t.total     = list.reduce((a, r) => a + (Number(r.total_lessons) || 0), 0);
+  });
+}
+
+// Representative pass threshold for a track (from the lessons' passing_score).
+function passThreshold(t){
+  const ps = t.lessons.map(l => normPct(l.passing_score)).filter(v => v != null);
+  if (!ps.length) return 70;            // sensible discipleship default
+  return ps.reduce((a, b) => Math.max(a, b), 0);   // strictest lesson bar
+}
+
+// % of lessons passed (used when there is no course-grade rollup).
+function pctPassed(t){
+  if (!t.lessons.length) return null;
+  const passed = t.lessons.filter(l => l.passed === true).length;
+  return Math.round((passed / t.lessons.length) * 100);
+}
+
+// ─── One program cell ({text, cls}) ───
+function programCell(t){
+  const hasGrade = t.courseGrade != null;
+  const hasRows  = t.lessons.length > 0;
+  const pass = passThreshold(t);
+  const grade = hasGrade ? Math.round(t.courseGrade) : (hasRows ? pctPassed(t) : null);
+
+  if (t.enrolled){
+    if (grade == null) return { text: 'Enrolled · —', cls: 'muted' };
+    return { text: grade + '%', cls: grade >= pass ? 'green' : 'amber' };
+  }
+  // Not enrolled.
+  if (grade == null) return { text: 'Unenrolled', cls: 'grey' };
+  return { text: 'Unenrolled · ' + grade + '%', cls: 'grey' };
+}
+
+// ─── Sub-table for a track ───
+function subTable(t, label){
+  if (!t.lessons.length){
+    return `<div class="exp-track"><h4>${_esc(label)}</h4><div class="empty-track">No quiz attempts in this track.</div></div>`;
+  }
+  const rows = t.lessons.map(l => {
+    const num = l.lesson_number != null ? 'L' + l.lesson_number : '—';
+    const title = l.lesson_title || '';
+    const passing = normPct(l.passing_score);
+    const best = l.best_score != null ? l.best_score : '—';
+    const passed = l.passed === true;
+    const tag = l.passed == null
+      ? ''
+      : `<span class="tag ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>`;
+    const retake = (Number(l.total_attempts) || 0) > 1 ? ` <span style="color:var(--muted);font-weight:400">(${l.total_attempts} attempts)</span>` : '';
+    const passTxt = passing != null ? ` / ${Math.round(passing)}` : '';
+    return `<tr>
+      <td>${_esc(num)}</td>
+      <td>${_esc(title)}</td>
+      <td class="score">${_esc(String(best))}${passTxt}${retake}</td>
+      <td>${tag}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="exp-track">
+    <h4>${_esc(label)}</h4>
+    <table class="sub">
+      <thead><tr><th>Lesson</th><th>Title</th><th>Best</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ─── Filter predicates ───
+function passesFilters(m){
+  const pm = perMember[m.id] || { usbong: blankTrack(), btli: blankTrack() };
+  // Search
+  const q = (document.getElementById('fSearch').value || '').trim().toLowerCase();
+  if (q && !(m.name || '').toLowerCase().includes(q)) return false;
+  // Program
+  const prog = document.getElementById('fProgram').value;   // all | usbong | btli
+  const relevant = prog === 'usbong' ? [pm.usbong]
+                 : prog === 'btli'   ? [pm.btli]
+                 : [pm.usbong, pm.btli];
+  if (prog !== 'all'){
+    const t = relevant[0];
+    if (!t.enrolled && !t.lessons.length && t.courseGrade == null) {
+      // not in this program at all — only show under "Unenrolled only"
+      if (document.getElementById('fStatus').value !== 'unenrolled') return false;
+    }
+  }
+  // Status
+  const status = document.getElementById('fStatus').value;  // all | unenrolled | below
+  if (status === 'unenrolled'){
+    const anyUnenrolled = relevant.some(t => !t.enrolled);
+    if (!anyUnenrolled) return false;
+  } else if (status === 'below'){
+    const anyBelow = relevant.some(t => {
+      const c = programCell(t);
+      return c.cls === 'amber';   // has a grade and is below passing
+    });
+    if (!anyBelow) return false;
+  }
+  return true;
+}
+
+// ─── Render ───
+function render(){
+  document.getElementById('pageSub').textContent = `Showing: ${scopeLabel} · Usbong + BTLI · best of retakes`;
+
+  const wrap = document.getElementById('content');
+  if (!scoped.length){
+    wrap.innerHTML = `<div class="empty-card"><div class="emoji">🌱</div>
+      <div style="font-weight:600;color:var(--ink);margin-bottom:.3rem;">No members in scope</div>
+      <div>Nothing to show for this view yet.</div></div>`;
+    return;
+  }
+
+  // Controls (rendered once; re-render only the table on change).
+  wrap.innerHTML = `
+    <div class="controls">
+      <input type="search" id="fSearch" placeholder="Search by name…" oninput="renderTable()">
+      <label>Program
+        <select id="fProgram" onchange="renderTable()">
+          <option value="all">All</option>
+          <option value="usbong">Usbong</option>
+          <option value="btli">BTLI</option>
+        </select>
+      </label>
+      <label>Status
+        <select id="fStatus" onchange="renderTable()">
+          <option value="all">All</option>
+          <option value="unenrolled">Unenrolled only</option>
+          <option value="below">Below passing</option>
+        </select>
+      </label>
+      <button class="btn" onclick="window.print()">🖨 Print / PDF</button>
+    </div>
+    <div class="legend">
+      <span class="chip"><span class="dot" style="background:var(--green)"></span> Passing</span>
+      <span class="chip"><span class="dot" style="background:var(--amber)"></span> Below passing</span>
+      <span class="chip"><span class="dot" style="background:var(--grey-ink)"></span> Unenrolled</span>
+      <span style="color:var(--muted)">· grade = course rollup % (best of retakes); tap a row for per-lesson detail</span>
+    </div>
+    <div id="tableHost"></div>`;
+
+  renderTable();
+}
+
+function renderTable(){
+  const host = document.getElementById('tableHost');
+  if (!host) return;
+  const list = scoped.filter(passesFilters);
+
+  let html = `<div class="qtable">
+    <div class="qhead"><div>Member</div><div style="text-align:center">Usbong</div><div style="text-align:center">BTLI</div><div></div></div>`;
+
+  if (!list.length){
+    html += `<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:12.5px;">No members match these filters.</div>`;
+  } else {
+    list.forEach(m => {
+      const pm = perMember[m.id] || { usbong: blankTrack(), btli: blankTrack() };
+      const uc = programCell(pm.usbong);
+      const bc = programCell(pm.btli);
+      const lvl = m.pipeline_level || 0;
+      const lvlName = LEVEL_NAMES[lvl] || '';
+      const k = kindOf(m);
+      const kbadge = k === 'test' ? `<span class="kbadge test">🧪 Test</span>`
+                   : k === 'guest' ? `<span class="kbadge guest">👤 Guest</span>` : '';
+      html += `
+        <div class="qrow" onclick="toggleRow(this)">
+          <div>
+            <div class="qname">${_esc(m.name || '—')}${kbadge}</div>
+            <div class="qmeta">L${lvl}${lvlName ? ' · ' + _esc(lvlName) : ''}</div>
+          </div>
+          <div class="cell ${uc.cls}">${_esc(uc.text)}</div>
+          <div class="cell ${bc.cls}">${_esc(bc.text)}</div>
+          <div class="caret">▸</div>
+        </div>
+        <div class="qexp">
+          <div class="exp-grid">
+            ${subTable(pm.usbong, 'Usbong')}
+            ${subTable(pm.btli, 'BTLI')}
+          </div>
+        </div>`;
+    });
+  }
+  html += `</div>`;
+  host.innerHTML = html;
+}
+
+function toggleRow(rowEl){ rowEl.classList.toggle('open'); }
+window.toggleRow = toggleRow;
+window.renderTable = renderTable;
+
+function handleLoadError(err){
+  console.error('Quiz Scores load error:', err);
+  document.getElementById('content').innerHTML =
+    `<div class="empty-card"><div class="emoji">⚠️</div>
+      <div style="font-weight:600;color:var(--ink);margin-bottom:.35rem;">Could not load quiz scores</div>
+      <div style="font-size:12px;">${_esc(err.message || String(err))}</div>
+    </div>`;
+  document.getElementById('pageSub').textContent = 'Error.';
+}
+
+// ─── Kick off ───
+loadAll();
+</script>
+</body>
+</html>
