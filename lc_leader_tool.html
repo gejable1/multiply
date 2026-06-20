@@ -542,13 +542,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div id="l5SelfAttestCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
        background:linear-gradient(135deg, #fdfaf3, #f7f1e1);
        border:1px solid #e3d4a8; border-radius:var(--r);">
-    <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;">
+    <div onclick="_toggleL5Attest()" title="Tap to show/hide" style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;cursor:pointer;user-select:none;">
       <span style="font-size:22px;">📋</span>
       <div style="font-weight:700;font-size:14.5px;color:#3a2c0a;">My Attendance</div>
       <div style="margin-left:auto;font-size:10.5px;color:#7a5800;font-style:italic;">
         For Pastoral Staff
       </div>
+      <span id="l5AttestChevron" style="font-size:15px;color:#7a5800;margin-left:.5rem;transition:transform .18s ease;transform:rotate(-90deg);">▾</span>
     </div>
+    <div id="l5AttestBody" style="display:none;">
     <div style="font-size:12px;color:#5a4316;margin-bottom:.65rem;line-height:1.5;">
       Mark yourself present at events you attended. No one logs attendance for Pastoral Staff
       so this keeps your attendance record honest. 🙏
@@ -569,6 +571,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     </div>
     <div id="l5LastMarkedRow" style="margin-top:.7rem;font-size:11.5px;color:#7a5800;min-height:14px;line-height:1.5;">
       <!-- Last marked status -->
+    </div>
     </div>
   </div>
   <!-- ════ END L5 SELF-ATTEST CARD ════ -->
@@ -1767,12 +1770,34 @@ function _l5FmtShort(dateStr){
   return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}`;
 }
 
+// ── "My Attendance" fold: collapsed by default to save real estate;
+//    remembers the leader's last open/closed choice (localStorage). ──
+function _applyL5AttestFold(){
+  const body = document.getElementById('l5AttestBody');
+  const chev = document.getElementById('l5AttestChevron');
+  if (!body) return;
+  let open = false;
+  try { open = localStorage.getItem('mlt_attest_open') === '1'; } catch(e){}
+  body.style.display = open ? 'block' : 'none';
+  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+}
+function _toggleL5Attest(){
+  const body = document.getElementById('l5AttestBody');
+  const chev = document.getElementById('l5AttestChevron');
+  if (!body) return;
+  const open = (body.style.display === 'none');
+  body.style.display = open ? 'block' : 'none';
+  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+  try { localStorage.setItem('mlt_attest_open', open ? '1' : '0'); } catch(e){}
+}
+
 async function renderL5AttestCard(){
   const card = document.getElementById('l5SelfAttestCard');
   if (!card) return;
   const isL5 = LEADER && (LEADER.leaderLevel || 0) >= 5;
   if (!isL5) { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  _applyL5AttestFold();
 
   // Default the date field to today (only if not already set, so a leader's
   // backdated pick survives a re-render). Reset the manual-override flag each
