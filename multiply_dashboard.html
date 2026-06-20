@@ -1523,12 +1523,16 @@ if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()) {
       if (typeof revealPastorTab === 'function') revealPastorTab();
       if (typeof _refreshMyMinistryNav === 'function') _refreshMyMinistryNav();
       if (typeof updateScopeCounts === 'function') updateScopeCounts();
+      if (typeof paintLeaderBadge === 'function') paintLeaderBadge();
     } catch (e) {}
   });
 }
 
-// Boot: render the leader badge in the topbar
-(function paintLeaderBadge(){
+// Boot: render the leader badge in the topbar.
+// Named hoisted function (not an anonymous IIFE) so the embed re-sync
+// .then() can re-run it once the real session arrives via postMessage —
+// at script-load LEADER is still {} in embed mode (Inv #169).
+function paintLeaderBadge(){
   const el = (id) => document.getElementById(id);
   if(!LEADER || !LEADER.leaderId){
     // No leader session — hide My Profile button (nothing to edit)
@@ -1536,11 +1540,17 @@ if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()) {
     if(myProfBtn) myProfBtn.style.display = 'none';
     return;
   }
+  // Real session present — ensure the My Profile button is visible. In embed
+  // mode the boot pass hid it (LEADER was still {}); the re-sync re-run lands
+  // here, so restore the button's default flex display (Inv #169).
+  const myProfBtn = document.getElementById('scopeBtnMyProfile');
+  if(myProfBtn) myProfBtn.style.display = 'flex';
   const initials = (LEADER.leaderName||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   if(el('leaderBadgeAv'))   el('leaderBadgeAv').textContent   = initials;
   if(el('leaderBadgeName')) el('leaderBadgeName').textContent = LEADER.leaderName || '?';
   if(el('leaderBadgeRole')) el('leaderBadgeRole').textContent = LEADER.leaderRole || MultiplyShared.LEVEL_NAMES[LEADER.leaderLevel||0];
-})();
+}
+paintLeaderBadge();
 
 // ── Hide "+ Add Member" for non-executive leaders ──
 //    Pastor Gerry's call (May 2026): too many duplicate additions while
