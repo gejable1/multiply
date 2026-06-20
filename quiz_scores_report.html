@@ -427,13 +427,14 @@ function programCell(t){
   const pass = passThreshold(t);
   const grade = hasGrade ? Math.round(t.courseGrade) : (hasRows ? pctPassed(t) : null);
 
+  const ofN = (Number(t.total) > 0) ? ' of ' + t.total : '';
   if (t.enrolled){
     if (grade == null) return { text: 'Enrolled · —', cls: 'muted' };
-    return { text: grade + '%', cls: grade >= pass ? 'green' : 'amber' };
+    return { text: grade + '%' + ofN, cls: grade >= pass ? 'green' : 'amber' };
   }
   // Not enrolled.
   if (grade == null) return { text: 'Unenrolled', cls: 'grey' };
-  return { text: 'Unenrolled · ' + grade + '%', cls: 'grey' };
+  return { text: 'Unenrolled · ' + grade + '%' + ofN, cls: 'grey' };
 }
 
 // ─── Sub-table for a track ───
@@ -441,28 +442,28 @@ function subTable(t, label){
   if (!t.lessons.length){
     return `<div class="exp-track"><h4>${_esc(label)}</h4><div class="empty-track">No quiz attempts in this track.</div></div>`;
   }
+  const passMark = Math.round(passThreshold(t));
   const rows = t.lessons.map(l => {
     const num = l.lesson_number != null ? 'L' + l.lesson_number : '—';
     const title = l.lesson_title || '';
-    const passing = normPct(l.passing_score);
     const best = l.best_score != null ? l.best_score : '—';
+    const attempts = l.total_attempts != null ? l.total_attempts : '—';
     const passed = l.passed === true;
     const tag = l.passed == null
       ? ''
       : `<span class="tag ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>`;
-    const retake = (Number(l.total_attempts) || 0) > 1 ? ` <span style="color:var(--muted);font-weight:400">(${l.total_attempts} attempts)</span>` : '';
-    const passTxt = passing != null ? ` / ${Math.round(passing)}` : '';
     return `<tr>
       <td>${_esc(num)}</td>
       <td>${_esc(title)}</td>
-      <td class="score">${_esc(String(best))}${passTxt}${retake}</td>
+      <td class="score">${_esc(String(best))}</td>
+      <td style="text-align:center">${_esc(String(attempts))}</td>
       <td>${tag}</td>
     </tr>`;
   }).join('');
   return `<div class="exp-track">
     <h4>${_esc(label)}</h4>
     <table class="sub">
-      <thead><tr><th>Lesson</th><th>Title</th><th>Best</th><th></th></tr></thead>
+      <thead><tr><th>Lesson</th><th>Title</th><th>Best</th><th style="text-align:center">Attempts</th><th>Status (${passMark}% passing)</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -533,11 +534,17 @@ function render(){
       </label>
       <button class="btn" onclick="window.print()">🖨 Print / PDF</button>
     </div>
-    <div class="legend">
-      <span class="chip"><span class="dot" style="background:var(--green)"></span> Passing</span>
-      <span class="chip"><span class="dot" style="background:var(--amber)"></span> Below passing</span>
-      <span class="chip"><span class="dot" style="background:var(--grey-ink)"></span> Unenrolled</span>
-      <span style="color:var(--muted)">· grade = course rollup % (best of retakes); tap a row for per-lesson detail</span>
+    <div class="legend" style="flex-direction:column;align-items:flex-start;gap:.55rem;background:rgba(184,136,42,.06);border:1px solid rgba(184,136,42,.25);border-radius:10px;padding:.75rem .9rem;">
+      <div style="font-weight:700;letter-spacing:.03em;text-transform:uppercase;font-size:10.5px;color:var(--gold-dim);">How to read this report</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.9rem;align-items:center;">
+        <span class="chip"><span class="dot" style="background:var(--green)"></span> Passing</span>
+        <span class="chip"><span class="dot" style="background:var(--amber)"></span> Below passing</span>
+        <span class="chip"><span class="dot" style="background:var(--grey-ink)"></span> Unenrolled (no cohort)</span>
+      </div>
+      <div style="color:var(--muted);line-height:1.55;">
+        <b>Collapsed cell — e.g. "9% of 11":</b> progress across the whole track. The 9% is best-of-retakes points earned ÷ total points for all 11 quizzes in the course — it is <i>not</i> the score on one quiz. "Enrolled · —" = enrolled but no quiz taken yet.<br>
+        <b>Tap a row</b> for per-lesson detail — <b>Lesson</b> (number) · <b>Title</b> · <b>Best</b> (highest score across all retakes) · <b>Attempts</b> (times taken) · <b>Status</b> (PASS/FAIL vs the passing mark in the column header).
+      </div>
     </div>
     <div id="tableHost"></div>`;
 
