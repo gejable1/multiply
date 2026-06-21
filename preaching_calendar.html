@@ -178,6 +178,38 @@ function getCurrentMemberIds(){
 }
 function getCurrentMemberId(){ return getCurrentMemberIds()[0] || null; }
 
+// ── Tenancy-JWT gate (Option A, Session 41) ──────────────────────────────
+// db = MultiplyShared.getDB() carries the church-scoped JWT ONLY when
+// sessionStorage.multiply_jwt is present. On ?me= launches (bookmark /
+// external browser / PWA-external / rel=noopener) sessionStorage does NOT
+// carry, so getDB() would be anon — and once RLS is enabled on the preaching
+// tables those anon reads/writes are locked out. So we require a valid JWT
+// before ANY data loads. Inline mirror of shared.js _readTenancyJwt (no
+// import — keeps multiply_shared.js at ?v=7).
+function _hasValidTenancyJwt(){
+  try {
+    const raw = sessionStorage.getItem('multiply_jwt');
+    if (!raw) return false;
+    const j = JSON.parse(raw);
+    if (!j || !j.token) return false;
+    if (j.expires_at && Date.parse(j.expires_at) <= Date.now()) return false;
+    return true;
+  } catch(e){ return false; }
+}
+
+// Friendly login gate rendered into #calWrap. No db calls happen on this path.
+function _renderLoginGate(){
+  const wrap = document.getElementById('calWrap');
+  if (!wrap) return;
+  wrap.innerHTML =
+    '<div class="empty" style="text-align:center;padding:2.2rem 1rem;line-height:1.5">' +
+      '<div style="font-size:16px;font-weight:700;margin-bottom:.4rem">Please log in to view the preaching calendar</div>' +
+      '<div style="font-size:13px;color:var(--muted,#6b7280);margin-bottom:1.1rem">Your session has expired, or this link was opened outside the app. Log in to continue.</div>' +
+      '<button onclick="location.href=\'member_login.html\'" ' +
+        'style="padding:10px 22px;border:none;border-radius:8px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;background:var(--gold,#B8882A);color:#fff">Log in</button>' +
+    '</div>';
+}
+
 let _viewMonth = new Date(); _viewMonth.setDate(1); _viewMonth.setHours(0,0,0,0);
 let _members = [];
 let _preachers = [];
@@ -393,7 +425,9 @@ function closeSwapModal(){
 }
 
 async function submitSwap(){
-  if (!_myMemberId) { toast('Please log in first', '⚠️'); return; }
+  // A ?me= id alone must NOT allow a swap submit — require a valid JWT too,
+  // otherwise the anon insert is locked out by RLS on preaching_swap_requests.
+  if (!_myMemberId || !_hasValidTenancyJwt()) { toast('Please log in to request a swap', '⚠️'); return; }
   if (!_swapMyAssignment) return;
   const targetId = document.getElementById('swapTarget').value;
   if (!targetId) { toast('Pick a date to swap with', '⚠️'); return; }
@@ -414,7 +448,15 @@ async function submitSwap(){
   toast('Swap request sent! The other preacher will be notified.', '✓');
 }
 
-loadAll();
+// Boot (Option A): require a valid tenancy JWT before any data loads. A
+// logged-in user (session in sessionStorage) always carries the JWT and passes
+// straight to loadAll(); a JWT-less ?me=/bookmark/external launch gets the
+// login gate instead of an anon data load (which RLS would block anyway).
+if (_hasValidTenancyJwt()) {
+  loadAll();
+} else {
+  _renderLoginGate();
+}
 </script>
 </body>
 </html>
