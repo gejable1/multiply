@@ -2225,4 +2225,36 @@ Before enabling RLS on a per-church table: **(a)** confirm EVERY read/write path
 
 ---
 
+### **186. Purge allow-all stubs + verify EXACTLY 4 policies around ENABLE (the `absence_notices` lesson)**
+
+A per-church table can carry **dormant pre-existing policies** while RLS is disabled; `ENABLE` activates them. PERMISSIVE policies for the same command are **OR-combined**, so any leftover **allow-all** policy (`TO public`/`anon` with `USING(true)` and/or `WITH CHECK(true)`) **defeats** the church-scoped policy (`true OR church_id=auth_church_id()` = always true) → cross-church leak. **Before ENABLE, run CHECK B:** `SELECT ... FROM pg_policies WHERE tablename IN (...)` and **DROP any PERMISSIVE `public`/`anon` policy with `qual=true`/`with_check=true`**. **After ENABLE, the structural verify must show `policy_count = 4` EXACTLY (not >=4)** — a count of 6 on `absence_notices` (Session 41) caught two stale `*_read`/`*_write` allow-all stubs silently bypassing isolation; dropping them restored `[]` for the foreign token. The CC pre-RLS audit now includes this `pg_policies` scan alongside the JWT-path grep.
+
+**Established June 21, 2026 (Session 41). Invariant #186 added - count now 186.**
+
+---
+
+### **187. RLS batch-migration pattern (016-019) - extends #185**
+
+Each safe-now batch follows one shape: **(a)** CC read-only audit (JWT-path grep + Inv #186 `pg_policies` scan); **(b)** migration per table - `UPDATE ... SET church_id = (SELECT id FROM churches WHERE slug='rosehill') WHERE church_id IS NULL` (**slug subquery, never a hardcoded UUID**), `DROP POLICY IF EXISTS` x4, `CREATE POLICY` x4 `TO authenticated` on `church_id = public.auth_church_id()`, `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`; **(c)** structural verify (`relrowsecurity=true`, `policy_count=4`, `null_church=0`); **(d)** app smoke (re-login -> the live app still reads/writes as the owning church); **(e)** isolation curl (foreign token -> `[]`, owning token -> rows). **One representative table per batch is sufficient** for the curl - all tables in a batch share the identical `auth_church_id()` predicate. **Migrations shipped Session 41:** `016` cohort family (cohorts, cohort_members, cohort_lesson_unlocks, pipeline_lesson_grants); `017` communication family (announcements, announcement_acks, announcement_retraction_dismissals, absence_notices, notifications); `018` sermons; `019` preaching (preachers, wednesday_preaching, preaching_swap_requests). **Diagnostic:** `HTTP 000` from curl = a connection/network/curl-side issue (browser unaffected) - **never** an RLS or auth signal; the app-load smoke is the authoritative no-lockout proof when curl is flaky.
+
+**Established June 21, 2026 (Session 41). Invariant #187 added - count now 187.**
+
+---
+
+### **188. A logged-out/`?me=` anon page must be JWT-gated BEFORE its tables get RLS (Option A); writes must be authenticated**
+
+If a page has any **logged-out path** (no `sessionStorage` -> `getDB()` is anon - e.g. the `preaching_calendar.html` `?me=` bookmark/external/PWA/`noopener` fallback, Inv #149), enabling RLS on the tables it reads/writes would break that path (empty reads, rejected inserts). **Fix before RLS = gate the whole page on a valid JWT at boot:** an **inline** `_hasValidTenancyJwt()` (mirror of `_readTenancyJwt`, kept inline to avoid a `?v=` bump) -> no JWT renders a "Please log in" panel and makes **zero** DB calls; a valid JWT loads normally. **Writes under tenancy must be authenticated** - a bare `?me=` id alone must never authorize an insert (the swap-submit gate now also requires the JWT). Same-origin `window.open` launches from gated pages carry the JWT and are unaffected. Shipped Session 41 (`841a8bf`). Deferred note: the calendar also reads `members` anon - handle before `members` RLS.
+
+**Established June 21, 2026 (Session 41). Invariant #188 added - count now 188.**
+
+---
+
+### **189. CC prompts are always a single pastable fenced code block**
+
+Every Claude-Code prompt is delivered as **one triple-backtick fenced code block** - never blockquotes or prose - so the Pastor copies + pastes in a single action with no markdown artifacts. Applies to every CC prompt by default, not just `gmp`/session-close. (Pastor preference, Session 41.)
+
+**Established June 21, 2026 (Session 41). Invariant #189 added - count now 189.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
