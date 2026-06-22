@@ -329,13 +329,14 @@
 
 <div id="toast" class="toast">Saved successfully</div>
 
-<script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+<!-- Tenancy: UMD supabase + standalone tenancy module (Inv #11/#191/#194) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_tenancy.js?v=2"></script>
 
-const SUPABASE_URL = 'https://tirzeikbflolaclgtket.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<script>
+// JWT-attached DB via the standalone tenancy module. No own anon client —
+// getDB() carries the +2h church JWT so members RLS permits this page's
+// read + write (Inv #194: a JWT-less anon client is RLS-blocked).
 
 const RELATIONSHIPS = ['Spouse', 'Father', 'Mother', 'Son', 'Daughter', 'Brother', 'Sister', 'Grandparent', 'Grandchild', 'In-law', 'Other'];
 
@@ -346,43 +347,28 @@ let currentMember = null;
 // INIT
 // ─────────────────────────────────────────────────────────────────
 async function init() {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get('token');
-
-  if (!token) {
+  let memberId;
+  try {
+    memberId = await MultiplyTenancy.bootstrap();
+  } catch (e) {
+    return; // bootstrap already painted the bilingual "link expired" notice
+  }
+  if (!memberId) {
     return showInvalid('No access token provided in the URL.');
   }
 
+  const db = MultiplyTenancy.getDB();
   try {
-    // Fetch token row
-    const { data: tokenRow, error: tErr } = await supabase
-      .from('profile_tokens')
-      .select('*')
-      .eq('token', token)
-      .maybeSingle();
-
-    if (tErr) throw tErr;
-    if (!tokenRow) return showInvalid('Token not found.');
-
-    // Check expiry
-    const now = new Date();
-    const expiresAt = new Date(tokenRow.expires_at);
-    if (expiresAt < now) {
-      return showInvalid(`This link expired on ${expiresAt.toLocaleDateString()}.`);
+    const token = new URLSearchParams(location.search).get('token');
+    if (token) {
+      const { data: tokenRow } = await db
+        .from('profile_tokens').select('*').eq('token', token).maybeSingle();
+      currentToken = tokenRow || null;
     }
-
-    currentToken = tokenRow;
-
-    // Fetch member
-    const { data: member, error: mErr } = await supabase
-      .from('members')
-      .select('*')
-      .eq('id', tokenRow.member_id)
-      .maybeSingle();
-
+    const { data: member, error: mErr } = await db
+      .from('members').select('*').eq('id', memberId).maybeSingle();
     if (mErr) throw mErr;
     if (!member) return showInvalid('Member record not found.');
-
     currentMember = member;
     renderForm();
   } catch (e) {
@@ -408,14 +394,16 @@ function renderForm() {
   const firstName = (currentMember.name || '').split(' ')[0] || 'Friend';
   document.getElementById('greeting').textContent = `Hello, ${firstName}!`;
 
-  // Expiry text
-  const expiry = new Date(currentToken.expires_at);
-  document.getElementById('expiryText').textContent = expiry.toLocaleDateString(undefined, {
-    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
-  });
+  // Expiry text (token path only)
+  if (currentToken && currentToken.expires_at) {
+    const expiry = new Date(currentToken.expires_at);
+    document.getElementById('expiryText').textContent = expiry.toLocaleDateString(undefined, {
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+    });
+  }
 
   // Show "saved" banner if they've used this token before
-  if (currentToken.used_count > 0) {
+  if (currentToken && currentToken.used_count > 0) {
     document.getElementById('savedBanner').classList.remove('hidden');
     document.getElementById('savedBanner').innerHTML =
       `✓ You last saved on ${new Date(currentToken.used_at).toLocaleDateString()}. Feel free to update anything.`;
@@ -483,8 +471,6 @@ window.saveProfile = async function() {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving…';
 
-  // Build payload — only the fields members are allowed to edit
-  // Uses actual DB column names from the members table
   const payload = {
     birthday: document.getElementById('fld_bday').value || null,
     civil_status: document.getElementById('fld_civil').value || null,
@@ -498,53 +484,20 @@ window.saveProfile = async function() {
   };
 
   try {
-    // ── DEBUG: log payload so we can see what's being sent ──
-    console.log('=== Save Profile · Payload ===');
-    console.log('payload:', JSON.parse(JSON.stringify(payload)));
-    console.log('family_members specifically:', payload.family_members);
-    // ────────────────────────────────────────────────────────
-
-    // Update member — chain .select() so we can verify the row was actually updated
-    const { data: updated, error: memErr } = await supabase
-      .from('members')
-      .update(payload)
-      .eq('id', currentMember.id)
-      .select();
-
-    // ── DEBUG: log what came back ──
-    console.log('=== Save Profile · Result ===');
-    console.log('error:', memErr);
-    console.log('updated row(s):', updated);
-    if (updated?.[0]) console.log('family_members in saved row:', updated[0].family_members);
-    // ───────────────────────────────
+    const db = MultiplyTenancy.getDB();
+    const { data: updated, error: memErr } = await db
+      .from('members').update(payload).eq('id', currentMember.id).select();
 
     if (memErr) throw memErr;
     if (!updated || updated.length === 0) {
       throw new Error('Update silently failed (0 rows affected). This usually means a Row Level Security policy is blocking the write. Please contact your facilitator.');
     }
 
-    // Update token usage
-    const { error: tokErr } = await supabase
-      .from('profile_tokens')
-      .update({
-        used_at: new Date().toISOString(),
-        used_count: (currentToken.used_count || 0) + 1
-      })
-      .eq('id', currentToken.id);
-
-    if (tokErr) console.warn('Token usage update failed (non-fatal):', tokErr);
-
-    // Update local state from what was actually saved (in case Supabase normalized any values)
     currentMember = { ...currentMember, ...updated[0] };
-    currentToken.used_count = (currentToken.used_count || 0) + 1;
-    currentToken.used_at = new Date().toISOString();
 
     showToast('Saved successfully! You can keep editing or close this page.', false);
     document.getElementById('savedBanner').classList.remove('hidden');
-    document.getElementById('savedBanner').innerHTML =
-      `✓ Last saved just now. Feel free to update anything.`;
-
-    // Smooth scroll back to top
+    document.getElementById('savedBanner').innerHTML = `✓ Last saved just now. Feel free to update anything.`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
     console.error('Save error:', e);
