@@ -4,7 +4,7 @@
 
 **Standing rule:** An invariant is removed from this file ONLY when explicitly retired by Pastor Gerry. HANDOFF.md rewrites must NEVER drop, summarize, or rephrase items from this list.
 
-**Last reviewed:** June 20, 2026 (Session 40 — #180 Path-1 custom HS256 JWT auth (legacy shared secret), #181 `auth-login` EF contract (verify_jwt OFF + bcrypt), #182 JWT-claim SQL helpers + `church_id` auto-stamp trigger, #183 DB client must carry the JWT for RLS, #184 `multiply_shared.js` has 19 consumers, #185 RLS rollout / per-table canary discipline; **count now 185**). Earlier: June 19, 2026 (Session 38 — #169 embed-async LEADER re-sync, #170 EF 150s limit → bulk-prefetch, #171 SVI LC-meeting scoring, #172 preaching Auto-fill anchored to schedule-end; **count now 172** — same-session follow-up: **#170 RESOLVED** (bulk-prefetch shipped + EF redeployed, compute now runs in seconds) and **#171 now LIVE** (LC-meeting scoring in effect)). Earlier: June 1, 2026 (Session 27); count **144** (running history in the dated footers below — #128–#131 added this session: per-person Usbong unlock, present-only attendance, per-lesson roster filter, lesson-unique attendance patterns). Earlier: Session 21 added Invariants **#98–#105**. **#98** (Usbong lesson-lock bridges on the literal track string `'Usbong'`, NOT `'Pre-Pipeline'`), **#99** (habit-nudge forcefulness tuned to audience — forceful-with-escape for leaders, gentle for members; all fail-soft), **#100** (weekly attendance gate: service-window model, always backward-looking, dated labels, LCG rolling-7-day + waivable), **#101** (MLT boot wall is ONE merged modal: attendance + unread announcements), **#102** (announcement unread surfacing must load at boot, not only inside `openAnnouncements`), **#103** (BTLI Zone-1 salvation-assurance gate in `canEnroll`, BTLI-scoped, all enrollers; MD override bypasses by not calling canEnroll), **#104** (MLT enroll pickers show ALL members with advisory badges, never hide the ineligible), **#105** (whole-file `node --check` after any structural JS edit; the "Leader Name/?/empty" screen has two causes — inline throw OR shared.js not loading; mind the cache). **Count now 105.** Session 20 added #95 (`no_gate` fail-closed), #96 (cross-source self-attest guard), #97 (pending notes are hypotheses — verify against live data). Session 19 added #91 (DONE — shared lesson-attest extraction), #92 (self-attest date-snap), #93 (dark-hex on light surfaces), #94 (MD audience picker labels). Earlier:  Invariants #90 (MMT self-attest event parity + lesson sub-picker + member-facing LCG attendance report; plus Prayer of the Day, LCG name fallback, flock fix, count+YOU — all in one cumulative `member_tool.html`) and #91 (lesson-attest resolution is a shared-extraction candidate — logic to shared.js, UI per-file) added. Session 17 added #88 (BTLI L10 Ministry shipped) and #89 (BTLI quiz-gate audit: full-form attendance patterns + lesson_id linkage). Session 16 added #87 (BTLI L9 Evangelism shipped). Invariant #50 stale-clause retired (USAD/UNLAD are BTLI 1 source halves, not separate quiz curricula). Sessions 12–15 added #74–#86: shared slides navigation module (#74), USAD virtues palette ≠ Galatians fruit cycle (#75), USAD 4-movement maps to BTLI 5-movement (#76), USAD-L6 Praying Hands belongs in TUGON (#77), Karamay theology priority (#78), FIY working command (#79), shared font slider is BYO-markup not auto-injecting (#80), inline SVG favicons role-coded (#81), PPTX render-before-ship (#82), L7 shipped (#83), Model X participant lesson/quiz lock final (#84), lesson+quiz gates share live-cohort set (#85), L8 shipped (#86), L9 shipped (#87), L10 shipped (#88), quiz-gate audit (#89). Invariant count: 91 through Session 18; 92–94 Session 19; 95–97 Session 20; 98–105 Session 21 → **now 105**.
+**Last reviewed:** June 23, 2026 (Session 42 — #190 `token-login` EF (cold-page JWT mint), #191 `multiply_tenancy.js` standalone module, #192 `bootstrap()` `?token=`-cold vs `?id=`-in-app, #193 render-before-tenancy (resume ordering), #194 `?id=`-cold = anon = RLS-blocked, #195 cold share `?token=` / in-app `?id=` / one-token-per-member, #196 no raw-URL previews, #197 recommend elegant+scalable; **member_profiles + gifts_diagnostic RLS-live -> 16 tables**; **count now 197**). Earlier: June 20, 2026 (Session 40 — #180 Path-1 custom HS256 JWT auth (legacy shared secret), #181 `auth-login` EF contract (verify_jwt OFF + bcrypt), #182 JWT-claim SQL helpers + `church_id` auto-stamp trigger, #183 DB client must carry the JWT for RLS, #184 `multiply_shared.js` has 19 consumers, #185 RLS rollout / per-table canary discipline; **count now 185**). Earlier: June 19, 2026 (Session 38 — #169 embed-async LEADER re-sync, #170 EF 150s limit → bulk-prefetch, #171 SVI LC-meeting scoring, #172 preaching Auto-fill anchored to schedule-end; **count now 172** — same-session follow-up: **#170 RESOLVED** (bulk-prefetch shipped + EF redeployed, compute now runs in seconds) and **#171 now LIVE** (LC-meeting scoring in effect)). Earlier: June 1, 2026 (Session 27); count **144** (running history in the dated footers below — #128–#131 added this session: per-person Usbong unlock, present-only attendance, per-lesson roster filter, lesson-unique attendance patterns). Earlier: Session 21 added Invariants **#98–#105**. **#98** (Usbong lesson-lock bridges on the literal track string `'Usbong'`, NOT `'Pre-Pipeline'`), **#99** (habit-nudge forcefulness tuned to audience — forceful-with-escape for leaders, gentle for members; all fail-soft), **#100** (weekly attendance gate: service-window model, always backward-looking, dated labels, LCG rolling-7-day + waivable), **#101** (MLT boot wall is ONE merged modal: attendance + unread announcements), **#102** (announcement unread surfacing must load at boot, not only inside `openAnnouncements`), **#103** (BTLI Zone-1 salvation-assurance gate in `canEnroll`, BTLI-scoped, all enrollers; MD override bypasses by not calling canEnroll), **#104** (MLT enroll pickers show ALL members with advisory badges, never hide the ineligible), **#105** (whole-file `node --check` after any structural JS edit; the "Leader Name/?/empty" screen has two causes — inline throw OR shared.js not loading; mind the cache). **Count now 105.** Session 20 added #95 (`no_gate` fail-closed), #96 (cross-source self-attest guard), #97 (pending notes are hypotheses — verify against live data). Session 19 added #91 (DONE — shared lesson-attest extraction), #92 (self-attest date-snap), #93 (dark-hex on light surfaces), #94 (MD audience picker labels). Earlier:  Invariants #90 (MMT self-attest event parity + lesson sub-picker + member-facing LCG attendance report; plus Prayer of the Day, LCG name fallback, flock fix, count+YOU — all in one cumulative `member_tool.html`) and #91 (lesson-attest resolution is a shared-extraction candidate — logic to shared.js, UI per-file) added. Session 17 added #88 (BTLI L10 Ministry shipped) and #89 (BTLI quiz-gate audit: full-form attendance patterns + lesson_id linkage). Session 16 added #87 (BTLI L9 Evangelism shipped). Invariant #50 stale-clause retired (USAD/UNLAD are BTLI 1 source halves, not separate quiz curricula). Sessions 12–15 added #74–#86: shared slides navigation module (#74), USAD virtues palette ≠ Galatians fruit cycle (#75), USAD 4-movement maps to BTLI 5-movement (#76), USAD-L6 Praying Hands belongs in TUGON (#77), Karamay theology priority (#78), FIY working command (#79), shared font slider is BYO-markup not auto-injecting (#80), inline SVG favicons role-coded (#81), PPTX render-before-ship (#82), L7 shipped (#83), Model X participant lesson/quiz lock final (#84), lesson+quiz gates share live-cohort set (#85), L8 shipped (#86), L9 shipped (#87), L10 shipped (#88), quiz-gate audit (#89). Invariant count: 91 through Session 18; 92–94 Session 19; 95–97 Session 20; 98–105 Session 21 → **now 105**.
 
 ---
 
@@ -2254,6 +2254,70 @@ If a page has any **logged-out path** (no `sessionStorage` -> `getDB()` is anon 
 Every Claude-Code prompt is delivered as **one triple-backtick fenced code block** - never blockquotes or prose - so the Pastor copies + pastes in a single action with no markdown artifacts. Applies to every CC prompt by default, not just `gmp`/session-close. (Pastor preference, Session 41.)
 
 **Established June 21, 2026 (Session 41). Invariant #189 added - count now 189.**
+
+---
+
+### **190. `token-login` Edge Function — mints a church-scoped JWT from a `profile_tokens` token (the cold-page credential)**
+
+For cold-capable pages (the 7 assessment instruments + `member_self_edit.html`) opened with **no session**, the `profile_tokens` token IS the credential. The **`token-login` EF** (`verify_jwt` **OFF**; reuses the SAME `JWT_SECRET` as `auth-login` — no new secret) takes `{token}`, validates it server-side with the **service role** against `profile_tokens` (exists + `expires_at` in the future), resolves the member's `church_id` from `members`, and mints a short-lived **(+2h)** HS256 JWT with the **same claim shape as `auth-login`** (`sub`, `role`/`aud`=`authenticated`, `church_id`, `leader_level`, `name`, `is_test`, `is_guest`). Returns `{token, church_id, member_id, expires_at}` and bumps `used_count`. Like `auth-login`, it is **dashboard-deployed, NOT in the repo** (commit gap to close). Proven for BOTH Rosehill + Agape tokens (Session 42).
+
+**Established June 23, 2026 (Session 42). Invariant #190 added - count now 190.**
+
+---
+
+### **191. `multiply_tenancy.js` — the standalone tenancy-bootstrap module for cold-capable pages (extends #11)**
+
+A **classic-script UMD module** (`?v=2`, its OWN version) loaded by every cold-capable page AFTER the supabase UMD script — a sibling of `multiply_close.js`. It is deliberately **NOT folded into `multiply_shared.js`** (that would force a `?v=` lockstep across all 19 shared.js consumers, Inv #11/#184). Exposes `window.MultiplyTenancy`: `await tokenLogin(token)` (POST the `token-login` EF, store the JWT in `sessionStorage.multiply_jwt`), **synchronous** `getDB()` (attaches `Authorization: Bearer` when a valid `multiply_jwt` is present, else anon — mirrors `multiply_shared.js` getDB), `await bootstrap()`, plus `readJwt`/`currentMemberId`/`churchId`/`hasValidSession`. The `multiply_jwt` sessionStorage key is **shared** with `multiply_shared.js` getDB (interop by design).
+
+**Established June 23, 2026 (Session 42). Invariant #191 added - count now 191.**
+
+---
+
+### **192. `MultiplyTenancy.bootstrap()` resolves the member by URL mode — `?token=` cold vs `?id=` in-app (hybrid, not always-token)**
+
+`bootstrap()` branches on the URL. **`?token=`** (cold, no session) -> `tokenLogin()` -> returns the **token's** member (`currentMemberId()`), **ignoring any `?id=`**; on token failure it replaces the page body with a bilingual "Link expired or invalid" notice and **throws** (halts the page). **No `?token=`** (in-app) -> returns `?id=` unchanged; the existing login JWT already attaches via `getDB()`. The **hybrid was chosen over always-`?token=` deliberately** — it avoids an EF round-trip + a `profile_tokens` insert on every in-app open (hot-path scalability at 170+ members), per Inv #197.
+
+**Established June 23, 2026 (Session 42). Invariant #192 added - count now 192.**
+
+---
+
+### **193. Render BEFORE tenancy resolution — the autosave/resume ordering invariant**
+
+A cold-capable page's render/build (e.g. `buildQuestions`/`buildPairs`) MUST run **synchronously FIRST** in the init, BEFORE the awaited `bootstrap()`/member-load. Reason: the autosave/resume IIFE (`initIdle.../start()`) runs on `DOMContentLoaded` and **attaches the `saveProgress` `change`/`input` listeners to the question inputs** + calls `loadProgress()` (the resume banner). An async init that `await`s `bootstrap()` **before** building yields at the await, so `start()` runs while the inputs **don't yet exist** -> listeners attach to nothing -> no draft is ever written -> **resume silently breaks** (no banner on return). Caught on the **disc canary (Session 42) before fan-out**; render-first is the fix AND the wiring pattern for all cold-capable pages. (Static-HTML-question pages — conflict, salvation — satisfy this automatically.)
+
+**Established June 23, 2026 (Session 42). Invariant #193 added - count now 193.**
+
+---
+
+### **194. `?id=` opened cold = anon = RLS-blocked; cold writes need `?token=`**
+
+After RLS, an `?id=` assessment link opened **without a session** (incognito / bookmark / not-logged-in) resolves the member but carries **no JWT** -> `getDB()` is anon -> INSERT rejected: **"new row violates row-level security policy for table …"**. This is **RLS working correctly** — and it **proves the allow-all anon stub was dropped** (with the stub, the anon insert would have *succeeded*). In-app `?id=` works only because a session JWT is present; **cold sharing MUST use `?token=`** (Inv #192/#195). Fast discriminator: `sessionStorage.getItem('multiply_jwt')` in the page console (long object = JWT present; `null` = anon). Watch for a **double-`??` typo** in a hand-edited URL (`disc_profile.html??token=…`) — the stray `?` makes the param key `?token`, so `get('token')` returns null and no JWT is minted.
+
+**Established June 23, 2026 (Session 42). Invariant #194 added - count now 194.**
+
+---
+
+### **195. Cold assessment SHARE links use `?token=`; in-app "Take" stays `?id=`; one token per member (reuse-or-mint)**
+
+The assessment URL getters (`getProfileUrl`/`getGiftsUrl`/`getDiagUrl` in MD; `file+'?id='` in MLT) are **shared** between in-app "Take" (`window.open` `?id=`, session present) and cold share — so they are **left as `?id=`**. Only the **share path** tokenizes: MLT `sendLink_` and MD `copyProfileLink`/`copyGiftsLink`/`copyDiagLink` (-> `sendAssessmentLink`) mint/reuse a member token via **`getOrCreateMemberToken(memberId)`** (SELECT a non-expired `profile_tokens` row for the member and reuse it; mint only if none) and build `<file>?token=<tok>`, dropping `&name=` (the page resolves member+name from the token via `bootstrap()`). **One token per member, reused across self-edit + all 7 assessments** (design decision #1). Lives in EACH tool (MD + MLT), never `multiply_shared.js` (avoid `?v=` lockstep). **Never** alter the getters or the in-app Take/Open paths.
+
+**Established June 23, 2026 (Session 42). Invariant #195 added - count now 195.**
+
+---
+
+### **196. Never render a raw `?id=`/`?token=` URL as copyable text (footgun + URL-leak principle)**
+
+A modal/tab must **not** display a raw internal assessment URL as visible/copyable text. Post-RLS a manually-copied `?id=` link is cold-broken, and showing the URL invites exactly that copy (it also differs from what the tokenized Send button actually copies). Show a **hint** ("Click 'Send Personalized Link' …") + the tokenized Send button instead; the share modal MAY show the **tokenized** URL it actually shares. Extends the existing MMT/MLT URL-leak-prevention rule to MD. (Session 42: removed the `${diagUrl}` `?id=` preview in the MD salvation tab.)
+
+**Established June 23, 2026 (Session 42). Invariant #196 added - count now 196.**
+
+---
+
+### **197. Standing recommendation rule — recommend the most ELEGANT + SCALABLE option, never the easiest**
+
+When Claude (chat) recommends among options (design, architecture, tooling — anything), it **defaults to the most elegant and scalable** option and **justifies on elegance + scalability grounds**, never on "simpler / less work." Ease is a **tiebreaker at most**, never the primary criterion. (Pastor directive, Session 42.)
+
+**Established June 23, 2026 (Session 42). Invariant #197 added - count now 197.**
 
 ---
 
