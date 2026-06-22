@@ -8,6 +8,7 @@
 <title>Love Language Profile — MULTIPLY Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_tenancy.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--bg:#faf7f2;--paper:#fff;--ink:#1a1410;--muted:#6b5f50;--lighter:#a09080;--border:#e8ddd0;--surface2:#f5f0e8;--rose:#8a2040;--rose2:#b83060;--rose-bg:#fdf0f4;--rose-light:#fff5f8;--gold:#b8882a;--gold-bg:#fdf6e8;--green:#2a5c40;--green-bg:#eef6f1;--navy:#1b2a4a;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.1);}
@@ -251,16 +252,7 @@ body[data-lang="tl"] .choice-en{display:none!important;}
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 let db = null;
-function getDB() {
-  if (!db) {
-    try {
-      db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8',{
-        auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
-      });
-    } catch(e) { console.error('Supabase init failed:',e); }
-  }
-  return db;
-}
+function getDB(){ return MultiplyTenancy.getDB(); }
 let _memberId=null;
 const LANGUAGES=[
   {id:'words',name:'Words of Affirmation',icon:'💬',tagline:'Nagsasalita ang puso mo sa pamamagitan ng mga salita',
@@ -446,7 +438,7 @@ async function saveToDashboard(){
   }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
 }
 async function autoLinkFromUrl(){
-  const id=new URLSearchParams(window.location.search).get('id');if(!id)return;
+  const id = await MultiplyTenancy.bootstrap(); if(!id) return;
   try{
     const {data}=await getDB().from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
     _memberId=data.id;document.getElementById('selectedMemberId').value=data.id;
@@ -467,9 +459,9 @@ async function searchMember(q){
 function selectMember(id,name){_memberId=id;document.getElementById('memberSearch').value=name;document.getElementById('selectedMemberId').value=id;document.getElementById('memberDropdown').style.display='none';document.getElementById('memberSelected').style.display='block';document.getElementById('memberSelected').textContent='✓ Linked: '+name;if(!document.getElementById('pName').value)document.getElementById('pName').value=name;}
 document.addEventListener('click',e=>{if(!e.target.closest('#memberSearch')&&!e.target.closest('#memberDropdown')){const dd=document.getElementById('memberDropdown');if(dd)dd.style.display='none';}});
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
   buildQuestions();
-  autoLinkFromUrl();
+  await autoLinkFromUrl();
 });
 
 // ── Language Toggle ──────────────────────────────────────────

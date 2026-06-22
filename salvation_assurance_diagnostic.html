@@ -795,6 +795,7 @@ body {
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_tenancy.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body data-lang="en">
@@ -2143,24 +2144,14 @@ function lockFacilitator() {
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 let dbClient = null;
-function getDB() {
-  if (!dbClient) {
-    try {
-      dbClient = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8',{
-        auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
-      });
-    } catch(e) { console.error('Supabase init failed:',e); }
-  }
-  return dbClient;
-}
+function getDB(){ return MultiplyTenancy.getDB(); }
 
 let _selectedMemberId = null;
 let _selectedMemberName = null;
 
 // ── AUTO-LINK FROM URL ?id= PARAMETER ──
 async function autoLinkFromUrl() {
-  var params = new URLSearchParams(window.location.search);
-  var memberId = params.get('id');
+  var memberId = await MultiplyTenancy.bootstrap();
   if (!memberId) return;
 
   try {

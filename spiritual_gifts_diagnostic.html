@@ -538,6 +538,7 @@ body[data-lang="tl"] .en-block{display:none !important;}
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_tenancy.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body data-lang="en">
@@ -853,7 +854,7 @@ body[data-lang="tl"] .en-block{display:none !important;}
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 let db=null;
-function getDB(){if(!db){try{db=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});}catch(e){console.error(e);}}return db;}
+function getDB(){ return MultiplyTenancy.getDB(); }
 let _memberId=null;
 let _calculatedScores=null; // populated by _doCalculate; used by saveToDashboard
 
@@ -1692,7 +1693,7 @@ function clearAll() {
 // AUTO-LINK FROM URL  (?id=memberId from MULTIPLY dashboard)
 // ═══════════════════════════════════════════════════════════
 async function autoLinkFromUrl(){
-  const id = new URLSearchParams(location.search).get('id');
+  const id = await MultiplyTenancy.bootstrap();
   if(!id) return;
   try{
     const sb = getDB();

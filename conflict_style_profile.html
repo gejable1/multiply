@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_tenancy.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1494,12 +1495,7 @@ h2.sec-title {
 const SB_URL = "https://tirzeikbflolaclgtket.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8";
 let _db = null;
-function getDB(){
-  if(!_db){
-    try { _db = supabase.createClient(SB_URL, SB_KEY, { auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}); } catch(e){console.error(e);}
-  }
-  return _db;
-}
+function getDB(){ return MultiplyTenancy.getDB(); }
 
 // ═══════════════════════════════════════════════════════════════
 // SCORING KEY (Items 1-30)
@@ -1894,35 +1890,32 @@ function _showIdlePrompt(){
     // Dashboard's "Take" / "Send link" buttons open this page with ?id=<member-uuid>.
     // Fetch the member's name and pre-fill the link state so the participant
     // doesn't have to re-search and the save lands on the right member record.
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const urlId = params.get('id');
-      if (urlId) {
-        // Fire async; UI is already rendered. Keep failures silent —
-        // member can still self-search if this errors out.
-        (async () => {
-          try {
-            const { data } = await getDB().from('members').select('id,name').eq('id', urlId).limit(1);
-            if (data && data.length) {
-              const m = data[0];
-              if (typeof selectMember === 'function') {
-                selectMember(m.id, m.name);
-              } else {
-                // Fallback if hoisting order ever changes
-                _memberId = m.id;
-                document.getElementById('selectedMemberId').value = m.id;
-                const ms = document.getElementById('memberSearch'); if (ms) ms.value = m.name;
-                const sel = document.getElementById('memberSelected');
-                if (sel) { sel.style.display = 'block'; sel.textContent = '✓ Linked: ' + m.name; }
-                const pn = document.getElementById('pName'); if (pn && !pn.value) pn.value = m.name;
-              }
-            } else {
-              console.warn('URL id provided but member not found:', urlId);
-            }
-          } catch(e){ console.warn('URL preload failed:', e.message); }
-        })();
-      }
-    } catch(e){ console.warn('URL preload skipped:', e.message); }
+    // Resolve the member via MultiplyTenancy.bootstrap(): cold link = token's
+    // member (after token-login), in-app = ?id=. UI is already rendered; keep
+    // failures silent — member can still self-search if this errors out.
+    (async () => {
+      try {
+        const urlId = await MultiplyTenancy.bootstrap();
+        if (!urlId) return;
+        const { data } = await getDB().from('members').select('id,name').eq('id', urlId).limit(1);
+        if (data && data.length) {
+          const m = data[0];
+          if (typeof selectMember === 'function') {
+            selectMember(m.id, m.name);
+          } else {
+            // Fallback if hoisting order ever changes
+            _memberId = m.id;
+            document.getElementById('selectedMemberId').value = m.id;
+            const ms = document.getElementById('memberSearch'); if (ms) ms.value = m.name;
+            const sel = document.getElementById('memberSelected');
+            if (sel) { sel.style.display = 'block'; sel.textContent = '✓ Linked: ' + m.name; }
+            const pn = document.getElementById('pName'); if (pn && !pn.value) pn.value = m.name;
+          }
+        } else {
+          console.warn('URL id provided but member not found:', urlId);
+        }
+      } catch(e){ console.warn('URL preload failed:', e.message); }
+    })();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
