@@ -6201,8 +6201,20 @@ function _genSelfEditToken(){
   return Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
 }
 
-async function createSelfEditToken(memberId){
+// Decision #1 (Phase 2d): ONE token per member, reused across self-edit + all
+// assessments — reuse a non-expired profile_tokens row, else mint one. Returns
+// the token STRING. Bounds token rows to ~1 per member.
+async function getOrCreateMemberToken(memberId){
   if(!memberId) throw new Error('Member ID required');
+  try {
+    const {data} = await db.from('profile_tokens')
+      .select('token,expires_at')
+      .eq('member_id', memberId)
+      .gt('expires_at', new Date().toISOString())
+      .order('expires_at', {ascending:false})
+      .limit(1);
+    if(data && data.length && data[0].token) return data[0].token;
+  } catch(e){ /* fall through to mint */ }
   const token = _genSelfEditToken();
   const expiresAt = new Date(Date.now() + TOKEN_VALIDITY_DAYS * 86400000).toISOString();
   const {error} = await db.from('profile_tokens').insert({
@@ -6211,7 +6223,11 @@ async function createSelfEditToken(memberId){
     expires_at: expiresAt
   });
   if(error) throw new Error(error.message);
-  return SELF_EDIT_BASE + '?token=' + token;
+  return token;
+}
+
+async function createSelfEditToken(memberId){
+  return SELF_EDIT_BASE + '?token=' + (await getOrCreateMemberToken(memberId));
 }
 
 async function sendProfileEditLink(memberId, memberName, contact){
@@ -6322,8 +6338,17 @@ async function _shareVia(method, btn){
   }
 }
 
-function sendLink_(memberId, memberName, file, assessName, contact){
-  const url = BASE_URL+file+'?id='+memberId+'&name='+encodeURIComponent(memberName);
+async function sendLink_(memberId, memberName, file, assessName, contact){
+  // Cold share path (Phase 2d): emit ?token= so a logged-out recipient gets a
+  // JWT via token-login and passes RLS. The assessment page resolves the member
+  // (and name) from the token via bootstrap() — so &name= is no longer needed.
+  let url;
+  try {
+    url = BASE_URL+file+'?token='+(await getOrCreateMemberToken(memberId));
+  } catch(e){
+    toast('Could not create link: '+e.message, 'error');
+    return;
+  }
   const firstName = (memberName||'').split(' ')[0] || 'kapatid';
   const senderName = currentLeader?.name || 'Your LC Leader';
   // Build from the configurable assessment greeting (loaded from system_settings)

@@ -9332,7 +9332,7 @@ function _quizConfirmBulkImport(replaceAll){
 }
 
 
-function copyProfileLink(type, memberId) {
+async function copyProfileLink(type, memberId) {
   // Map internal type code to a friendly name shown in the WhatsApp/SMS message
   const NAMES = {
     love_language: 'Love Language Assessment',
@@ -9342,7 +9342,7 @@ function copyProfileLink(type, memberId) {
     gifts:         'Spiritual Gifts Diagnostic',
     conflict_style: 'Conflict Response Style Inventory'
   };
-  sendAssessmentLink(memberId, NAMES[type] || 'Assessment', getProfileUrl(type, memberId));
+  sendAssessmentLink(memberId, NAMES[type] || 'Assessment', await _assessShareUrl(getProfileUrl(type, memberId), memberId));
 }
 
 async function rProfileTab(m) {
@@ -9803,8 +9803,8 @@ function toggleProfileResults(id) {
   const btn = document.querySelector(`button[onclick="toggleProfileResults('${id}')"]`);
   if (btn) btn.textContent = isOpen ? '👁 View Results' : '🙈 Hide Results';
 }
-function copyGiftsLink(memberId) {
-  sendAssessmentLink(memberId, 'Spiritual Gifts Diagnostic', getGiftsUrl(memberId));
+async function copyGiftsLink(memberId) {
+  sendAssessmentLink(memberId, 'Spiritual Gifts Diagnostic', await _assessShareUrl(getGiftsUrl(memberId), memberId));
 }
 
 function openGiftsDirect(memberId) {
@@ -9845,10 +9845,10 @@ async function rGiftsTab(m) {
   }
 }
 
-function copyDiagLink(memberId) {
+async function copyDiagLink(memberId) {
   // Now routes through the unified sender — WhatsApp direct if phone on file,
   // share picker otherwise. Uses the configurable Assessment Link greeting.
-  sendAssessmentLink(memberId, 'Salvation Assurance Diagnostic', getDiagUrl(memberId));
+  sendAssessmentLink(memberId, 'Salvation Assurance Diagnostic', await _assessShareUrl(getDiagUrl(memberId), memberId));
 }
 
 function openDiagDirect(memberId) {
@@ -11710,15 +11710,39 @@ function _normalizePHPhone(raw){
   return '';
 }
 
-async function _createSelfEditToken(memberId){
+// Decision #1 (Phase 2d): ONE token per member, reused across self-edit + all
+// assessments — reuse a non-expired profile_tokens row, else mint one. Returns
+// the token STRING. Bounds token rows to ~1 per member.
+async function getOrCreateMemberToken(memberId){
   if(!memberId) throw new Error('Member ID required');
+  try {
+    const {data} = await db.from('profile_tokens')
+      .select('token,expires_at')
+      .eq('member_id', memberId)
+      .gt('expires_at', new Date().toISOString())
+      .order('expires_at', {ascending:false})
+      .limit(1);
+    if(data && data.length && data[0].token) return data[0].token;
+  } catch(e){ /* fall through to mint */ }
   const token = _genSelfEditToken();
   const expiresAt = new Date(Date.now() + _TOKEN_VALIDITY_DAYS * 86400000).toISOString();
   const {error} = await db.from('profile_tokens').insert({
     token, member_id: memberId, expires_at: expiresAt
   });
   if(error) throw new Error(error.message);
-  return _SELF_EDIT_BASE + '?token=' + token;
+  return token;
+}
+
+// Cold assessment SHARE url (Phase 2d): take an existing in-app ?id= URL (which
+// carries the file mapping from getProfileUrl/getGiftsUrl/getDiagUrl) and swap
+// the query to ?token= so a logged-out recipient passes RLS via token-login.
+async function _assessShareUrl(idUrl, memberId){
+  const token = await getOrCreateMemberToken(memberId);
+  return idUrl.split('?')[0] + '?token=' + token;
+}
+
+async function _createSelfEditToken(memberId){
+  return _SELF_EDIT_BASE + '?token=' + (await getOrCreateMemberToken(memberId));
 }
 
 async function sendProfileEditLink(memberId){
