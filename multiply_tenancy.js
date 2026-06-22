@@ -1,4 +1,4 @@
-/* multiply_tenancy.js — v1
+/* multiply_tenancy.js — v2
  *
  * Standalone tenancy bootstrap for MULTIPLY cold-capable pages
  * (the 7 assessment instruments + member_self_edit.html).
@@ -9,12 +9,19 @@
  *
  * Load order on the page (AFTER the supabase UMD script, BEFORE the page script):
  *   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
- *   <script src="multiply_tenancy.js?v=1"></script>
+ *   <script src="multiply_tenancy.js?v=2"></script>
  *
  * window.MultiplyTenancy:
  *   await tokenLogin(token) -> POST {token} to the token-login EF, store the
  *                             church-scoped JWT in sessionStorage.multiply_jwt,
  *                             return { token, church_id, member_id, expires_at }.
+ *   await bootstrap()      -> resolve the member id from the page URL, handling
+ *                            both the cold (?token=) and in-app (?id=) paths.
+ *                            COLD (token present + no valid session): tokenLogin,
+ *                            then return currentMemberId(); on failure replace the
+ *                            page body with a bilingual "link expired" notice and
+ *                            THROW so the page halts. IN-APP (no token): return
+ *                            ?id= unchanged (getDB() attaches the existing JWT).
  *   getDB()                -> Supabase client with the church JWT attached as
  *                            Bearer when present+valid, else anon. SYNCHRONOUS.
  *   readJwt(), currentMemberId(), churchId(), hasValidSession()
@@ -82,6 +89,28 @@
     return data;
   }
 
+  async function bootstrap() {
+    var params = new URLSearchParams(location.search);
+    var token = params.get('token');
+    if (token) {
+      if (!hasValidSession()) {
+        try {
+          await tokenLogin(token);
+        } catch (e) {
+          document.body.innerHTML =
+            '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:system-ui,-apple-system,sans-serif;text-align:center;color:#b00">' +
+            '<h2>Link expired or invalid</h2>' +
+            '<p>Please ask your leader for a fresh link.</p>' +
+            '<p style="color:#777;margin-top:.5rem">Paso na o di-wasto ang link — pakihingi sa iyong lider ang bagong link.</p>' +
+            '</div>';
+          throw new Error('token_login_failed');
+        }
+      }
+      return currentMemberId();
+    }
+    return params.get('id');
+  }
+
   var _db = null;
   function getDB() {
     if (_db) return _db;
@@ -98,6 +127,7 @@
 
   global.MultiplyTenancy = {
     tokenLogin: tokenLogin,
+    bootstrap: bootstrap,
     getDB: getDB,
     readJwt: readJwt,
     currentMemberId: currentMemberId,

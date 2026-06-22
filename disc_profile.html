@@ -8,7 +8,7 @@
 <title>DISC Profile — MULTIPLY Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="multiply_tenancy.js?v=1"></script>
+<script src="multiply_tenancy.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--bg:#f8f5f0;--paper:#fff;--ink:#1a1612;--muted:#6b5f50;--lighter:#a09080;--border:#e5ddd0;--surface2:#f3efe8;
@@ -263,16 +263,6 @@ const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 let db = null;
 function getDB(){ return MultiplyTenancy.getDB(); }
-async function _bootstrapTenancy(){
-  const t = new URLSearchParams(location.search).get('token');
-  if (t && !MultiplyTenancy.hasValidSession()){
-    try { await MultiplyTenancy.tokenLogin(t); }
-    catch(e){
-      document.body.innerHTML = '<div style="max-width:520px;margin:80px auto;padding:24px;font-family:system-ui;text-align:center;color:#b00"><h2>Link expired or invalid</h2><p>Please ask your leader to send a fresh link.</p></div>';
-      throw new Error('token_login_failed');
-    }
-  }
-}
 let _memberId=null;
 const DISC=[
   {id:'D',name:'Dominance',color:'var(--d)',bg:'var(--d-bg)',cls:'dl-d',
@@ -518,8 +508,7 @@ async function saveToDashboard(){
   }catch(e){btn.textContent='💾 Save to MULTIPLY Dashboard';btn.disabled=false;msg.style.display='block';msg.style.background='#fdecea';msg.style.color='#7a2020';msg.textContent='❌ Error: '+e.message;}
 }
 async function autoLinkFromUrl(){
-  const _p = new URLSearchParams(location.search);
-  const id = _p.get('token') ? MultiplyTenancy.currentMemberId() : _p.get('id');
+  const id = await MultiplyTenancy.bootstrap();
   if(!id) return;
   try{
     const {data}=await getDB().from('members').select('id,name,pipeline_level,discipler_name,discipler').eq('id',id).single();if(!data)return;
@@ -542,9 +531,8 @@ function selectMember(id,name){_memberId=id;document.getElementById('memberSearc
 document.addEventListener('click',e=>{if(!e.target.closest('#memberSearch')&&!e.target.closest('#memberDropdown')){const dd=document.getElementById('memberDropdown');if(dd)dd.style.display='none';}});
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 document.addEventListener('DOMContentLoaded', async function() {
-  await _bootstrapTenancy();
+  await autoLinkFromUrl();
   buildQuestions();
-  autoLinkFromUrl();
 });
 
 // ── Language Toggle ──────────────────────────────────────────
