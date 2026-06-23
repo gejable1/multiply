@@ -356,7 +356,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = 'https://tirzeikbflolaclgtket.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Phase-2 tenancy (C3b): attach the leader's church-scoped JWT (minted at login,
+// in sessionStorage.multiply_jwt) so the members read survives members RLS. Anon
+// fallback if absent/expired — under members RLS that yields an empty list, which
+// implicitly leader-gates this admin tool.
+function _readTenancyJwt(){
+  try {
+    const raw = sessionStorage.getItem('multiply_jwt');
+    if(!raw) return null;
+    const j = JSON.parse(raw);
+    if(!j || !j.token) return null;
+    if(j.expires_at && Date.parse(j.expires_at) <= Date.now()) return null;
+    return j.token;
+  } catch(e){ return null; }
+}
+
+const _mjwt = _readTenancyJwt();
+const supabase = _mjwt
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ headers:{ Authorization:'Bearer ' + _mjwt } }, auth:{ persistSession:false } })
+  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // State
 let allMembers = [];
