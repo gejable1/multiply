@@ -5,14 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MULTIPLY — Leader Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
-<script>
-// bcryptjs v2.4.3 exposes itself as window.dcodeIO.bcrypt when neither
-// CommonJS nor AMD is available. Some hosts also expose plain `bcrypt`.
-// Normalize to a single global so the rest of the code is simple.
-window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
-</script>
 <style>
 :root{
   --green:#2a5c40; --green-bg:#e8f1ec; --green-deep:#1f4530;
@@ -306,17 +298,21 @@ body{
 
   <div class="footer-note">
     Forgot your PIN? Ask Pastor Gerry to reset it.<br>
-    <span style="font-size:10px">Rosehill Christian Church · MULTIPLY Pipeline</span>
+    <span style="font-size:10px">MULTIPLY Pipeline</span>
   </div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════
-// SUPABASE
+// AUTH — all leader access goes through the auth-login Edge Function.
+// This page touches the `members` table ZERO times from the client
+// (lookup, PIN-verify, PIN-set, last-login, session-log all happen
+// server-side via stamp:'leader'), so `members` RLS can lock the table
+// from anon while login still works. SB_KEY remains ONLY as the apikey
+// header on the EF fetch.
 // ═══════════════════════════════════════════════════════════
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-const db = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 
 // ═══════════════════════════════════════════════════════════
 // CONSTANTS
@@ -363,36 +359,43 @@ let mode = 'verify';      // 'verify' (existing PIN) or 'setup' (new PIN)
 })();
 
 // ═══════════════════════════════════════════════════════════
-// LOAD LEADERS LIST
+// NO LEADER PRELOAD — the picker is populated on demand by the
+// auth-login `search` action (server-side, min_level:2). This page
+// never reads the `members` table from the client. `allLeaders`
+// (below) holds the latest search results so pickLeader resolves by id.
 // ═══════════════════════════════════════════════════════════
-async function loadLeaders(){
-  try{
-    const {data, error} = await db.from('members')
-      .select('id,name,pipeline_level,facilitator_role,lc_group,member_pin_hash')
-      .gte('pipeline_level', 2)
-      .order('name');
-    if(error) throw error;
-    allLeaders = data || [];
-  }catch(e){
-    showError('err1', 'Could not load leader list. Check your connection. ('+e.message+')');
-  }
-}
-loadLeaders();
 
 // ═══════════════════════════════════════════════════════════
 // STEP 1 — NAME SEARCH
 // ═══════════════════════════════════════════════════════════
 const nameInput = document.getElementById('nameSearch');
 const dropdown = document.getElementById('searchDropdown');
+let _searchTimer = null;
 nameInput.addEventListener('input', ()=>{
-  const q = nameInput.value.trim().toLowerCase();
-  if(!q){ dropdown.classList.remove('show'); return; }
-  const matches = allLeaders.filter(m => (m.name||'').toLowerCase().includes(q)).slice(0,8);
-  if(!matches.length){
+  const q = nameInput.value.trim();
+  if(_searchTimer) clearTimeout(_searchTimer);
+  if(q.length < 2){ dropdown.classList.remove('show'); dropdown.innerHTML = ''; return; }
+  _searchTimer = setTimeout(()=>runSearch(q), 250);
+});
+
+// Debounced server-side search via the auth-login `search` action with
+// min_level:2 (leaders only). Stores results in `allLeaders` (the module
+// variable pickLeader reads) and renders name + role · lc (no test/guest badges).
+async function runSearch(q){
+  hideError('err1');
+  let results;
+  try{
+    const data = await authLogin({ action:'search', q, min_level: 2 });
+    results = (data && data.results) || [];
+  }catch(e){
+    showError('err1', 'Could not search the leader list. Check your connection.');
+    return;
+  }
+  allLeaders = results;
+  if(!results.length){
     dropdown.innerHTML = '<div class="search-empty">No leader matches that name.<br>Only Leader / Coach / Director / Pastor can log in here.</div>';
   } else {
-    dropdown.innerHTML = matches.map(m=>{
-      const initials = (m.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    dropdown.innerHTML = results.map(m=>{
       const role = m.facilitator_role || LN[m.pipeline_level||0];
       return `<div class="search-item" onclick="pickLeader('${m.id}')">
         <div class="si-name">${escapeHTML(m.name)}</div>
@@ -401,7 +404,7 @@ nameInput.addEventListener('input', ()=>{
     }).join('');
   }
   dropdown.classList.add('show');
-});
+}
 nameInput.addEventListener('blur', ()=>{
   setTimeout(()=>dropdown.classList.remove('show'), 200);
 });
@@ -423,7 +426,7 @@ function pickLeader(id){
   document.getElementById('lLc').textContent = selectedLeader.lc_group || '';
 
   // Has a PIN already set? (single PIN per user — same column for MMT and MLT)
-  if(selectedLeader.member_pin_hash){
+  if(selectedLeader.has_pin){
     mode = 'verify';
     document.getElementById('pinExisting').classList.remove('hidden');
     document.getElementById('pinNew').classList.add('hidden');
@@ -466,20 +469,19 @@ function updatePinDots(){
 
 async function handlePinSubmit(){
   if(mode === 'verify'){
-    // Existing PIN — verify against hash
+    // Existing PIN — verify server-side via the auth-login EF (stamp:'leader')
     showLoading('loadBar2', true);
     try{
-      const ok = await verifyPin(pinEntry, selectedLeader.member_pin_hash);
-      if(!ok){
-        showLoading('loadBar2', false);
-        showError('err2', 'Incorrect PIN. Try again or ask Pastor Gerry to reset.');
-        pinEntry = ''; updatePinDots();
-        return;
-      }
-      await loginSuccess();
+      const ef = await authLogin({ member_id: selectedLeader.id, pin: pinEntry, stamp:'leader' });
+      await loginSuccess(ef);
     }catch(e){
       showLoading('loadBar2', false);
-      showError('err2', 'Login error: '+e.message);
+      if(e.code === 'invalid_login'){
+        showError('err2', 'Incorrect PIN. Try again or ask Pastor Gerry to reset.');
+        pinEntry = ''; updatePinDots();
+      } else {
+        showError('err2', 'Login error. Check your connection and try again.');
+      }
     }
   } else {
     // Setup mode — capture this entry, ask to confirm
@@ -527,78 +529,57 @@ async function handlePinConfirmSubmit(){
     return;
   }
 
-  // Save the new hashed PIN
+  // Claim the new PIN server-side via the auth-login EF (stamp:'leader')
   showLoading('loadBar3', true);
   try{
-    const hash = await hashPin(pinFirstEntry);
-    const {error} = await db.from('members').update({
-      member_pin_hash: hash,
-      member_pin_set_at: new Date().toISOString(),
-    }).eq('id', selectedLeader.id);
-    if(error) throw error;
-    selectedLeader.member_pin_hash = hash;
-    pinEntry = pinFirstEntry; // for the loginSuccess path
-    await loginSuccess();
+    const ef = await authLogin({ action:'set_pin', member_id: selectedLeader.id, pin: pinFirstEntry, stamp:'leader' });
+    await loginSuccess(ef);
   }catch(e){
     showLoading('loadBar3', false);
-    showError('err3', 'Could not save PIN: '+e.message);
+    if(e.code === 'pin_already_set'){
+      // A PIN got set for this account meanwhile — fall back to verify mode on step 2.
+      selectedLeader.has_pin = true;
+      mode = 'verify';
+      pinFirstEntry = ''; pinConfirm = ''; pinEntry = '';
+      updatePinDots(); updatePinDotsC();
+      document.getElementById('pinExisting').classList.remove('hidden');
+      document.getElementById('pinNew').classList.add('hidden');
+      document.getElementById('step3').classList.add('hidden');
+      document.getElementById('step2').classList.remove('hidden');
+      showError('err2', 'A PIN was already set for this account. Please enter it.');
+    } else {
+      showError('err3', 'Could not save PIN. Check your connection and try again.');
+    }
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOGIN SUCCESS — write session, log, show destination chooser
+// LOGIN SUCCESS — write session + JWT, show destination chooser
 // ═══════════════════════════════════════════════════════════
-// Phase-2 tenancy (C1): call the auth-login EF → store {token,church_id,exp} under
-// 'multiply_jwt'. INERT plumbing — stored but NOT consumed until C2 (getDB attach).
-async function _mintTenancyJwt(memberId, pin){
-  if(!memberId || !pin) return;
-  const res = await fetch(SB_URL + '/functions/v1/auth-login', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY },
-    body: JSON.stringify({ member_id: memberId, pin: String(pin) }),
-  });
-  if(!res.ok) throw new Error('auth-login HTTP ' + res.status);
-  const data = await res.json();
-  if(!data || !data.token) throw new Error('no token in response');
-  sessionStorage.setItem('multiply_jwt', JSON.stringify({
-    token: data.token,
-    church_id: (data.profile && data.profile.church_id) || null,
-    expires_at: data.expires_at || null,
-    member_id: memberId,
-  }));
-}
-
-async function loginSuccess(){
-  const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+// The auth-login EF (stamp:'leader') already verified (or set) the PIN AND
+// stamped leader_last_login + logged a leader session-log row server-side, and
+// returned the church-scoped JWT — so this page just persists the session +
+// token and shows the chooser. ef.profile lacks lc_group, so it's carried
+// from the picked SEARCH ROW (selectedLeader). No client-side `members` access.
+async function loginSuccess(ef){
   const session = {
-    leaderId:    selectedLeader.id,
-    leaderName:  selectedLeader.name,
-    leaderLevel: selectedLeader.pipeline_level || 0,
-    leaderRole:  selectedLeader.facilitator_role || LN[selectedLeader.pipeline_level||0],
+    leaderId:    ef.profile.id,
+    leaderName:  ef.profile.name,
+    leaderLevel: ef.profile.pipeline_level || 0,
+    leaderRole:  ef.profile.facilitator_role || LN[ef.profile.pipeline_level||0],
     leaderLcGroup: selectedLeader.lc_group || null,
-    expiresAt,
+    expiresAt: ef.expires_at,
     sessionStart: new Date().toISOString(),
   };
   sessionStorage.setItem('multiply_leader_session', JSON.stringify(session));
 
-  // Phase-2 tenancy (C1): mint + store church-scoped JWT (inert; best-effort, non-fatal).
-  try { await _mintTenancyJwt(selectedLeader.id, pinEntry); }
-  catch(e){ console.warn('tenancy JWT mint failed (non-fatal):', e); }
-
-  // Update last-login timestamp & insert session log (best-effort, non-fatal)
-  try{
-    await db.from('members').update({
-      leader_last_login: new Date().toISOString()
-    }).eq('id', selectedLeader.id);
-  }catch(e){ console.warn('last-login update failed (non-fatal):', e); }
-
-  try{
-    await db.from('leader_sessions').insert({
-      leader_id: selectedLeader.id,
-      expires_at: expiresAt,
-      user_agent_hint: (navigator.userAgent || '').slice(0,180),
-    });
-  }catch(e){ console.warn('session log failed (non-fatal):', e); }
+  // Phase-2 tenancy: persist the church-scoped JWT (getDB attaches it as Bearer).
+  sessionStorage.setItem('multiply_jwt', JSON.stringify({
+    token: ef.token,
+    church_id: (ef.profile && ef.profile.church_id) || null,
+    expires_at: ef.expires_at,
+    member_id: ef.profile.id,
+  }));
 
   // Show destination chooser instead of jumping straight to a page.
   showDestinationChooser();
@@ -629,19 +610,9 @@ function goToDestination(which){
 }
 
 // "Logout" link from the destination chooser — clears session and
-// returns to the name search step.
-async function logoutAndRestart(){
-  try{
-    const raw = sessionStorage.getItem('multiply_leader_session');
-    if(raw){
-      const sess = JSON.parse(raw);
-      if(sess && sess.leaderId){
-        await db.from('leader_sessions').update({
-          ended_at: new Date().toISOString(), ended_reason: 'logout'
-        }).eq('leader_id', sess.leaderId).is('ended_at', null);
-      }
-    }
-  }catch(e){ /* non-fatal */ }
+// returns to the name search step. (No client-side session-log write
+// remains; the EF owns session logging.)
+function logoutAndRestart(){
   sessionStorage.removeItem('multiply_leader_session');
   selectedLeader = null;
   pinEntry = ''; pinFirstEntry = ''; pinConfirm = '';
@@ -654,21 +625,29 @@ async function logoutAndRestart(){
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
-function hashPin(pin){
-  if(typeof bcrypt === 'undefined' || !bcrypt || !bcrypt.hash){
-    return Promise.reject(new Error('Security library failed to load. Check your internet connection and refresh the page.'));
+// Single server-side auth entry point. POSTs to the auth-login EF; on a
+// non-2xx it throws an Error whose .code carries the EF's `error` string
+// (e.g. 'invalid_login', 'pin_already_set', 'missing_credentials');
+// a thrown/network/parse failure uses code 'network'.
+async function authLogin(body){
+  let res;
+  try{
+    res = await fetch(SB_URL + '/functions/v1/auth-login', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY },
+      body: JSON.stringify(body),
+    });
+  }catch(e){
+    const err = new Error('Network error'); err.code = 'network'; throw err;
   }
-  return new Promise((resolve, reject)=>{
-    bcrypt.hash(pin, 10, (err, hash) => err ? reject(err) : resolve(hash));
-  });
-}
-function verifyPin(pin, hash){
-  if(typeof bcrypt === 'undefined' || !bcrypt || !bcrypt.compare){
-    return Promise.reject(new Error('Security library failed to load. Check your internet connection and refresh the page.'));
+  let data = null;
+  try{ data = await res.json(); }catch(e){ /* body may be empty */ }
+  if(!res.ok){
+    const err = new Error((data && data.error) || ('auth-login HTTP ' + res.status));
+    err.code = (data && data.error) || 'network';
+    throw err;
   }
-  return new Promise((resolve, reject)=>{
-    bcrypt.compare(pin, hash, (err, ok) => err ? reject(err) : resolve(!!ok));
-  });
+  return data;
 }
 
 function showError(id, msg){

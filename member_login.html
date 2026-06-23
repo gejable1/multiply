@@ -15,13 +15,6 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap"
       onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap"></noscript>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
-<script>
-// bcryptjs v2.4.3 exposes itself as window.dcodeIO.bcrypt when neither
-// CommonJS nor AMD is available. Normalize to a single global.
-window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
-</script>
 <style>
 :root{
   --forest:#0e3a2c; --forest-2:#1a5547; --forest-3:#2d6e5a;
@@ -189,7 +182,7 @@ body{
   <!-- ─────────── STEP 1: Find your name ─────────── -->
   <div id="step1">
     <div class="step-title">Hi! What's your name?</div>
-    <div class="step-sub">Type your name to begin. Every member of Rosehill has access here.</div>
+    <div class="step-sub">Type your name to begin. Every member of the church has access here.</div>
     <div class="search-wrap">
       <input type="text" id="nameSearch" class="search-input" placeholder="Type your name..." autocomplete="off" spellcheck="false">
       <div class="search-dropdown" id="searchDropdown"></div>
@@ -290,17 +283,20 @@ body{
 
   <div class="footer-note">
     Forgot your PIN? Ask your discipler or Pastor Gerry to reset it.<br>
-    <span style="font-size:10px">Rosehill Christian Church · MULTIPLY Pipeline</span>
+    <span style="font-size:10px">MULTIPLY Pipeline</span>
   </div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════
-// SUPABASE
+// AUTH — all member access goes through the auth-login Edge Function.
+// This page touches the `members` table ZERO times from the client
+// (lookup, PIN-verify, PIN-set, last-login all happen server-side), so
+// `members` RLS can lock the table from anon while login still works.
+// SB_KEY remains ONLY as the apikey header on the EF fetch.
 // ═══════════════════════════════════════════════════════════
 const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
-const db = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 
 // ═══════════════════════════════════════════════════════════
 // CONSTANTS
@@ -338,42 +334,43 @@ let mode = 'verify'; // 'verify' or 'setup'
 })();
 
 // ═══════════════════════════════════════════════════════════
-// LOAD MEMBERS LIST
-// ───────────────────────────────────────────────────────────
-// Every member of the church belongs in MMT — the whole point is
-// discipleship, regardless of pipeline level. The PIN setup flow
-// on first login (Step 2) is the real gate: a contact who shouldn't
-// have access simply won't have a PIN and won't get past it.
-// Test members ARE included in the login search — Pastor uses them
-// to verify MMT behavior end-to-end. They're visually marked with
-// a 🧪 badge so anyone browsing the list can identify them at a glance.
+// NO MEMBER PRELOAD — the picker is populated on demand by the
+// auth-login `search` action (server-side). This page never reads
+// the `members` table from the client. `allMembers` (below) holds
+// the latest search results so pickMember can resolve a row by id.
 // ═══════════════════════════════════════════════════════════
-async function loadMembers(){
-  try{
-    const {data, error} = await db.from('members')
-      .select('id,name,pipeline_level,facilitator_role,lc_group,member_pin_hash,is_test_member,is_external_user,discipler_name')
-      .order('name');
-    if(error) throw error;
-    allMembers = data || [];
-  }catch(e){
-    showError('err1', 'Could not load member list. Check your connection. ('+e.message+')');
-  }
-}
-loadMembers();
 
 // ═══════════════════════════════════════════════════════════
 // STEP 1 — NAME SEARCH
 // ═══════════════════════════════════════════════════════════
 const nameInput = document.getElementById('nameSearch');
 const dropdown = document.getElementById('searchDropdown');
+let _searchTimer = null;
 nameInput.addEventListener('input', ()=>{
-  const q = nameInput.value.trim().toLowerCase();
-  if(!q){ dropdown.classList.remove('show'); return; }
-  const matches = allMembers.filter(m => (m.name||'').toLowerCase().includes(q)).slice(0,8);
-  if(!matches.length){
+  const q = nameInput.value.trim();
+  if(_searchTimer) clearTimeout(_searchTimer);
+  if(q.length < 2){ dropdown.classList.remove('show'); dropdown.innerHTML = ''; return; }
+  _searchTimer = setTimeout(()=>runSearch(q), 250);
+});
+
+// Debounced server-side search via the auth-login `search` action. Stores the
+// returned rows in `allMembers` (the same module variable pickMember reads) and
+// renders them exactly as before — name + 🧪 TEST / 👤 GUEST badges + role · lc.
+async function runSearch(q){
+  hideError('err1');
+  let results;
+  try{
+    const data = await authLogin({ action:'search', q });
+    results = (data && data.results) || [];
+  }catch(e){
+    showError('err1', 'Could not search the member list. Check your connection.');
+    return;
+  }
+  allMembers = results;
+  if(!results.length){
     dropdown.innerHTML = '<div class="search-empty">No member matches that name.<br>If you are a new member, please ask your discipler or Pastor.</div>';
   } else {
-    dropdown.innerHTML = matches.map(m=>{
+    dropdown.innerHTML = results.map(m=>{
       const role = m.facilitator_role || LN[m.pipeline_level||0];
       // Two distinct badges: 🧪 TEST (Pastor's QA accounts) vs 👤 GUEST
       // (real people exploring the app but not formal church members).
@@ -391,7 +388,7 @@ nameInput.addEventListener('input', ()=>{
     }).join('');
   }
   dropdown.classList.add('show');
-});
+}
 nameInput.addEventListener('blur', ()=>{
   setTimeout(()=>dropdown.classList.remove('show'), 200);
 });
@@ -413,7 +410,7 @@ function pickMember(id){
   document.getElementById('mLc').textContent = selectedMember.lc_group || '';
 
   // Has a PIN already set?
-  if(selectedMember.member_pin_hash){
+  if(selectedMember.has_pin){
     mode = 'verify';
     document.getElementById('pinExisting').classList.remove('hidden');
     document.getElementById('pinNew').classList.add('hidden');
@@ -458,17 +455,16 @@ async function handlePinSubmit(){
   if(mode === 'verify'){
     showLoading('loadBar2', true);
     try{
-      const ok = await verifyPin(pinEntry, selectedMember.member_pin_hash);
-      if(!ok){
-        showLoading('loadBar2', false);
-        showError('err2', 'Incorrect PIN. Try again or ask your discipler/Pastor to reset.');
-        pinEntry = ''; updatePinDots();
-        return;
-      }
-      await loginSuccess();
+      const ef = await authLogin({ member_id: selectedMember.id, pin: pinEntry });
+      await loginSuccess(ef);
     }catch(e){
       showLoading('loadBar2', false);
-      showError('err2', 'Login error: '+e.message);
+      if(e.code === 'invalid_login'){
+        showError('err2', 'Incorrect PIN. Try again or ask your discipler/Pastor to reset.');
+        pinEntry = ''; updatePinDots();
+      } else {
+        showError('err2', 'Login error. Check your connection and try again.');
+      }
     }
   } else {
     pinFirstEntry = pinEntry;
@@ -515,68 +511,55 @@ async function handlePinConfirmSubmit(){
 
   showLoading('loadBar3', true);
   try{
-    const hash = await hashPin(pinFirstEntry);
-    const {error} = await db.from('members').update({
-      member_pin_hash: hash,
-      member_pin_set_at: new Date().toISOString(),
-    }).eq('id', selectedMember.id);
-    if(error) throw error;
-    selectedMember.member_pin_hash = hash;
-    pinEntry = pinFirstEntry;
-    await loginSuccess();
+    const ef = await authLogin({ action:'set_pin', member_id: selectedMember.id, pin: pinFirstEntry });
+    await loginSuccess(ef);
   }catch(e){
     showLoading('loadBar3', false);
-    showError('err3', 'Could not save PIN: '+e.message);
+    if(e.code === 'pin_already_set'){
+      // A PIN got set for this account meanwhile — fall back to verify mode on step 2.
+      selectedMember.has_pin = true;
+      mode = 'verify';
+      pinFirstEntry = ''; pinConfirm = ''; pinEntry = '';
+      updatePinDots(); updatePinDotsC();
+      document.getElementById('pinExisting').classList.remove('hidden');
+      document.getElementById('pinNew').classList.add('hidden');
+      document.getElementById('step3').classList.add('hidden');
+      document.getElementById('step2').classList.remove('hidden');
+      showError('err2', 'A PIN was already set for this account. Please enter it.');
+    } else {
+      showError('err3', 'Could not save PIN. Check your connection and try again.');
+    }
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOGIN SUCCESS — write session, log, redirect
+// LOGIN SUCCESS — write session + JWT, redirect
 // ═══════════════════════════════════════════════════════════
-// Phase-2 tenancy (C1): call the auth-login EF → store {token,church_id,exp} under
-// 'multiply_jwt'. INERT plumbing — stored but NOT consumed until C2 (getDB attach).
-async function _mintTenancyJwt(memberId, pin){
-  if(!memberId || !pin) return;
-  const res = await fetch(SB_URL + '/functions/v1/auth-login', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY },
-    body: JSON.stringify({ member_id: memberId, pin: String(pin) }),
-  });
-  if(!res.ok) throw new Error('auth-login HTTP ' + res.status);
-  const data = await res.json();
-  if(!data || !data.token) throw new Error('no token in response');
-  sessionStorage.setItem('multiply_jwt', JSON.stringify({
-    token: data.token,
-    church_id: (data.profile && data.profile.church_id) || null,
-    expires_at: data.expires_at || null,
-    member_id: memberId,
-  }));
-}
-
-async function loginSuccess(){
-  const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+// The auth-login EF already verified (or set) the PIN AND stamped
+// member_last_login server-side, and returned the church-scoped JWT — so
+// this page just persists the session + token and navigates. ef.profile
+// lacks lc_group/discipler_name, so those are carried from the picked
+// SEARCH ROW (selectedMember). No client-side `members` access remains.
+async function loginSuccess(ef){
   const session = {
-    memberId:    selectedMember.id,
-    memberName:  selectedMember.name,
-    memberLevel: selectedMember.pipeline_level || 0,
-    memberRole:  selectedMember.facilitator_role || LN[selectedMember.pipeline_level||0],
+    memberId:    ef.profile.id,
+    memberName:  ef.profile.name,
+    memberLevel: ef.profile.pipeline_level || 0,
+    memberRole:  ef.profile.facilitator_role || LN[ef.profile.pipeline_level||0],
     memberLcGroup: selectedMember.lc_group || null,
     memberDisciplerName: selectedMember.discipler_name || null,
-    expiresAt,
+    expiresAt: ef.expires_at,
     sessionStart: new Date().toISOString(),
   };
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
 
-  // Phase-2 tenancy (C1): mint + store church-scoped JWT (inert; best-effort, non-fatal).
-  try { await _mintTenancyJwt(selectedMember.id, pinEntry); }
-  catch(e){ console.warn('tenancy JWT mint failed (non-fatal):', e); }
-
-  // Update last-login (best-effort, non-fatal)
-  try{
-    await db.from('members').update({
-      member_last_login: new Date().toISOString()
-    }).eq('id', selectedMember.id);
-  }catch(e){ console.warn('last-login update failed (non-fatal):', e); }
+  // Phase-2 tenancy: persist the church-scoped JWT (getDB attaches it as Bearer).
+  sessionStorage.setItem('multiply_jwt', JSON.stringify({
+    token: ef.token,
+    church_id: (ef.profile && ef.profile.church_id) || null,
+    expires_at: ef.expires_at,
+    member_id: ef.profile.id,
+  }));
 
   // Optional ?next= redirect (additive — used by the unified shell). Only a
   // SAME-ORIGIN RELATIVE .html path is honored (no scheme, no leading / or //,
@@ -602,21 +585,29 @@ function _safeNextUrl(){
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
-function hashPin(pin){
-  if(typeof bcrypt === 'undefined' || !bcrypt || !bcrypt.hash){
-    return Promise.reject(new Error('Security library failed to load. Check your internet connection and refresh the page.'));
+// Single server-side auth entry point. POSTs to the auth-login EF; on a
+// non-2xx it throws an Error whose .code carries the EF's `error` string
+// (e.g. 'invalid_login', 'pin_already_set', 'missing_credentials');
+// a thrown/network/parse failure uses code 'network'.
+async function authLogin(body){
+  let res;
+  try{
+    res = await fetch(SB_URL + '/functions/v1/auth-login', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY },
+      body: JSON.stringify(body),
+    });
+  }catch(e){
+    const err = new Error('Network error'); err.code = 'network'; throw err;
   }
-  return new Promise((resolve, reject)=>{
-    bcrypt.hash(pin, 10, (err, hash) => err ? reject(err) : resolve(hash));
-  });
-}
-function verifyPin(pin, hash){
-  if(typeof bcrypt === 'undefined' || !bcrypt || !bcrypt.compare){
-    return Promise.reject(new Error('Security library failed to load. Check your internet connection and refresh the page.'));
+  let data = null;
+  try{ data = await res.json(); }catch(e){ /* body may be empty */ }
+  if(!res.ok){
+    const err = new Error((data && data.error) || ('auth-login HTTP ' + res.status));
+    err.code = (data && data.error) || 'network';
+    throw err;
   }
-  return new Promise((resolve, reject)=>{
-    bcrypt.compare(pin, hash, (err, ok) => err ? reject(err) : resolve(!!ok));
-  });
+  return data;
 }
 
 function showError(id, msg){
