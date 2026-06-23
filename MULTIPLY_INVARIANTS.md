@@ -2377,4 +2377,44 @@ Pastor works across a home desktop + a laptop (+ CC web). `main` can be **histor
 
 ---
 
+### **205. Logout clears ALL session state via `_clearSessionState()`; gate-FAIL paths deliberately do not**
+
+`logoutLeader` + `logoutMember` (`multiply_shared.js`) both route through one private `_clearSessionState()` helper that removes **all three** keys — `multiply_leader_session`, `multiply_member_session`, AND `multiply_jwt` — because a unified-shell leader (Inv #204) holds both session keys + one shared church JWT, so logout from any role tears the whole presence down (fresh login re-mints cleanly); one source of truth → scalable. `leader_login.html`'s `logoutAndRestart` (legacy page, can't load shared.js) inlines the same three `removeItem`s. The **gate-fail paths** (`gateOrRedirect`/`gateMemberOrRedirect`) are deliberately NOT routed through the helper — they fire on session *expiry*, not intentional logout, and on a standalone leader tool a member-session expiry must not nuke a JWT the tool still needs; JWT-clear belongs only at explicit logout. No stranding risk (every logout `location.replace`s away; sessionStorage is per-tab). `?v=7→?v=8` across all 19 consumers. (PRs #13/#15; browser-proven — sessionStorage empty after logout.)
+
+**Established June 23, 2026 (Session 45). Invariant #205 added - count now 205.**
+
+---
+
+### **206. Public views bypass RLS by default — every view must be `security_invoker = true` (or church-filtered)**
+
+A Postgres view runs underlying table access with the **OWNER's** rights by default (`security_invoker=false`); owner here is `postgres` (superuser → **bypasses RLS**), so an owner-view over a per-church table returns **every church's rows** to any caller. Fix: `ALTER VIEW public.<v> SET (security_invoker = true)` → view reads as the *caller*, RLS applies. Audit: `SELECT relname, reloptions FROM pg_class WHERE relkind='v' AND relnamespace='public'::regnamespace` (flag any WITHOUT `security_invoker=true`) + Supabase **Security Advisor → "Security Definer View"**. **New views default to owner-bypass — always set invoker.** (S45 audit: 6 owner-views flipped in `022`.) Parallel surface: `SECURITY DEFINER` *functions* (`pg_proc.prosecdef=true`) — S45 found **zero** in `public` (clean; auth helpers read the JWT GUC, not tables, so they need no DEFINER).
+
+**Established June 23, 2026 (Session 45). Invariant #206 added - count now 206.**
+
+---
+
+### **207. A view's invoker flip only closes the leak if its BASE tables are RLS-enabled — fix the table, not just the view**
+
+`security_invoker=true` makes a view read base tables as the caller — but a base table with **RLS OFF** still returns all rows (no policy = no restriction). A leaky reporting view is a *symptom*; the disease is the unprotected base table. S45: the 4 quiz-grade views read `btli_quiz_attempts`/`usbong_quiz_attempts`, which were per-church (`church_id uuid`) but **RLS-off, 0 policies** — `022` enabled RLS on both (4 `TO authenticated` policies on `auth_church_id()`) AND flipped the views. Always trace a flagged view to its base tables (`pg_get_viewdef`) and confirm each is RLS-enabled before declaring it safe.
+
+**Established June 23, 2026 (Session 45). Invariant #207 added - count now 207.**
+
+---
+
+### **208. Multi-tenancy is NOT yet complete — ~22 church-stamped tables remain RLS-off (corrects the S44 "wall complete" claim)**
+
+S44 declared "every per-church table enforces tenancy / the wall is complete." **Premature.** A full `pg_class` RLS audit (S45) found ~22 tables with a `church_id` column but **`relrowsecurity=false`**, two tiers: **(a) latent — policies written, never `ENABLE`d** (`attendance` 4!, `profile_tokens` 3, `devotionals`/`devotional_reflections`/`ministries`/`ministry_roles`/`system_settings` 2 each, `diagnostic_results` 1) → quick wins after an Inv #186 stub-check; **(b) unstarted — `church_id`, 0 policies** (`transfers`, all 5 `prayer_*`, the `library_*` set, `ministry_roster*`, `attendance_self_attest_log`, `discipler_change_log`, `leader_sessions`). **No active cross-tenant leak today** only because Rosehill is the sole church with real data ("all rows" ≈ "Rosehill rows") — the exposure **activates when Agape onboards real data**, so it is a hard prereq for Agape go-live. Special-care (don't blind-enable): `devotionals` was deliberately excluded from the autostamp trigger (special `church_id` semantics); `profile_tokens`/`leader_sessions` sit on pre-auth EF paths (service-role bypasses RLS so EFs survive — verify client paths). The **RLS-coverage sweep** (batched like 016–019, per-table stub pre-flight + in-browser isolation) is an open arc.
+
+**Established June 23, 2026 (Session 45). Invariant #208 added - count now 208.**
+
+---
+
+### **209. Run large dashboard SQL FLAT (statement-by-statement), never wrapped in one `BEGIN…COMMIT`**
+
+A single `BEGIN…COMMIT` around a multi-statement migration is **all-or-nothing**: if any statement throws (even transiently), the whole block rolls back and the `COMMIT` silently becomes a rollback — **zero trace**, verify shows nothing changed (S45: `022`'s wrapped first run rolled back invisibly — `rls_enabled=false`, un-backfilled NULLs, views still `(none)`). Run flat: each statement commits on its own, so the **exact failing statement** surfaces in red and everything before it **stays applied**. Idempotent design (`DROP POLICY IF EXISTS` before `CREATE`, `UPDATE … WHERE … IS NULL`, no-op re-`ENABLE`) makes a flat re-run safe. The committed version-of-record file must match the form actually run (flat, no `BEGIN/COMMIT`).
+
+**Established June 23, 2026 (Session 45). Invariant #209 added - count now 209.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
