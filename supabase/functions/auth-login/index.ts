@@ -5,19 +5,22 @@
 // from the client and the PIN hash never leaves the server. This is what lets
 // `members` RLS lock the table from anon while login still works.
 //
-//   action:"search"  {q}              -> name-search directory for the login
+//   action:"search"  {q, min_level?}  -> name-search directory for the login
 //                                        picker. Returns id/name/role/has_pin
-//                                        ONLY — never member_pin_hash.
-//   action:"login"   {member_id,pin}  -> bcrypt-verify the PIN (service role,
-//   (default)                            bypasses RLS) + mint an 8h church JWT
-//                                        + best-effort last-login stamp.
-//   action:"set_pin" {member_id,pin}  -> FIRST-login PIN claim: only when the
-//                                        member has no hash yet. bcrypt-hash,
-//                                        store, then mint a JWT (auto-login).
+//                                        ONLY — never member_pin_hash. Optional
+//                                        min_level filters BEFORE the limit (the
+//                                        leader picker passes 2).
+//   action:"login"   {member_id,pin,  -> bcrypt-verify the PIN (service role,
+//   (default)         stamp?}            bypasses RLS) + mint an 8h church JWT
+//                                        + last-login stamp. stamp:"leader" ->
+//                                        leader_last_login + leader_sessions.
+//   action:"set_pin" {member_id,pin,  -> FIRST-login PIN claim: only when the
+//                     stamp?}            member has no hash yet. bcrypt-hash,
+//                                        store, stamp, then mint (auto-login).
 //
-// Backward-compatible: a body with no `action` is treated as "login" and
-// returns the identical {token, expires_at, profile} shape as before, so
-// deploying this does NOT break the current login pages.
+// Backward-compatible: a body with no `action` is treated as "login"; no
+// `stamp`/`min_level` reproduces the prior behavior exactly, so deploying this
+// does NOT break the current login pages.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { create } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
@@ -75,6 +78,25 @@ async function mintSession(m: any) {
   };
 }
 
+// Best-effort post-auth stamp. Leader logins stamp leader_last_login + log a
+// leader_sessions row (folded in from the old client-side writes); member logins
+// stamp member_last_login. All non-fatal.
+async function stampLogin(sb: any, memberId: string, isLeader: boolean, ua: string) {
+  const nowIso = new Date().toISOString();
+  if (isLeader) {
+    try { await sb.from("members").update({ leader_last_login: nowIso }).eq("id", memberId); } catch { /* ignore */ }
+    try {
+      await sb.from("leader_sessions").insert({
+        leader_id: memberId,
+        expires_at: new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString(),
+        user_agent_hint: (ua || "").slice(0, 180),
+      });
+    } catch { /* ignore */ }
+  } else {
+    try { await sb.from("members").update({ member_last_login: nowIso }).eq("id", memberId); } catch { /* ignore */ }
+  }
+}
+
 const MEMBER_COLS =
   "id,name,pipeline_level,church_id,member_pin_hash,facilitator_role,is_test_member,is_external_user";
 
@@ -85,20 +107,24 @@ Deno.serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
   const action = (body.action || "login").toString();
+  const ua = req.headers.get("user-agent") || "";
+  const isLeader = body.stamp === "leader";
   const sb = admin();
 
   // ── SEARCH ────────────────────────────────────────────────────────────
   // Anon name-search for the login picker. Safe columns only; the hash is
   // reduced to a boolean (has_pin) so the client knows enter-PIN vs set-PIN.
+  // Optional min_level filters BEFORE the limit (leader picker passes 2).
   if (action === "search") {
     const q = (body.q || "").toString().trim();
     if (q.length < 2) return json({ results: [] });
-    const { data, error } = await sb
+    const minLevel = Number.isFinite(+body.min_level) ? +body.min_level : 0;
+    let query = sb
       .from("members")
       .select("id,name,pipeline_level,facilitator_role,lc_group,discipler_name,member_pin_hash,is_test_member,is_external_user")
-      .ilike("name", "%" + q + "%")
-      .order("name")
-      .limit(8);
+      .ilike("name", "%" + q + "%");
+    if (minLevel > 0) query = query.gte("pipeline_level", minLevel);
+    const { data, error } = await query.order("name").limit(8);
     if (error) return json({ error: "search_failed" }, 500);
     const results = (data || []).map((m: any) => ({
       id: m.id, name: m.name, pipeline_level: m.pipeline_level ?? 0,
@@ -111,8 +137,6 @@ Deno.serve(async (req) => {
   }
 
   // ── SET_PIN (first-login claim) ───────────────────────────────────────
-  // Mirrors the current client behavior: a member with NO hash yet may claim
-  // a PIN. If a hash already exists, this path is refused (use login).
   if (action === "set_pin") {
     const memberId = (body.member_id || "").trim();
     const pin = (body.pin ?? "").toString();
@@ -126,10 +150,10 @@ Deno.serve(async (req) => {
     const { error: upErr } = await sb.from("members").update({
       member_pin_hash: hash,
       member_pin_set_at: new Date().toISOString(),
-      member_last_login: new Date().toISOString(),
     }).eq("id", memberId);
     if (upErr) return json({ error: "set_failed" }, 500);
 
+    await stampLogin(sb, memberId, isLeader, ua);
     return json(await mintSession({ ...m, member_pin_hash: hash }));
   }
 
@@ -147,10 +171,6 @@ Deno.serve(async (req) => {
   try { ok = bcrypt.compareSync(pin, m.member_pin_hash); } catch { ok = false; }
   if (!ok) return json({ error: "invalid_login" }, 401);
 
-  // Best-effort last-login stamp (service role; non-fatal).
-  try {
-    await sb.from("members").update({ member_last_login: new Date().toISOString() }).eq("id", m.id);
-  } catch { /* ignore */ }
-
+  await stampLogin(sb, m.id, isLeader, ua);
   return json(await mintSession(m));
 });
