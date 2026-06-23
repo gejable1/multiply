@@ -2369,4 +2369,12 @@ Pastor works across a home desktop + a laptop (+ CC web). `main` can be **histor
 
 ---
 
+### **204. Unified shell = one login door (`member_login`) for ALL levels; `leader_login` is legacy fallback**
+
+`index.html` is the single entry shell. Boot: no session → `member_login.html?next=index.html`, so **every level (L0–L5) logs in through the member picker** — which is why both a Pre-Pipeline member and the Pastor appear in its search. It then calls `MultiplyShared.ensureBothSessions()`: a member-only session with `memberLevel >= 2` **mints the leader-session counterpart** from the member fields (level < 2 → no-op, fail-closed). L<2 → straight to MMT; L≥2 → role-toolbar shell with MMT/MLT/MD as `?embed=1` iframes, each served the session via the postMessage handshake. Consequence: **`leader_login.html` is bypassed in the unified flow** — reachable only by a direct bookmark or a standalone MD/MLT `gateOrRedirect`. It stays as a rewired, RLS-safe fallback (do NOT delete; retiring it means re-pointing every gate's default redirect — deferred). The `stamp:'leader'` path (`leader_last_login` + `leader_sessions` insert) therefore rarely fires; this is NOT a regression (the old `leader_login`'s anon writes were already shell-bypassed). One church-scoped JWT (minted by member-login; carries `church_id` + `leader_level`) serves MMT/MLT/MD under RLS regardless of role — the leader *session* is only a client-side gate shim, never the RLS scope. **Verified Session 44**: `members` RLS isolation proven in-browser — L5 Rosehill = 236 own-church rows, Agape test member = 1 own row, zero cross-church leakage.
+
+**Established June 23, 2026 (Session 44). Invariant #204 added - count now 204.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
