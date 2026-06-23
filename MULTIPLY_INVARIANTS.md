@@ -2321,4 +2321,52 @@ When Claude (chat) recommends among options (design, architecture, tooling — a
 
 ---
 
+### **198. `member_self_edit.html` is JWT-attached via `MultiplyTenancy` — own-anon gate closed**
+
+`member_self_edit.html` dropped its own anon `createClient` + `esm.sh` module; it now loads UMD supabase + `multiply_tenancy.js?v=2` (classic), resolves the member via `MultiplyTenancy.bootstrap()` (cold `?token=` → `token-login` mint; in-app `?id=` → existing JWT), and reads/writes `members` through the JWT-attached `getDB()`. The per-save `profile_tokens` `used_count` bump was removed (the `token-login` EF owns "used" on each fresh session); one **read-only** `profile_tokens` lookup remains for the expiry / saved-banner display. Smoke-proven cold on `gejable1.github.io`: `token-login` 200, `members` GET + PATCH both carry `Authorization: Bearer`, 200. This closes one of the two client-side anon `members` readers that blocked `members` RLS.
+
+**Established June 23, 2026 (Session 43). Invariant #198 added - count now 198.**
+
+---
+
+### **199. `auth-login` is the consolidated login surface — `search` / `login` / `set_pin` (all anon-callable)**
+
+`auth-login` routes on a body `action` field, all three actions anon-callable (pre-auth): **`search`** `{q}` → name-search directory for the login picker (`ilike`, min 2 chars, limit 8) returning `id/name/pipeline_level/facilitator_role/lc_group/discipler_name/is_test/is_guest` + **`has_pin`** — **NEVER** `member_pin_hash`; **`login`** `{member_id,pin}` (**DEFAULT when `action` is absent** — backward-compatible, identical `{token,expires_at,profile}` response as before) → bcrypt-verify via the **service role** + mint an 8h church JWT + best-effort `member_last_login` stamp; **`set_pin`** `{member_id,pin}` → first-login claim, **only when no hash exists** (else `409 pin_already_set`), bcrypt-hash + store + auto-mint the JWT. Deploying it does **not** break current login (no `action` = `login`). The PIN hash never leaves the server.
+
+**Established June 23, 2026 (Session 43). Invariant #199 added - count now 199.**
+
+---
+
+### **200. C3b inline-Bearer for standalone leader-launched `esm.sh` pages (`bulk_send_links`)**
+
+`bulk_send_links.html` attaches the leader's church JWT via the **C3b inline pattern** (read `sessionStorage.multiply_jwt` → if non-expired, `createClient` with `global.headers.Authorization: 'Bearer ' + jwt`; else anon) — **NOT** `multiply_shared.js`, **NOT** `MultiplyTenancy` (it is leader-launched in-app, not cold `?token=`). Same pattern as `ministry_recommender` / `profile_results_viewer`. Under `members` RLS the anon fallback yields an empty list, which **implicitly leader-gates** this admin tool. **Backlog flagged:** its WhatsApp message hardcodes "Rosehill Christian Church" (a multi-tenancy bug once Agape uses it); its `profile_tokens` insert does not stamp `church_id` (matters when `profile_tokens` gets RLS).
+
+**Established June 23, 2026 (Session 43). Invariant #200 added - count now 200.**
+
+---
+
+### **201. `members` RLS REQUIRES server-side login — the anon pre-auth special case**
+
+The login pages' name picker does a **pre-auth anon `members` read** (no JWT can exist before login) **and** downloads `member_pin_hash` to do **client-side bcrypt** verification. Both are fundamentally incompatible with `members` RLS: a `TO authenticated` church-scoped policy returns `[]` to anon (empty picker → lockout), and no anon-readable policy preserves isolation (anon has no church scope). Therefore `members` RLS **requires** moving member-lookup + PIN-verify + PIN-set + last-login fully into `auth-login` (`search`/`login`/`set_pin`, Inv #199) so the login pages touch `members` **zero times** from the client. This also closes a real pre-existing vulnerability (anon download of every PIN hash). `auth-login` (service role) bypasses RLS, so login survives the ENABLE. **Designed Session 43** (the `member_login` + `leader_login` rewire blueprint, in HANDOFF); `leader_login` adds a `stamp:'leader'` flag so the EF also sets `leader_last_login`.
+
+**Established June 23, 2026 (Session 43). Invariant #201 added - count now 201.**
+
+---
+
+### **202. Edge Functions are version-controlled at `supabase/functions/<name>/index.ts`**
+
+`auth-login` + `token-login` are now committed to the repo (`supabase/functions/auth-login/index.ts`, `supabase/functions/token-login/index.ts`) — closing the **dashboard-only gap** (Inv #190 / S40). The repo is **version-control-of-record**; **deploy stays a Supabase dashboard step** (the committed source must be kept in sync with the deployed function by hand on each change). Import-style drift to standardize later: `auth-login` uses `npm:`, `token-login` uses `esm.sh` for supabase-js (both work on Deno; `jsr:` is the preferred form).
+
+**Established June 23, 2026 (Session 43). Invariant #202 added - count now 202.**
+
+---
+
+### **203. Multi-machine git — reconcile clones with `reset --hard origin/main`, never assume `pull`**
+
+Pastor works across a home desktop + a laptop (+ CC web). `main` can be **history-rewritten** from one machine (force-push / rebase / squash), leaving another clone an **orphan history** with no common ancestor — `git pull` then fails ("divergent / refusing to merge unrelated histories"). Reconcile with `git fetch origin` → `git stash -u` (seatbelt) → `git reset --hard origin/main`, **never** a plain pull. The **"sync"** command produces this CC prompt at machine switch. Claude (chat) stays current automatically by curling authoritative `raw.githubusercontent.com/.../main` per the repo-pull rule — only CC's clone needs syncing. (Bit us Session 43: CC's local `main` was a stale orphan at `cb632d6` vs `origin` `9f0979d`; `reset --hard` recovered it, then committed `5e21d25`.)
+
+**Established June 23, 2026 (Session 43). Invariant #203 added - count now 203.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
