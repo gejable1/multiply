@@ -102,6 +102,17 @@
     return false;
   }
 
+  // Clear ALL client session state — both session keys AND the shared
+  // church JWT. Inv #204: one church-scoped multiply_jwt serves every tool
+  // under RLS regardless of role, and a unified-shell leader holds BOTH
+  // session keys, so logout from any role must tear the whole presence
+  // down. A fresh login re-mints cleanly. Idempotent. Inv #56.
+  function _clearSessionState() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    try { sessionStorage.removeItem(MEMBER_SESSION_KEY); } catch (e) {}
+    try { sessionStorage.removeItem('multiply_jwt'); } catch (e) {}
+  }
+
   // Logout — mark active session ended in DB, clear storage, redirect.
   async function logoutLeader(loginUrl) {
     const L = global.LEADER || getValidSession() || {};
@@ -114,7 +125,7 @@
         }).eq('leader_id', L.leaderId).is('ended_at', null);
       }
     } catch (e) { /* non-fatal */ }
-    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    _clearSessionState();
     global.location.replace(loginUrl || 'leader_login.html');
   }
 
@@ -163,7 +174,7 @@
   // No DB session table for members in Phase 1 (could be added later
   // if we want last-login auditing parallel to leader_sessions).
   function logoutMember(loginUrl) {
-    try { sessionStorage.removeItem(MEMBER_SESSION_KEY); } catch (e) {}
+    _clearSessionState();
     global.location.replace(loginUrl || 'member_login.html');
   }
 
