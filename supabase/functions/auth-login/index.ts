@@ -81,13 +81,14 @@ async function mintSession(m: any) {
 // Best-effort post-auth stamp. Leader logins stamp leader_last_login + log a
 // leader_sessions row (folded in from the old client-side writes); member logins
 // stamp member_last_login. All non-fatal.
-async function stampLogin(sb: any, memberId: string, isLeader: boolean, ua: string) {
+async function stampLogin(sb: any, memberId: string, isLeader: boolean, ua: string, churchId: string | null) {
   const nowIso = new Date().toISOString();
   if (isLeader) {
     try { await sb.from("members").update({ leader_last_login: nowIso }).eq("id", memberId); } catch { /* ignore */ }
     try {
       await sb.from("leader_sessions").insert({
         leader_id: memberId,
+        church_id: churchId ?? null,
         expires_at: new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString(),
         user_agent_hint: (ua || "").slice(0, 180),
       });
@@ -153,7 +154,7 @@ Deno.serve(async (req) => {
     }).eq("id", memberId);
     if (upErr) return json({ error: "set_failed" }, 500);
 
-    await stampLogin(sb, memberId, isLeader, ua);
+    await stampLogin(sb, memberId, isLeader, ua, m.church_id);
     return json(await mintSession({ ...m, member_pin_hash: hash }));
   }
 
@@ -171,6 +172,6 @@ Deno.serve(async (req) => {
   try { ok = bcrypt.compareSync(pin, m.member_pin_hash); } catch { ok = false; }
   if (!ok) return json({ error: "invalid_login" }, 401);
 
-  await stampLogin(sb, m.id, isLeader, ua);
+  await stampLogin(sb, m.id, isLeader, ua, m.church_id);
   return json(await mintSession(m));
 });
