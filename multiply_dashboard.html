@@ -11072,7 +11072,7 @@ function _buildWhatsAppUrl(phone, message){
 async function loadGreetingTemplates(){
   try{
     const {data, error} = await db.from('system_settings')
-      .select('meta').eq('id', 1).maybeSingle();
+      .select('meta').maybeSingle();
     if(error) throw error;
     const tplProf  = data?.meta?.profile_edit_greeting;
     const tplAss   = data?.meta?.assessment_link_greeting;
@@ -11156,7 +11156,7 @@ async function saveGreetingTemplates(){
   try{
     // Read existing meta first so we don't clobber other fields
     const {data: cur, error: rErr} = await db.from('system_settings')
-      .select('meta').eq('id', 1).maybeSingle();
+      .select('meta').maybeSingle();
     if(rErr) throw rErr;
     const newMeta = {
       ...(cur?.meta || {}),
@@ -11168,7 +11168,7 @@ async function saveGreetingTemplates(){
       greeting_updated_by:      (LEADER && LEADER.leaderName) || 'Pastor'
     };
     const {error: uErr} = await db.from('system_settings')
-      .update({meta: newMeta}).eq('id', 1);
+      .upsert({meta: newMeta}, {onConflict: 'church_id'});
     if(uErr) throw uErr;
     _greetingTemplate  = profileTpl;
     _assessTemplate    = assessTpl;
@@ -11271,7 +11271,7 @@ let _diagIdleMinutes = _DEFAULT_IDLE_MINUTES;
 async function loadDiagSettings(){
   try{
     const {data, error} = await db.from('system_settings')
-      .select('meta').eq('id', 1).maybeSingle();
+      .select('meta').maybeSingle();
     if(error) throw error;
     const v = data?.meta?.salvation_idle_minutes;
     if(typeof v === 'number' && v >= 1 && v <= 30) _diagIdleMinutes = v;
@@ -11318,7 +11318,7 @@ async function saveDiagSettings(){
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
   try{
     const {data: cur, error: rErr} = await db.from('system_settings')
-      .select('meta').eq('id', 1).maybeSingle();
+      .select('meta').maybeSingle();
     if(rErr) throw rErr;
     const newMeta = {
       ...(cur?.meta || {}),
@@ -11326,7 +11326,7 @@ async function saveDiagSettings(){
       diag_settings_updated_at: new Date().toISOString(),
       diag_settings_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'
     };
-    const {error: uErr} = await db.from('system_settings').update({meta: newMeta}).eq('id', 1);
+    const {error: uErr} = await db.from('system_settings').upsert({meta: newMeta}, {onConflict: 'church_id'});
     if(uErr) throw uErr;
     _diagIdleMinutes = v;
     if(status){ status.textContent = '✓ Saved — new threshold applies on next assessment session'; status.style.color = 'var(--green)'; }
@@ -11377,7 +11377,7 @@ let _sysSettings = null;
 async function _refreshSysSettings(){
   try{
     const {data, error} = await db.from('system_settings')
-      .select('*').eq('id', 1).maybeSingle();
+      .select('*').maybeSingle();
     if(error) throw error;
     _sysSettings = data || { id: 1, meta: {} };
   } catch(e){
@@ -11486,7 +11486,7 @@ async function saveInstrumentVersions(){
   try{
     // Read the current row fresh — another tab may have touched meta
     const {data: cur, error: rErr} = await db.from('system_settings')
-      .select('meta').eq('id', 1).maybeSingle();
+      .select('meta').maybeSingle();
     if(rErr) throw rErr;
 
     // Build the patch — only the four instruments we surface
@@ -11509,7 +11509,7 @@ async function saveInstrumentVersions(){
       instrument_versions_updated_at: new Date().toISOString(),
       instrument_versions_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'
     };
-    const {error: uErr} = await db.from('system_settings').update({meta: newMeta}).eq('id', 1);
+    const {error: uErr} = await db.from('system_settings').upsert({meta: newMeta}, {onConflict: 'church_id'});
     if(uErr) throw uErr;
 
     // Refresh local cache + re-render UI
@@ -11544,7 +11544,7 @@ let _huDirty   = false;
 
 async function loadHeadsUpSettings(){
   try{
-    const {data, error} = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    const {data, error} = await db.from('system_settings').select('meta').maybeSingle();
     if(error) throw error;
     const meta = data?.meta || {};
     _huEvents  = Array.isArray(meta.absence_events)  ? meta.absence_events.slice() : _DEFAULT_HEADSUP_EVENTS.slice();
@@ -11624,7 +11624,7 @@ async function saveHeadsUpSettings(){
   const btn = document.getElementById('headsUpSaveBtn');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Saving…'; }
   try{
-    const {data: cur, error: rErr} = await db.from('system_settings').select('meta').eq('id', 1).maybeSingle();
+    const {data: cur, error: rErr} = await db.from('system_settings').select('meta').maybeSingle();
     if(rErr) throw rErr;
     const newMeta = {
       ...(cur?.meta || {}),
@@ -11633,7 +11633,7 @@ async function saveHeadsUpSettings(){
       headsup_settings_updated_at: new Date().toISOString(),
       headsup_settings_updated_by: (LEADER && LEADER.leaderName) || 'Pastor'
     };
-    const {error: uErr} = await db.from('system_settings').update({meta: newMeta}).eq('id', 1);
+    const {error: uErr} = await db.from('system_settings').upsert({meta: newMeta}, {onConflict: 'church_id'});
     if(uErr) throw uErr;
     _huDirty = false;
     setHeadsUpStatus('✓ Saved — members will see updates on next MMT load');
