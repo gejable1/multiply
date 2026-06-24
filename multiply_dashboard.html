@@ -516,7 +516,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         <!-- My Ministry: visibility toggled at runtime by _refreshMyMinistryNav() — only leaders who head ≥1 ministry see it -->
         <button class="mm-item" id="navMyMinistryMore" data-nav="myMinistry" onclick="_navTo('myMinistry', renderMyMinistryPanel)" style="display:none">🎵 My Ministry</button>
         <button class="mm-item" data-nav="reports"       onclick="_navTo('reports')">📊 Reports</button>
-        <button class="mm-item" data-nav="settings"      onclick="_navTo('settings', loadSviWeights)">⚙️ Settings</button>
+        <button class="mm-item" data-nav="settings"      onclick="_navTo('settings', initSettingsPanel)">⚙️ Settings</button>
       </div>
     </div>
   </div>
@@ -578,7 +578,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   <!-- My Ministry: shown at runtime by _refreshMyMinistryNav() to leaders who head ≥1 ministry -->
   <button class="nd-item" id="navMyMinistryDrawer" data-nav="myMinistry" onclick="_navTo('myMinistry', renderMyMinistryPanel, true)" style="display:none">🎵 My Ministry</button>
   <button class="nd-item" data-nav="reports"       onclick="_navTo('reports', null, true)">📊 Reports</button>
-  <button class="nd-item" data-nav="settings"      onclick="_navTo('settings', loadSviWeights, true)">⚙️ Settings</button>
+  <button class="nd-item" data-nav="settings"      onclick="_navTo('settings', initSettingsPanel, true)">⚙️ Settings</button>
 </aside>
 
 <!-- OVERVIEW -->
@@ -11691,6 +11691,26 @@ loadHeadsUpSettings();
   setTimeout(tryGate, 500);
   setTimeout(tryGate, 1500);
 })();
+
+// ── Settings panel init (S47 render fix) ──────────────────────────
+// The four pastor-only Settings sub-sections (Ministries, Diagnostic,
+// Heads-Up, Greetings) are revealed by hide-only boot gates that race
+// LeaderScope readiness. In the unified shell, auth settles AFTER the
+// gates' 0/500/1500ms runs, so the sections stay hidden with no "else
+// show". Re-assert load + visibility when Settings opens (auth is
+// reliably ready by then). Wired via _navTo('settings', initSettingsPanel).
+function initSettingsPanel(){
+  try { if(typeof loadSviWeights==='function') loadSviWeights(); } catch(e){}
+  try { if(typeof loadGreetingTemplates==='function') loadGreetingTemplates(); } catch(e){}
+  try { if(typeof loadDiagSettings==='function') loadDiagSettings(); } catch(e){}
+  try { if(typeof loadHeadsUpSettings==='function') loadHeadsUpSettings(); } catch(e){}
+  try { if(typeof buildSettingsMinistries==='function') buildSettingsMinistries(); } catch(e){}
+  try {
+    const isPastor = (typeof LeaderScope!=='undefined') && LeaderScope.isPastor();
+    ['#panel-settings .ss:nth-child(3)','#diagSettingsSection','#headsUpSettingsSection','#greetingSection']
+      .forEach(sel => { const el = document.querySelector(sel); if(el) el.style.display = isPastor ? '' : 'none'; });
+  } catch(e){}
+}
 
 function _genSelfEditToken(){
   const arr = new Uint8Array(16);
