@@ -427,7 +427,7 @@ tbody tr:hover{background:var(--green-light);}
 // when neither CommonJS nor AMD is available.
 window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 </script>
-<script src="multiply_shared.js?v=8"></script>
+<script src="multiply_shared.js?v=9"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -4743,11 +4743,11 @@ async function _libSave(){
 
   try {
     if(editing.id){
-      const { error } = await db.from('library_resources').update(payload).eq('id', editing.id);
+      const { error } = await MultiplyShared.catalogWrite('library_resources', 'update', { id: editing.id, payload });
       if(error) throw error;
       toast('✓ Resource updated', 'success');
     } else {
-      const { error } = await db.from('library_resources').insert(payload);
+      const { error } = await MultiplyShared.catalogWrite('library_resources', 'insert', { payload });
       if(error) throw error;
       toast('✓ Resource added', 'success');
     }
@@ -4770,7 +4770,7 @@ async function _libDelete(id){
   const chWarn = chCount > 0 ? `\n\nThis includes ${chCount} chapter${chCount===1?'':'s'} and ALL member progress on them.` : '';
   if(!confirm(`Delete "${r.title_en}"?\n\nThis is permanent. Members' reading progress for this resource will also be deleted.${chWarn}`)) return;
   try {
-    const { error } = await db.from('library_resources').delete().eq('id', id);
+    const { error } = await MultiplyShared.catalogWrite('library_resources', 'delete', { id });
     if(error) throw error;
     toast('Resource deleted', 'success');
     _libraryState.editing = null;
@@ -4968,11 +4968,11 @@ async function _chReorder(chapterId, direction){
   const PARK = 100000;
   try {
     let r;
-    r = await db.from('library_chapters').update({ chapter_number: PARK + aOld, updated_at: new Date().toISOString() }).eq('id', a.id);
+    r = await MultiplyShared.catalogWrite('library_chapters', 'update', { id: a.id, payload: { chapter_number: PARK + aOld, updated_at: new Date().toISOString() } });
     if(r.error) throw r.error;
-    r = await db.from('library_chapters').update({ chapter_number: aOld, updated_at: new Date().toISOString() }).eq('id', b.id);
+    r = await MultiplyShared.catalogWrite('library_chapters', 'update', { id: b.id, payload: { chapter_number: aOld, updated_at: new Date().toISOString() } });
     if(r.error) throw r.error;
-    r = await db.from('library_chapters').update({ chapter_number: bOld, updated_at: new Date().toISOString() }).eq('id', a.id);
+    r = await MultiplyShared.catalogWrite('library_chapters', 'update', { id: a.id, payload: { chapter_number: bOld, updated_at: new Date().toISOString() } });
     if(r.error) throw r.error;
 
     // Update local state
@@ -5017,7 +5017,7 @@ async function _chDelete(chapterId){
   const title = ch.title_en || `Chapter ${ch.chapter_number}`;
   if(!confirm(`Delete "${title}"?\n\nThis is permanent. Member progress on this chapter and any chapter quiz (with all attempts) will be deleted too.`)) return;
   try {
-    const { error } = await db.from('library_chapters').delete().eq('id', chapterId);
+    const { error } = await MultiplyShared.catalogWrite('library_chapters', 'delete', { id: chapterId });
     if(error) throw error;
     toast('Chapter deleted', 'success');
     // Remove locally; chapter numbers are NOT auto-renumbered (gaps are fine).
@@ -5273,21 +5273,14 @@ async function _chSave(){
   try {
     let savedRow;
     if(_libraryState.chapterEditOriginalId){
-      const { data, error } = await db.from('library_chapters')
-        .update(payload)
-        .eq('id', _libraryState.chapterEditOriginalId)
-        .select()
-        .single();
+      const { data, error } = await MultiplyShared.catalogWrite('library_chapters', 'update', { id: _libraryState.chapterEditOriginalId, payload });
       if(error) throw error;
       savedRow = data;
       // Replace in local state
       const idx = _libraryState.chapters.findIndex(c => c.id === savedRow.id);
       if(idx !== -1) _libraryState.chapters[idx] = savedRow;
     } else {
-      const { data, error } = await db.from('library_chapters')
-        .insert(payload)
-        .select()
-        .single();
+      const { data, error } = await MultiplyShared.catalogWrite('library_chapters', 'insert', { payload });
       if(error) throw error;
       savedRow = data;
       _libraryState.chapters.push(savedRow);
@@ -6661,11 +6654,11 @@ async function _coSaveProgram(){
   try {
     const editing = _cohortState.editingProgram;
     if(editing.id){
-      const { error } = await db.from('cohort_programs').update(payload).eq('id', editing.id);
+      const { error } = await MultiplyShared.catalogWrite('cohort_programs', 'update', { id: editing.id, payload });
       if(error) throw error;
       toast('✓ Program updated', 'success');
     } else {
-      const { data, error } = await db.from('cohort_programs').insert(payload).select().single();
+      const { data, error } = await MultiplyShared.catalogWrite('cohort_programs', 'insert', { payload });
       if(error) throw error;
       _cohortState.selectedProgramId = data.id;
       toast('✓ Program created', 'success');
@@ -6693,7 +6686,7 @@ async function _coDeleteProgram(id){
   }
   if(!confirm(`Delete program "${p.name}"?\n\nThis is permanent.`)) return;
   try {
-    const { error } = await db.from('cohort_programs').delete().eq('id', id);
+    const { error } = await MultiplyShared.catalogWrite('cohort_programs', 'delete', { id });
     if(error) throw error;
     toast('Program deleted', 'success');
     if(_cohortState.selectedProgramId === id) _cohortState.selectedProgramId = null;
@@ -8214,11 +8207,11 @@ async function _llSave(){
   try {
     let savedId = l.id;
     if(l.id){
-      const { error } = await db.from('pipeline_lessons').update(payload).eq('id', l.id);
+      const { error } = await MultiplyShared.catalogWrite('pipeline_lessons', 'update', { id: l.id, payload });
       if(error) throw error;
       toast('✓ Lesson updated', 'success');
     } else {
-      const { data, error } = await db.from('pipeline_lessons').insert(payload).select().single();
+      const { data, error } = await MultiplyShared.catalogWrite('pipeline_lessons', 'insert', { payload });
       if(error) throw error;
       savedId = data.id;
       toast('✓ Lesson created', 'success');
@@ -8239,7 +8232,7 @@ async function _llDelete(id){
   if(!l) return;
   if(!confirm(`Delete lesson "${l.title_en}"?\n\nThis is permanent. All grants on this lesson will also be deleted.`)) return;
   try {
-    const { error } = await db.from('pipeline_lessons').delete().eq('id', id);
+    const { error } = await MultiplyShared.catalogWrite('pipeline_lessons', 'delete', { id });
     if(error) throw error;
     toast('Lesson deleted', 'success');
     _lessonState.editing = null;
@@ -8710,9 +8703,9 @@ async function _quizSaveQuiz(){
   try {
     let result;
     if (qz.id){
-      result = await db.from('library_quizzes').update(payload).eq('id', qz.id).select().single();
+      result = await MultiplyShared.catalogWrite('library_quizzes', 'update', { id: qz.id, payload });
     } else {
-      result = await db.from('library_quizzes').insert(payload).select().single();
+      result = await MultiplyShared.catalogWrite('library_quizzes', 'insert', { payload });
     }
     if (result.error) throw result.error;
     _quizBuilderState.quiz = result.data;
@@ -8735,7 +8728,7 @@ async function _quizDeleteAll(){
   if (!qz.id) return;
   if (!confirm("Delete the entire quiz?\n\nAll questions will be lost, and all member attempts on this quiz will also be deleted (via cascade). This cannot be undone.")) return;
   try {
-    const { error } = await db.from('library_quizzes').delete().eq('id', qz.id);
+    const { error } = await MultiplyShared.catalogWrite('library_quizzes', 'delete', { id: qz.id });
     if (error) throw error;
     toast('Quiz deleted', 'success');
     if (typeof _libFetchQuizStatusForEditForm === 'function' && qz.resource_id){

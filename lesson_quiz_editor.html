@@ -364,7 +364,7 @@ textarea.text-input:disabled,textarea.text-input[readonly]{
 <div id="leaderGateBlackout">Checking session…</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="multiply_shared.js?v=8"></script>
+<script src="multiply_shared.js?v=9"></script>
 <script>
 // ─── Session gate (matches MD/MLT pattern) ─────────────────────
 (function leaderGateBoot(){
@@ -1126,11 +1126,7 @@ async function saveEdit(){
   if (L.leaderId) payload.updated_by = L.leaderId;
 
   try {
-    const { data, error } = await db.from(tbl)
-      .update(payload)
-      .eq('id', STATE.selectedId)
-      .select()
-      .single();
+    const { data, error } = await MultiplyShared.catalogWrite(tbl, 'update', { id: STATE.selectedId, payload });
     if (error) throw error;
     STATE.selected = data;
     STATE.draft = { ...data };
