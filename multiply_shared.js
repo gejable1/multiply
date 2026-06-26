@@ -3192,9 +3192,31 @@
     return { weekStart: week, snapshots: rows };
   }
 
+  // ───── Catalog publish lane (Phase B) ─────
+  // BASE shared-content writes (church_id = NULL) can't ride the church JWT once RLS is on
+  // (insert/update policies demand church_id = auth_church_id(), never NULL). Route them
+  // through the service-role catalog-publish EF. Overlay writes (church_id = mine) — a FUTURE
+  // capability — stay client-side; this lane is base-only.
+  const CATALOG_PUBLISH_URL = SB_URL + '/functions/v1/catalog-publish';
+  async function catalogWrite(table, op, { id, payload, onConflict } = {}) {
+    const jwt = _readTenancyJwt();
+    if (!jwt) return { data: null, error: { message: 'no_session' } };
+    try {
+      const res = await fetch(CATALOG_PUBLISH_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + jwt },
+        body: JSON.stringify({ table, op, id, payload, onConflict }),
+      });
+      return await res.json().catch(() => ({ data: null, error: { message: 'bad_response' } }));
+    } catch (e) {
+      return { data: null, error: { message: String((e && e.message) || e) } };
+    }
+  }
+
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
     getDB,
+    catalogWrite,
     // Leader-session API (for MD, MLT, lc_attendance_report, etc.)
     getValidSession,
     gateOrRedirect,
