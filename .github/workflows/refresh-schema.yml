@@ -1,0 +1,69 @@
+name: Refresh schema.json
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/**'
+      - 'supabase/functions/**'
+  schedule:
+    - cron: '0 19 * * 0'      # Sun 19:00 UTC = Mon 03:00 Manila — safety net
+  workflow_dispatch: {}        # manual "Run workflow" button
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-schema
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch + normalize schema from Supabase
+        env:
+          SCHEMA_DUMP_SECRET: ${{ secrets.SCHEMA_DUMP_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="https://tirzeikbflolaclgtket.functions.supabase.co/schema-dump?schemas=public"
+          echo "Requesting schema dump..."
+          code=$(curl -sS -w '%{http_code}' -o raw.json \
+            -H "x-schema-secret: ${SCHEMA_DUMP_SECRET}" "$URL")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::schema-dump returned HTTP $code (EF deployed? secret matches?)"
+            echo "--- body ---"; cat raw.json || true
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, sys
+          d = json.load(open('raw.json'))
+          if not isinstance(d.get('tables'), dict) or d.get('table_count', 0) < 1:
+              print('::error::dump missing tables / table_count < 1'); sys.exit(1)
+          # Drop volatile fields so re-dumps with no schema change are byte-identical
+          # (clean diffs = a real migration changelog; no cron commit spam).
+          d.pop('generated_at', None)
+          for t in d.get('tables', {}).values():
+              t.pop('est_rows', None)
+          json.dump(d, open('schema.json', 'w'), indent=2, ensure_ascii=False)
+          open('schema.json', 'a').write('\n')
+          print('OK - tables:', d['table_count'])
+          PY
+          rm -f raw.json
+
+      - name: Commit if changed
+        run: |
+          set -euo pipefail
+          git add schema.json
+          if git diff --cached --quiet; then
+            echo "No schema changes - nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh schema.json from Supabase [skip ci]"
+          git push
