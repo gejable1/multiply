@@ -381,6 +381,7 @@ let allMembers = [];
 let selectedIds = new Set();
 let currentFilter = 'missing';
 let tokenExpiryDays = 14;
+let churchName = 'MULTIPLY';
 let generatedLinks = [];
 
 const SELF_EDIT_PAGE = 'member_self_edit.html';   // assumes same folder
@@ -389,6 +390,8 @@ const SELF_EDIT_PAGE = 'member_self_edit.html';   // assumes same folder
 // LOAD
 // ─────────────────────────────────────────────────────────────────
 async function init() {
+  // Resolve the church's own name once for invite signatures (own-row RLS 035)
+  try { const _r = await supabase.from('churches').select('name').limit(1).maybeSingle(); if (_r && _r.data && _r.data.name) churchName = _r.data.name; } catch (e) {}
   // Load token expiry from system_settings
   try {
     const { data } = await supabase.from('system_settings').select('meta').eq('id', 1).maybeSingle();
@@ -575,7 +578,7 @@ function showStep2() {
 function buildWhatsAppUrl(member, link) {
   const phone = (member.contact || '').replace(/[^0-9]/g, '');
   const firstName = (member.name || '').split(' ')[0] || 'Friend';
-  const msg = `Hi ${firstName}! 🙏\n\nPlease take a few minutes to fill in your profile so we can serve you better.\n\nUse this link (expires in ${tokenExpiryDays} days):\n${link}\n\nGod bless! — Rosehill Christian Church`;
+  const msg = `Hi ${firstName}! 🙏\n\nPlease take a few minutes to fill in your profile so we can serve you better.\n\nUse this link (expires in ${tokenExpiryDays} days):\n${link}\n\nGod bless! — ${churchName}`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
 }
 
