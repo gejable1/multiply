@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon_dashboard_512.png?v=2">
 <link rel="shortcut icon" href="icon_dashboard_192.png?v=2">
 <link rel="apple-touch-icon" href="icon_dashboard_192.png?v=2">
-<title>MULTIPLY Dashboard — Rosehill Christian Church</title>
+<title>MULTIPLY Dashboard</title>
 <!-- Non-blocking font load — protects against slow PH networks and
      Vivo/Xiaomi data-saver throttling that hangs Google Fonts. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -491,7 +491,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </button>
   <div class="brand">
     <div class="brand-logo">MULTIPLY</div>
-    <div class="brand-church">Rosehill Christian Church</div>
+    <div class="brand-church" id="brandChurch"></div>
   </div>
   <div class="tnav" id="tnav">
     <!-- PRIMARY: always-visible on desktop -->
@@ -548,7 +548,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   <div class="nd-head">
     <div>
       <div class="nd-title">MULTIPLY</div>
-      <div class="nd-sub">Rosehill Christian Church</div>
+      <div class="nd-sub" id="ndSubChurch"></div>
     </div>
     <button class="nd-close" onclick="closeDrawer()" aria-label="Close menu">✕</button>
   </div>
@@ -1524,6 +1524,7 @@ if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()) {
       if (typeof _refreshMyMinistryNav === 'function') _refreshMyMinistryNav();
       if (typeof updateScopeCounts === 'function') updateScopeCounts();
       if (typeof paintLeaderBadge === 'function') paintLeaderBadge();
+      if (typeof paintChurchName === 'function') paintChurchName();
     } catch (e) {}
   });
 }
@@ -1551,6 +1552,35 @@ function paintLeaderBadge(){
   if(el('leaderBadgeRole')) el('leaderBadgeRole').textContent = LEADER.leaderRole || MultiplyShared.LEVEL_NAMES[LEADER.leaderLevel||0];
 }
 paintLeaderBadge();
+
+// Paint the tenant church's own name (S50) — header brand, mobile drawer
+// subtitle, and browser tab title. Reads the own-church row via the JWT'd
+// client; churches own-row RLS (migration 035) returns exactly this church's
+// row, so each tenant sees its OWN name. Hardcoded "Rosehill Christian Church"
+// was a cross-tenant branding leak (Agape would have seen it). Column is
+// auto-detected so a future churches rename can't break it. Idempotent —
+// safe to re-run from the embed re-sync once the session lands.
+let _churchNamePainted = false;
+async function paintChurchName(){
+  if (_churchNamePainted) return;
+  try {
+    const { data, error } = await db.from('churches').select('*').limit(1).maybeSingle();
+    if (error || !data) return;   // anon / no own-church row -> leave blank, never leak a name
+    const CAND = ['church_name','name','display_name','full_name','title'];
+    let nm = '';
+    for (const k of CAND){
+      const v = data[k];
+      if (typeof v === 'string' && v.trim()){ nm = v.trim(); break; }
+    }
+    if (!nm) return;
+    _churchNamePainted = true;
+    const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+    set('brandChurch', nm);
+    set('ndSubChurch', nm);
+    document.title = 'MULTIPLY Dashboard — ' + nm;
+  } catch (e) { /* leave header blank on any failure */ }
+}
+paintChurchName();
 
 // ── Hide "+ Add Member" for non-executive leaders ──
 //    Pastor Gerry's call (May 2026): too many duplicate additions while
