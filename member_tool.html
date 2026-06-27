@@ -1298,6 +1298,18 @@ body.lang-tl .tl-text{display:inline;}
   transition:border-color .15s;
 }
 .reflection-box textarea:focus{border-color:var(--forest);}
+.rb-save{
+  display:block;width:100%;margin-top:12px;padding:13px 16px;
+  background:var(--forest,#2a5c40);color:#fff;border:none;border-radius:12px;
+  font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;
+  transition:transform .08s ease,opacity .15s ease;
+}
+.rb-save:active{transform:scale(.98);}
+.rb-save:disabled{opacity:.6;cursor:default;}
+.rb-autohint{
+  margin-top:8px;font-size:12px;line-height:1.45;color:var(--muted,#6a6a6a);
+  text-align:center;font-style:italic;
+}
 .reflection-box textarea::placeholder{
   color:var(--lighter);font-style:italic;
 }
@@ -7068,6 +7080,7 @@ let monthDevos = [];           // all rows for current month
 let currentReaderEntry = null; // row currently shown in reader (today or browsed past day)
 let currentReflection = '';    // textbox value while reader is open
 let currentReflectionRow = null; // existing reflection row (for update vs insert)
+let _devoAutosaveTimer = null;   // S51: debounced silent-autosave net (persist after typing pauses)
 
 // Returns today's date in the user's LOCAL timezone as 'YYYY-MM-DD'.
 // IMPORTANT: do NOT use toISOString() — that converts to UTC, which is
@@ -7322,6 +7335,8 @@ function renderReaderBody(){
   html += `<div class="rb-label"><span class="en-text">MY REFLECTION</span><span class="tl-text">AKING TUGON</span></div>`;
   html += `<div class="rb-sub"><span class="en-text">What is the Spirit saying to you, kapatid?</span><span class="tl-text">Ano ang sinasabi ng Espiritu sa iyo, kapatid?</span></div>`;
   html += `<textarea id="reflectionInput" placeholder="${esc('Write what God is teaching you today…')}"></textarea>`;
+  html += `<button id="reflectionSaveBtn" class="rb-save" type="button" onclick="saveDevoReflection()"><span class="en-text">Save reflection</span><span class="tl-text">I-save ang tugon</span></button>`;
+  html += `<div class="rb-autohint"><span class="en-text">Auto-saves as you write — your words are kept even if you leave this page.</span><span class="tl-text">Awtomatikong sine-save habang nagsusulat — hindi mawawala ang sinulat mo kahit umalis ka.</span></div>`;
   html += `</div>`;
 
   document.getElementById('readerBody').innerHTML = html;
@@ -7335,6 +7350,10 @@ function renderReaderBody(){
       // Hide saved indicator while typing
       const st = document.getElementById('readerStatus');
       if(st) st.classList.remove('show');
+      // S51 silent autosave net: persist ~1.5s after typing stops so words
+      // survive ANY exit (phone Home, refresh, app-kill), not just the back arrow.
+      clearTimeout(_devoAutosaveTimer);
+      _devoAutosaveTimer = setTimeout(() => { _persistDevoReflection({silent:true}); }, 1500);
     });
   }
 }
@@ -7357,6 +7376,78 @@ async function _devoCompleteToday(){
   }catch(e){
     console.warn('devo-complete check failed (non-fatal):', e);
     return true; // fail-soft: don't trap the member on a DB hiccup
+  }
+}
+
+// ───── Reflection persistence (S51) — ONE write path for autosave + Save + close ─────
+// Writes the current textarea to devotional_reflections (insert→capture id, or
+// update). Returns {saved, changed, error}. Streak credit is NOT handled here —
+// that stays gated to >=10 words on TODAY's entry, applied by the caller.
+async function _persistDevoReflection(opts){
+  opts = opts || {};
+  if(!currentReaderEntry) return { saved:false, changed:false };
+  const ref = document.getElementById('reflectionInput');
+  const finalText = ref ? ref.value : currentReflection;
+  const wasText = currentReflectionRow ? (currentReflectionRow.reflection || '') : '';
+  if((finalText || '').trim() === wasText.trim()) return { saved:false, changed:false };
+  try{
+    if(currentReflectionRow && currentReflectionRow.id){
+      const {error} = await db.from('devotional_reflections').update({
+        reflection: finalText,
+        updated_at: new Date().toISOString()
+      }).eq('id', currentReflectionRow.id);
+      if(error) throw error;
+      currentReflectionRow.reflection = finalText;
+    } else if((finalText || '').trim()){
+      const {data, error} = await db.from('devotional_reflections').insert({
+        member_id: MEMBER.memberId,
+        entry_date: currentReaderEntry.entry_date,
+        reflection: finalText
+      }).select().single();
+      if(error) throw error;
+      currentReflectionRow = data; // capture id so later saves UPDATE, never re-insert
+    } else {
+      return { saved:false, changed:false };
+    }
+    return { saved:true, changed:true };
+  }catch(e){
+    console.error('reflection persist failed:', e);
+    if(!opts.silent){
+      const tl = document.body.classList.contains('lang-tl');
+      showToast((tl?'Hindi na-save ang tugon: ':'Could not save reflection: ')+e.message, true);
+    }
+    return { saved:false, error:e };
+  }
+}
+
+// Manual Save button — persists immediately, keeps the reader open, shows a
+// visible ✓ (and a streak toast if TODAY's reflection reaches >=10 words).
+async function saveDevoReflection(){
+  if(!currentReaderEntry) return;
+  clearTimeout(_devoAutosaveTimer); // saving now; cancel any pending autosave
+  const btn = document.getElementById('reflectionSaveBtn');
+  if(btn) btn.disabled = true;
+  try{
+    const ref = document.getElementById('reflectionInput');
+    const finalText = ref ? ref.value : currentReflection;
+    const res = await _persistDevoReflection({silent:false});
+    if(res && res.error) return; // helper already toasted the error
+    const isToday  = currentReaderEntry.entry_date === todayIso();
+    const meetsMin = _wordCount(finalText) >= 10;
+    let streakAdvanced = false;
+    if(isToday && meetsMin) streakAdvanced = await markDevoReadSilent();
+    const st = document.getElementById('readerStatus');
+    if(st){ st.classList.add('show'); setTimeout(()=>st.classList.remove('show'), 1400); }
+    const tl = document.body.classList.contains('lang-tl');
+    if(streakAdvanced){
+      showToast(devoStreak === 1
+        ? (tl?'🔥 Naumpisahan ang streak!':'🔥 Started a new streak!')
+        : (tl?('🔥 Araw '+devoStreak+' — tuloy lang!'):('🔥 Day '+devoStreak+' — keep going!')));
+    } else {
+      showToast(tl?'Naka-save ang tugon ✓':'Reflection saved ✓');
+    }
+  } finally {
+    if(btn) btn.disabled = false;
   }
 }
 
@@ -7386,31 +7477,10 @@ async function closeDevoReader(){
   }
   _devoExitConfirmedShort = false; // consume any override
 
-  // Save reflection if changed
-  let savedReflection = false;
-  const wasText = currentReflectionRow ? (currentReflectionRow.reflection || '') : '';
-  if((finalText || '').trim() !== wasText.trim()){
-    try{
-      if(currentReflectionRow && currentReflectionRow.id){
-        const {error} = await db.from('devotional_reflections').update({
-          reflection: finalText,
-          updated_at: new Date().toISOString()
-        }).eq('id', currentReflectionRow.id);
-        if(error) throw error;
-      } else if((finalText || '').trim()){
-        const {error} = await db.from('devotional_reflections').insert({
-          member_id: MEMBER.memberId,
-          entry_date: currentReaderEntry.entry_date,
-          reflection: finalText
-        });
-        if(error) throw error;
-      }
-      savedReflection = true;
-    }catch(e){
-      console.error('reflection save failed:', e);
-      showToast('Could not save reflection: '+e.message, true);
-    }
-  }
+  // Save reflection if changed — centralized persist (same path as autosave + Save button)
+  clearTimeout(_devoAutosaveTimer); // closing now; cancel any pending autosave
+  const _res = await _persistDevoReflection({silent:false});
+  let savedReflection = !!(_res && _res.saved);
 
   // Mark today complete (silent) ONLY for TODAY's entry with a >=10-word reflection (Inv #62)
   let streakAdvanced = false;
