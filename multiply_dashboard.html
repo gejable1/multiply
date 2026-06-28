@@ -950,6 +950,21 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <button class="sbtn" style="margin-top:0;background:#a36a3f" onclick="openLessonLibrary()">📖 Lesson Library</button>
     </div>
   </div>
+  <!-- ─── MLT PERMISSIONS (Pastor-toggled, Inv #227) ─── -->
+  <div class="ss" id="mltPermsSection" style="display:none"><div class="st">⚙️ LC Leader Tool (MLT) <span style="display:inline-flex;align-items:center;gap:3px;font-size:9.5px;background:var(--surface2);color:var(--muted);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:.5rem;vertical-align:middle"><span style="font-size:10px">🔒</span>Pastor only</span></div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
+      Controls what LC Leaders can do inside their own tool (MLT).
+    </div>
+    <div class="sr" style="align-items:center">
+      <span class="sl" style="display:flex;flex-direction:column;gap:2px">
+        <span>Allow LC Leaders to add new members <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;background:rgba(94,125,82,.18);color:var(--green);padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:6px;vertical-align:1px"><span style="font-size:9.5px">👥</span>Leaders</span></span>
+        <span style="font-size:10.5px;color:var(--lighter);font-weight:400">When off, the Add Member button still shows in MLT but stays disabled. Turn on only when needed — leaving it on invites duplicate entries.</span>
+      </span>
+      <button class="sbtn" id="mltAddMemberToggleBtn" style="margin-top:0;background:var(--muted);min-width:104px" onclick="toggleMltAddMember()">…</button>
+    </div>
+    <div id="mltAddMemberStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+  </div>
+
   <!-- ─── DIAGNOSTIC SETTINGS (Pastor-configurable) ─── -->
   <div class="ss" id="diagSettingsSection"><div class="st">⚙️ Diagnostic Settings</div>
     <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:.5rem 0 .85rem">
@@ -1547,6 +1562,52 @@ paintLeaderBadge();
 // was a cross-tenant branding leak (Agape would have seen it). Column is
 // auto-detected so a future churches rename can't break it. Idempotent —
 // safe to re-run from the embed re-sync once the session lands.
+// ─── MLT add-member permission toggle (Pastor-only, writes via church-settings-flag EF, Inv #227) ───
+let _mltAddMemberOn = false;
+function _renderMltToggle(){
+  const btn = document.getElementById('mltAddMemberToggleBtn');
+  if (!btn) return;
+  if (_mltAddMemberOn){ btn.textContent = 'Enabled ✓'; btn.style.background = 'var(--green)'; }
+  else { btn.textContent = 'Disabled'; btn.style.background = 'var(--muted)'; }
+}
+async function initMltAddMemberToggle(){
+  const isPastor = (typeof LeaderScope !== 'undefined' && LeaderScope.isPastor && LeaderScope.isPastor());
+  const sec = document.getElementById('mltPermsSection');
+  if (!isPastor){ if (sec) sec.style.display = 'none'; return; }
+  if (sec) sec.style.display = '';
+  try {
+    const { data } = await db.from('churches').select('settings').limit(1).maybeSingle();
+    _mltAddMemberOn = !!(data && data.settings && data.settings.mlt_add_member === true);
+  } catch(e){ _mltAddMemberOn = false; }
+  _renderMltToggle();
+}
+async function toggleMltAddMember(){
+  const btn = document.getElementById('mltAddMemberToggleBtn');
+  const stat = document.getElementById('mltAddMemberStatus');
+  const next = !_mltAddMemberOn;
+  let token = null;
+  try { const j = JSON.parse(sessionStorage.getItem('multiply_jwt')||'null'); token = j && j.token; } catch(e){}
+  if (!token){ if (stat){ stat.textContent='⚠ Session expired — please sign in again.'; stat.style.color='var(--red)'; } return; }
+  if (btn){ btn.disabled = true; btn.style.opacity='.6'; }
+  if (stat){ stat.textContent='Saving…'; stat.style.color='var(--muted)'; }
+  try {
+    const res = await fetch(SB_URL + '/functions/v1/church-settings-flag', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY, 'Authorization':'Bearer '+token },
+      body: JSON.stringify({ enabled: next })
+    });
+    const j = await res.json().catch(()=>null);
+    if (!res.ok || !j || j.error){ throw new Error((j && j.error) || ('HTTP '+res.status)); }
+    _mltAddMemberOn = !!(j.data && j.data.mlt_add_member);
+    _renderMltToggle();
+    if (stat){ stat.textContent = _mltAddMemberOn ? '✓ LC Leaders can now add members.' : '✓ Add-member turned off for LC Leaders.'; stat.style.color='var(--green)'; }
+  } catch(e){
+    if (stat){ stat.textContent = '⚠ '+(e.message||'Could not save — try again.'); stat.style.color='var(--red)'; }
+  } finally {
+    if (btn){ btn.disabled = false; btn.style.opacity='1'; }
+  }
+}
+initMltAddMemberToggle();
 let _churchNamePainted = false;
 async function paintChurchName(){
   if (_churchNamePainted) return;
