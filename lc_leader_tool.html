@@ -1196,17 +1196,42 @@ let allSelected = false;
 //         inside saveNewMember). Filters out test members and guests per the
 //         standing exclusion rule.
 //    The DOM hide is convenience; openAddMember() also re-checks server-side.
-(function gateAddMemberButton(){
-  const tryGate = ()=>{
-    const btn = document.getElementById('addMemberBtn');
-    if(!btn) return;
-    const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
-    btn.style.display = lvl >= 2 ? '' : 'none';
-  };
-  tryGate();
-  setTimeout(tryGate, 500);
-  setTimeout(tryGate, 1500);
-})();
+// ── "+ Add Member" gate (Inv #227) ──
+//   Visibility floor: L2+ (LCL and above) — below that it isn't an LCL surface.
+//   Within L2+, the button is ALWAYS shown but ENABLED only when the Pastor
+//   has switched it on in MD (churches.settings.mlt_add_member). OFF => greyed,
+//   disabled, and a tap explains why. Honest-leader governance gate; the soft
+//   dup check on save (_checkAddMemberDup) still backs it. Pastor's call:
+//   throttle duplicate adds without hiding the feature.
+let _mltAddMemberAllowed = false;
+function _paintAddMemberBtn(){
+  const btn = document.getElementById('addMemberBtn');
+  if(!btn) return;
+  const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
+  if(lvl < 2){ btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  if(_mltAddMemberAllowed){
+    btn.style.opacity = '1'; btn.style.cursor = 'pointer'; btn.style.filter = '';
+    btn.removeAttribute('title');
+  } else {
+    btn.style.opacity = '.45'; btn.style.cursor = 'not-allowed'; btn.style.filter = 'grayscale(.5)';
+    btn.setAttribute('title', 'Turned off by your pastor');
+  }
+}
+async function _refreshAddMemberGate(){
+  try {
+    const { data } = await db.from('churches').select('settings').limit(1).maybeSingle();
+    _mltAddMemberAllowed = !!(data && data.settings && data.settings.mlt_add_member === true);
+  } catch(e){ _mltAddMemberAllowed = false; }
+  _paintAddMemberBtn();
+}
+_paintAddMemberBtn();
+setTimeout(_paintAddMemberBtn, 500);
+setTimeout(_refreshAddMemberGate, 600);
+setTimeout(_refreshAddMemberGate, 1600);
+if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()){
+  MultiplyShared.embedSessionReady(3000).then(_refreshAddMemberGate);
+}
 
 const LEVEL_NAMES = {0:'Pre-Pipeline',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Exec. Leader'};
 const ZONE_DATA = {
@@ -2141,6 +2166,10 @@ function openAddMember(){
   // Defense-in-depth — the button is also DOM-hidden by gateAddMemberButton.
   if(!currentLeader || (currentLeader.pipeline_level||0) < 2){
     toast('Adding members requires Leader access (Level 2+).', 'info');
+    return;
+  }
+  if(!_mltAddMemberAllowed){
+    toast('Adding members is currently turned off by your pastor.', 'info');
     return;
   }
   const today = _l5Today();   // local date (Inv #12) — was toISOString (UTC, off by a day before 8AM PHT)
