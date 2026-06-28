@@ -1203,11 +1203,21 @@ let allSelected = false;
 //   disabled, and a tap explains why. Honest-leader governance gate; the soft
 //   dup check on save (_checkAddMemberDup) still backs it. Pastor's call:
 //   throttle duplicate adds without hiding the feature.
+function _liveLeaderLevel(){
+  try {
+    var s = MultiplyShared.getValidSession && MultiplyShared.getValidSession();
+    if (s && s.leaderLevel != null) return s.leaderLevel || 0;
+  } catch(e){}
+  var L = window.LEADER || {};
+  if (L.leaderLevel != null) return L.leaderLevel || 0;
+  return (currentLeader && currentLeader.pipeline_level) || 0;
+}
 let _mltAddMemberAllowed = false;
 function _paintAddMemberBtn(){
   const btn = document.getElementById('addMemberBtn');
   if(!btn) return;
-  const lvl = (currentLeader && currentLeader.pipeline_level) || 0;
+  const lvl = _liveLeaderLevel();
+  if (currentLeader && (currentLeader.pipeline_level == null) && lvl) currentLeader.pipeline_level = lvl;
   if(lvl < 2){ btn.style.display = 'none'; return; }
   btn.style.display = '';
   if(_mltAddMemberAllowed){
@@ -2164,7 +2174,7 @@ function openAddMember(){
   //   • Discipler auto-fills from currentLeader (no orphan members)
   //   • Soft dup-name check on save (see saveNewMember)
   // Defense-in-depth — the button is also DOM-hidden by gateAddMemberButton.
-  if(!currentLeader || (currentLeader.pipeline_level||0) < 2){
+  if(_liveLeaderLevel() < 2){
     toast('Adding members requires Leader access (Level 2+).', 'info');
     return;
   }
