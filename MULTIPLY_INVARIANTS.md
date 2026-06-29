@@ -2562,4 +2562,68 @@ Member-adding from the LC Leader tool duplicates fast when ungoverned, so it is 
 
 ---
 
+### **228. Home action cards collapse into the shared `lc-detail` CTA + bottom-sheet pattern; the sheet dismisses only via Close/✕, never a backdrop tap**
+
+The MMT Home surface standardizes every member action card onto one pattern: a collapsed `prayer-cta-card` button (icon · title · meta · ›, optional `pcc-badge`) that opens a `lc-detail-backdrop`/`lc-detail` bottom-sheet (✕ `pr-top-close`, `<h2>`, `lc-detail-meta`, body, `lc-detail-close`). `open*Sheet()` adds class `show`; `close*Sheet(e){ if(e) return; … }` removes it — a tap on the dimmed backdrop must NEVER dismiss (only the Close/✕ buttons), mirroring `closePrayerSheet`. S52 collapsed both Thanksgiving (PR #57) and "I'm here" self-attest (PR #59) onto this, joining Prayer — so all three read identically and new cards have a template to follow. RULE: a new Home action = a CTA button + a `lc-detail` sheet, backdrop-tap-inert.
+
+**Established June 29, 2026 (Session 52). Invariant #228 added - count now 228.**
+
+---
+
+### **229. Relocating inline content into a sheet: PRESERVE the ids its render functions target, and DE-SCOPE descendant CSS that assumed the old parent**
+
+When collapsing an inline card into a sheet, two things silently break unless guarded. (1) **Ids:** keep the exact element ids the existing render/logic functions read/write (`#attestCard`/`#attestPickerRow`/`#attestStatusRow` for `renderAttestCard`; `#gratitudeInput`/`#gratitudeShare`/`#gratitudeStatus` for `_persistGratitude`) so the logic stays untouched — relocate the nodes, don't rename them. (2) **CSS:** descendant-scoped rules (`.gratitude-card .gc-input{…}`) stop matching once the element leaves `.gratitude-card` for `.lc-detail` — styles vanish with no error (PR #57's share-row + "Saved ✓"-flash regression). FIX: de-scope to class-only (`.gc-input{…}`) and drop the now-unused wrapper rule. RULE: a "move it into the sheet" change is an id-preservation + CSS-scope audit, not just a markup cut-paste.
+
+**Established June 29, 2026 (Session 52). Invariant #229 added - count now 229.**
+
+---
+
+### **230. The celebration feed excludes the LC leader from `eligible`/`lcIds`; to surface a leader's OWN shared content, query the leader-inclusive id set + resolve via `leaderRow`**
+
+`loadCelebrationFeed` builds `eligible` (and `lcIds`) with `m.id !== lcLeaderId` — the LC leader is deliberately omitted from the peer-win set and modeled separately (the always-on streak subject `leaderRow`/`streakIds`). So any win-type keyed only on `lcIds` will NEVER show the leader's own row — and since a no-discipler pastor IS `lcLeaderId`, their own shared item never appears to them OR their flock. S52's gratitude win (PR #58) hit exactly this: a shared "To God be the glory!" never surfaced. FIX: query the leader-inclusive id set (`streakIds = [...lcIds, leaderRow.id]`) and resolve the subject via `eligibleById.get(id) || (leaderRow && id===leaderRow.id ? leaderRow : null)`. The render already maps `w.memberId === MEMBER.memberId → "You"/"Ikaw"`, so a leader's own shared win auto-reads "You". RULE: for any shared-content win a leader can also post, scope to leader-inclusive ids, not bare `lcIds`.
+
+**Established June 29, 2026 (Session 52). Invariant #230 added - count now 230.**
+
+---
+
+### **231. Celebration win labels use non-conjugating PAST tense ("gave thanks"), so both "You …" and "<Name> …" render grammatically**
+
+The feed renders `${name} ${label_en}` where name is "You" (self) or a member's name. A present-tense verb conjugates wrong for one of them — "You **gives** thanks" (S52 bug). Every other win label already dodges this with past tense ("completed", "discovered", "found"), invariant across persons. FIX: gratitude label `gives thanks → gave thanks` (TL `nagpapasalamat → nagpasalamat`). RULE: win/feed labels that get a subject prefix must use a verb form correct for both "You" and a third-person name — past tense is the safe default.
+
+**Established June 29, 2026 (Session 52). Invariant #231 added - count now 231.**
+
+---
+
+### **232. Attendance writes resolve the recorder from the LIVE session (`_liveLeaderIdName`), never the frozen `currentLeader` snapshot (extends #169)**
+
+MLT's `currentLeader` is a one-time `const` shim of `window.LEADER` built at parse time; in the unified shell it is EMPTY until the postMessage session lands. Three attendance write paths (main roster save, Sunday quick-mark, ministry batch) stamped `logged_by`/`logged_by_id` from `currentLeader?.name/id` → so every batch/quick-mark save recorded **'Unknown' / null** (the recorder identity was never captured). FIX (PR #60): a live resolver `_liveLeaderIdName()` (getValidSession → window.LEADER → shim, mirroring `_liveLeaderLevel`) feeds all three sites. RULE: anything that must carry the acting leader's identity at write time reads it live, never from the frozen parse-time shim.
+
+**Established June 29, 2026 (Session 52). Invariant #232 added - count now 232.**
+
+---
+
+### **233. Attendance recorder traceability + backfill: LC-scoped → subject's `discipler_id` (LCL); GP/ministry batches are NOT LCL-traceable; removed-member subjects attribute by attendance `id`; never stamp a guessed recorder**
+
+When backfilling historical 'Unknown' recorders (rows logged before #232), the recorder is recoverable for **LC-scoped** rows (LC Meeting / devotional / Sunday) = the subject's `discipler_id` (the LCL logging their own flock) — but **General-Purpose / ministry batches are NOT** (logged by one ministry leader across many LCGs, so the subject's LCL is the wrong answer; attribute to the confirmed logger). A **removed-member** subject has no live `members` row to trace — attribute by the attendance row's own `id`. CRITICAL: never stamp a guessed recorder — an honest 'Unknown' beats a wrong name, because the confirm / dispute / pastor-resolve audit keys on `logged_by_id`. S52 closed 288 rows (279 → LCLs `039`, 8 GP → pastor `040`, 1 orphan → Amy `041`), 0 Unknown left. RULE: always preview the trace (read-only) and split LC-scoped vs ministry before any backfill UPDATE.
+
+**Established June 29, 2026 (Session 52). Invariant #233 added - count now 233.**
+
+---
+
+### **234. The GP-batch ATTENDANCE picker is owner-scoped (`owner_id === live leader`); programs stay visible to all, batches don't — Settings/My Batches keeps the full list**
+
+Architecture: the pastor makes **programs** (`cohort_programs`); LCLs make **batches** (`cohorts`, `owner_id` = the LCL) under them. `_gpLoadBatches` was listing every batch visible to the leader (own + others' `visible_to_others` + pastor's), so the General-Purpose-Batch attendance dropdown buried the leader's own. FIX (PR #62): add `c.owner_id === L.leaderId` to the attendance-picker filter — own batches only when reporting. Program visibility is a SEPARATE loader (`cohort_programs` in 🎓 My Batches) and is untouched, so LCLs still see all programs to create batches under; the full visible-batch list also stays in My Batches / Settings. RULE: scope batches to their owner in the attendance flow; keep programs church-visible for creation. (BTLI/Usbong lesson-batch pickers are separate, left as-is.)
+
+**Established June 29, 2026 (Session 52). Invariant #234 added - count now 234.**
+
+---
+
+### **235. Multi-church pastor onboarding: seed church `ON CONFLICT (slug) DO NOTHING` + an L5 pastor with `member_pin_hash = NULL` (first-login `set_pin`); supply `church_id` explicitly; PREFER re-stamp over delete**
+
+Pre-seeding a tenant cohort (S52: 7 churches + L5 pastors, `042`): each church is `INSERT INTO churches (name,slug,timezone) … ON CONFLICT (slug) DO NOTHING`; each pastor is a `members` row with `pipeline_level=5`, `is_external_user=false`, `is_platform_admin=false` (only the platform author is), no discipler, and **`member_pin_hash = NULL`** — they claim their own PIN privately via the bcrypt `set_pin` first-login action (`auth-login`), so no password is handed out or guessed. Supply `church_id` EXPLICITLY: the `set_church_id_from_jwt` BEFORE-INSERT trigger fills it only when NULL, so a SQL-editor insert (no JWT) won't get clobbered. When a pastor already exists as a guest of another church, **re-stamp their `church_id` (move them)** rather than delete-and-recreate: a member with child rows (`announcement_acks`, `attendance`, …) CANNOT be deleted (FK has no cascade — the delete is rejected), and re-stamp preserves history. RULE: onboard by additive seed + targeted re-stamp; never hard-delete a member who has history.
+
+**Established June 29, 2026 (Session 52). Invariant #235 added - count now 235.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
