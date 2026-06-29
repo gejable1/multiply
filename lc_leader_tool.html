@@ -4138,12 +4138,13 @@ async function _gpLoadBatches(){
       const cat = (((c.cohort_programs || {}).category) || '').toLowerCase();
       const lessonDriven = cat === 'btli' || cat === 'pre-discipleship' || cat === 'pre-pipeline';
       const live = c.status === 'active' || c.status === 'forming';
-      return !lessonDriven && live;
+      const mine = c.owner_id === L.leaderId;   // attendance picker = YOUR batches only (others live in 🎓 My Batches / Settings)
+      return !lessonDriven && live && mine;
     });
     sel.disabled = false;
     if (_gpBatches.length === 0) {
       sel.innerHTML = '<option value="">⚠ No general-purpose batches yet</option>';
-      if (hint) hint.textContent = 'No general-purpose batches you can manage. Create one in 🎓 My Batches (under a non-BTLI / non-Pre-Pipeline program).';
+      if (hint) hint.textContent = 'No general-purpose batches of yours yet. Create one in 🎓 My Batches (under a non-BTLI / non-Pre-Pipeline program).';
       return;
     }
     sel.innerHTML = '<option value="">— Pick the batch —</option>' +
