@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 66,
+  "table_count": 67,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -6162,6 +6162,250 @@
         {
           "name": "trg_set_church_id",
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.interventions FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
+        }
+      ]
+    },
+    "lc_meeting_guides": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "lcl_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "devotional_id",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "meeting_date",
+          "ordinal": 5,
+          "data_type": "date",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "facilitator_md",
+          "ordinal": 6,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "participant_md",
+          "ordinal": 7,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "raw_paste",
+          "ordinal": 8,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "status",
+          "ordinal": 9,
+          "data_type": "text",
+          "nullable": false,
+          "default": "'draft'::text",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 10,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 11,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "lc_meeting_guides_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_meeting_guides_devotional_id_fkey",
+          "columns": [
+            "devotional_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "devotionals",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (devotional_id) REFERENCES devotionals(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "lc_meeting_guides_lcl_id_fkey",
+          "columns": [
+            "lcl_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (lcl_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [
+        {
+          "name": "lc_meeting_guides_status_check",
+          "definition": "CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_lcmg_lcl_status",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "lcl_id",
+            "status"
+          ],
+          "definition": "CREATE INDEX ix_lcmg_lcl_status ON public.lc_meeting_guides USING btree (lcl_id, status)"
+        },
+        {
+          "name": "lc_meeting_guides_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lc_meeting_guides_pkey ON public.lc_meeting_guides USING btree (id)"
+        },
+        {
+          "name": "uq_lcmg_lcl_date",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "lcl_id",
+            "meeting_date"
+          ],
+          "definition": "CREATE UNIQUE INDEX uq_lcmg_lcl_date ON public.lc_meeting_guides USING btree (church_id, lcl_id, meeting_date)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "lcmg_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "(lcl_id = auth_member_id())",
+          "with_check": null
+        },
+        {
+          "name": "lcmg_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((lcl_id = auth_member_id()) AND (church_id = auth_church_id()))"
+        },
+        {
+          "name": "lcmg_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id = auth_church_id()) AND ((lcl_id = auth_member_id()) OR ((status = 'published'::text) AND (lcl_id = auth_discipler_id()))))",
+          "with_check": null
+        },
+        {
+          "name": "lcmg_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "(lcl_id = auth_member_id())",
+          "with_check": "(lcl_id = auth_member_id())"
+        }
+      ],
+      "triggers": [
+        {
+          "name": "trg_lcmg_updated",
+          "definition": "CREATE TRIGGER trg_lcmg_updated BEFORE UPDATE ON public.lc_meeting_guides FOR EACH ROW EXECUTE FUNCTION _set_updated_at()"
+        },
+        {
+          "name": "trg_set_church_id",
+          "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lc_meeting_guides FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
     },
@@ -16632,6 +16876,16 @@
       "security_definer": false,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public.auth_church_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE\nAS $function$\r\n  select nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'church_id','')::uuid\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "auth_discipler_id",
+      "arguments": "",
+      "returns": "uuid",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.auth_discipler_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT discipler_id FROM members WHERE id = auth_member_id()\r\n$function$\n"
     },
     {
       "schema": "public",
