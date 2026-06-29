@@ -6975,17 +6975,22 @@ async function loadCelebrationFeed(){
   // gratitude_entries flagged shared_to_lc=true by same-LCG members - daily
   // thanks that surfaced answered-prayer praise outside the prayer board. RLS
   // permits reading shared rows in-church; lcIds keeps it strictly same-LCG.
+  // Same-LCG sharers PLUS the LC leader (mirror the streak subject set), so a
+  // leader's shared thanks reaches the flock and a no-discipler leader sees their
+  // own as "You 🌾…". Per-entry shared_to_lc=true is explicit consent, so the
+  // leader's globally always-on inclusion is fine here too.
   const gratitudeWins = [];
-  if(lcIds.length){
+  const _gratIds = (typeof streakIds !== 'undefined' && streakIds.length) ? streakIds : lcIds;
+  if(_gratIds.length){
     const { data: gratRows, error: gerr } = await db.from('gratitude_entries')
       .select('member_id, body, created_at, shared_to_lc')
       .eq('shared_to_lc', true)
-      .in('member_id', lcIds)
+      .in('member_id', _gratIds)
       .gte('created_at', new Date(cutoff).toISOString())
       .not('body','is',null);
     if(gerr) throw gerr;
     for(const gr of (gratRows || [])){
-      const m = eligibleById.get(gr.member_id);
+      const m = eligibleById.get(gr.member_id) || ((leaderRow && gr.member_id === leaderRow.id) ? leaderRow : null);
       if(!m) continue;
       const note = (gr.body || '').trim();
       if(!note) continue;
