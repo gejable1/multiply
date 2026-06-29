@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 65,
+  "table_count": 66,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -9173,6 +9173,15 @@
           "default": null,
           "is_identity": false,
           "comment": null
+        },
+        {
+          "name": "archetype_key",
+          "ordinal": 11,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
         }
       ],
       "primary_key": [
@@ -9317,6 +9326,197 @@
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.ministries FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
+    },
+    "ministry_archetypes": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": false,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "archetype_key",
+          "ordinal": 3,
+          "data_type": "text",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "name",
+          "ordinal": 4,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "summary",
+          "ordinal": 5,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "scoring",
+          "ordinal": 6,
+          "data_type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "display_order",
+          "ordinal": 7,
+          "data_type": "integer",
+          "nullable": true,
+          "default": "0",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "active",
+          "ordinal": 8,
+          "data_type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 9,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 10,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "ministry_archetypes_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [],
+      "indexes": [
+        {
+          "name": "ministry_archetypes_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX ministry_archetypes_pkey ON public.ministry_archetypes USING btree (id)"
+        },
+        {
+          "name": "uq_archetype_base",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "archetype_key"
+          ],
+          "definition": "CREATE UNIQUE INDEX uq_archetype_base ON public.ministry_archetypes USING btree (archetype_key) WHERE (church_id IS NULL)"
+        },
+        {
+          "name": "uq_archetype_overlay",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "archetype_key"
+          ],
+          "definition": "CREATE UNIQUE INDEX uq_archetype_overlay ON public.ministry_archetypes USING btree (church_id, archetype_key) WHERE (church_id IS NOT NULL)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "archetype_tenant_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "(church_id = auth_church_id())",
+          "with_check": null
+        },
+        {
+          "name": "archetype_tenant_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "(church_id = auth_church_id())"
+        },
+        {
+          "name": "archetype_tenant_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id IS NULL) OR (church_id = auth_church_id()))",
+          "with_check": null
+        },
+        {
+          "name": "archetype_tenant_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "(church_id = auth_church_id())",
+          "with_check": "(church_id = auth_church_id())"
+        }
+      ],
+      "triggers": []
     },
     "ministry_intake": {
       "kind": "table",
