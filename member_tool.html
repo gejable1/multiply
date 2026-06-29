@@ -1771,6 +1771,27 @@ body.lang-tl .tl-text{display:inline;}
         📅 <span class="en-text">Browse this month</span><span class="tl-text">Tingnan buong buwan</span>
       </button>
 
+      <!-- 📖 This Week's Study — the member's LCL published Participant's Guide (PR-3, read-only).
+           Hidden until a guide is published for the member's LC. RLS returns only their own
+           LCL's published guide (auth_discipler_id), so a simple status='published' query is safe. -->
+      <div id="mtgGuideWrap" style="display:none">
+        <div class="section-label"><div class="title">
+          <span class="en-text">📖 This Week's Study</span>
+          <span class="tl-text">📖 Aralin Ngayong Linggo</span>
+        </div></div>
+        <button class="prayer-cta-card" onclick="openMeetingGuideSheet()">
+          <div class="pcc-icon">📖</div>
+          <div class="pcc-body">
+            <div class="pcc-title">
+              <span class="en-text">This Week's Study</span>
+              <span class="tl-text">Aralin Ngayong Linggo</span>
+            </div>
+            <div class="pcc-meta" id="mtgGuideMeta"></div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">›</div>
+        </button>
+      </div>
+
       <!-- 🌾 Thanksgiving / Pasasalamat - daily gratitude journal (S52).
            Quiet autosave; optional "share as a win" surfaces it to LC-mates in
            the celebration feed. Multiple entries/day allowed (Add another). -->
@@ -2478,6 +2499,18 @@ body.lang-tl .tl-text{display:inline;}
       <span class="tl-text">Aking attendance record</span>
     </button>
     <button class="lc-detail-close" onclick="closeAttestSheet()">
+      <span class="en-text">Close</span><span class="tl-text">Isara</span>
+    </button>
+  </div>
+</div>
+
+<div class="lc-detail-backdrop" id="mtgGuideBackdrop" onclick="closeMeetingGuideSheet(event)">
+  <div class="lc-detail" id="mtgGuideSheet" onclick="event.stopPropagation()">
+    <button class="pr-top-close" onclick="closeMeetingGuideSheet()" aria-label="Close · Isara">✕</button>
+    <h2><span class="en-text">📖 This Week's Study</span><span class="tl-text">📖 Aralin Ngayong Linggo</span></h2>
+    <div class="lc-detail-meta" id="mtgGuideSheetMeta"></div>
+    <div id="mtgGuideBody" style="font-size:14px;line-height:1.65;color:var(--ink)"></div>
+    <button class="lc-detail-close" onclick="closeMeetingGuideSheet()">
       <span class="en-text">Close</span><span class="tl-text">Isara</span>
     </button>
   </div>
@@ -3373,6 +3406,7 @@ function renderDailyPrayer(){
 // HOME RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderHome(){
+  loadMeetingGuide();
   // Streak badge
   if(devoStreak > 0){
     document.getElementById('streakBadge').style.display = '';
@@ -6802,6 +6836,50 @@ function normalizePHPhone(raw){
 // ═══════════════════════════════════════════════════════════════
 // CELEBRATION FEED — synthesize wins from existing LC data
 // ═══════════════════════════════════════════════════════════════
+// ═══════════ This Week's Study — member-facing published Participant's Guide (PR-3) ═══════════
+let _mmtGuide = null;
+async function loadMeetingGuide(){
+  const wrap = document.getElementById('mtgGuideWrap'); if(!wrap) return;
+  _mmtGuide = null;
+  try{
+    const { data, error } = await db.from('lc_meeting_guides')
+      .select('participant_md,meeting_date')
+      .eq('status','published')
+      .order('meeting_date',{ ascending:false })
+      .limit(1);
+    if(error) throw error;
+    _mmtGuide = (data && data[0]) || null;
+  }catch(e){ console.error('meeting guide load', e); }
+  if(_mmtGuide){
+    document.getElementById('mtgGuideMeta').textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
+    wrap.style.display = '';
+  }else{
+    wrap.style.display = 'none';
+  }
+}
+function openMeetingGuideSheet(){
+  if(!_mmtGuide) return;
+  document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
+  document.getElementById('mtgGuideBody').innerHTML = mmtMd(_mmtGuide.participant_md || '');
+  document.getElementById('mtgGuideBackdrop').classList.add('show');
+}
+function closeMeetingGuideSheet(e){
+  if(e && e.currentTarget !== e.target) return;
+  document.getElementById('mtgGuideBackdrop').classList.remove('show');
+}
+function mmtMd(src){
+  let s = (src||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s = s.replace(/^### (.*)$/gm,'<h3>$1</h3>')
+       .replace(/^## (.*)$/gm,'<h2>$1</h2>')
+       .replace(/^# (.*)$/gm,'<h1>$1</h1>')
+       .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+       .replace(/\*(.+?)\*/g,'<em>$1</em>')
+       .replace(/^\s*[-*] (.*)$/gm,'<li>$1</li>');
+  s = s.replace(/(<li>[\s\S]*?<\/li>)/g, m => '<ul>'+m+'</ul>').replace(/<\/ul>\s*<ul>/g,'');
+  s = s.split(/\n{2,}/).map(b => /^\s*<(h\d|ul|li)/.test(b.trim()) ? b : '<p>'+b.replace(/\n/g,'<br>')+'</p>').join('');
+  return s;
+}
+
 async function loadCelebrationFeed(){
   // LC anchor (Inv #59/#166 — key on discipler_id, never lc_group):
   //  • Viewer HAS a discipler (every member AND every normal LCL with an upline)
