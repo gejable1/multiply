@@ -1428,7 +1428,7 @@ let MINISTRY_ROWS={};
 async function loadMinistries(){
   try{
     const {data: mRows, error: mErr} = await db.from('ministries')
-      .select('id,category,name,head_member_id,display_order,active')
+      .select('id,category,name,head_member_id,display_order,active,archetype_key')
       .eq('active', true)
       .order('category', {ascending:true})
       .order('display_order', {ascending:true});
@@ -10328,8 +10328,36 @@ function openEditMinistryModal(ministryId){
   _showMinistryModal(row);
 }
 
-function _showMinistryModal(existing){
+let ARCHETYPE_OPTIONS = [];
+function _mdChurchId(){
+  try{
+    const j = JSON.parse(sessionStorage.getItem('multiply_jwt')||'null');
+    const tok = j && j.token; if(!tok) return null;
+    const p = tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    return JSON.parse(atob(p)).church_id || null;
+  }catch(e){ return null; }
+}
+async function loadArchetypeOptions(){
+  try{
+    const cid = _mdChurchId();
+    let q = db.from('ministry_archetypes').select('church_id,archetype_key,name,display_order');
+    q = cid ? q.or('church_id.is.null,church_id.eq.'+cid) : q.is('church_id', null);
+    const { data, error } = await q;
+    if(error) throw error;
+    const byKey = {};
+    (data||[]).forEach(a=>{
+      const cur = byKey[a.archetype_key];
+      if(!cur || (a.church_id && !cur.church_id)) byKey[a.archetype_key] = a; // overlay name wins
+    });
+    ARCHETYPE_OPTIONS = Object.values(byKey)
+      .sort((x,y)=> (x.display_order??999)-(y.display_order??999) || (x.name||'').localeCompare(y.name||''))
+      .map(a=>({ key:a.archetype_key, name:a.name||a.archetype_key }));
+  }catch(e){ console.error('loadArchetypeOptions', e); ARCHETYPE_OPTIONS = []; }
+}
+
+async function _showMinistryModal(existing){
   document.querySelectorAll('.ministry-edit-modal').forEach(m => m.remove());
+  await loadArchetypeOptions();
   const isEdit = !!existing;
   const cats = [...new Set(Object.values(MINISTRY_ROWS).map(r => r.category))].sort();
 
@@ -10346,6 +10374,12 @@ function _showMinistryModal(existing){
     const sel = (existing && existing.category === c) ? 'selected' : '';
     return `<option value="${escapeHTMLNotif(c)}" ${sel}>${escapeHTMLNotif(c)}</option>`;
   }).join('');
+
+  const archOptions = ['<option value="">— Not mapped —</option>']
+    .concat(ARCHETYPE_OPTIONS.map(a => {
+      const sel = (existing && existing.archetype_key === a.key) ? 'selected' : '';
+      return `<option value="${escapeHTMLNotif(a.key)}" ${sel}>${escapeHTMLNotif(a.name)}</option>`;
+    })).join('');
 
   const modal = document.createElement('div');
   modal.className = 'ministry-edit-modal';
@@ -10381,6 +10415,14 @@ function _showMinistryModal(existing){
         <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Only flagged facilitators (LC Leaders) appear in this list.</div>
       </div>
 
+      <div style="margin-bottom:.85rem">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Recommender Archetype</label>
+        <select id="meArch" style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:13px">
+          ${archOptions}
+        </select>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:5px">Maps this ministry to the recommender's gift-fit profile. Leave unmapped to exclude it from recommendations.</div>
+      </div>
+
       <div style="display:flex;gap:8px;margin-top:1.2rem">
         <button onclick="this.closest('.ministry-edit-modal').remove()" style="flex:1;padding:10px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
         <button onclick="saveMinistry('${isEdit ? existing.id : ''}', this)" style="flex:2;padding:10px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">💾 Save Ministry</button>
@@ -10407,6 +10449,7 @@ async function saveMinistry(existingId, btn){
     if(!category){ toast('Enter the new category name','⚠️'); return; }
   }
   const headId = document.getElementById('meHead').value || null;
+  const archId = document.getElementById('meArch').value || null;
 
   // Check for duplicate name (only when adding or renaming to a different name)
   const dupCheck = Object.values(MINISTRY_ROWS).find(r =>
@@ -10418,7 +10461,7 @@ async function saveMinistry(existingId, btn){
     if(existingId){
       // Update existing
       const {error} = await db.from('ministries')
-        .update({category, name, head_member_id: headId})
+        .update({category, name, head_member_id: headId, archetype_key: archId})
         .eq('id', existingId);
       if(error) throw error;
       toast('Ministry updated ✓');
@@ -10430,7 +10473,7 @@ async function saveMinistry(existingId, btn){
         ? 10
         : Math.max(...inCat.map(r => r.display_order || 0)) + 10;
       const {error} = await db.from('ministries')
-        .insert({category, name, head_member_id: headId, display_order: nextOrder, active: true});
+        .insert({category, name, head_member_id: headId, display_order: nextOrder, active: true, archetype_key: archId});
       if(error) throw error;
       toast('Ministry added ✓');
     }
