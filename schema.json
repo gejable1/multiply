@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 67,
+  "table_count": 68,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -6406,6 +6406,235 @@
         {
           "name": "trg_set_church_id",
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lc_meeting_guides FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
+        }
+      ]
+    },
+    "lc_meeting_responses": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "guide_id",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "i_will",
+          "ordinal": 5,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "reach_person",
+          "ordinal": 6,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "notes",
+          "ordinal": 7,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "shared_with_leader",
+          "ordinal": 8,
+          "data_type": "boolean",
+          "nullable": false,
+          "default": "false",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 9,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 10,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "lc_meeting_responses_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_meeting_responses_guide_id_fkey",
+          "columns": [
+            "guide_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "lc_meeting_guides",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (guide_id) REFERENCES lc_meeting_guides(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_meeting_responses_member_id_fkey",
+          "columns": [
+            "member_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_lcmr_guide_shared",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "guide_id",
+            "shared_with_leader"
+          ],
+          "definition": "CREATE INDEX ix_lcmr_guide_shared ON public.lc_meeting_responses USING btree (guide_id, shared_with_leader)"
+        },
+        {
+          "name": "lc_meeting_responses_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lc_meeting_responses_pkey ON public.lc_meeting_responses USING btree (id)"
+        },
+        {
+          "name": "uq_lcmr_member_guide",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "member_id",
+            "guide_id"
+          ],
+          "definition": "CREATE UNIQUE INDEX uq_lcmr_member_guide ON public.lc_meeting_responses USING btree (member_id, guide_id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "lcmr_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "(member_id = auth_member_id())",
+          "with_check": null
+        },
+        {
+          "name": "lcmr_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((member_id = auth_member_id()) AND (church_id = auth_church_id()))"
+        },
+        {
+          "name": "lcmr_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id = auth_church_id()) AND ((member_id = auth_member_id()) OR ((shared_with_leader = true) AND (discipler_of(member_id) = auth_member_id()))))",
+          "with_check": null
+        },
+        {
+          "name": "lcmr_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "(member_id = auth_member_id())",
+          "with_check": "(member_id = auth_member_id())"
+        }
+      ],
+      "triggers": [
+        {
+          "name": "trg_lcmr_updated",
+          "definition": "CREATE TRIGGER trg_lcmr_updated BEFORE UPDATE ON public.lc_meeting_responses FOR EACH ROW EXECUTE FUNCTION _set_updated_at()"
+        },
+        {
+          "name": "trg_set_church_id",
+          "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lc_meeting_responses FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
     },
@@ -16906,6 +17135,16 @@
       "security_definer": false,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public.auth_member_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE\nAS $function$\r\n  select nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'sub','')::uuid\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "discipler_of",
+      "arguments": "p_member uuid",
+      "returns": "uuid",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.discipler_of(p_member uuid)\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT discipler_id FROM members WHERE id = p_member\r\n$function$\n"
     },
     {
       "schema": "public",
