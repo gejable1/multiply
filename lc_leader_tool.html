@@ -662,6 +662,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-label">My Batches</div>
       <div class="qa-desc">Enroll disciples · manage rosters</div>
     </div>
+    <div class="qa-btn" onclick="openMeetingPrep()">
+      <div class="qa-icon">📖</div>
+      <div class="qa-label">Meeting Prep</div>
+      <div class="qa-desc">AI-assisted study guides</div>
+    </div>
     <div class="qa-btn" onclick="window.open('mlt_manual.html','_blank','noopener')">
       <div class="qa-icon">📖</div>
       <div class="qa-label">User's Manual</div>
@@ -1046,6 +1051,53 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 </div>
 
 <!-- ══════════════════ SCREEN: SEND LINKS ══════════════════ -->
+<div class="screen" id="screenMeetingPrep">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">📖 Meeting Prep</div>
+  </div>
+  <div style="padding:14px;max-width:680px;margin:0 auto">
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+      <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">1 · Pick the lesson</div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Meeting date</label>
+      <input type="date" id="mpDate" onchange="mpLoadDevotional();mpLoadExisting()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:14px">
+      <div id="mpDevoTitle" style="margin-top:10px;font-size:13.5px;color:var(--muted)">Loading…</div>
+    </div>
+
+    <div id="mpStep2" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+      <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">2 · Copy the prompt → run it in any AI</div>
+      <textarea id="mpPrompt" readonly rows="7" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12px;line-height:1.5;resize:vertical"></textarea>
+      <button onclick="mpCopyPrompt()" style="margin-top:8px;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:10px 16px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">📋 Copy Prompt</button>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.4">Paste into ChatGPT, Gemini, Claude — any AI you like — then copy its full reply.</div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+      <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">3 · Paste the AI's reply</div>
+      <textarea id="mpPaste" rows="6" placeholder="Paste the AI's full reply here…" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
+      <button onclick="mpParse()" style="margin-top:8px;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:9px 16px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">Parse into two guides</button>
+    </div>
+
+    <div id="mpPreview" style="display:none">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+        <div style="font-weight:700;color:var(--ink);font-size:13px;margin-bottom:8px">Facilitator's Guide <span style="font-size:11px;color:var(--muted);font-weight:500">(you only)</span></div>
+        <textarea id="mpFacEdit" rows="6" oninput="mpRenderPreview()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
+        <div id="mpFacView" style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--ink)"></div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+        <div style="font-weight:700;color:var(--ink);font-size:13px;margin-bottom:8px">Participant's Guide <span style="font-size:11px;color:var(--muted);font-weight:500">(your group sees this)</span></div>
+        <textarea id="mpParEdit" rows="6" oninput="mpRenderPreview()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
+        <div id="mpParView" style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--ink)"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:24px">
+        <button onclick="mpSave('draft')" style="flex:1;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:11px;font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer">Save draft</button>
+        <button onclick="mpSave('published')" style="flex:1;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:11px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">Publish to my group</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <div class="screen" id="screenSendLinks">
   <div class="topbar">
     <div class="tb-back" onclick="showScreen('screenHome')">←</div>
@@ -1225,6 +1277,168 @@ function _liveLeaderIdName(){
   if (L.leaderId || L.leaderName) return { id: L.leaderId || null, name: L.leaderName || null };
   return { id: (currentLeader && currentLeader.id) || null, name: (currentLeader && currentLeader.name) || null };
 }
+// ═══════════ Meeting Prep — BYO-AI small-group guides (PR-2) ═══════════
+let _mpDevo = null;
+
+function _mpToday(){ return new Date().toISOString().slice(0,10); }
+
+async function openMeetingPrep(){
+  showScreen('screenMeetingPrep');
+  const d = document.getElementById('mpDate');
+  if(d && !d.value) d.value = _mpToday();
+  await mpLoadDevotional();
+  await mpLoadExisting();
+}
+
+async function mpLoadDevotional(){
+  const date = document.getElementById('mpDate').value || _mpToday();
+  const titleEl = document.getElementById('mpDevoTitle');
+  _mpDevo = null;
+  try{
+    const { data, error } = await db.from('devotionals')
+      .select('id,entry_date,title,scripture_ref,scripture_text,story,explanation,response,prayer,reflection_questions')
+      .eq('entry_date', date).maybeSingle();
+    if(error) throw error;
+    _mpDevo = data;
+  }catch(e){ console.error('devo load', e); }
+  if(_mpDevo){
+    titleEl.textContent = '“'+(_mpDevo.title||'(untitled)')+'” — '+(_mpDevo.scripture_ref||'');
+    titleEl.style.color = 'var(--ink)';
+    document.getElementById('mpPrompt').value = mpBuildPrompt(_mpDevo);
+    document.getElementById('mpStep2').style.display = '';
+  }else{
+    titleEl.textContent = 'No devotional found for '+date+'. Pick another day.';
+    titleEl.style.color = 'var(--muted)';
+    document.getElementById('mpPrompt').value = '';
+    document.getElementById('mpStep2').style.display = 'none';
+  }
+}
+
+function mpBuildPrompt(d){
+  const q = (d.reflection_questions||'').toString().trim();
+  return `You are helping a small-group leader prepare a 1-hour Bible study from a daily devotional. Produce TWO guides, following every rule exactly.
+
+RULES
+- Use ONLY the devotional content below. Do not add outside doctrine, speculation, or facts not in the text. When in doubt, stay closer to the passage.
+- Keep all applications consistent with the devotional's own Response and questions.
+- Warm, pastoral, Christ-centered, plain language a new believer can follow.
+- Output ONLY the two guides between the EXACT fences shown. Nothing outside them.
+
+DEVOTIONAL
+Title: ${d.title||''}
+Scripture: ${d.scripture_ref||''}
+${d.scripture_text||''}
+Story: ${d.story||''}
+Explanation: ${d.explanation||''}
+Response: ${d.response||''}
+Prayer: ${d.prayer||''}
+Reflection questions: ${q}
+
+THE FACILITATOR'S GUIDE MUST FOLLOW THIS TIMED 1-HOUR FLOW
+0:00-0:08  Welcome + Win (snack; one God-story from the week)
+0:08-0:15  Connect to God (a song or psalm + opening prayer)
+0:15-0:18  Look Back (last week's "I will" + "who did you reach?")
+0:18-0:38  The Word (discuss THIS devotional, by questions - the main block)
+0:38-0:48  "I Will" (one obedience step + one person to love/reach this week)
+0:48-0:57  Pray for one another (by name; remember the empty chair)
+0:57-1:00  Send-off (next step, end on time)
+
+OUTPUT FORMAT - use these EXACT fences, markdown inside, nothing outside them:
+===FACILITATOR===
+# Facilitator's Guide - ${d.title||''}
+(timed script: for each segment above, what to say/do, plus 4-6 discussion questions for The Word drawn straight from the passage, with facilitation tips and timing cues)
+===PARTICIPANT===
+# Participant's Guide - ${d.title||''}
+(the scripture reference, a 2-3 sentence framing, the reflection questions, a space prompt for "My 'I will' this week", a space prompt for "One person I'll love/reach", and a short closing prayer)
+===END===`;
+}
+
+async function mpCopyPrompt(){
+  const t = document.getElementById('mpPrompt');
+  try{ await navigator.clipboard.writeText(t.value); toast('Prompt copied — paste it into your AI','✅'); }
+  catch(e){ t.focus(); t.select(); try{document.execCommand('copy');}catch(_){} toast('Prompt copied','✅'); }
+}
+
+function mpParse(){
+  const raw = document.getElementById('mpPaste').value || '';
+  const fi = raw.indexOf('===FACILITATOR===');
+  const pi = raw.indexOf('===PARTICIPANT===');
+  const ei = raw.indexOf('===END===');
+  if(fi>=0 && pi>fi && ei>pi){
+    const fac = raw.slice(fi+'===FACILITATOR==='.length, pi).trim();
+    const par = raw.slice(pi+'===PARTICIPANT==='.length, ei).trim();
+    document.getElementById('mpFacEdit').value = fac;
+    document.getElementById('mpParEdit').value = par;
+    toast('Parsed into two guides — review below','✅');
+  }else{
+    document.getElementById('mpFacEdit').value = raw;
+    document.getElementById('mpParEdit').value = '';
+    toast("Couldn't find the guide markers — split the text into the two boxes by hand",'⚠️');
+  }
+  document.getElementById('mpPreview').style.display = '';
+  mpRenderPreview();
+}
+
+function mpRenderPreview(){
+  document.getElementById('mpFacView').innerHTML = mpMd(document.getElementById('mpFacEdit').value);
+  document.getElementById('mpParView').innerHTML = mpMd(document.getElementById('mpParEdit').value);
+}
+
+// minimal, escaping markdown -> html (headings, bold, italic, bullet lists, paragraphs)
+function mpMd(src){
+  let s = (src||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s = s.replace(/^### (.*)$/gm,'<h3>$1</h3>')
+       .replace(/^## (.*)$/gm,'<h2>$1</h2>')
+       .replace(/^# (.*)$/gm,'<h1>$1</h1>')
+       .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+       .replace(/\*(.+?)\*/g,'<em>$1</em>')
+       .replace(/^\s*[-*] (.*)$/gm,'<li>$1</li>');
+  s = s.replace(/(<li>[\s\S]*?<\/li>)/g, m => '<ul>'+m+'</ul>').replace(/<\/ul>\s*<ul>/g,'');
+  s = s.split(/\n{2,}/).map(b => /^\s*<(h\d|ul|li)/.test(b.trim()) ? b : '<p>'+b.replace(/\n/g,'<br>')+'</p>').join('');
+  return s;
+}
+
+async function mpLoadExisting(){
+  const me = _liveLeaderIdName(); if(!me || !me.id) return;
+  const date = document.getElementById('mpDate').value || _mpToday();
+  try{
+    const { data } = await db.from('lc_meeting_guides')
+      .select('facilitator_md,participant_md,raw_paste,status')
+      .eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
+    if(data){
+      if(data.raw_paste) document.getElementById('mpPaste').value = data.raw_paste;
+      document.getElementById('mpFacEdit').value = data.facilitator_md || '';
+      document.getElementById('mpParEdit').value = data.participant_md || '';
+      document.getElementById('mpPreview').style.display = '';
+      mpRenderPreview();
+    }
+  }catch(e){}
+}
+
+async function mpSave(status){
+  if(!_mpDevo){ toast('Pick a devotional first','⚠️'); return; }
+  const me = _liveLeaderIdName();
+  if(!me || !me.id){ toast('Session not ready — reopen this screen','⚠️'); return; }
+  const fac = (document.getElementById('mpFacEdit').value||'').trim();
+  const par = (document.getElementById('mpParEdit').value||'').trim();
+  if(!fac || !par){ toast('Both guides need content before publishing','⚠️'); return; }
+  const date = document.getElementById('mpDate').value || _mpToday();
+  const payload = {
+    lcl_id: me.id, devotional_id: _mpDevo.id, meeting_date: date,
+    facilitator_md: fac, participant_md: par,
+    raw_paste: document.getElementById('mpPaste').value || null, status: status
+  };
+  try{
+    const { data: existing } = await db.from('lc_meeting_guides')
+      .select('id').eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
+    let res;
+    if(existing && existing.id) res = await db.from('lc_meeting_guides').update(payload).eq('id', existing.id);
+    else res = await db.from('lc_meeting_guides').insert(payload);
+    if(res.error) throw res.error;
+    toast(status==='published' ? 'Published to your group 🎉' : 'Saved as draft','✅');
+  }catch(e){ console.error('mpSave', e); toast('Save failed: '+(e.message||e),'⚠️'); }
+}
+
 let _mltAddMemberAllowed = false;
 function _paintAddMemberBtn(){
   const btn = document.getElementById('addMemberBtn');
