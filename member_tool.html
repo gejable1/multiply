@@ -1270,6 +1270,23 @@ body.lang-tl .tl-text{display:inline;}
   white-space:pre-wrap;
 }
 
+.gratitude-card{
+  background:var(--card,#fff);
+  border:1px solid rgba(47,109,79,.18);
+  border-radius:14px;
+  padding:14px 14px 12px;
+  margin-bottom:1rem;
+}
+.gratitude-card .gc-prompt{ font-weight:700; font-size:14px; color:var(--ink,#1f2a24); margin-bottom:8px; line-height:1.35; }
+.gratitude-card .gc-input{ width:100%; box-sizing:border-box; border:1px solid rgba(0,0,0,.14); border-radius:10px; padding:10px; font:inherit; font-size:14px; resize:vertical; min-height:64px; }
+.gratitude-card .gc-input:focus{ border-color:var(--forest,#2f6d4f); outline:none; }
+.gratitude-card .gc-share{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; color:var(--ink,#1f2a24); cursor:pointer; }
+.gratitude-card .gc-share input{ width:16px; height:16px; accent-color:var(--forest,#2f6d4f); }
+.gratitude-card .gc-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; min-height:20px; }
+.gratitude-card .gc-status{ font-size:12px; color:var(--forest,#2f6d4f); font-weight:600; opacity:0; transition:opacity .2s; }
+.gratitude-card .gc-status.show{ opacity:1; }
+.gratitude-card .gc-add{ background:none; border:none; color:var(--forest,#2f6d4f); font:inherit; font-size:12px; font-weight:600; cursor:pointer; padding:2px 4px; }
+.gratitude-card .gc-hint{ font-size:11px; color:var(--muted,#7a857f); margin-top:6px; font-style:italic; }
 .reflection-box{
   margin-top:30px;
   padding:18px 18px 20px;
@@ -1760,6 +1777,38 @@ body.lang-tl .tl-text{display:inline;}
       <button class="browse-month-btn" onclick="openBrowseMonth()" id="browseMonthBtn" style="display:none">
         📅 <span class="en-text">Browse this month</span><span class="tl-text">Tingnan buong buwan</span>
       </button>
+
+      <!-- 🌾 Thanksgiving / Pasasalamat - daily gratitude journal (S52).
+           Quiet autosave; optional "share as a win" surfaces it to LC-mates in
+           the celebration feed. Multiple entries/day allowed (Add another). -->
+      <div class="section-label">
+        <div class="title">
+          <span class="en-text">🌾 Thanksgiving</span>
+          <span class="tl-text">🌾 Pasasalamat</span>
+        </div>
+      </div>
+      <div class="gratitude-card" id="gratitudeCard">
+        <div class="gc-prompt">
+          <span class="en-text">What are you thankful to God for today?</span>
+          <span class="tl-text">Para saan ka nagpapasalamat sa Diyos ngayon?</span>
+        </div>
+        <textarea id="gratitudeInput" class="gc-input" rows="3" placeholder="Salamat, Panginoon…"></textarea>
+        <label class="gc-share">
+          <input type="checkbox" id="gratitudeShare">
+          <span class="en-text">🎉 share as a win in LC celebrations</span>
+          <span class="tl-text">🎉 ibahagi bilang tagumpay sa LC celebrations</span>
+        </label>
+        <div class="gc-foot">
+          <span class="gc-status" id="gratitudeStatus"></span>
+          <button type="button" class="gc-add" id="gratitudeAddAnother" style="display:none" onclick="gratitudeAddAnother()">
+            <span class="en-text">＋ Add another</span><span class="tl-text">＋ Magpasalamat ulit</span>
+          </button>
+        </div>
+        <div class="gc-hint">
+          <span class="en-text">Auto-saves as you write.</span>
+          <span class="tl-text">Awtomatikong sine-save habang nagsusulat.</span>
+        </div>
+      </div>
 
       <!-- 🙏 Prayer / Panalangin — requests + intercession (Wave 1).
            Prominent CTA near the top of Home: compose a request, pray for
@@ -6895,8 +6944,38 @@ async function loadCelebrationFeed(){
     prayerWins.sort((a,b) => b.sortKey - a.sortKey);
   }
 
-  // ── INDIVIDUAL ORDER: birthdays → answered prayers → streaks → assessments; cap 8.
-  celebrationWins = [...bdayWins, ...prayerWins, ...streakWins, ...wins].slice(0, 8);
+  // -- (F) GRATITUDE SHARES (S52) --
+  // gratitude_entries flagged shared_to_lc=true by same-LCG members - daily
+  // thanks that surfaced answered-prayer praise outside the prayer board. RLS
+  // permits reading shared rows in-church; lcIds keeps it strictly same-LCG.
+  const gratitudeWins = [];
+  if(lcIds.length){
+    const { data: gratRows, error: gerr } = await db.from('gratitude_entries')
+      .select('member_id, body, created_at, shared_to_lc')
+      .eq('shared_to_lc', true)
+      .in('member_id', lcIds)
+      .gte('created_at', new Date(cutoff).toISOString())
+      .not('body','is',null);
+    if(gerr) throw gerr;
+    for(const gr of (gratRows || [])){
+      const m = eligibleById.get(gr.member_id);
+      if(!m) continue;
+      const note = (gr.body || '').trim();
+      if(!note) continue;
+      const snippet = note.length > 90 ? note.slice(0,87).trimEnd() + '…' : note;
+      gratitudeWins.push({
+        memberId: m.id, memberName: m.name, photoUrl: m.photo_url || '', isTest: !!m.is_test_member,
+        icon: '🌾',
+        label_en: `gives thanks to God — “${snippet}”`,
+        label_tl: `nagpapasalamat sa Diyos — “${snippet}”`,
+        whenIso: gr.created_at, sortKey: gr.created_at ? Date.parse(gr.created_at) : 0
+      });
+    }
+    gratitudeWins.sort((a,b) => b.sortKey - a.sortKey);
+  }
+
+  // ── INDIVIDUAL ORDER: birthdays → answered prayers → gratitude → streaks → assessments; cap 8.
+  celebrationWins = [...bdayWins, ...prayerWins, ...gratitudeWins, ...streakWins, ...wins].slice(0, 8);
 
   // ── (D) GROUP BADGES (pinned atop, not counted in the cap)
   // 1) Perfect attendance last Sunday — fires ONLY if the whole sharing LCG
@@ -7046,6 +7125,7 @@ renderHome = function(){
   try{ renderLcCard(); }catch(e){ console.warn(e); }
   try{ renderCelebrationFeed(); }catch(e){ console.warn(e); }
   try{ renderMyHeadsUps(); }catch(e){ console.warn(e); }
+  try{ renderGratitudeCard(); }catch(e){ console.warn(e); }
 };
 
 // Same for renderProfile — extend to render the share toggle
@@ -7072,6 +7152,107 @@ setLang = function(lang){
 };
 
 // ═══════════════════════════════════════════════════════════════
+// ===============================================================
+// 🌾 GRATITUDE JOURNAL (S52) - daily thanks card on Home
+// ---------------------------------------------------------------
+// Quiet autosave mirrors the devo reflection persist (insert->capture id, then
+// update). "share as a win" flips shared_to_lc, which surfaces the entry to
+// same-LCG mates via the gratitude win-type in loadCelebrationFeed. Multiple
+// entries/day: "Add another" clears the captured row so the next words start a
+// fresh row. church_id auto-stamps on insert via trg_set_church_id (#182) -
+// never set client-side.
+let _gratCurrentRow = null;
+let _gratAutosaveTimer = null;
+let _gratWired = false;
+
+function _gratFlashSaved(){
+  const st = document.getElementById('gratitudeStatus');
+  if(!st) return;
+  const tl = document.body.classList.contains('lang-tl');
+  st.textContent = tl ? 'Naka-save ✓' : 'Saved ✓';
+  st.classList.add('show');
+  setTimeout(()=>st.classList.remove('show'), 1400);
+}
+
+async function _persistGratitude(opts){
+  opts = opts || {};
+  const inp = document.getElementById('gratitudeInput');
+  const shareEl = document.getElementById('gratitudeShare');
+  if(!inp) return { saved:false };
+  const text = (inp.value || '').trim();
+  const share = !!(shareEl && shareEl.checked);
+  if(!text && !(_gratCurrentRow && _gratCurrentRow.id)) return { saved:false };
+  try{
+    if(_gratCurrentRow && _gratCurrentRow.id){
+      if((_gratCurrentRow.body||'') === text && !!_gratCurrentRow.shared_to_lc === share){
+        return { saved:false };
+      }
+      const {error} = await db.from('gratitude_entries').update({
+        body: text, shared_to_lc: share, updated_at: new Date().toISOString()
+      }).eq('id', _gratCurrentRow.id);
+      if(error) throw error;
+      _gratCurrentRow.body = text; _gratCurrentRow.shared_to_lc = share;
+    } else {
+      const {data, error} = await db.from('gratitude_entries').insert({
+        member_id: MEMBER.memberId,
+        entry_date: todayIso(),
+        body: text,
+        shared_to_lc: share
+      }).select().single();
+      if(error) throw error;
+      _gratCurrentRow = data;
+    }
+    if(!opts.silent) _gratFlashSaved();
+    const add = document.getElementById('gratitudeAddAnother');
+    if(add) add.style.display = '';
+    return { saved:true, shared:share };
+  }catch(e){
+    console.error('gratitude persist failed:', e);
+    if(!opts.silent){
+      const tl = document.body.classList.contains('lang-tl');
+      showToast((tl?'Hindi na-save: ':'Could not save: ')+e.message, true);
+    }
+    return { saved:false, error:e };
+  }
+}
+
+async function _onGratitudeShareChange(){
+  const res = await _persistGratitude({silent:false});
+  if(res && res.error){
+    const shareEl = document.getElementById('gratitudeShare');
+    if(shareEl) shareEl.checked = !!(_gratCurrentRow && _gratCurrentRow.shared_to_lc);
+    return;
+  }
+  try{ await loadCelebrationFeed(); renderCelebrationFeed(); }catch(e){ console.warn('feed refresh after share:', e); }
+}
+
+function gratitudeAddAnother(){
+  clearTimeout(_gratAutosaveTimer);
+  _gratCurrentRow = null;
+  const inp = document.getElementById('gratitudeInput');
+  const shareEl = document.getElementById('gratitudeShare');
+  if(inp){ inp.value=''; inp.focus(); }
+  if(shareEl) shareEl.checked = false;
+  const add = document.getElementById('gratitudeAddAnother');
+  if(add) add.style.display = 'none';
+}
+
+function renderGratitudeCard(){
+  if(_gratWired) return;
+  const inp = document.getElementById('gratitudeInput');
+  const shareEl = document.getElementById('gratitudeShare');
+  if(!inp) return;
+  inp.addEventListener('input', () => {
+    const st = document.getElementById('gratitudeStatus');
+    if(st) st.classList.remove('show');
+    clearTimeout(_gratAutosaveTimer);
+    _gratAutosaveTimer = setTimeout(() => { _persistGratitude({silent:true}); }, 1500);
+  });
+  inp.addEventListener('blur', () => { clearTimeout(_gratAutosaveTimer); _persistGratitude({silent:true}); });
+  if(shareEl) shareEl.addEventListener('change', _onGratitudeShareChange);
+  _gratWired = true;
+}
+
 // ═══════════════ DEVOTIONAL — load + reader + browse ═══════════
 // ═══════════════════════════════════════════════════════════════
 
