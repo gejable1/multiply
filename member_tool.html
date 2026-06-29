@@ -1874,29 +1874,26 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
-      <!-- Self-attest attendance card -->
-      <div id="attestCard" style="display:none">
-        <div class="section-label">
-          <div class="title">
-            <span class="en-text">📍 I'm here at service</span>
-            <span class="tl-text">📍 Nasa serbisyo ako</span>
+      <!-- 📍 Attendance — collapsed CTA (always shown); picker + status live in the sheet. -->
+      <div class="section-label"><div class="title">
+        <span class="en-text">Attendance</span><span class="tl-text">Pagdalo</span>
+      </div></div>
+      <button class="prayer-cta-card" onclick="openAttestSheet()" id="attestCtaBtn">
+        <div class="pcc-icon">📍</div>
+        <div class="pcc-body">
+          <div class="pcc-title">
+            <span class="en-text">I'm here</span><span class="tl-text">Nandito ako</span>
           </div>
-          <div class="meta" style="font-size:11px;color:var(--muted);margin-top:.2rem;">
-            <span class="en-text">Tap your service so we can record your attendance even if your leader isn't logging.</span>
-            <span class="tl-text">I-tap ang serbisyo para ma-record ang attendance mo kahit hindi nagla-log ang leader mo.</span>
+          <div class="pcc-meta">
+            <span class="en-text">Check in to a service · see your record</span>
+            <span class="tl-text">Mag-check in sa serbisyo · tingnan ang record</span>
           </div>
         </div>
-        <div id="attestPickerRow" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;"></div>
-        <!-- Status row: recent attestations with their resolution state.
-             Lives in its own row so it never covers the attest buttons above. -->
-        <div id="attestStatusRow" style="display:none;margin-bottom:.5rem;"></div>
-        <button onclick="openAttestHistory()" 
-          style="display:flex;align-items:center;gap:.4rem;margin:.3rem auto 0;padding:.4rem .8rem;background:transparent;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11.5px;cursor:pointer;">
-          <span>📊</span>
-          <span class="en-text">My attendance record</span>
-          <span class="tl-text">Aking attendance record</span>
-        </button>
-      </div>
+        <span class="pcc-badge" id="attestCtaPill" style="display:none">
+          <span class="en-text">now</span><span class="tl-text">ngayon</span>
+        </span>
+        <div style="color:var(--muted);font-size:18px">›</div>
+      </button>
 
       <!-- Heads-up to leader button -->
       <button class="headsup-btn" onclick="openHeadsUpModal()">
@@ -2454,6 +2451,38 @@ body.lang-tl .tl-text{display:inline;}
 <!-- 🌾 Thanksgiving sheet (S52b) — mirrors the Prayer sheet. The composer keeps
      the SAME ids (#gratitudeInput / #gratitudeShare / #gratitudeStatus /
      #gratitudeAddAnother) so the existing autosave helpers work untouched. -->
+<!-- 📍 "I'm here" self-attest sheet (S52 PR B) — mirrors the Prayer/Thanksgiving
+     sheets. The picker/status keep their ids (#attestCard / #attestPickerRow /
+     #attestStatusRow) so renderAttestCard works untouched; the history button sits
+     OUTSIDE #attestCard so it's reachable even with no attestable service. -->
+<div class="lc-detail-backdrop" id="attestBackdrop" onclick="closeAttestSheet(event)">
+  <div class="lc-detail" id="attestSheet" onclick="event.stopPropagation()">
+    <button class="pr-top-close" onclick="closeAttestSheet()" aria-label="Close · Isara">✕</button>
+    <h2><span class="en-text">📍 I'm here</span><span class="tl-text">📍 Nandito ako</span></h2>
+    <div class="lc-detail-meta">
+      <span class="en-text">Tap your service so your attendance is recorded even if your leader isn't logging.</span>
+      <span class="tl-text">I-tap ang serbisyo para ma-record ang attendance mo kahit hindi nagla-log ang leader mo.</span>
+    </div>
+    <div id="attestCard" style="display:none">
+      <div id="attestPickerRow" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;"></div>
+      <div id="attestStatusRow" style="display:none;margin-bottom:.5rem;"></div>
+    </div>
+    <div id="attestEmptyState" style="display:none;font-size:13px;color:var(--muted);text-align:center;padding:14px 6px;">
+      <span class="en-text">No service to check into right now. We'll show it here when one's open.</span>
+      <span class="tl-text">Walang serbisyong maaaring i-attend ngayon. Lalabas ito dito kapag may bukas.</span>
+    </div>
+    <button onclick="openAttestHistory()"
+      style="display:flex;align-items:center;gap:.4rem;margin:.6rem auto 0;padding:.4rem .8rem;background:transparent;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11.5px;cursor:pointer;">
+      <span>📊</span>
+      <span class="en-text">My attendance record</span>
+      <span class="tl-text">Aking attendance record</span>
+    </button>
+    <button class="lc-detail-close" onclick="closeAttestSheet()">
+      <span class="en-text">Close</span><span class="tl-text">Isara</span>
+    </button>
+  </div>
+</div>
+
 <div class="lc-detail-backdrop" id="gratitudeBackdrop" onclick="closeGratitudeSheet(event)">
   <div class="lc-detail" id="gratitudeSheet" onclick="event.stopPropagation()">
     <button class="pr-top-close" onclick="closeGratitudeSheet()" aria-label="Close · Isara">✕</button>
@@ -6118,6 +6147,10 @@ function setLang(lang){
   try{
     if(document.getElementById('gratitudeBackdrop')?.classList.contains('show')) renderMyGratitudeList();
   }catch(e){ console.warn(e); }
+  // S52 PR B: rebuild the attest picker labels in the new language if its sheet is open.
+  try{
+    if(document.getElementById('attestBackdrop')?.classList.contains('show')) renderAttestCard();
+  }catch(e){ console.warn(e); }
 }
 function applySavedLang(){
   let lang = 'en';
@@ -7293,6 +7326,20 @@ function renderGratitudeCard(){
 //    closePrayerSheet — only the Close/✕ buttons do).
 let _myGratitude = [];
 
+// ── S52 PR B: "I'm here" self-attest as a CTA + bottom-sheet. The picker/status
+//    (#attestCard / #attestPickerRow / #attestStatusRow) relocated into the sheet
+//    unchanged, so renderAttestCard keeps working. Open refreshes the card; close
+//    mirrors closePrayerSheet (a backdrop tap never dismisses).
+async function openAttestSheet(){
+  document.getElementById('attestBackdrop').classList.add('show');
+  try{ await renderAttestCard(); }catch(e){ console.warn('attest sheet render failed (non-fatal):', e); }
+}
+
+function closeAttestSheet(e){
+  if(e) return;
+  document.getElementById('attestBackdrop').classList.remove('show');
+}
+
 async function openGratitudeSheet(){
   renderGratitudeCard();   // idempotent — _gratWired guard attaches listeners once
   document.getElementById('gratitudeBackdrop').classList.add('show');
@@ -8416,8 +8463,17 @@ async function renderAttestCard(){
   await _loadAttestEventTypes();
   await _loadRecentAttests();
 
-  if (!_attestEventTypes.length) { card.style.display = 'none'; return; }
+  const _es = document.getElementById('attestEmptyState');
+  const _pill = document.getElementById('attestCtaPill');
+  if (!_attestEventTypes.length) {
+    card.style.display = 'none';
+    if (_es) _es.style.display = 'block';
+    if (_pill) _pill.style.display = 'none';
+    return;
+  }
   card.style.display = 'block';
+  if (_es) _es.style.display = 'none';
+  if (_pill) _pill.style.display = '';
 
   // Build picker buttons (one per event_type)
   const pickerRow = document.getElementById('attestPickerRow');
