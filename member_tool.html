@@ -2510,6 +2510,27 @@ body.lang-tl .tl-text{display:inline;}
     <h2><span class="en-text">📖 This Week's Study</span><span class="tl-text">📖 Aralin Ngayong Linggo</span></h2>
     <div class="lc-detail-meta" id="mtgGuideSheetMeta"></div>
     <div id="mtgGuideBody" style="font-size:14px;line-height:1.65;color:var(--ink)"></div>
+    <div class="section-label" style="margin-top:18px"><div class="title">
+      <span class="en-text">My Response</span><span class="tl-text">Aking Sagot</span>
+    </div></div>
+    <label style="display:block;font-size:12px;color:var(--muted);margin:6px 0 4px">
+      <span class="en-text">My "I will" this week</span><span class="tl-text">Aking gagawin ngayong linggo</span>
+    </label>
+    <textarea id="mtgIWill" class="gc-input" rows="2" placeholder="…"></textarea>
+    <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 4px">
+      <span class="en-text">One person I'll love / reach this week</span><span class="tl-text">Isang taong aabutin ko ngayong linggo</span>
+    </label>
+    <input id="mtgReach" class="gc-input" type="text" placeholder="…">
+    <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 4px">
+      <span class="en-text">My notes / reflections</span><span class="tl-text">Aking mga tala</span>
+    </label>
+    <textarea id="mtgNotes" class="gc-input" rows="3" placeholder="…"></textarea>
+    <label class="gc-share" style="margin-top:10px">
+      <input type="checkbox" id="mtgShare">
+      <span class="en-text">🔒 share with my leader</span>
+      <span class="tl-text">🔒 ibahagi sa aking lider</span>
+    </label>
+    <span class="gc-status" id="mtgRespStatus"></span>
     <button class="lc-detail-close" onclick="closeMeetingGuideSheet()">
       <span class="en-text">Close</span><span class="tl-text">Isara</span>
     </button>
@@ -6838,12 +6859,79 @@ function normalizePHPhone(raw){
 // ═══════════════════════════════════════════════════════════════
 // ═══════════ This Week's Study — member-facing published Participant's Guide (PR-3) ═══════════
 let _mmtGuide = null;
+// ── Interactive responses for the study guide (PR-2): i_will / reach / notes,
+//    autosave (mirrors gratitude), optional share-with-leader. Keyed (member, guide). ──
+let _mtgResp = null, _mtgRespTimer = null, _mtgRespWired = false;
+function _mtgFlashSaved(){
+  const st = document.getElementById('mtgRespStatus'); if(!st) return;
+  const tl = document.body.classList.contains('lang-tl');
+  st.textContent = tl ? 'Naka-save ✓' : 'Saved ✓'; st.classList.add('show');
+  setTimeout(()=>st.classList.remove('show'), 1400);
+}
+async function mtgLoadResponse(){
+  _mtgResp = null;
+  ['mtgIWill','mtgReach','mtgNotes'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const sh = document.getElementById('mtgShare'); if(sh) sh.checked = false;
+  if(!_mmtGuide || !_mmtGuide.id) return;
+  try{
+    const { data, error } = await db.from('lc_meeting_responses')
+      .select('id,i_will,reach_person,notes,shared_with_leader')
+      .eq('guide_id', _mmtGuide.id).eq('member_id', MEMBER.memberId).maybeSingle();
+    if(error) throw error;
+    if(data){
+      _mtgResp = data;
+      document.getElementById('mtgIWill').value = data.i_will || '';
+      document.getElementById('mtgReach').value = data.reach_person || '';
+      document.getElementById('mtgNotes').value = data.notes || '';
+      if(sh) sh.checked = !!data.shared_with_leader;
+    }
+  }catch(e){ console.warn('response load', e); }
+}
+async function _mtgPersistResponse(opts){
+  opts = opts || {};
+  if(!_mmtGuide || !_mmtGuide.id) return;
+  const i_will = (document.getElementById('mtgIWill').value||'').trim();
+  const reach  = (document.getElementById('mtgReach').value||'').trim();
+  const notes  = (document.getElementById('mtgNotes').value||'').trim();
+  const share  = !!document.getElementById('mtgShare').checked;
+  if(!i_will && !reach && !notes && !share && !(_mtgResp && _mtgResp.id)) return;
+  try{
+    if(_mtgResp && _mtgResp.id){
+      const { error } = await db.from('lc_meeting_responses').update({
+        i_will, reach_person:reach, notes, shared_with_leader:share, updated_at:new Date().toISOString()
+      }).eq('id', _mtgResp.id);
+      if(error) throw error;
+      _mtgResp.i_will=i_will; _mtgResp.reach_person=reach; _mtgResp.notes=notes; _mtgResp.shared_with_leader=share;
+    } else {
+      const { data, error } = await db.from('lc_meeting_responses').insert({
+        member_id: MEMBER.memberId, guide_id: _mmtGuide.id,
+        i_will, reach_person:reach, notes, shared_with_leader:share
+      }).select().single();
+      if(error) throw error;
+      _mtgResp = data;
+    }
+    if(!opts.silent) _mtgFlashSaved();
+  }catch(e){
+    console.error('response persist', e);
+    if(!opts.silent){ const tl=document.body.classList.contains('lang-tl'); showToast((tl?'Hindi na-save: ':'Could not save: ')+e.message, true); }
+  }
+}
+function _mtgWireResponse(){
+  if(_mtgRespWired) return;
+  ['mtgIWill','mtgReach','mtgNotes'].forEach(id=>{
+    const e = document.getElementById(id); if(!e) return;
+    e.addEventListener('input', ()=>{ const st=document.getElementById('mtgRespStatus'); if(st) st.classList.remove('show'); clearTimeout(_mtgRespTimer); _mtgRespTimer=setTimeout(()=>_mtgPersistResponse({silent:true}),1500); });
+    e.addEventListener('blur', ()=>{ clearTimeout(_mtgRespTimer); _mtgPersistResponse({silent:true}); });
+  });
+  const sh = document.getElementById('mtgShare'); if(sh) sh.addEventListener('change', ()=>_mtgPersistResponse({silent:false}));
+  _mtgRespWired = true;
+}
 async function loadMeetingGuide(){
   const wrap = document.getElementById('mtgGuideWrap'); if(!wrap) return;
   _mmtGuide = null;
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('participant_md,meeting_date')
+      .select('id,participant_md,meeting_date')
       .eq('status','published')
       .order('meeting_date',{ ascending:false })
       .limit(1);
@@ -6861,6 +6949,8 @@ function openMeetingGuideSheet(){
   if(!_mmtGuide) return;
   document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
   document.getElementById('mtgGuideBody').innerHTML = mmtMd(_mmtGuide.participant_md || '');
+  _mtgWireResponse();
+  mtgLoadResponse();
   document.getElementById('mtgGuideBackdrop').classList.add('show');
 }
 function closeMeetingGuideSheet(e){
