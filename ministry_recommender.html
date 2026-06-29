@@ -588,476 +588,76 @@ window.supabase = supabase;
 // ─────────────────────────────────────────────────────────────────
 // MINISTRY SCORING MATRIX (v2 from project knowledge)
 // ─────────────────────────────────────────────────────────────────
-const MINISTRIES = [
-  {
-    name: "Children's Ministry",
-    short: "Children",
-    summary: "Teaching and shepherding kids ages 4-12.",
-    rosehill: { primary: ["teaching","shepherding","mercy"], secondary: ["exhortation","hospitality","service"] },
-    adv: [
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:3, key:"gift_teaching_strong", reason:"Core function — instructing children in Scripture." },
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Pastoral care of young hearts." },
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Children need compassionate adults." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Building up children in their faith identity." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Welcoming visiting kids and parents." },
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:2, key:"gift_service_strong", reason:"Supports lead teachers." },
-      { src:"DISC", sig:"S primary or secondary", w:2, key:"disc_S", reason:"Patient, steady — children need consistency." },
-      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Naturally caring; reads kids' emotions well." },
-      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Faithful, dependable — shows up week after week." },
-      { src:"STR",  sig:"Developer", w:2, key:"str_Developer", reason:"Sees potential in each child." },
-      { src:"STR",  sig:"Empathy", w:2, key:"str_Empathy", reason:"Catches the child hurting silently." },
-      { src:"STR",  sig:"Includer", w:2, key:"str_Includer", reason:"Notices the shy or new child." },
-      { src:"LL",   sig:"Quality Time primary", w:1, key:"ll_quality_time", reason:"Gives full presence to kids." },
-      { src:"LL",   sig:"Physical Touch primary", w:1, key:"ll_physical_touch", reason:"Appropriate warmth communicates safety." },
-    ],
-    risk: [
-      { src:"GIFT", sig:"Mercy weak (≤8)", w:3, key:"gift_mercy_weak", reason:"Low compassion is a serious mismatch." },
-      { src:"GIFT", sig:"Teaching weak (≤8)", w:2, key:"gift_teaching_weak", reason:"Teaching is core — low gift makes it a struggle." },
-      { src:"DISC", sig:"D primary (high)", w:3, key:"disc_D_high", reason:"Impatience can frighten children." },
-      { src:"ENN",  sig:"Type 8 (Challenger)", w:3, key:"enn_8", reason:"Intensity can overwhelm sensitive children." },
-      { src:"STR",  sig:"Command", w:2, key:"str_Command", reason:"Direct/forceful style not ideal." },
-      { src:"STR",  sig:"Competition", w:2, key:"str_Competition", reason:"Children's ministry is not performance-driven." },
-      { src:"ENN",  sig:"Type 5 (Investigator)", w:1, key:"enn_5", reason:"May prefer solitary thought." },
-    ]
-  },
-  {
-    name: "Campus Life Coach", short: "Campus",
-    summary: "Volunteers teaching values formation in high schools and colleges.",
-    rosehill: { primary: ["evangelism","teaching","apostleship"], secondary: ["wisdom","exhortation","mercy"] },
-    adv: [
-      { src:"GIFT", sig:"Evangelism strong (≥18)", w:3, key:"gift_evangelism_strong", reason:"Public school context = unchurched students." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:3, key:"gift_teaching_strong", reason:"Primary function." },
-      { src:"GIFT", sig:"Apostleship strong (≥18)", w:3, key:"gift_apostleship_strong", reason:"Pioneering ministry." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Students bring complex life issues." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Encouraging young people." },
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:2, key:"gift_mercy_strong", reason:"Students carry hidden burdens." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Engages students through enthusiasm." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Values formation is about right and wrong." },
-      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:1, key:"enn_7", reason:"Energy keeps young audiences engaged." },
-      { src:"STR",  sig:"Communication", w:2, key:"str_Communication", reason:"Public speaking is essential." },
-      { src:"STR",  sig:"Developer", w:2, key:"str_Developer", reason:"Sees potential in young people." },
-      { src:"STR",  sig:"Learner", w:1, key:"str_Learner", reason:"Models lifelong learning." },
-    ],
-    risk: [
-      { src:"GIFT", sig:"Teaching weak (≤8)", w:3, key:"gift_teaching_weak", reason:"Teaching is the core function." },
-      { src:"DISC", sig:"C primary (very high)", w:2, key:"disc_C_high", reason:"Too rigid or academic for teens." },
-      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Detached style does not connect." },
-    ]
-  },
-  {
-    name: "Preaching Ministry", short: "Preaching",
-    summary: "Pulpit preaching, devotional speakers, seminar lectures.",
-    rosehill: { primary: ["prophecy","teaching","knowledge"], secondary: ["wisdom","faith","discernment"] },
-    adv: [
-      { src:"GIFT", sig:"Prophecy strong (≥18)", w:3, key:"gift_prophecy_strong", reason:"Speaking God's word." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:3, key:"gift_teaching_strong", reason:"Foundational requirement." },
-      { src:"GIFT", sig:"Knowledge strong (≥18)", w:3, key:"gift_knowledge_strong", reason:"Preaching requires deep biblical knowledge." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Application requires wisdom." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:2, key:"gift_faith_strong", reason:"Calls people beyond what is visible." },
-      { src:"GIFT", sig:"Discernment strong (≥18)", w:2, key:"gift_discernment_strong", reason:"Recognizes truth from error." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Engaging delivery style." },
-      { src:"DISC", sig:"D primary or secondary", w:1, key:"disc_D", reason:"Bold proclamation when needed." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Conviction and standards." },
-      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Depth of preparation." },
-      { src:"ENN",  sig:"Type 8 (Challenger)", w:1, key:"enn_8", reason:"Bold prophetic voice." },
-      { src:"STR",  sig:"Communication", w:3, key:"str_Communication", reason:"Core skill." },
-      { src:"STR",  sig:"Intellection", w:2, key:"str_Intellection", reason:"Thoughtful sermon prep." },
-      { src:"STR",  sig:"Input", w:2, key:"str_Input", reason:"Wide reading enriches preaching." },
-      { src:"STR",  sig:"Context", w:2, key:"str_Context", reason:"Historical-redemptive preaching." },
-      { src:"STR",  sig:"Self-Assurance", w:1, key:"str_Self-Assurance", reason:"Pulpit demands confident delivery." },
-    ],
-    risk: [
-      { src:"GIFT", sig:"Teaching weak (≤8)", w:3, key:"gift_teaching_weak", reason:"Without teaching gift, preaching becomes opinion." },
-      { src:"DISC", sig:"S only (very high)", w:2, key:"disc_S_only_high", reason:"May lack the bold edge." },
-      { src:"ENN",  sig:"Type 9 only (Peacemaker)", w:1, key:"enn_9_only", reason:"Risk of avoiding hard texts." },
-    ]
-  },
-  {
-    name: "Music Ministry", short: "Music",
-    summary: "Worship leading, vocals, instrumentalists, sound design.",
-    rosehill: { primary: ["service","exhortation","hospitality"], secondary: ["leadership","shepherding"] },
-    adv: [
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Worship serves the congregation." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Worship leaders draw people to encounter God." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:3, key:"gift_hospitality_strong", reason:"Welcomes congregation into worship space." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Worship leading is leading." },
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:2, key:"gift_shepherding_strong", reason:"Pastoral concern in song." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:1, key:"gift_faith_strong", reason:"Worship leading is a faith act." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Stage presence." },
-      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Reliable rehearsal attendance." },
-      { src:"ENN",  sig:"Type 4 (Individualist)", w:2, key:"enn_4", reason:"Creative depth in worship." },
-      { src:"ENN",  sig:"Type 2 (Helper)", w:1, key:"enn_2", reason:"Serves the congregation through song." },
-      { src:"STR",  sig:"Connectedness", w:1, key:"str_Connectedness", reason:"Sees worship as joining heaven's song." },
-      { src:"STR",  sig:"Significance", w:1, key:"str_Significance", reason:"Healthy desire for meaningful platform." },
-      { src:"LL",   sig:"Words of Affirmation primary", w:1, key:"ll_words", reason:"Worship is verbal proclamation." },
-      { src:"TALENT", sig:"Creative & Aesthetic strong (≥8)", w:2, key:"talent_creative_strong", reason:"Musical artistry overlaps with creative cluster." },
-    ],
-    risk: [
-      { src:"ENN", sig:"Type 3 (Achiever) ungrounded", w:2, key:"enn_3", reason:"Risk of performance-driven worship." },
-      { src:"STR", sig:"Significance (extreme)", w:1, key:"str_Significance_extreme", reason:"Watch for using worship as personal platform." },
-    ]
-  },
-  {
-    name: "Interior Design", short: "Interior",
-    summary: "Visual aesthetics of the church space.",
-    rosehill: { primary: ["service","hospitality"], secondary: ["administration","giving"] },
-    adv: [
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Behind-the-scenes ministry of beauty." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:3, key:"gift_hospitality_strong", reason:"Beauty serves welcoming function." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:2, key:"gift_administration_strong", reason:"Coordinates suppliers and materials." },
-      { src:"GIFT", sig:"Giving strong (≥18)", w:2, key:"gift_giving_strong", reason:"Often donates materials." },
-      { src:"TALENT", sig:"Creative & Aesthetic strong (≥8)", w:3, key:"talent_creative_strong", reason:"Visual sense is core requirement." },
-      { src:"DISC", sig:"C primary or secondary", w:2, key:"disc_C", reason:"Detail and precision essential." },
-      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Patient methodical execution." },
-      { src:"ENN",  sig:"Type 4 (Individualist)", w:3, key:"enn_4", reason:"Creative aesthetic is natural domain." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:1, key:"enn_1", reason:"Standards of excellence." },
-      { src:"STR",  sig:"Ideation", w:2, key:"str_Ideation", reason:"Generates creative concepts." },
-      { src:"STR",  sig:"Arranger", w:2, key:"str_Arranger", reason:"Organizes elements into beautiful wholes." },
-      { src:"LL",   sig:"Acts of Service primary", w:1, key:"ll_acts", reason:"Quietly serves through tangible work." },
-    ],
-    risk: [
-      { src:"TALENT", sig:"Creative & Aesthetic weak (≤4)", w:3, key:"talent_creative_weak", reason:"Without visual sense, output suffers." },
-      { src:"DISC", sig:"D primary (high)", w:1, key:"disc_D_high", reason:"Impatience with iteration." },
-    ]
-  },
-  {
-    name: "Lights & Tech", short: "Lights/Tech",
-    summary: "AVL — sound, lights, slides, livestream.",
-    rosehill: { primary: ["service","administration"], secondary: ["knowledge","leadership"] },
-    adv: [
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Tech ministry is service par excellence." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Systems thinking is core." },
-      { src:"GIFT", sig:"Knowledge strong (≥18)", w:2, key:"gift_knowledge_strong", reason:"Steep learning curve." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Tech team coordination." },
-      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:3, key:"talent_technical_strong", reason:"Must understand equipment." },
-      { src:"DISC", sig:"C primary or secondary", w:3, key:"disc_C", reason:"Precision under pressure." },
-      { src:"DISC", sig:"S primary or secondary", w:2, key:"disc_S", reason:"Steady consistency every Sunday." },
-      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Loves technical depth." },
-      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Risk-aware; ready for problems." },
-      { src:"STR",  sig:"Discipline", w:3, key:"str_Discipline", reason:"Routines and checklists." },
-      { src:"STR",  sig:"Restorative", w:2, key:"str_Restorative", reason:"Troubleshoots problems on the fly." },
-      { src:"STR",  sig:"Deliberative", w:2, key:"str_Deliberative", reason:"Spots failure points." },
-      { src:"STR",  sig:"Focus", w:2, key:"str_Focus", reason:"Stays locked on signal during live service." },
-    ],
-    risk: [
-      { src:"TALENT", sig:"Technical & Digital weak (≤4)", w:3, key:"talent_technical_weak", reason:"Tech requires foundational understanding." },
-      { src:"DISC", sig:"I primary (high)", w:2, key:"disc_I_high", reason:"May enjoy attention more than precision." },
-      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:1, key:"enn_7", reason:"Spontaneity ill-suited to predictable routines." },
-    ]
-  },
-  {
-    name: "Documentation & Media", short: "Doc/Media",
-    summary: "Photography, video, livestream, social media.",
-    rosehill: { primary: ["service","administration","knowledge"], secondary: ["teaching","giving"] },
-    adv: [
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Behind-the-scenes ministry." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Workflow and asset management." },
-      { src:"GIFT", sig:"Knowledge strong (≥18)", w:3, key:"gift_knowledge_strong", reason:"Research and accuracy." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Visual storytelling teaches through media." },
-      { src:"GIFT", sig:"Giving strong (≥18)", w:2, key:"gift_giving_strong", reason:"Often donates equipment." },
-      { src:"TALENT", sig:"Creative & Aesthetic strong (≥8)", w:3, key:"talent_creative_strong", reason:"Visual storytelling is core." },
-      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:3, key:"talent_technical_strong", reason:"Equipment and software fluency required." },
-      { src:"TALENT", sig:"Communication & Writing strong (≥8)", w:2, key:"talent_comms_strong", reason:"Captions, scripts, editorial writing." },
-      { src:"DISC", sig:"C primary or secondary", w:2, key:"disc_C", reason:"Quality control on output." },
-      { src:"DISC", sig:"I primary or secondary", w:1, key:"disc_I", reason:"Connects with subjects on camera." },
-      { src:"ENN",  sig:"Type 4 (Individualist)", w:2, key:"enn_4", reason:"Aesthetic sensibility." },
-      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Technical media depth." },
-      { src:"STR",  sig:"Input", w:2, key:"str_Input", reason:"Loves capturing and archiving." },
-      { src:"STR",  sig:"Communication", w:2, key:"str_Communication", reason:"Storytelling skill." },
-      { src:"STR",  sig:"Ideation", w:2, key:"str_Ideation", reason:"Creative concepts for content." },
-      { src:"STR",  sig:"Discipline", w:1, key:"str_Discipline", reason:"Editing requires consistency." },
-    ],
-    risk: [
-      { src:"TALENT", sig:"Creative & Aesthetic weak (≤4)", w:3, key:"talent_creative_weak", reason:"Output quality limited." },
-      { src:"TALENT", sig:"Technical & Digital weak (≤4)", w:3, key:"talent_technical_weak", reason:"Cannot operate production tools." },
-    ]
-  },
-  {
-    name: "Publishing & Communications", short: "Publishing",
-    summary: "Newsletter, devotional guide, written content.",
-    rosehill: { primary: ["knowledge","administration","prophecy"], secondary: ["teaching","wisdom","service"] },
-    adv: [
-      { src:"GIFT", sig:"Knowledge strong (≥18)", w:3, key:"gift_knowledge_strong", reason:"Strong knowledge produces accurate content." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Editorial calendar, workflow." },
-      { src:"GIFT", sig:"Prophecy strong (≥18)", w:3, key:"gift_prophecy_strong", reason:"Sometimes writing speaks needed truth." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Written communication is teaching in print." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Devotionals need wisdom application." },
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:2, key:"gift_service_strong", reason:"Quiet service through written ministry." },
-      { src:"TALENT", sig:"Communication & Writing strong (≥8)", w:3, key:"talent_comms_strong", reason:"Core requirement." },
-      { src:"TALENT", sig:"Administrative & Organizational strong (≥8)", w:2, key:"talent_admin_strong", reason:"Editorial workflow needs organization." },
-      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:1, key:"talent_technical_strong", reason:"Layout and digital publishing tools." },
-      { src:"DISC", sig:"C primary or secondary", w:3, key:"disc_C", reason:"Editing precision and grammar." },
-      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Steady output over time." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Standards in writing and editing." },
-      { src:"ENN",  sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Research depth informs publications." },
-      { src:"STR",  sig:"Communication", w:3, key:"str_Communication", reason:"Core competency." },
-      { src:"STR",  sig:"Input", w:2, key:"str_Input", reason:"Vast information stockpile." },
-      { src:"STR",  sig:"Intellection", w:2, key:"str_Intellection", reason:"Thoughtful processing produces deeper writing." },
-      { src:"LL",   sig:"Words of Affirmation primary", w:1, key:"ll_words", reason:"Words are their natural medium." },
-    ],
-    risk: [
-      { src:"GIFT", sig:"Teaching weak (≤8)", w:2, key:"gift_teaching_weak", reason:"Information without formation." },
-      { src:"TALENT", sig:"Communication & Writing weak (≤4)", w:3, key:"talent_comms_weak", reason:"Cannot do central task." },
-      { src:"DISC", sig:"D primary (high)", w:1, key:"disc_D_high", reason:"May rush content; impatient with editing." },
-    ]
-  },
-  {
-    name: "Kitchen Ministry", short: "Kitchen",
-    summary: "Food preparation for fellowship meals.",
-    rosehill: { primary: ["mercy","service","hospitality","giving"], secondary: ["administration","faith"] },
-    adv: [
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Often serves grieving families." },
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Practical hands-on service." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:3, key:"gift_hospitality_strong", reason:"Core gift — welcome through food." },
-      { src:"GIFT", sig:"Giving strong (≥18)", w:3, key:"gift_giving_strong", reason:"Donates ingredients and time." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:2, key:"gift_administration_strong", reason:"Coordinates ingredients, timing, team." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:2, key:"gift_faith_strong", reason:"Trusts that meals will bless." },
-      { src:"TALENT", sig:"Culinary & Hospitality strong (≥8)", w:3, key:"talent_culinary_strong", reason:"Cooking and food prep skill required." },
-      { src:"TALENT", sig:"Physical & Maintenance strong (≥8)", w:2, key:"talent_physical_strong", reason:"Setup, cleanup, physical work." },
-      { src:"DISC", sig:"S primary or secondary", w:3, key:"disc_S", reason:"Steady — meals must be ready on time." },
-      { src:"ENN",  sig:"Type 2 (Helper)", w:3, key:"enn_2", reason:"Caring through nourishment." },
-      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Faithful weekly presence." },
-      { src:"ENN",  sig:"Type 9 (Peacemaker)", w:2, key:"enn_9", reason:"Calm, harmonious team." },
-      { src:"STR",  sig:"Arranger", w:2, key:"str_Arranger", reason:"Coordinates timing and people." },
-      { src:"STR",  sig:"Adaptability", w:2, key:"str_Adaptability", reason:"Last-minute changes happen often." },
-      { src:"STR",  sig:"Responsibility", w:2, key:"str_Responsibility", reason:"Owns the outcome." },
-      { src:"STR",  sig:"Harmony", w:1, key:"str_Harmony", reason:"Kitchen teams need cohesion." },
-      { src:"LL",   sig:"Acts of Service primary", w:2, key:"ll_acts", reason:"Kitchen ministry is acts of service literally." },
-    ],
-    risk: [
-      { src:"ENN", sig:"Type 3 (Achiever)", w:1, key:"enn_3", reason:"Behind-the-scenes may feel insignificant." },
-      { src:"DISC", sig:"D primary (high)", w:1, key:"disc_D_high", reason:"May find repetitive prep boring." },
-    ]
-  },
-  {
-    name: "Building Administration", short: "Building",
-    summary: "Facilities, maintenance, security, scheduling.",
-    rosehill: { primary: ["service","administration"], secondary: ["giving","faith","leadership"] },
-    adv: [
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:3, key:"gift_service_strong", reason:"Tangible practical service." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:3, key:"gift_administration_strong", reason:"Core gift." },
-      { src:"GIFT", sig:"Giving strong (≥18)", w:2, key:"gift_giving_strong", reason:"Often donates time and materials." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:2, key:"gift_faith_strong", reason:"Trusts God for resources." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Coordinates volunteers and contractors." },
-      { src:"TALENT", sig:"Administrative & Organizational strong (≥8)", w:3, key:"talent_admin_strong", reason:"Core requirement." },
-      { src:"TALENT", sig:"Physical & Maintenance strong (≥8)", w:3, key:"talent_physical_strong", reason:"Hands-on maintenance ability." },
-      { src:"TALENT", sig:"Technical & Digital strong (≥8)", w:1, key:"talent_technical_strong", reason:"Booking and equipment systems." },
-      { src:"DISC", sig:"C primary or secondary", w:3, key:"disc_C", reason:"Detail-oriented; spots issues early." },
-      { src:"DISC", sig:"S primary or secondary", w:2, key:"disc_S", reason:"Dependable ongoing oversight." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Standards of order and excellence." },
-      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Risk-conscious; spots safety issues." },
-      { src:"STR",  sig:"Discipline", w:3, key:"str_Discipline", reason:"Maintenance routines need consistency." },
-      { src:"STR",  sig:"Responsibility", w:3, key:"str_Responsibility", reason:"Ownership essential." },
-      { src:"STR",  sig:"Restorative", w:2, key:"str_Restorative", reason:"Loves fixing things." },
-      { src:"STR",  sig:"Arranger", w:2, key:"str_Arranger", reason:"Schedules space and resources." },
-      { src:"STR",  sig:"Consistency", w:2, key:"str_Consistency", reason:"Applies rules fairly." },
-    ],
-    risk: [
-      { src:"TALENT", sig:"Administrative & Organizational weak (≤4)", w:2, key:"talent_admin_weak", reason:"Cannot manage facilities." },
-      { src:"ENN", sig:"Type 4 (Individualist)", w:1, key:"enn_4", reason:"May find facilities work mundane." },
-      { src:"DISC", sig:"I primary (high)", w:2, key:"disc_I_high", reason:"Bored by detail; may neglect documentation." },
-    ]
-  },
-  {
-    name: "Community Outreach", short: "Outreach",
-    summary: "Calamity response, evangelism, EOLO support.",
-    rosehill: { primary: ["evangelism","mercy","giving","faith"], secondary: ["apostleship","hospitality","service"] },
-    adv: [
-      { src:"GIFT", sig:"Evangelism strong (≥18)", w:3, key:"gift_evangelism_strong", reason:"Outreach is evangelism in action." },
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Calamity work demands compassion." },
-      { src:"GIFT", sig:"Giving strong (≥18)", w:3, key:"gift_giving_strong", reason:"Outreach runs on generous donors." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:3, key:"gift_faith_strong", reason:"Stepping into hard places." },
-      { src:"GIFT", sig:"Apostleship strong (≥18)", w:2, key:"gift_apostleship_strong", reason:"Pioneering into new contexts." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Welcoming strangers." },
-      { src:"GIFT", sig:"Service/Helps strong (≥18)", w:2, key:"gift_service_strong", reason:"Practical service in disasters." },
-      { src:"TALENT", sig:"Culinary & Hospitality strong (≥8)", w:2, key:"talent_culinary_strong", reason:"Often involves feeding programs." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Energy and connection essential." },
-      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Reliable in long-term outreach." },
-      { src:"ENN",  sig:"Type 8 (Challenger)", w:2, key:"enn_8", reason:"Bold to enter hard places." },
-      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Naturally compassionate." },
-      { src:"STR",  sig:"Empathy", w:2, key:"str_Empathy", reason:"Reads needs in the community." },
-      { src:"STR",  sig:"Activator", w:2, key:"str_Activator", reason:"Mobilizes responses quickly." },
-      { src:"STR",  sig:"Connectedness", w:1, key:"str_Connectedness", reason:"Sees outreach as kingdom thread." },
-    ],
-    risk: [
-      { src:"GIFT", sig:"Mercy weak (≤8)", w:2, key:"gift_mercy_weak", reason:"Without compassion outreach becomes mechanical." },
-      { src:"ENN", sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Prefers analysis to engagement." },
-      { src:"DISC", sig:"C primary (very high)", w:1, key:"disc_C_high", reason:"May overthink; needs immediate action." },
-    ]
-  },
-  {
-    name: "Youth in Motion", short: "YIM (Sports)",
-    summary: "Basketball-based outreach to young people.",
-    rosehill: { primary: ["evangelism","exhortation","mercy"], secondary: ["hospitality","shepherding","leadership"] },
-    adv: [
-      { src:"GIFT", sig:"Evangelism strong (≥18)", w:3, key:"gift_evangelism_strong", reason:"Bringing unchurched youth to Christ." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Coaches challenge players spiritually." },
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:3, key:"gift_mercy_strong", reason:"Many players come from hard backgrounds." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Welcoming new players." },
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:2, key:"gift_shepherding_strong", reason:"Pastoral care once they engage." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:2, key:"gift_leadership_strong", reason:"Coaches lead their teams." },
-      { src:"TALENT", sig:"Sports & Athletics strong (≥8)", w:3, key:"talent_sports_strong", reason:"Required — sports-based ministry." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Energy draws youth in." },
-      { src:"DISC", sig:"D primary or secondary", w:1, key:"disc_D", reason:"Drive fits sports culture." },
-      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:2, key:"enn_7", reason:"Joy and energy match the environment." },
-      { src:"ENN",  sig:"Type 3 (Achiever)", w:1, key:"enn_3", reason:"Drives team excellence." },
-      { src:"STR",  sig:"Activator", w:2, key:"str_Activator", reason:"Sports requires execution." },
-      { src:"STR",  sig:"Competition", w:2, key:"str_Competition", reason:"Healthy competitive instinct." },
-      { src:"STR",  sig:"Woo", w:2, key:"str_Woo", reason:"Wins over new players quickly." },
-      { src:"STR",  sig:"Positivity", w:1, key:"str_Positivity", reason:"Keeps morale up through losses." },
-    ],
-    risk: [
-      { src:"TALENT", sig:"Sports & Athletics weak (≤4)", w:3, key:"talent_sports_weak", reason:"Major mismatch — players will sense discomfort." },
-      { src:"ENN", sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Prefers solitude; sports culture exhausts." },
-      { src:"ENN", sig:"Type 4 (Individualist)", w:1, key:"enn_4", reason:"May find team culture too uniform." },
-      { src:"DISC", sig:"C primary (very high)", w:1, key:"disc_C_high", reason:"Perfectionism clashes with chaos." },
-      { src:"STR", sig:"Deliberative", w:1, key:"str_Deliberative", reason:"Sports needs quick action." },
-    ]
-  },
-  {
-    name: "Youth Ministry", short: "Youth",
-    summary: "Discipling teens — sermons, small groups, retreats.",
-    rosehill: { primary: ["shepherding","exhortation","leadership"], secondary: ["teaching","evangelism","mercy"] },
-    adv: [
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Discipleship of adolescents." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Youth need encouragement through identity formation." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Casts vision for youth." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Solid biblical formation." },
-      { src:"GIFT", sig:"Evangelism strong (≥18)", w:2, key:"gift_evangelism_strong", reason:"Many teens still need salvation moment." },
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:2, key:"gift_mercy_strong", reason:"Teens carry hidden wounds." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Energy connects with teens." },
-      { src:"DISC", sig:"S primary or secondary", w:1, key:"disc_S", reason:"Patient through teen struggles." },
-      { src:"ENN",  sig:"Type 7 (Enthusiast)", w:2, key:"enn_7", reason:"Energy matches age group." },
-      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Caring presence teens need." },
-      { src:"STR",  sig:"Developer", w:3, key:"str_Developer", reason:"Sees who the teen will become." },
-      { src:"STR",  sig:"Connectedness", w:2, key:"str_Connectedness", reason:"Helps teens see meaning." },
-      { src:"STR",  sig:"Positivity", w:2, key:"str_Positivity", reason:"Counters cynicism." },
-      { src:"LL",   sig:"Quality Time primary", w:2, key:"ll_quality_time", reason:"Teens crave undivided attention." },
-    ],
-    risk: [
-      { src:"DISC", sig:"C primary (very high)", w:2, key:"disc_C_high", reason:"Too rigid or cold." },
-      { src:"ENN", sig:"Type 1 (Reformer) without grace", w:2, key:"enn_1_rigid", reason:"Standards-heavy approach can crush teen identity." },
-      { src:"ENN", sig:"Type 5 (Investigator)", w:2, key:"enn_5", reason:"Detached style does not connect." },
-    ]
-  },
-  {
-    name: "Couples Ministry", short: "Couples",
-    summary: "Marriage discipleship — preparation, enrichment, restoration.",
-    rosehill: { primary: ["shepherding","wisdom","discernment"], secondary: ["exhortation","mercy","hospitality"] },
-    adv: [
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Pastoral care for couples in crisis." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:3, key:"gift_wisdom_strong", reason:"Marriage counseling requires deep wisdom." },
-      { src:"GIFT", sig:"Discernment strong (≥18)", w:3, key:"gift_discernment_strong", reason:"Recognizing real issues beneath complaints." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Couples in crisis need encouragement." },
-      { src:"GIFT", sig:"Mercy strong (≥18)", w:2, key:"gift_mercy_strong", reason:"Couples in crisis need compassion." },
-      { src:"GIFT", sig:"Hospitality strong (≥18)", w:2, key:"gift_hospitality_strong", reason:"Sessions over meals or in homes." },
-      { src:"DISC", sig:"S primary or secondary", w:3, key:"disc_S", reason:"Patient through long restoration journeys." },
-      { src:"DISC", sig:"C primary or secondary", w:1, key:"disc_C", reason:"Thoughtful process in counseling." },
-      { src:"ENN",  sig:"Type 9 (Peacemaker)", w:3, key:"enn_9", reason:"Sees both sides; mediates conflict." },
-      { src:"ENN",  sig:"Type 2 (Helper)", w:2, key:"enn_2", reason:"Caring presence couples need." },
-      { src:"ENN",  sig:"Type 6 (Loyalist)", w:1, key:"enn_6", reason:"Faithful confidentiality." },
-      { src:"STR",  sig:"Empathy", w:3, key:"str_Empathy", reason:"Reads tension and pain accurately." },
-      { src:"STR",  sig:"Connectedness", w:2, key:"str_Connectedness", reason:"Helps couples see redemptively." },
-      { src:"STR",  sig:"Relator", w:2, key:"str_Relator", reason:"Long-term investment." },
-      { src:"STR",  sig:"Harmony", w:2, key:"str_Harmony", reason:"De-escalates conflict." },
-      { src:"LL",   sig:"Quality Time primary", w:2, key:"ll_quality_time", reason:"Couples need undivided attention." },
-    ],
-    risk: [
-      { src:"DISC", sig:"D primary (high)", w:3, key:"disc_D_high", reason:"Couples need patience, not fast fixes." },
-      { src:"ENN", sig:"Type 8 (Challenger)", w:2, key:"enn_8", reason:"Confrontational style can wound." },
-      { src:"STR", sig:"Command", w:2, key:"str_Command", reason:"Authority style mismatched." },
-    ]
-  },
-  {
-    name: "Young Pro Ministry", short: "Young Pro",
-    summary: "Discipling 25-35 year olds — career, faith integration.",
-    rosehill: { primary: ["shepherding","leadership","exhortation"], secondary: ["wisdom","evangelism","teaching"] },
-    adv: [
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Long-term discipleship investment." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Young pros respect strong leadership." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:3, key:"gift_exhortation_strong", reason:"Identity pressure." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Career and life decisions." },
-      { src:"GIFT", sig:"Evangelism strong (≥18)", w:2, key:"gift_evangelism_strong", reason:"Many still need conversion." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Doctrinal formation for thinking adults." },
-      { src:"DISC", sig:"I primary or secondary", w:2, key:"disc_I", reason:"Connects with social, professional vibe." },
-      { src:"DISC", sig:"C primary or secondary", w:1, key:"disc_C", reason:"Thoughtful engagement." },
-      { src:"ENN",  sig:"Type 3 (Achiever)", w:2, key:"enn_3", reason:"Speaks the language of ambition." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:1, key:"enn_1", reason:"High standards for life integration." },
-      { src:"STR",  sig:"Futuristic", w:2, key:"str_Futuristic", reason:"Casts vision for their lives." },
-      { src:"STR",  sig:"Communication", w:2, key:"str_Communication", reason:"Articulates faith intelligently." },
-      { src:"STR",  sig:"Strategic", w:2, key:"str_Strategic", reason:"Helps think through decisions." },
-      { src:"STR",  sig:"Significance", w:1, key:"str_Significance", reason:"Resonates with drive for meaningful life." },
-    ],
-    risk: [
-      { src:"ENN", sig:"Type 5 (Investigator)", w:1, key:"enn_5", reason:"Misses emotional pressures." },
-      { src:"DISC", sig:"S only (very high)", w:1, key:"disc_S_only_high", reason:"Too passive for high-energy demographic." },
-    ]
-  },
-  {
-    name: "Church Council", short: "Council",
-    summary: "Governance, policy, financial oversight.",
-    leadership: true,
-    rosehill: { primary: ["leadership","wisdom","discernment","faith"], secondary: ["administration","knowledge","prophecy"] },
-    adv: [
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Council leads the church." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:3, key:"gift_wisdom_strong", reason:"Decisions affect the whole church." },
-      { src:"GIFT", sig:"Discernment strong (≥18)", w:3, key:"gift_discernment_strong", reason:"Recognizing motives." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:3, key:"gift_faith_strong", reason:"Stepping into the unknown." },
-      { src:"GIFT", sig:"Administration strong (≥18)", w:2, key:"gift_administration_strong", reason:"Policy and systems." },
-      { src:"GIFT", sig:"Knowledge strong (≥18)", w:2, key:"gift_knowledge_strong", reason:"Informed decisions." },
-      { src:"GIFT", sig:"Prophecy strong (≥18)", w:2, key:"gift_prophecy_strong", reason:"Speaks needed truth." },
-      { src:"DISC", sig:"C primary or secondary", w:2, key:"disc_C", reason:"Detail and policy precision." },
-      { src:"DISC", sig:"D primary or secondary", w:2, key:"disc_D", reason:"Decisive when needed." },
-      { src:"ENN",  sig:"Type 1 (Reformer)", w:2, key:"enn_1", reason:"Standards and integrity." },
-      { src:"ENN",  sig:"Type 6 (Loyalist)", w:2, key:"enn_6", reason:"Risk awareness." },
-      { src:"ENN",  sig:"Type 8 (Challenger)", w:1, key:"enn_8", reason:"Willing to make hard calls." },
-      { src:"STR",  sig:"Strategic", w:3, key:"str_Strategic", reason:"Governance is strategic." },
-      { src:"STR",  sig:"Analytical", w:2, key:"str_Analytical", reason:"Examines proposals critically." },
-      { src:"STR",  sig:"Deliberative", w:2, key:"str_Deliberative", reason:"Risk-aware." },
-      { src:"STR",  sig:"Responsibility", w:2, key:"str_Responsibility", reason:"Owns outcomes." },
-      { src:"STR",  sig:"Belief", w:1, key:"str_Belief", reason:"Anchors decisions in core values." },
-      { src:"FATS", sig:"All four FATS markers strong", w:3, key:"fats_all_strong", reason:"Council demands trustworthy character." },
-      { src:"PIPELINE", sig:"Director or Executive level", w:3, key:"pipeline_director_or_exec", reason:"Demonstrated leadership maturity." },
-    ],
-    risk: [
-      { src:"FATS", sig:"Faithful low", w:3, key:"fats_faithful_low", reason:"Inconsistency disqualifies." },
-      { src:"FATS", sig:"Selfless low", w:3, key:"fats_selfless_low", reason:"Self-interest is corrosive." },
-      { src:"PIPELINE", sig:"Below Coach level", w:3, key:"pipeline_below_coach", reason:"Premature placement risks both leader and church." },
-      { src:"ENN", sig:"Type 7 (Enthusiast)", w:2, key:"enn_7", reason:"May rush decisions." },
-      { src:"DISC", sig:"I only (very high)", w:1, key:"disc_I_only_high", reason:"Too people-pleasing for hard decisions." },
-    ]
-  },
-  {
-    name: "Core Group", short: "Core",
-    summary: "Inner leadership circle — vision carriers, multipliers.",
-    leadership: true,
-    rosehill: { primary: ["shepherding","leadership","faith"], secondary: ["wisdom","discernment","exhortation"] },
-    adv: [
-      { src:"GIFT", sig:"Shepherding strong (≥18)", w:3, key:"gift_shepherding_strong", reason:"Cares for emerging leaders." },
-      { src:"GIFT", sig:"Leadership strong (≥18)", w:3, key:"gift_leadership_strong", reason:"Multiplying leaders requires leaders." },
-      { src:"GIFT", sig:"Faith strong (≥18)", w:3, key:"gift_faith_strong", reason:"Carries vision beyond current reality." },
-      { src:"GIFT", sig:"Wisdom strong (≥18)", w:2, key:"gift_wisdom_strong", reason:"Decisions shape direction." },
-      { src:"GIFT", sig:"Discernment strong (≥18)", w:2, key:"gift_discernment_strong", reason:"Evaluates emerging leaders." },
-      { src:"GIFT", sig:"Encouragement strong (≥18)", w:2, key:"gift_exhortation_strong", reason:"Builds up leaders they multiply." },
-      { src:"GIFT", sig:"Apostleship strong (≥18)", w:2, key:"gift_apostleship_strong", reason:"Pioneering and multiplying." },
-      { src:"GIFT", sig:"Teaching strong (≥18)", w:2, key:"gift_teaching_strong", reason:"Discipling future leaders." },
-      { src:"ENN",  sig:"Type 3 (Achiever)", w:2, key:"enn_3", reason:"Drives multiplication." },
-      { src:"ENN",  sig:"Type 8 (Challenger)", w:1, key:"enn_8", reason:"Bold vision-casting." },
-      { src:"STR",  sig:"Strategic", w:3, key:"str_Strategic", reason:"Sees the multiplication paths." },
-      { src:"STR",  sig:"Developer", w:3, key:"str_Developer", reason:"Develops leaders by trade." },
-      { src:"STR",  sig:"Maximizer", w:2, key:"str_Maximizer", reason:"Develops to full potential." },
-      { src:"STR",  sig:"Futuristic", w:2, key:"str_Futuristic", reason:"Casts vision for future church." },
-      { src:"STR",  sig:"Activator", w:2, key:"str_Activator", reason:"Turns vision into action." },
-      { src:"FATS", sig:"All four FATS markers strong", w:3, key:"fats_all_strong", reason:"Inner circle demands FATS character." },
-      { src:"PIPELINE", sig:"Coach level or above", w:3, key:"pipeline_coach_or_above", reason:"Demonstrated multiplication." },
-    ],
-    risk: [
-      { src:"FATS", sig:"Any FATS marker low", w:3, key:"fats_any_low", reason:"Core Group is character-first." },
-      { src:"PIPELINE", sig:"Below Coach level", w:3, key:"pipeline_below_coach", reason:"Pipeline progression matters." },
-      { src:"ENN", sig:"Type 9 only (Peacemaker)", w:1, key:"enn_9_only", reason:"May avoid hard conflicts." },
-    ]
-  },
-];
+// ─────────────────────────────────────────────────────────────────
+// MINISTRY LIST (runtime) — this church's ministries (RLS-scoped) joined to the
+// archetype library (migrations 043/044). Overlay (church_id = mine) beats base
+// (church_id = NULL) per archetype_key. Replaces the former hardcoded array.
+// ─────────────────────────────────────────────────────────────────
+let MINISTRIES = [];
+let UNTAGGED_MINISTRIES = [];
+
+function _recoChurchId(){
+  try{
+    if(!_mjwt) return null;
+    const p = _mjwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    return JSON.parse(atob(p)).church_id || null;
+  }catch(e){ return null; }
+}
+
+async function loadMinistries(){
+  try{
+    const { data: mins, error: e1 } = await supabase
+      .from('ministries')
+      .select('id,name,description,archetype_key,display_order,active')
+      .eq('active', true)
+      .order('display_order', { ascending: true });
+    if(e1) throw e1;
+
+    const cid = _recoChurchId();
+    let q = supabase.from('ministry_archetypes').select('church_id,archetype_key,name,summary,scoring');
+    q = cid ? q.or('church_id.is.null,church_id.eq.'+cid) : q.is('church_id', null);
+    const { data: arch, error: e2 } = await q;
+    if(e2) throw e2;
+
+    const byKey = {};
+    (arch||[]).forEach(a=>{
+      const cur = byKey[a.archetype_key];
+      if(!cur || (a.church_id && !cur.church_id)) byKey[a.archetype_key] = a; // overlay beats base
+    });
+
+    const built = [], untagged = [];
+    (mins||[]).forEach(m=>{
+      const a = m.archetype_key ? byKey[m.archetype_key] : null;
+      const sc = (a && a.scoring) ? a.scoring : null;
+      if(sc && (Array.isArray(sc.adv) || Array.isArray(sc.risk))){
+        built.push({
+          name: m.name,
+          short: m.name,
+          summary: m.description || a.summary || '',
+          adv: Array.isArray(sc.adv) ? sc.adv : [],
+          risk: Array.isArray(sc.risk) ? sc.risk : []
+        });
+      } else {
+        untagged.push(m.name);
+      }
+    });
+    MINISTRIES = built;
+    UNTAGGED_MINISTRIES = untagged;
+  }catch(err){
+    console.error('loadMinistries failed', err);
+    MINISTRIES = []; UNTAGGED_MINISTRIES = [];
+  }
+}
+
+function _untaggedNote(){
+  if(!UNTAGGED_MINISTRIES.length) return '';
+  const names = UNTAGGED_MINISTRIES.map(n=>escapeHtml(n)).join(', ');
+  const one = UNTAGGED_MINISTRIES.length === 1;
+  return '<div class="untagged-note" style="margin-top:12px;padding:10px 14px;border:1px dashed var(--border,#cbd5e1);border-radius:10px;font-size:13px;color:var(--muted,#64748b);">'
+    + UNTAGGED_MINISTRIES.length + ' ministr' + (one?'y is':'ies are')
+    + ' not yet mapped to an archetype: <strong>' + names + '</strong>. A pastor can tag '
+    + (one?'it':'them') + ' in Settings to include ' + (one?'it':'them') + ' here.</div>';
+}
 
 // Map source code -> weight key
 const SOURCE_TO_WEIGHT = {
@@ -1086,6 +686,7 @@ let slidersUnlocked = false;     // PIN-gated
 // ─────────────────────────────────────────────────────────────────
 async function init() {
   await loadSystemSettings();
+  await loadMinistries();
   await loadMemberList();
 
   // If launched with ?member_id=... auto-select that member
@@ -1485,6 +1086,14 @@ function renderChart() {
     return;
   }
 
+  if (!MINISTRIES.length) {
+    document.getElementById('chartArea').innerHTML =
+      '<div class="chart-card"><div class="chart-title">No mapped ministries yet</div>'
+      + '<div class="chart-subtitle">Tag your ministries to an archetype to see fit recommendations.</div></div>'
+      + _untaggedNote();
+    return;
+  }
+
   const scored = MINISTRIES.map(m => ({ ministry: m, ...computeMinistryScores(m) }));
   // Sort by net score descending
   scored.sort((a, b) => b.net - a.net);
@@ -1525,6 +1134,7 @@ function renderChart() {
       </div>
     </div>
   `;
+  document.getElementById('chartArea').insertAdjacentHTML('beforeend', _untaggedNote());
 }
 
 window.showMinistryDetail = function(ministryName) {
