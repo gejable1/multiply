@@ -1212,6 +1212,19 @@ function _liveLeaderLevel(){
   if (L.leaderLevel != null) return L.leaderLevel || 0;
   return (currentLeader && currentLeader.pipeline_level) || 0;
 }
+// Live recorder identity for attendance writes. currentLeader is a frozen
+// parse-time snapshot (Inv #169) that's empty in the shell, so logged_by/
+// logged_by_id fell back to 'Unknown'/null on batch + quick-mark saves.
+// Resolve from the live session first, then window.LEADER, then the shim.
+function _liveLeaderIdName(){
+  try {
+    var s = MultiplyShared.getValidSession && MultiplyShared.getValidSession();
+    if (s && (s.leaderId || s.leaderName)) return { id: s.leaderId || null, name: s.leaderName || null };
+  } catch(e){}
+  var L = window.LEADER || {};
+  if (L.leaderId || L.leaderName) return { id: L.leaderId || null, name: L.leaderName || null };
+  return { id: (currentLeader && currentLeader.id) || null, name: (currentLeader && currentLeader.name) || null };
+}
 let _mltAddMemberAllowed = false;
 function _paintAddMemberBtn(){
   const btn = document.getElementById('addMemberBtn');
@@ -3087,6 +3100,7 @@ async function logQuickAttendance(){
   // Since this is the single-member quick-mark, the LCL would have flipped
   // the 🌐 toggle on the row before tapping mark-present. Defaults in_person.
   const memMode = attendanceModeState[currentMember.id] === 'online' ? 'online' : 'in_person';
+  const _ll = _liveLeaderIdName();
   const { error } = await db.from('attendance').upsert({
     member_id:       currentMember.id,
     member_name:     currentMember.name,
@@ -3098,8 +3112,8 @@ async function logQuickAttendance(){
     member_zone:     currentMember.diagnostic_zone ?? null,
     member_level:    currentMember.pipeline_level ?? null,
     event_lc_group:  currentLeader?.lc_group || '',
-    logged_by:       currentLeader?.name || 'Unknown',
-    logged_by_id:    currentLeader?.id || null,
+    logged_by:       _ll.name || 'Unknown',
+    logged_by_id:    _ll.id,
   }, { onConflict: 'member_id,event_type,event_date' });
   if(error){
     toast('Error: '+error.message,'error');
@@ -4748,8 +4762,9 @@ async function saveAttendance(){
 
   const leader        = currentLeader;
   const eventLcGroup  = leader?.lc_group || '';
-  const loggedById    = leader?.id || null;
-  const loggedBy      = leader?.name || 'Unknown';
+  const _ll           = _liveLeaderIdName();
+  const loggedById    = _ll.id;
+  const loggedBy      = _ll.name || 'Unknown';
   // Derive event_name for BTLI and Pre-Pipeline; null for all other types.
   let eventName = null;
   if (selectedAttType === 'BTLI')         eventName = selectedBtliEventName;
@@ -5194,6 +5209,7 @@ async function saveMinistryAttendance(){
   if (!date){ toast('Pick a date','⚠️'); return; }
   const eventName = ministryName + (rosterName ? ' · ' + rosterName : '');
 
+  const _ll = _liveLeaderIdName();
   const rows = _maMembers.map(m => ({
     member_id:       m.id,
     member_name:     m.name,
@@ -5205,8 +5221,8 @@ async function saveMinistryAttendance(){
     member_zone:     m.diagnostic_zone ?? null,
     member_level:    m.pipeline_level ?? null,
     event_lc_group:  '',                       // not LC-scoped
-    logged_by:       currentLeader?.name || 'Unknown',
-    logged_by_id:    currentLeader?.id || null,
+    logged_by:       _ll.name || 'Unknown',
+    logged_by_id:    _ll.id,
   }));
   if (rows.length === 0){ toast('No members to save','⚠️'); return; }
 
