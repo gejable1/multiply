@@ -2626,4 +2626,84 @@ Pre-seeding a tenant cohort (S52: 7 churches + L5 pastors, `042`): each church i
 
 ---
 
+### **236. BYO-AI Meeting Prep: devotional → fixed prompt → any AI → fenced parse + fallback → LCL review → publish**
+
+The weekly LC study is prepared by a **Bring-Your-Own-AI** loop, zero server-side AI cost/keys: the LCL picks a devotional (today's or any `entry_date`), MLT's `mpBuildPrompt` assembles a FIXED prompt from the devotional fields, the LCL runs it in any AI they trust, pastes the reply, MLT parses it into a **Facilitator's Guide** + **Participant's Guide**, the LCL reviews/edits, then publishes. The LCL is the **doctrinal guardrail** — nothing reaches the group until a human approves it (AI drafts, it does not teach). Guides live in `lc_meeting_guides` keyed `UNIQUE(church_id, lcl_id, meeting_date)`, last-wins via explicit upsert (select-then-update-or-insert). `lcl_id` = `_liveLeaderIdName().id` (embed-safe, #169), never the frozen `currentLeader`.
+
+**Established June 30, 2026 (Session 53). Invariant #236 added - count now 236.**
+
+---
+
+### **237. Parsing arbitrary AI output: enforce a fenced contract in the PROMPT, split on it, fall back to manual**
+
+When ingesting free-form AI text, do not guess structure — make the GENERATED PROMPT require a strict machine-parseable contract and split on it: `===FACILITATOR===` / `===PARTICIPANT===` / `===END===`, extract by `indexOf` between fences. If the fences are absent or garbled, **fall back gracefully** to a manual two-box split (show the raw paste, let the human place each part) rather than failing or losing the work. Control the output format via the prompt so the parse is deterministic; never trust an LLM to be consistent without a contract.
+
+**Established June 30, 2026 (Session 53). Invariant #237 added - count now 237.**
+
+---
+
+### **238. The one-hour LC meeting (7 timed segments) is the discipleship spine; generated guides bind to it**
+
+The meeting model: **Welcome+Win (8) → Connect to God (7) → Look Back (3) → The Word (20) → "I Will" (10) → Pray (9) → Send-off (3)** = 60 min. It synthesizes the strongest parts of named systems — the **Four Ws** (cell church, Neighbour/Comiskey), **sermon-based/alignment** groups (North Point, Life.Church), the **3/3 Group / Discovery Bible Study** Look-Back/Up/Forward (Watson, T4T), **Up·In·Out** (Breen, 3DM), and **HOST** low-bar leadership (Saddleback) — with four deliberate strengthenings: the Word stays a question-led conversation (not a sermon), the "I Will" is captured + revisitable (not evaporated), leader prep is AI-light, and every meeting opens with a celebrated win. The facilitator guide prompt is shaped to this timed flow; EOLO/empty-chair is woven through every meeting, not a separate event.
+
+**Established June 30, 2026 (Session 53). Invariant #238 added - count now 238.**
+
+---
+
+### **239. Cross-member RLS reads use SECURITY DEFINER discipler helpers (`auth_discipler_id()` / `discipler_of(uuid)`)**
+
+For "a member reads their LCL's published X" and "an LCL reads their disciples' shared Y" policies, use SECURITY DEFINER SQL helpers that bypass `members` RLS rather than inline subqueries (which are subject to the queried table's own RLS and can silently return nothing): **`auth_discipler_id()`** = the caller's own discipler (`SELECT discipler_id FROM members WHERE id = auth_member_id()`); **`discipler_of(p_member)`** = a given member's discipler. Both key off `auth_member_id()` so they expose nothing the caller shouldn't see. Pattern: `lc_meeting_guides` member-read = `status='published' AND lcl_id = auth_discipler_id()`; `lc_meeting_responses` LCL-read = `shared_with_leader AND discipler_of(member_id) = auth_member_id()`.
+
+**Established June 30, 2026 (Session 53). Invariant #239 added - count now 239.**
+
+---
+
+### **240. Member self-data is private-by-default with opt-in share-to-leader (shepherd-not-spy, RLS-enforced)**
+
+Interactive member responses (`lc_meeting_responses`: `i_will` / `reach_person` / `notes`) default `shared_with_leader = false`. The LCL sees a member's answer ONLY if the member ticks "share with my leader." This extends the AI-as-pastoral-tool principle: visibility serves care, never surveillance. RLS enforces it structurally — member-own write (`member_id = auth_member_id()`), LCL reads only shared rows of their own disciples (#239). The UI toggle is off unless chosen; follow-up should feel like care.
+
+**Established June 30, 2026 (Session 53). Invariant #240 added - count now 240.**
+
+---
+
+### **241. CC prompts are a single self-contained Python patch (one delimiter, anchors as triple-quoted literals)**
+
+Multi-heredoc-fragment `.sh` assembly is fragile: a fragment that does not end in a newline glues the closing delimiter onto its last content line (e.g. `}OPENOLD`), so bash never matches the delimiter and the first heredoc swallows the rest of the script — nothing runs (caught by CC, Session 53). RULE: generate every CC prompt as ONE `python3 - <<'PYEOF'` block, with old/new blocks as triple-quoted Python literals inside; before shipping, verify the embedded content has no `'''`/`"""` and no line equal to the delimiter, then RUN the embedded patch against a copy and `diff` it against the fragment-built expected. One delimiter you control directly = no gluing, no swallowing.
+
+**Established June 30, 2026 (Session 53). Invariant #241 added - count now 241.**
+
+---
+
+### **242. Commit each migration to the repo immediately after running it (proactively close the #212 lag)**
+
+The dashboard-run-but-not-yet-committed gap (#212) makes `schema.json` lag, so CC repeatedly (and correctly, from the repo's view) reports "table X doesn't exist" for a table that is in fact live — a recurring false alarm (043/044, 047, 048). RULE: the moment a migration goes green in Supabase, commit it to `migrations/` as its own tiny version-of-record PR BEFORE building the dependent feature, so `refresh-schema.yml` refreshes `schema.json` and CC reads ground truth. Claude itself stays current by curling authoritative `origin/main`; only the repo record + CC's view need the commit.
+
+**Established June 30, 2026 (Session 53). Invariant #242 added - count now 242.**
+
+---
+
+### **243. Date-keyed features use LOCAL date components, never `toISOString()` UTC**
+
+`new Date().toISOString().slice(0,10)` returns the UTC date — off-by-one for Manila (UTC+8) in the morning, so a record saved "today" can be keyed to a different calendar day than the revisit default, and a date-keyed lookup silently misses (surfaced by the Meeting Prep revisit bug). RULE: derive date keys from local components — `getFullYear()` / `getMonth()+1` / `getDate()`. Companion robustness for date-keyed resumes: default to the most-recent existing record's date (not blindly "today"), clear stale UI state when the date changes, and surface load errors with a toast instead of a silent `catch{}`.
+
+**Established June 30, 2026 (Session 53). Invariant #243 added - count now 243.**
+
+---
+
+### **244. Ministry Recommender = each church's own `ministries` ⋈ a shared archetype library, overlay-wins-by-key**
+
+The recommender reads each church's OWN `ministries` rows joined to a shared `ministry_archetypes` library (Model 3: `church_id = NULL` = canonical base curriculum, non-NULL = per-church overlay; scoring in a jsonb `{adv, risk, profile}`). Each ministry maps to an archetype via the `ministries.archetype_key` column; scoring resolves **overlay-wins-by-key**. Pastors map their ministries to archetypes in MD Settings (async dropdown, base + own overlay); unmapped ministries are excluded with a gentle note. There is NO hardcoded ministry array — that dead per-church-profile pattern was removed (PR #65). 17 base archetypes seeded + a Rosehill `interior_design` overlay; partial unique indexes split base/overlay (honors #218).
+
+**Established June 30, 2026 (Session 53). Invariant #244 added - count now 244.**
+
+---
+
+### **245. Render-verify inline SVG diagrams (rasterize → eyeball) before shipping; prefix diagram classes to avoid leaks**
+
+Extends #82 (PPTX render-before-ship) to inline SVG: hand-authored diagrams must be rasterized (cairosvg → PNG contact sheet) and visually inspected for overflow, overlap, and broken arrows before shipping manual/visual content — code inspection alone misses layout defects. Two SVG gotchas: (a) a per-SVG `<defs><style>` is NOT scoped — it leaks document-wide, so a short SVG class can collide with an HTML class of the same name (an HTML `class="m"` inherited an SVG `.m { font-size:9.5px }`); prefix diagram classes (e.g. `mp-*`) or keep them SVG-only and never reuse the name in HTML; (b) give each `<marker>` a unique id across all SVGs on the page.
+
+**Established June 30, 2026 (Session 53). Invariant #245 added - count now 245.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
