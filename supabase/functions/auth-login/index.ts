@@ -17,6 +17,9 @@
 //   action:"set_pin" {member_id,pin,  -> FIRST-login PIN claim: only when the
 //                     stamp?}            member has no hash yet. bcrypt-hash,
 //                                        store, stamp, then mint (auto-login).
+//   action:"change_pin" {member_id,    -> member-initiated change: a hash already
+//                     current_pin,         exists; bcrypt-verify current_pin, then
+//                     new_pin}             overwrite. No session minted.
 //
 // Backward-compatible: a body with no `action` is treated as "login"; no
 // `stamp`/`min_level` reproduces the prior behavior exactly, so deploying this
@@ -156,6 +159,33 @@ Deno.serve(async (req) => {
 
     await stampLogin(sb, memberId, isLeader, ua, m.church_id);
     return json(await mintSession({ ...m, member_pin_hash: hash }));
+  }
+
+  // ── CHANGE_PIN (member-initiated; requires the current PIN) ───────────
+  // Distinct from set_pin's first-login claim: here a hash already exists and
+  // the caller must prove the CURRENT pin (server-side bcrypt) before we
+  // overwrite. No session minted — the caller is already logged in.
+  if (action === "change_pin") {
+    const memberId = (body.member_id || "").trim();
+    const cur = (body.current_pin ?? "").toString();
+    const nw  = (body.new_pin ?? "").toString();
+    if (!memberId || cur.length < 4 || nw.length < 4) return json({ error: "missing_credentials" }, 400);
+
+    const { data: m, error } = await sb.from("members").select(MEMBER_COLS).eq("id", memberId).maybeSingle();
+    if (error || !m || !m.member_pin_hash) return json({ error: "invalid_login" }, 401);
+
+    let ok = false;
+    try { ok = bcrypt.compareSync(cur, m.member_pin_hash); } catch { ok = false; }
+    if (!ok) return json({ error: "invalid_login" }, 401);
+
+    const hash = bcrypt.hashSync(nw, 10);
+    const { error: upErr } = await sb.from("members").update({
+      member_pin_hash: hash,
+      member_pin_set_at: new Date().toISOString(),
+    }).eq("id", memberId);
+    if (upErr) return json({ error: "set_failed" }, 500);
+
+    return json({ ok: true });
   }
 
   // ── LOGIN (default) ───────────────────────────────────────────────────
