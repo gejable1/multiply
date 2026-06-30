@@ -2154,6 +2154,13 @@ body.lang-tl .tl-text{display:inline;}
           </span>
           <span class="value">›</span>
         </button>
+        <button class="field" onclick="openChangePin()">
+          <span class="label">
+            <span class="en-text">🔑 Change my PIN</span>
+            <span class="tl-text">🔑 Palitan ang PIN ko</span>
+          </span>
+          <span class="value">›</span>
+        </button>
       </div>
 
       <!-- Share This Tool — QR to the PUBLIC app URL (gejable1.github.io/multiply).
@@ -2262,6 +2269,41 @@ body.lang-tl .tl-text{display:inline;}
       </button>
       <button class="modal-btn primary" onclick="saveModalField()">
         <span class="en-text">Save</span><span class="tl-text">I-save</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CHANGE PIN MODAL ═══════════════ -->
+<div class="modal-backdrop" id="pinModalBackdrop">
+  <div class="modal">
+    <h3><span class="en-text">🔑 Change my PIN</span><span class="tl-text">🔑 Palitan ang PIN ko</span></h3>
+    <p class="modal-sub">
+      <span class="en-text">Enter your current PIN, then choose a new 4-digit PIN.</span>
+      <span class="tl-text">Ilagay ang kasalukuyang PIN, tapos pumili ng bagong 4-digit na PIN.</span>
+    </p>
+    <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin:.15rem 0 .25rem">
+      <span class="en-text">Current PIN</span><span class="tl-text">Kasalukuyang PIN</span>
+    </label>
+    <input id="pinCurrent" type="password" inputmode="numeric" maxlength="4" autocomplete="off"
+           placeholder="••••" style="text-align:center;letter-spacing:.4em;font-size:18px;margin-bottom:.5rem">
+    <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin:.15rem 0 .25rem">
+      <span class="en-text">New PIN</span><span class="tl-text">Bagong PIN</span>
+    </label>
+    <input id="pinNew" type="password" inputmode="numeric" maxlength="4" autocomplete="off"
+           placeholder="••••" style="text-align:center;letter-spacing:.4em;font-size:18px;margin-bottom:.5rem">
+    <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin:.15rem 0 .25rem">
+      <span class="en-text">Confirm new PIN</span><span class="tl-text">Kumpirmahin ang bagong PIN</span>
+    </label>
+    <input id="pinConfirm" type="password" inputmode="numeric" maxlength="4" autocomplete="off"
+           placeholder="••••" style="text-align:center;letter-spacing:.4em;font-size:18px">
+    <div id="pinErr" style="display:none;color:#c0392b;font-size:12.5px;margin:.45rem 0 .1rem"></div>
+    <div class="modal-actions" style="margin-top:.9rem">
+      <button class="modal-btn secondary" onclick="closeChangePin()">
+        <span class="en-text">Cancel</span><span class="tl-text">I-cancel</span>
+      </button>
+      <button class="modal-btn primary" id="pinSaveBtn" onclick="submitChangePin()">
+        <span class="en-text">Save PIN</span><span class="tl-text">I-save</span>
       </button>
     </div>
   </div>
@@ -5784,6 +5826,56 @@ function editField(field, label_en, label_tl, type){
 function closeModal(){
   document.getElementById('modalBackdrop').classList.remove('show');
   currentEditField = null;
+}
+
+// ───── Change my PIN (one atomic call to auth-login change_pin: verify current + overwrite) ─────
+function openChangePin(){
+  ['pinCurrent','pinNew','pinConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+  const e = document.getElementById('pinErr'); e.style.display = 'none'; e.textContent = '';
+  document.getElementById('pinSaveBtn').disabled = false;
+  document.getElementById('pinModalBackdrop').classList.add('show');
+  setTimeout(() => document.getElementById('pinCurrent').focus(), 50);
+}
+function closeChangePin(){
+  document.getElementById('pinModalBackdrop').classList.remove('show');
+}
+function _mmtAuthLogin(body){
+  return fetch(MultiplyShared.SB_URL + '/functions/v1/auth-login', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'apikey': MultiplyShared.SB_KEY },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    let data = null; try{ data = await res.json(); }catch(_){}
+    if(!res.ok){ const err = new Error((data && data.error) || ('auth-login HTTP ' + res.status)); err.code = (data && data.error) || 'network'; throw err; }
+    return data;
+  });
+}
+async function submitChangePin(){
+  const cur = document.getElementById('pinCurrent').value.trim();
+  const nw  = document.getElementById('pinNew').value.trim();
+  const cf  = document.getElementById('pinConfirm').value.trim();
+  const errEl = document.getElementById('pinErr');
+  const tl = document.body.classList.contains('lang-tl');
+  const showErr = (en, tlm) => { errEl.textContent = tl ? tlm : en; errEl.style.display = 'block'; };
+  errEl.style.display = 'none';
+  if(!/^\d{4}$/.test(cur) || !/^\d{4}$/.test(nw) || !/^\d{4}$/.test(cf)){
+    showErr('Each PIN must be exactly 4 digits.', 'Dapat 4 na numero ang bawat PIN.'); return;
+  }
+  if(nw !== cf){ showErr('New PIN and confirmation do not match.', 'Hindi magkatugma ang bagong PIN at kumpirmasyon.'); return; }
+  if(nw === cur){ showErr('New PIN must be different from your current one.', 'Dapat iba ang bagong PIN sa kasalukuyan.'); return; }
+  const btn = document.getElementById('pinSaveBtn'); btn.disabled = true;
+  try{
+    await _mmtAuthLogin({ action:'change_pin', member_id: MEMBER.memberId, current_pin: cur, new_pin: nw });
+  }catch(e){
+    btn.disabled = false;
+    if(e.code === 'invalid_login') showErr('Current PIN is incorrect.', 'Mali ang kasalukuyang PIN.');
+    else if(e.code === 'network') showErr('Network error — check your connection.', 'May problema sa koneksyon.');
+    else showErr('Could not save the new PIN. Please try again.', 'Hindi na-save ang bagong PIN. Subukan muli.');
+    return;
+  }
+  btn.disabled = false;
+  closeChangePin();
+  showToast(tl ? 'Na-update ang PIN mo. 🔑' : 'Your PIN has been updated. 🔑');
 }
 
 async function saveModalField(){
