@@ -1280,14 +1280,26 @@ function _liveLeaderIdName(){
 // ═══════════ Meeting Prep — BYO-AI small-group guides (PR-2) ═══════════
 let _mpDevo = null;
 
-function _mpToday(){ return new Date().toISOString().slice(0,10); }
+function _mpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 async function openMeetingPrep(){
   showScreen('screenMeetingPrep');
   const d = document.getElementById('mpDate');
-  if(d && !d.value) d.value = _mpToday();
+  if(d && !d.value){
+    const recent = await _mpMostRecentGuideDate();
+    d.value = recent || _mpToday();
+  }
   await mpLoadDevotional();
   await mpLoadExisting();
+}
+async function _mpMostRecentGuideDate(){
+  const me = _liveLeaderIdName(); if(!me || !me.id) return null;
+  try{
+    const { data } = await db.from('lc_meeting_guides')
+      .select('meeting_date').eq('lcl_id', me.id)
+      .order('meeting_date',{ ascending:false }).limit(1).maybeSingle();
+    return data ? data.meeting_date : null;
+  }catch(e){ return null; }
 }
 
 async function mpLoadDevotional(){
@@ -1402,17 +1414,23 @@ async function mpLoadExisting(){
   const me = _liveLeaderIdName(); if(!me || !me.id) return;
   const date = document.getElementById('mpDate').value || _mpToday();
   try{
-    const { data } = await db.from('lc_meeting_guides')
+    const { data, error } = await db.from('lc_meeting_guides')
       .select('facilitator_md,participant_md,raw_paste,status')
       .eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
+    if(error) throw error;
     if(data){
-      if(data.raw_paste) document.getElementById('mpPaste').value = data.raw_paste;
+      document.getElementById('mpPaste').value = data.raw_paste || '';
       document.getElementById('mpFacEdit').value = data.facilitator_md || '';
       document.getElementById('mpParEdit').value = data.participant_md || '';
       document.getElementById('mpPreview').style.display = '';
       mpRenderPreview();
+    } else {
+      document.getElementById('mpPaste').value = '';
+      document.getElementById('mpFacEdit').value = '';
+      document.getElementById('mpParEdit').value = '';
+      document.getElementById('mpPreview').style.display = 'none';
     }
-  }catch(e){}
+  }catch(e){ console.error('guide load', e); toast('Could not load your saved guide','⚠️'); }
 }
 
 async function mpSave(status){
