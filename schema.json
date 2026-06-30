@@ -9508,10 +9508,10 @@
           "name": "members_delete_own_church",
           "permissive": "PERMISSIVE",
           "roles": [
-            "authenticated"
+            "public"
           ],
           "command": "DELETE",
-          "using": "(church_id = auth_church_id())",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
           "with_check": null
         },
         {
@@ -9546,6 +9546,10 @@
         }
       ],
       "triggers": [
+        {
+          "name": "trg_members_guard_privilege",
+          "definition": "CREATE TRIGGER trg_members_guard_privilege BEFORE UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION members_guard_privilege_cols()"
+        },
         {
           "name": "trg_set_church_id",
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.members FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
@@ -17145,6 +17149,16 @@
       "security_definer": true,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public.discipler_of(p_member uuid)\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT discipler_id FROM members WHERE id = p_member\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "members_guard_privilege_cols",
+      "arguments": "",
+      "returns": "trigger",
+      "language": "plpgsql",
+      "security_definer": false,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.members_guard_privilege_cols()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nbegin\r\n  if auth_church_id() is null or auth_level() >= 5 then\r\n    return new;  -- service-role/EF (no JWT) or pastor: unrestricted\r\n  end if;\r\n  if (new.is_platform_admin is distinct from old.is_platform_admin)\r\n     or (new.pipeline_level   is distinct from old.pipeline_level)\r\n     or (new.is_facilitator   is distinct from old.is_facilitator)\r\n     or (new.facilitator_role is distinct from old.facilitator_role) then\r\n    raise exception 'members: only the pastor can change level/role/admin fields';\r\n  end if;\r\n  return new;\r\nend;\r\n$function$\n"
     },
     {
       "schema": "public",
