@@ -1171,7 +1171,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <span id="greetingStatus" style="margin-left:auto;font-size:11px;color:var(--muted);align-self:center"></span>
     </div>
   </div>
-  <div class="ss"><div class="st">Data Management</div>
+  <div class="ss" id="dataManagementSection"><div class="st">Data Management</div>
     <div class="sr"><span class="sl">Export all members to CSV</span><button class="sbtn" style="margin-top:0;min-width:160px;text-align:center" onclick="exportCSV()">Export CSV</button></div>
     <div class="sr"><span class="sl">Load 12 demo members</span><button class="sbtn" style="margin-top:0;min-width:160px;text-align:center" onclick="loadSample()">Load Sample</button></div>
     <div class="sr"><span class="sl">Delete only the 12 sample members (keeps real ones)</span><button class="sbtn" style="margin-top:0;min-width:160px;text-align:center;background:var(--gold)" onclick="clearSample()">Clear Sample Only</button></div>
@@ -3832,6 +3832,7 @@ const SAMPLE_NAMES = ['Maria Santos','Jose Reyes','Ana Cruz','Pedro Garcia','Ros
   'Cynthia Torres','Roberto Flores'];
 
 async function loadSample(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can do this','🔒'); return; }
   if(!confirm('Add 12 sample members to Supabase?'))return;
   const names=[['Maria Santos',1,1,75],['Jose Reyes',1,1,80],['Ana Cruz',1,2,62],
     ['Pedro Garcia',0,4,35],['Rosa Dela Cruz',2,1,88],['Juan Mendoza',1,1,76],
@@ -3860,6 +3861,7 @@ async function loadSample(){
 }
 
 async function clearSample(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can do this','🔒'); return; }
   // Find sample members by exact name match
   const samples = members.filter(m => SAMPLE_NAMES.includes(m.name));
   if(!samples.length){ toast('No sample members found','ℹ️'); return; }
@@ -3876,6 +3878,7 @@ async function clearSample(){
 }
 
 async function clearAll(){
+  if(!LeaderScope.isPastor()){ toast('Only the Pastor can do this','🔒'); return; }
   if(!confirm('Delete ALL members? PERMANENT.'))return;sync('ing');
   try{await db.from('members').delete().neq('id','00000000-0000-0000-0000-000000000000');members=[];sync('ok');renderAll();toast('All data cleared');}
   catch(e){sync('err');toast('Error: '+e.message,'❌');}
@@ -11824,7 +11827,7 @@ function initSettingsPanel(){
   try { if(typeof buildSettingsMinistries==='function') buildSettingsMinistries(); } catch(e){}
   try {
     const isPastor = (typeof LeaderScope!=='undefined') && LeaderScope.isPastor();
-    ['#ministriesSettingsSection','#diagSettingsSection','#headsUpSettingsSection','#greetingSection']
+    ['#ministriesSettingsSection','#diagSettingsSection','#headsUpSettingsSection','#greetingSection','#pastorToolsSection','#instrumentVersionsSection','#dataManagementSection']
       .forEach(sel => { const el = document.querySelector(sel); if(el) el.style.display = isPastor ? '' : 'none'; });
   } catch(e){}
 }
