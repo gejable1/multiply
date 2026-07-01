@@ -2706,4 +2706,52 @@ Extends #82 (PPTX render-before-ship) to inline SVG: hand-authored diagrams must
 
 ---
 
+### **246. The `auth-login`/`token-login` Edge Functions are now in the repo — read the EF source before building on an action**
+
+The `supabase/functions/auth-login/index.ts` + `token-login` sources are committed; the old "dashboard-only, not in repo" exception (a carve-out in the file-pull rule) is RETIRED — pull and read them like any other file. RULE: before designing a feature on an EF action, READ the EF source to confirm the exact contract (which body fields, which guards, which error codes). A verbal/one-word confirmation of an action's behavior is NOT a substitute for reading the code — assuming `set_pin` overwrote an existing PIN (it does not) produced a dead-on-arrival PIN-change build; CC's pre-apply contract read caught it before it shipped.
+
+**Established July 1, 2026 (Session 54). Invariant #246 added - count now 246.**
+
+---
+
+### **247. `set_pin` is first-login-only; `change_pin` is the member-initiated PIN-change path**
+
+auth-login `set_pin` returns `pin_already_set` (409) when a hash already exists — it is a first-login claim only. Member-initiated PIN changes use the dedicated **`change_pin`** action: `{member_id, current_pin, new_pin}` → bcrypt-verify the current PIN **server-side** → overwrite, **no session minted** (the caller is already logged in). Verifying the current PIN inside the EF keeps it the auth boundary — a direct call still needs the current PIN, so an unattended logged-in session can't silently re-key the account. NEVER write `member_pin_hash` from the client; the hash never leaves the server.
+
+**Established July 1, 2026 (Session 54). Invariant #247 added - count now 247.**
+
+---
+
+### **248. An EF change is a separate human-gated dashboard deploy — land it with/before the frontend that needs it**
+
+Merging a PR ships the frontend (Pages auto-deploys), but a NEW Edge-Function action does not exist until the Pastor redeploys the function in the Supabase dashboard (with **Verify-JWT OFF** for anon-callable EFs like `auth-login`). Until then the feature **fails safe**: an unknown `action` falls through to the default `login` branch → `missing_credentials` (400) → the frontend's generic error, no misbehaviour. RULE: deploy the EF FIRST, then merge the frontend. Verify the deploy with a console contract-probe (`200 {ok:true}` = live; `400 {error:'missing_credentials'}` = not deployed yet).
+
+**Established July 1, 2026 (Session 54). Invariant #248 added - count now 248.**
+
+---
+
+### **249. Tenant-only RLS without a level check is a self-escalation hole — gate privileged ops by level, not just church (`members` hotfix `050`)**
+
+`members` had church-scoped INSERT/UPDATE/DELETE policies with NO level gate, so any authenticated member could DELETE every member in their church AND self-promote via UPDATE (`pipeline_level=5` / `is_platform_admin=true`) then re-login as pastor. FIX (`050`): DELETE now requires `auth_church_id()` match AND `auth_level() >= 5`; a BEFORE UPDATE trigger (`members_guard_privilege_cols`) blocks non-pastor changes to the privilege columns `is_platform_admin` / `pipeline_level` / `is_facilitator` / `facilitator_role`, bypassing only for service-role (`auth_church_id()` IS NULL) or L5. Validated 3/3 in-browser as a live L2 (normal update OK; self-promote BLOCKED 400; delete BLOCKED 0 rows). RULE: audit every per-church table's policies for a missing LEVEL gate, not just church scoping. Console RLS tests run in the dashboard frame via `MultiplyShared.getDB()`; the SQL editor bypasses RLS as owner and is useless for this. Still open (Phase 2): members INSERT is unguarded; the broad members UPDATE also lets a member edit ANOTHER member's row.
+
+**Established July 1, 2026 (Session 54). Invariant #249 added - count now 249.**
+
+---
+
+### **250. SVI is SEVEN dimensions — Prayer is LIVE (the "W4 silent-SVI-prayer held" note is retired)**
+
+Migration `009` is RUN and the `compute-svi-weekly` EF is computing the `prayer` category — confirmed live: 4 prayer metrics active, 14 weight-profiles carry the prayer weights, **458 recent snapshots scoring prayer**. The SVI blends SEVEN dimensions: **Gather · Word · Prayer · Fellowship · Mission · Growth · Service**. Prayer is weighted modestly (1 each across `prayer_saved_30d` / `prayer_opens_14d` / `prayer_answered_90d` / `prayer_intercessions_30d`), tunable live in MD → SVI Weights. The Pastor's Manual now documents seven (heading/intro/list/diagram/glossary). Any prior "W4 held / silent" note in HANDOFF is STALE — Prayer ships.
+
+**Established July 1, 2026 (Session 54). Invariant #250 added - count now 250.**
+
+---
+
+### **251. `m.md` now drops the two full canonical files for manual upload (supersedes the net-additions/CC-splice flow)**
+
+From Session 54 on, `m.md` = Claude pulls the current `HANDOFF.md` + `MULTIPLY_INVARIANTS.md` from `main`, applies the net additions IN PLACE (new invariant blocks + new COMPLETED section + updated Jumpstart + Last-updated prepend), and drops BOTH complete files for the Pastor to upload to GitHub manually — no CC splice prompt. The Session-52 "net additions only, CC splices" procedure is retired.
+
+**Established July 1, 2026 (Session 54). Invariant #251 added - count now 251.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
