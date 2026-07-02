@@ -866,11 +866,48 @@ function indexMeetingsByLCG() {
 }
 
 // ─────────────────────── Render ───────────────────────
+const CHECKIN_LABELS = {
+  met_forgot_log: '✅ Nag-meet, nakalimutan i-log',
+  overwhelmed:    '😮‍💨 Overwhelmed',
+  need_coleader:  '🤝 Needs a co-leader',
+  unsure_meeting: '❓ Unsure what to do',
+  scheduling:     '📅 Scheduling is hard',
+  personal:       '🙏 Going through something',
+  okay:           '👍 Okay, tuloy pa rin',
+};
+window._checkinByLeader = {};
+async function loadCheckins() {
+  window._checkinByLeader = {};
+  try {
+    const { data, error } = await db.from('lcg_leader_checkins')
+      .select('leader_member_id, status, reason_code, responded_at, sent_at')
+      .order('sent_at', { ascending: false });
+    if (error) throw error;
+    (data || []).forEach(r => {
+      if (!window._checkinByLeader[r.leader_member_id]) window._checkinByLeader[r.leader_member_id] = r;
+    });
+  } catch (e) { console.error('loadCheckins failed:', e); }
+}
+function _checkinChipHtml(leaderId) {
+  const c = window._checkinByLeader[leaderId];
+  if (!c) return '';
+  let text, style;
+  if (c.status === 'awaiting') {
+    text = '⏳ Check-in sent — awaiting reply';
+    style = 'background:rgba(212,184,122,.14);color:#d4b87a;border:1px solid rgba(212,184,122,.4)';
+  } else {
+    text = CHECKIN_LABELS[c.reason_code] || '💬 Replied';
+    style = 'background:rgba(80,170,120,.15);color:#7fd0a3;border:1px solid rgba(80,170,120,.4)';
+  }
+  return `<div style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${style}">${text}</div>`;
+}
+
 async function reloadAndRender() {
   document.getElementById('content').innerHTML = '<div class="loading">Loading pulse</div>';
   document.getElementById('actionbar').style.display = 'none';
   try {
     await loadMeetings();
+    await loadCheckins();
     indexMeetingsByLCG();
     render();
     document.getElementById('actionbar').style.display = 'flex';
@@ -1058,6 +1095,7 @@ function render() {
                 <div>${lastMetText}</div>
                 <div>👥 <strong>${e.members.length}</strong> members affected</div>
               </div>
+              ${_checkinChipHtml(e.leader.id)}
               ${canSendCheckIn ? `
                 <button class="hb-action" onclick="openLeaderCheckInModal('${e.leader.id}')">
                   📲 Message ${escapeHTML((e.leader.name||'').split(' ')[0])}
