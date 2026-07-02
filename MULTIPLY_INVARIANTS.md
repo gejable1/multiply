@@ -2754,4 +2754,68 @@ From Session 54 on, `m.md` = Claude pulls the current `HANDOFF.md` + `MULTIPLY_I
 
 ---
 
+### **252. MULTIPLY migrations live in the `migrations/` folder, never repo root — commit the byte-exact run SQL there for ledger parity**
+
+Existing migrations (`049_onboard_cef.sql`, `051_onboard_ggcf.sql`, …) all live under `migrations/`. S55 twice authored 052/053 CC prompts that placed the file at repo ROOT (off-convention), and once let a stale index-based `migrations/052_devotionals_unique_per_church.sql` reach `main` alongside the correct root-level constraint version, leaving TWO conflicting 052s — different object types (`CREATE UNIQUE INDEX` vs `ADD CONSTRAINT`) and different ledger keys (`'052'` vs `'052_devotionals_composite_unique'`). RULE: every migration goes to `migrations/`; after running the SQL in Supabase, commit the BYTE-EXACT text that was run to `migrations/NNN_*.sql` (repo/DB parity, #212/#242) — the committed file must mirror the LIVE schema (constraint-vs-index matters), so a fresh `migrations/`-folder replay reproduces the live DB. When two variants exist, keep the one that matches what actually ran and delete the other.
+
+**Established July 2, 2026 (Session 55). Invariant #252 added - count now 252.**
+
+---
+
+### **253. Model-3 shared-catalog uniques need PARTIAL indexes, not a plain composite — the base row (`church_id IS NULL`) must dedupe separately from per-church overrides**
+
+The #218 composite `UNIQUE(church_id, <key>)` fix is correct for PURE-tenant tables (every row owned by one church). It is WRONG for Model-3 shared-catalog tables (`cohort_programs`, `btli_quizzes`, `usbong_quizzes`, `library_chapters`, …) where `church_id IS NULL` = the canonical shared base and `NOT NULL` = a per-church overlay: a plain composite lets unlimited base rows share a key (Postgres treats NULLs as distinct in a unique index), corrupting the catalog. Correct pattern = TWO partial unique indexes: `UNIQUE(<key>) WHERE church_id IS NULL` (one canonical base per key) + `UNIQUE(church_id, <key>) WHERE church_id IS NOT NULL` (one override per church per key). Judge per table first — some are already scoped by a tenant-owned FK (e.g. `library_chapters(resource_id, …)` rides `resource_id`) and aren't leaks at all. This is the remaining, still-parked slice of the #218 audit.
+
+**Established July 2, 2026 (Session 55). Invariant #253 added - count now 253.**
+
+---
+
+### **254. `auth_member_id()` resolves in BOTH session systems — the leader JWT carries `sub: m.id`, so per-member RLS works on leader-facing (MD/MLT) tables**
+
+`auth-login` (and `token-login`) mint the JWT with `sub: m.id` for leader logins AND member logins alike (confirmed by reading the EF source, #246). Since `auth_member_id()` reads the JWT `sub`, it resolves to the current person's member id in the leader session too — not only in MMT. So a leader-facing table can safely gate PER-MEMBER: e.g. `lcg_leader_checkins` lets an LC Leader (L2, leader session in MLT) SELECT/UPDATE only their OWN row via `leader_member_id = auth_member_id()`, while L3+ (`auth_level() >= 3`) read/insert all-in-church. `lc_meeting_guides`/`lc_meeting_responses` already relied on this. Don't assume `auth_member_id()` is member-session-only.
+
+**Established July 2, 2026 (Session 55). Invariant #254 added - count now 254.**
+
+---
+
+### **255. Leftover `_backup_*`/snapshot tables must be RLS-locked or dropped — never left API-reachable**
+
+Supabase Security Advisor flags any RLS-disabled table in the `public` schema as "publicly accessible" — anyone with the project's anon key + URL can read/edit/delete it. S55 got that alert for `_backup_devo_attendance_cleanup_20260620` (a cleanup snapshot holding real member data, RLS off). FIX (`055`): `ALTER TABLE … ENABLE ROW LEVEL SECURITY;` with NO policies → zero rows to anon/authenticated, still readable via the SQL editor / service role, and the advisor clears. Better long-term: DROP the snapshot once its cleanup is confirmed. RULE: backup/diagnostic snapshots never live reachable in `public` — lock (RLS-on-no-policy) or drop them. (Sibling of the SECURITY DEFINER view audit, #206–#208.)
+
+**Established July 2, 2026 (Session 55). Invariant #255 added - count now 255.**
+
+---
+
+### **256. Keep the literal space in the template when interpolating an OPTIONAL attribute after a tag name (`<div ${var}`) — and RENDER generated HTML, because `node --check` can't see it**
+
+S55's clickable ack-chip shipped `return \`<div${click}style="…">…\`` where `click` was `''` for the awaiting state → the browser received `<divstyle="…">`, an unknown WELDED tag that corrupted the DOM and broke the entire LCG-Pulse heartbeat grid (buttons escaped their cards, rows went full-width). `node --check` passed and the ANSWERED path (non-empty `click`) rendered fine, so it slipped past #105. RULE: put the separator space in the TEMPLATE (`<div ${click}…`), never inside the optional variable, so an empty value can't fuse the tag shut. Broader rule: `node --check` validates the JavaScript, NOT the HTML string it builds — always VISUALLY RENDER generated markup before declaring done (the HTML sibling of PPTX render-before-ship #82 and #105).
+
+**Established July 2, 2026 (Session 55). Invariant #256 added - count now 256.**
+
+---
+
+### **257. One member-facing message = one editable source: the Message Greetings template → composed on send → stored → shown, never a parallel hardcode**
+
+The LCG check-in message is driven by the pastor-editable **LC Check-in** template (`system_settings.meta.lcg_checkin_greeting`, MD Settings → Message Greetings). S55 first stored a SEPARATE hardcoded body on the reply screen → it didn't match the Pulse modal the pastor saw. FIX: store the composed template output (`fullText`, placeholders filled) into `lcg_leader_checkins.message` (`056`) at send-time, and render THAT on the MLT reply screen (falling back to a clear meeting-context default). Now Settings template → modal preview → sent → reply screen are identical AND pastor-editable from one tab; editing the template moves them all. RULE: never hardcode a parallel copy of a message that has a Message-Greetings template — capture the composed text at the moment of send for historical fidelity.
+
+**Established July 2, 2026 (Session 55). Invariant #257 added - count now 257.**
+
+---
+
+### **258. The shepherd's check-in loop is SELF-REPORT, not surveillance — the app surfaces, it never nags or renders a verdict**
+
+The LCG check-in loop (`054`/`056`; Pulse send #93, MLT reply #95, ack chip #98/#99, grid fix #100): a coach/pastor (L3+) sends an IN-APP check-in from the LCG Pulse to a silent LCG's leader (persist-on-send, dedup against an existing `awaiting` row); the leader SELF-REPORTS one of 7 reasons + an optional free-text note on a gentle MLT banner→screen (`status → answered`); the pastor reads the reason chip back on the Pulse card and taps it for the note. The leader chooses what to disclose — nothing is auto-flagged, pushed, or scored (extends AI-as-conversation-starter-not-verdict #6, and shepherd-not-spy). The first reason ("nag-meet, nakalimutan i-log") deliberately rescues the faithful-but-forgetful BEFORE any "correction." RLS: L3+ create/read-all-in-church; leader reads/answers own (via #254).
+
+**Established July 2, 2026 (Session 55). Invariant #258 added - count now 258.**
+
+---
+
+### **259. L0 is a real pre-pipeline level — foundations live at L0, formal formation (BTLI) begins at L1**
+
+The MULTIPLY leadership pipeline now opens with **L0 "New Believer · Follow Jesus"** (two internal stages, Guest → New Believer, conversion as the gate): New Believers Orientation, the Usbong devotional, the salvation + readiness assessments, and the Baptism / Completed-NBO milestones all belong at L0; BTLI (formal formation) starts at L1. Books: **Basic Christianity** (Stott) for seekers, **Real-Life Discipleship** (Putman) for new believers; **The Purpose Driven Life is retired.** L1 compensations: an "Entering Formation" pipeline orientation, a Spiritual Disciplines Inventory, formation milestones (Completed BTLI 101, 90-day devotional streak, discipling my EOLO one). The standalone `leadership_pipeline.html` diagram (static cards + click-modals + filter tabs) lives in the repo and is wired into MD Settings → Pastor Tools (📊 Leadership Pipeline, visible to all churches).
+
+**Established July 2, 2026 (Session 55). Invariant #259 added - count now 259.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
