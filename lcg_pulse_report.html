@@ -1311,6 +1311,9 @@ function openLeaderShareModal(leaderId, kind) {
   const waLabel = phone
     ? '🟢 Open WhatsApp to ' + escapeHTML(firstName)
     : '🟢 Open WhatsApp & pick contact';
+  const sendBtn = (kind === 'checkin')
+    ? `<button onclick="_pulseSendCheckIn(this)" style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">📨 Send in-app check-in</button>`
+    : '';
 
   modal.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit;color:var(--text)">
@@ -1319,6 +1322,7 @@ function openLeaderShareModal(leaderId, kind) {
         ${subText}
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
+        ${sendBtn}
         <button onclick="_pulseShareVia('copyPlain', this)"
           style="padding:11px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
           📋 Copy message
@@ -1340,10 +1344,35 @@ function openLeaderShareModal(leaderId, kind) {
     </div>`;
 
   // Stash data for the share handlers
-  window._pulseShareData = { plainText, fullText, phone: phone||'', firstName, kind };
+  window._pulseShareData = { plainText, fullText, phone: phone||'', firstName, kind, targetLeaderId: leaderId };
 
   document.body.appendChild(modal);
   modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+async function _pulseSendCheckIn(btn) {
+  if ((L.leaderLevel || 0) < 3) { toast('Send is for Coaches, Directors, and Pastor', 'error'); return; }
+  const d = window._pulseShareData;
+  if (!d || !d.targetLeaderId) { toast('Leader not found', 'error'); return; }
+  try {
+    const { data: existing, error: qErr } = await db.from('lcg_leader_checkins')
+      .select('id').eq('leader_member_id', d.targetLeaderId).eq('status', 'awaiting').limit(1);
+    if (qErr) throw qErr;
+    if (existing && existing.length) {
+      toast('A check-in is already awaiting a reply from ' + (d.firstName || 'this leader'), 'success');
+      btn.closest('.share-link-modal')?.remove();
+      return;
+    }
+    const { error } = await db.from('lcg_leader_checkins')
+      .insert({ leader_member_id: d.targetLeaderId, sent_by: L.leaderId || null, status: 'awaiting' });
+    if (error) throw error;
+    toast('✓ Check-in sent — ' + (d.firstName || 'they') + ' will see it in their tool', 'success');
+    btn.closest('.share-link-modal')?.remove();
+    if (typeof reloadAndRender === 'function') reloadAndRender();
+  } catch (e) {
+    console.error('send check-in error:', e);
+    toast('Could not send: ' + (e.message || e), 'error');
+  }
 }
 
 async function _pulseShareVia(method, btn) {
