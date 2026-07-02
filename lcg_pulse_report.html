@@ -880,7 +880,7 @@ async function loadCheckins() {
   window._checkinByLeader = {};
   try {
     const { data, error } = await db.from('lcg_leader_checkins')
-      .select('leader_member_id, status, reason_code, responded_at, sent_at')
+      .select('leader_member_id, status, reason_code, note, responded_at, sent_at')
       .order('sent_at', { ascending: false });
     if (error) throw error;
     (data || []).forEach(r => {
@@ -891,15 +891,48 @@ async function loadCheckins() {
 function _checkinChipHtml(leaderId) {
   const c = window._checkinByLeader[leaderId];
   if (!c) return '';
-  let text, style;
+  let text, style, clickable = false, hint = '';
   if (c.status === 'awaiting') {
     text = '⏳ Check-in sent — awaiting reply';
     style = 'background:rgba(212,184,122,.14);color:#d4b87a;border:1px solid rgba(212,184,122,.4)';
   } else {
     text = CHECKIN_LABELS[c.reason_code] || '💬 Replied';
     style = 'background:rgba(80,170,120,.15);color:#7fd0a3;border:1px solid rgba(80,170,120,.4)';
+    clickable = true;
+    if (c.note && c.note.trim()) hint = ' 💬';
   }
-  return `<div style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${style}">${text}</div>`;
+  const click = clickable ? ` onclick="openCheckinDetailModal('${leaderId}')" ` : '';
+  const cur = clickable ? 'cursor:pointer;' : '';
+  return `<div${click}style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${cur}${style}">${text}${hint}</div>`;
+}
+
+function openCheckinDetailModal(leaderId) {
+  const c = window._checkinByLeader[leaderId];
+  if (!c) return;
+  const reg = (window._pulseLeaders && window._pulseLeaders[leaderId]) || {};
+  const name = (reg.leader && reg.leader.name) || 'this leader';
+  const reasonLabel = CHECKIN_LABELS[c.reason_code] || 'Replied';
+  const when = c.responded_at ? humanDate(c.responded_at) : '';
+  const hasNote = c.note && c.note.trim();
+  const noteBlock = hasNote
+    ? `<div style="background:var(--surface3);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);line-height:1.55;white-space:pre-wrap">${escapeHTML(c.note)}</div>`
+    : `<div style="font-size:12px;color:var(--muted);font-style:italic">Walang idinagdag na mensahe.</div>`;
+  document.querySelectorAll('.share-link-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'share-link-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;max-width:380px;width:100%;padding:1.25rem;box-shadow:0 10px 40px rgba(0,0,0,.5);font-family:inherit;color:var(--text)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:.15rem">Check-in reply</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">${escapeHTML(name)}${when ? ' · ' + escapeHTML(when) : ''}</div>
+      <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(80,170,120,.15);color:#7fd0a3;border:1px solid rgba(80,170,120,.4);margin-bottom:1rem">${reasonLabel}</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.03em;margin-bottom:.4rem">SINABI NILA</div>
+      ${noteBlock}
+      <button onclick="this.closest('.share-link-modal').remove()"
+        style="width:100%;margin-top:1rem;padding:9px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer">✕ Close</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 }
 
 async function reloadAndRender() {
