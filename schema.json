@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 68,
+  "table_count": 69,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -6637,6 +6637,215 @@
         {
           "name": "trg_set_church_id",
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lc_meeting_responses FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
+        }
+      ]
+    },
+    "lcg_leader_checkins": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "leader_member_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "sent_by",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "sent_at",
+          "ordinal": 5,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "reason_code",
+          "ordinal": 6,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "note",
+          "ordinal": 7,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 8,
+          "data_type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "status",
+          "ordinal": 9,
+          "data_type": "text",
+          "nullable": false,
+          "default": "'awaiting'::text",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "pastor_seen_at",
+          "ordinal": 10,
+          "data_type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 11,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 12,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "check_constraints": [
+        {
+          "name": "lcg_checkins_reason_chk",
+          "definition": "CHECK (((reason_code IS NULL) OR (reason_code = ANY (ARRAY['met_forgot_log'::text, 'overwhelmed'::text, 'need_coleader'::text, 'unsure_meeting'::text, 'scheduling'::text, 'personal'::text, 'okay'::text]))))"
+        },
+        {
+          "name": "lcg_checkins_status_chk",
+          "definition": "CHECK ((status = ANY (ARRAY['awaiting'::text, 'answered'::text, 'resolved'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_lcg_checkins_church_leader",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "leader_member_id"
+          ],
+          "definition": "CREATE INDEX idx_lcg_checkins_church_leader ON public.lcg_leader_checkins USING btree (church_id, leader_member_id)"
+        },
+        {
+          "name": "idx_lcg_checkins_church_status",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "status"
+          ],
+          "definition": "CREATE INDEX idx_lcg_checkins_church_status ON public.lcg_leader_checkins USING btree (church_id, status)"
+        },
+        {
+          "name": "lcg_leader_checkins_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lcg_leader_checkins_pkey ON public.lcg_leader_checkins USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "lcg_checkins_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "command": "DELETE",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 3))",
+          "with_check": null
+        },
+        {
+          "name": "lcg_checkins_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 3))"
+        },
+        {
+          "name": "lcg_checkins_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "command": "SELECT",
+          "using": "((church_id = auth_church_id()) AND ((leader_member_id = auth_member_id()) OR (auth_level() >= 3)))",
+          "with_check": null
+        },
+        {
+          "name": "lcg_checkins_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "command": "UPDATE",
+          "using": "((church_id = auth_church_id()) AND ((leader_member_id = auth_member_id()) OR (auth_level() >= 3)))",
+          "with_check": "((church_id = auth_church_id()) AND ((leader_member_id = auth_member_id()) OR (auth_level() >= 3)))"
+        }
+      ],
+      "triggers": [
+        {
+          "name": "trg_set_church_id",
+          "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lcg_leader_checkins FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
     },
