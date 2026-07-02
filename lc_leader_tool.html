@@ -84,6 +84,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;
   cursor:pointer;font-size:16px;flex-shrink:0;color:var(--muted);}
 .tb-title{font-family:'Syne',serif;font-size:16px;font-weight:700;flex:1;}
+.checkin-reason{width:100%;text-align:left;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;}
+.checkin-reason:hover{background:var(--surface3);border-color:var(--gold);}
 .tb-action{font-size:11px;font-weight:700;color:var(--gold);cursor:pointer;
   padding:6px 10px;background:rgba(232,184,75,.1);border-radius:20px;
   border:1px solid rgba(232,184,75,.2);white-space:nowrap;}
@@ -504,6 +506,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <!-- Rendered by MultiplyShared.preaching.renderReminderBanner() on home screen init.
        Shows up to 7 days before assignment; escalates color at 3d and 0d.
        Hidden entirely when not in roster or no upcoming assignment. -->
+  <!-- ─── PASTOR CHECK-IN BANNER (shepherd's check-in reply) ─── -->
+  <div id="checkinBanner" style="display:none;background:linear-gradient(135deg,rgba(212,184,122,.16),rgba(212,184,122,.04));border-bottom:1px solid rgba(212,184,122,.4);padding:11px 14px;align-items:center;gap:10px;font-size:13px;cursor:pointer" onclick="showScreen('screenCheckin')">
+    <div style="font-size:20px;flex-shrink:0">💛</div>
+    <div style="flex:1;line-height:1.35">
+      <div style="font-weight:700;color:var(--text);margin-bottom:2px">Your pastor checked in — kumusta ka?</div>
+      <div style="font-size:11.5px;color:var(--muted)">Tap to reply — isang tap lang</div>
+    </div>
+    <div style="color:var(--muted);font-size:18px">›</div>
+  </div>
+
   <div id="preachingReminderBanner" style="padding:0 14px"></div>
 
   <div class="home-header">
@@ -1124,6 +1136,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <div style="flex:1;overflow-y:auto;padding:14px 12px 40px" id="headsUpListContent">
     <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: PASTOR CHECK-IN REPLY ══ -->
+<div class="screen" id="screenCheckin">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">Kumusta ka, kapatid?</div>
+  </div>
+  <div style="padding:14px 16px;font-size:13px;color:var(--text);line-height:1.6;background:var(--surface);border-bottom:1px solid var(--border)">
+    Nag-check-in ang pastor mo. Isang tap lang — ano ang makakatulong sa'yo ngayon? Walang tama o mali; honesty lang. 💛
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px 14px 40px;display:flex;flex-direction:column;gap:10px">
+    <button class="checkin-reason" onclick="_submitCheckin('met_forgot_log')">✅ Nag-meet kami — nakalimutan ko lang i-log</button>
+    <button class="checkin-reason" onclick="_submitCheckin('overwhelmed')">😮‍💨 Pagod / sobrang dami kong ginagawa</button>
+    <button class="checkin-reason" onclick="_submitCheckin('need_coleader')">🤝 Kailangan ko ng co-leader</button>
+    <button class="checkin-reason" onclick="_submitCheckin('unsure_meeting')">❓ Hindi ako sigurado kung ano gagawin sa meeting</button>
+    <button class="checkin-reason" onclick="_submitCheckin('scheduling')">📅 Mahirap mag-schedule</button>
+    <button class="checkin-reason" onclick="_submitCheckin('personal')">🙏 May pinagdadaanan ako</button>
+    <button class="checkin-reason" onclick="_submitCheckin('okay')">👍 Okay lang ako, tuloy pa rin</button>
+    <textarea id="checkinNote" placeholder="May idadagdag ka pa? (optional)" style="margin-top:6px;width:100%;box-sizing:border-box;min-height:70px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;resize:vertical"></textarea>
   </div>
 </div>
 
@@ -1846,6 +1879,45 @@ function renderTransferAlerts(){
   </div>`;
 }
 
+async function _loadMyCheckin(){
+  const banner = document.getElementById('checkinBanner');
+  if(!banner || !window.LEADER || !LEADER.leaderId) return;
+  try {
+    const { data, error } = await db.from('lcg_leader_checkins')
+      .select('id, sent_at')
+      .eq('leader_member_id', LEADER.leaderId)
+      .eq('status', 'awaiting')
+      .order('sent_at', { ascending: false })
+      .limit(1);
+    if(error) throw error;
+    if(data && data.length){
+      window._myCheckinId = data[0].id;
+      banner.style.display = 'flex';
+    } else {
+      window._myCheckinId = null;
+      banner.style.display = 'none';
+    }
+  } catch(e){ /* silent - banner stays hidden on error */ }
+}
+
+async function _submitCheckin(reasonCode){
+  const id = window._myCheckinId;
+  if(!id){ toast('No check-in to answer', 'error'); return; }
+  const noteEl = document.getElementById('checkinNote');
+  const note = noteEl ? noteEl.value.trim() : '';
+  try {
+    const { error } = await db.from('lcg_leader_checkins')
+      .update({ status: 'answered', reason_code: reasonCode, note: note || null, responded_at: new Date().toISOString() })
+      .eq('id', id);
+    if(error) throw error;
+    window._myCheckinId = null;
+    const b = document.getElementById('checkinBanner'); if(b) b.style.display = 'none';
+    if(noteEl) noteEl.value = '';
+    toast('Salamat, kapatid. Nakita na ito ng pastor mo. \u{1F49B}', 'success');
+    showScreen('screenHome');
+  } catch(e){ toast('Could not send: ' + (e.message || e), 'error'); }
+}
+
 function renderHome(){
   const m = currentLeader;
   // The session LEADER shim carries no photo_url, so look the leader up in the
@@ -1859,6 +1931,9 @@ function renderHome(){
 
   // Show/hide ministry-attendance quick-button based on whether this leader heads any ministry
   refreshMinistryAttButton();
+
+  // Pastor check-in banner (shepherd's loop)
+  _loadMyCheckin();
 
   // Home stats are kind-mirrored (Inv #164) — myMembers is the OPERATIONAL
   // (kind-visible) roster, so re-filter to the viewer's own kind for counts.
