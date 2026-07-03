@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 69,
+  "table_count": 71,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -11524,6 +11524,495 @@
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.notifications FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
+    },
+    "pathway_progress": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "level",
+          "ordinal": 4,
+          "data_type": "integer",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "rung_key",
+          "ordinal": 5,
+          "data_type": "text",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "completed_at",
+          "ordinal": 6,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "marked_by",
+          "ordinal": 7,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "note",
+          "ordinal": 8,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 9,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "pathway_progress_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "pathway_progress_marked_by_fkey",
+          "columns": [
+            "marked_by"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (marked_by) REFERENCES members(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "pathway_progress_member_id_fkey",
+          "columns": [
+            "member_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "pathway_progress_church_id_member_id_level_rung_key_key",
+          "columns": [
+            "church_id",
+            "member_id",
+            "level",
+            "rung_key"
+          ]
+        }
+      ],
+      "check_constraints": [
+        {
+          "name": "pathway_progress_level_check",
+          "definition": "CHECK (((level >= 0) AND (level <= 5)))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "pathway_progress_church_id_member_id_level_rung_key_key",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "member_id",
+            "level",
+            "rung_key"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_progress_church_id_member_id_level_rung_key_key ON public.pathway_progress USING btree (church_id, member_id, level, rung_key)"
+        },
+        {
+          "name": "pathway_progress_member_ix",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "member_id"
+          ],
+          "definition": "CREATE INDEX pathway_progress_member_ix ON public.pathway_progress USING btree (church_id, member_id)"
+        },
+        {
+          "name": "pathway_progress_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_progress_pkey ON public.pathway_progress USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "pathway_progress_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "((church_id = auth_church_id()) AND ((auth_level() >= 5) OR (discipler_of(member_id) = auth_member_id())))",
+          "with_check": null
+        },
+        {
+          "name": "pathway_progress_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((church_id = auth_church_id()) AND ((auth_level() >= 5) OR (discipler_of(member_id) = auth_member_id())))"
+        },
+        {
+          "name": "pathway_progress_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id = auth_church_id()) AND ((member_id = auth_member_id()) OR (auth_level() >= 3) OR (discipler_of(member_id) = auth_member_id())))",
+          "with_check": null
+        },
+        {
+          "name": "pathway_progress_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "((church_id = auth_church_id()) AND ((auth_level() >= 5) OR (discipler_of(member_id) = auth_member_id())))",
+          "with_check": "((church_id = auth_church_id()) AND ((auth_level() >= 5) OR (discipler_of(member_id) = auth_member_id())))"
+        }
+      ],
+      "triggers": []
+    },
+    "pathway_rungs": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "level",
+          "ordinal": 3,
+          "data_type": "integer",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "sort_order",
+          "ordinal": 4,
+          "data_type": "integer",
+          "nullable": false,
+          "default": "0",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "rung_key",
+          "ordinal": 5,
+          "data_type": "text",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "title_en",
+          "ordinal": 6,
+          "data_type": "text",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "title_tl",
+          "ordinal": 7,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "description_en",
+          "ordinal": 8,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "description_tl",
+          "ordinal": 9,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "category",
+          "ordinal": 10,
+          "data_type": "text",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "completion_source",
+          "ordinal": 11,
+          "data_type": "text",
+          "nullable": false,
+          "default": "'manual'::text",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "auto_source_key",
+          "ordinal": 12,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "published",
+          "ordinal": 13,
+          "data_type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 14,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 15,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "pathway_rungs_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [
+        {
+          "name": "pathway_rungs_category_check",
+          "definition": "CHECK ((category = ANY (ARRAY['book'::text, 'training'::text, 'lesson'::text, 'ministry'::text, 'coaching'::text, 'assessment'::text, 'character'::text, 'competency'::text, 'discipline'::text])))"
+        },
+        {
+          "name": "pathway_rungs_completion_source_check",
+          "definition": "CHECK ((completion_source = ANY (ARRAY['manual'::text, 'auto'::text])))"
+        },
+        {
+          "name": "pathway_rungs_level_check",
+          "definition": "CHECK (((level >= 0) AND (level <= 5)))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "pathway_rungs_base_uk",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "level",
+            "rung_key"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_rungs_base_uk ON public.pathway_rungs USING btree (level, rung_key) WHERE (church_id IS NULL)"
+        },
+        {
+          "name": "pathway_rungs_lookup_ix",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "level",
+            "church_id"
+          ],
+          "definition": "CREATE INDEX pathway_rungs_lookup_ix ON public.pathway_rungs USING btree (level, church_id) WHERE published"
+        },
+        {
+          "name": "pathway_rungs_overlay_uk",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "level",
+            "rung_key"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_rungs_overlay_uk ON public.pathway_rungs USING btree (church_id, level, rung_key) WHERE (church_id IS NOT NULL)"
+        },
+        {
+          "name": "pathway_rungs_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_rungs_pkey ON public.pathway_rungs USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "pathway_rungs_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
+          "with_check": null
+        },
+        {
+          "name": "pathway_rungs_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 5))"
+        },
+        {
+          "name": "pathway_rungs_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id IS NULL) OR (church_id = auth_church_id()))",
+          "with_check": null
+        },
+        {
+          "name": "pathway_rungs_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 5))"
+        }
+      ],
+      "triggers": []
     },
     "pipeline_lesson_grants": {
       "kind": "table",
