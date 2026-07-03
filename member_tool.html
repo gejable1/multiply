@@ -1989,6 +1989,7 @@ body.lang-tl .tl-text{display:inline;}
            we show a compact preview card that summarizes how many active
            lessons the member has, and opens the full screen on tap.
            Populated by renderJourneyLessonsTeaser() on page-pipeline activation. -->
+      <div id="pathwaySection" style="margin-top:1.5rem"></div>
       <div id="journeyLessonsTeaser" style="margin-top:1.5rem"></div>
 
       <!-- ═══════ USBONG (PRE-PIPELINE) COMPREHENSION QUIZZES ═══════
@@ -3719,6 +3720,7 @@ function renderPipeline(){
   // Reading list refreshes alongside the pipeline view (so language and
   // progress changes flow through together)
   if (typeof renderJourneyLessonsTeaser === 'function') renderJourneyLessonsTeaser();
+  if (typeof renderPathway === 'function') renderPathway();
   if (typeof renderLibrary === 'function') renderLibrary();
   if (typeof renderBtliQuizzes === 'function') renderBtliQuizzes();
   if (typeof renderUsbongQuizzes === 'function') renderUsbongQuizzes();
@@ -10692,6 +10694,100 @@ let _mmtLessonsState = {
 // ═══════════════════════════════════════════════════════════════
 // JOURNEY LESSONS TEASER
 // ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// PATHWAY — per-level rungs a member climbs to reach the next level
+// ─────────────────────────────────────────────────────────────
+// Reads pathway_rungs (base church_id NULL + own-church overlay, RLS-scoped;
+// overlay-wins-by-key) for the shown level + pathway_progress for this member
+// (LCL-marked). Read-only on MMT — the LCL marks in the leader tool. The metro
+// strip is clickable to preview any level. Migration 057 · Session 57.
+let _pathwayLevel = null;
+
+function _pathwayCatIcon(c){
+  return ({book:'📚',training:'🎓',lesson:'📖',ministry:'🤝',coaching:'🧭',assessment:'📋',character:'🌱',competency:'🧩',discipline:'🔥'})[c] || '◦';
+}
+function _pathwayCatChip(c){
+  const m = {book:['Book','Libro'],training:['Training','Pagsasanay'],lesson:['Lesson','Aralin'],ministry:['Ministry','Ministeryo'],coaching:['Coaching','Coaching'],assessment:['Assessment','Pagsusuri'],character:['Character','Karakter'],competency:['Competency','Kakayahan'],discipline:['Discipline','Disiplina']};
+  const p = m[c] || [c,c];
+  return `<span class="en-text">${MultiplyShared.escapeHTML(p[0])}</span><span class="tl-text">${MultiplyShared.escapeHTML(p[1])}</span>`;
+}
+function _pathwayMetro(shown, curLvl){
+  let dots = '';
+  for(let n=0;n<=5;n++){
+    const isCur=n===curLvl, isShown=n===shown, isDone=n<curLvl;
+    const bg = isDone?'var(--forest-3)':(isCur?'var(--gold)':'var(--surface2)');
+    const col = (isDone||isCur)?'#fff':'var(--muted)';
+    const ring = isShown?'box-shadow:0 0 0 2px var(--gold-bright)':'';
+    const sz = isCur?26:20;
+    const label = isDone?'✓':String(n);
+    if(n>0){ dots += `<div style="flex:1;height:2px;background:${n<=curLvl?'var(--forest-3)':'var(--line)'}"></div>`; }
+    dots += `<button onclick="renderPathway(${n})" aria-label="Level ${n}" style="flex:none;display:flex;flex-direction:column;align-items:center;background:none;border:none;cursor:pointer;padding:0;font-family:inherit">
+      <div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${bg};color:${col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;${ring}">${label}</div>
+      <div style="font-size:10px;margin-top:2px;color:${isShown?'var(--gold)':'var(--muted)'}">L${n}</div>
+    </button>`;
+  }
+  return `<div style="display:flex;align-items:center;margin:.25rem 0 .9rem">${dots}</div>`;
+}
+async function renderPathway(level){
+  const host = document.getElementById('pathwaySection');
+  if(!host) return;
+  if(!memberRow || !MEMBER || !MEMBER.memberId){ host.innerHTML=''; return; }
+  const curLvl = memberRow.pipeline_level || 0;
+  const shown = (typeof level==='number') ? level : (_pathwayLevel==null ? curLvl : _pathwayLevel);
+  _pathwayLevel = shown;
+  const nextEn = shown>=5 ? 'ongoing' : `Level ${shown} → Level ${shown+1}`;
+  const nextTl = shown>=5 ? 'tuloy-tuloy' : `Antas ${shown} → Antas ${shown+1}`;
+  const preview = shown!==curLvl ? `<span style="font-size:10px;background:var(--gold-soft);color:var(--gold);padding:1px 7px;border-radius:999px;margin-left:.4rem"><span class="en-text">preview</span><span class="tl-text">silip</span></span>` : '';
+  const head = `
+    <div style="font-size:14.5px;font-weight:700;color:var(--ink);margin-bottom:.2rem"><span class="en-text">My pathway</span><span class="tl-text">Aking landas</span>${preview}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:.2rem"><span class="en-text">${nextEn}</span><span class="tl-text">${nextTl}</span></div>
+    ${_pathwayMetro(shown, curLvl)}`;
+  const wrap = (inner) => `<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem">${head}${inner}</div>`;
+  host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Loading…</span><span class="tl-text">Naglo-load…</span></div>`);
+  try{
+    const db = MultiplyShared.getDB();
+    const [rungRes, progRes] = await Promise.all([
+      db.from('pathway_rungs').select('*').eq('level', shown),
+      db.from('pathway_progress').select('rung_key, completed_at').eq('member_id', MEMBER.memberId).eq('level', shown)
+    ]);
+    if(rungRes.error) throw rungRes.error;
+    if(progRes.error) throw progRes.error;
+    const byKey = {};
+    (rungRes.data||[]).forEach(r=>{ const ex=byKey[r.rung_key]; if(!ex || (r.church_id && !ex.church_id)) byKey[r.rung_key]=r; });
+    const rungs = Object.values(byKey).filter(r=>r.published!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const done = new Set((progRes.data||[]).map(p=>p.rung_key));
+    if(!rungs.length){ host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">No rungs for this level yet.</span><span class="tl-text">Wala pang rung dito.</span></div>`); return; }
+    const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
+    const pct = Math.round(nDone/rungs.length*100);
+    const bar = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem">
+        <div style="font-size:11px;color:var(--muted)"><span class="en-text">Progress</span><span class="tl-text">Progreso</span></div>
+        <div style="font-size:11px;font-weight:700;color:var(--ink)">${nDone} / ${rungs.length}</div>
+      </div>
+      <div style="height:7px;background:var(--surface2);border-radius:999px;overflow:hidden;margin-bottom:.8rem"><div style="height:100%;width:${pct}%;background:var(--leaf);border-radius:999px"></div></div>`;
+    const items = rungs.map(r=>{
+      const isDone = done.has(r.rung_key);
+      const status = isDone
+        ? `<div style="width:22px;height:22px;border-radius:50%;background:var(--forest-3);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none">✓</div>`
+        : `<div style="width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line-strong);flex:none"></div>`;
+      return `
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-top:1px solid var(--line)">
+          ${status}
+          <div style="font-size:17px;flex:none">${_pathwayCatIcon(r.category)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--ink)"><span class="en-text">${MultiplyShared.escapeHTML(r.title_en||'')}</span><span class="tl-text">${MultiplyShared.escapeHTML(r.title_tl||r.title_en||'')}</span></div>
+            <div style="font-size:10.5px;color:var(--muted);margin-top:1px">${_pathwayCatChip(r.category)}</div>
+          </div>
+        </div>`;
+    }).join('');
+    host.innerHTML = wrap(bar + `<div>${items}</div>`);
+  }catch(e){
+    console.warn('[pathway] load failed:', e);
+    host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Could not load. Tap a level to retry.</span><span class="tl-text">Hindi na-load. I-tap ang antas.</span></div>`);
+  }
+}
+
+
 // Compact preview card on the Journey page. Shows how many lessons
 // the member has available and a "View all" CTA that opens the full
 // lessons screen (openLessonsScreen) — same screen that used to be
