@@ -183,6 +183,7 @@ html,body{
 .champ-card .hb-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .champ-card .hb-avatar{
   width:40px;height:40px;border-radius:50%;
+  position:relative;overflow:hidden;
   background:rgba(52,211,153,.25);color:var(--green);
   display:flex;align-items:center;justify-content:center;
   font-weight:800;font-size:14px;flex-shrink:0;
@@ -272,6 +273,7 @@ html,body{
 .hb-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .hb-avatar{
   width:40px;height:40px;border-radius:50%;
+  position:relative;overflow:hidden;
   background:rgba(251,146,60,.25);color:var(--amber);
   display:flex;align-items:center;justify-content:center;
   font-weight:800;font-size:14px;flex-shrink:0;
@@ -774,7 +776,7 @@ function buildWeekBuckets() {
 // ─────────────────────── Data loading ───────────────────────
 async function loadMembers() {
   const { data, error } = await db.from('members')
-    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member, is_external_user');
+    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member, is_external_user, photo_url');
   if (error) throw error;
   allMembers = data || [];
   // ─── TEST + GUEST EXCLUSION (Inv #15/#16) ───
@@ -1089,7 +1091,7 @@ function render() {
           return `
             <div class="champ-card ${longStreak ? 'streak-long' : ''}">
               <div class="hb-row">
-                <div class="hb-avatar">${initials(e.leader.name)}</div>
+                <div class="hb-avatar">${initials(e.leader.name)}${e.leader.photo_url ? `<img src="${escapeHTML(e.leader.photo_url)}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : ''}</div>
                 <div style="min-width:0">
                   <div class="hb-name">${escapeHTML(e.leader.name)}</div>
                   <div class="hb-grp">${escapeHTML(e.leader.lc_group || 'LC Group')}</div>
@@ -1127,7 +1129,7 @@ function render() {
           return `
             <div class="hb-card">
               <div class="hb-row">
-                <div class="hb-avatar">${initials(e.leader.name)}</div>
+                <div class="hb-avatar">${initials(e.leader.name)}${e.leader.photo_url ? `<img src="${escapeHTML(e.leader.photo_url)}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : ''}</div>
                 <div style="min-width:0">
                   <div class="hb-name">${escapeHTML(e.leader.name)}</div>
                   <div class="hb-grp">${escapeHTML(e.leader.lc_group || 'LC Group')}</div>
@@ -1174,7 +1176,7 @@ function render() {
           return `
             <div class="hb-card ${longSilent ? 'silent-long' : ''}">
               <div class="hb-row">
-                <div class="hb-avatar">${initials(e.leader.name)}</div>
+                <div class="hb-avatar">${initials(e.leader.name)}${e.leader.photo_url ? `<img src="${escapeHTML(e.leader.photo_url)}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : ''}</div>
                 <div style="min-width:0">
                   <div class="hb-name">${escapeHTML(e.leader.name)}</div>
                   <div class="hb-grp">${escapeHTML(e.leader.lc_group || 'LC Group')}</div>
