@@ -2818,4 +2818,44 @@ The MULTIPLY leadership pipeline now opens with **L0 "New Believer · Follow Jes
 
 ---
 
+### **260. Leadership Pathway v1 — per-level rungs a member climbs, church-isolated, member-read + LCL-marked**
+
+The pipeline is now traversable: `057` adds **`pathway_rungs`** (catalog, Model 3 — `church_id` NULL = MULTIPLY base + per-church overlay; **partial-unique** `base(level,rung_key) WHERE church_id IS NULL` + `overlay(church_id,level,rung_key) WHERE NOT NULL` — the #253 fix, since a plain composite lets NULLs duplicate) and **`pathway_progress`** (per-member marks; `UNIQUE(church_id,member_id,level,rung_key)`). Rungs carry `category` (book·training·lesson·ministry·coaching·assessment·character·competency·discipline) + `completion_source` (`manual`/`auto`) + `auto_source_key` — v1 is manual-marked but the schema is **auto-ready** (v2 self-checks BTLI/assessments/devo-streak from the same activity spine). RLS: member reads own; **LCL marks own disciples** via `discipler_of(member_id)=auth_member_id()` (uses `auth_member_id()` in leader sessions #254); L3+ coach reads church-wide; L5 pastor writes any — **members never self-mark in v1**. Surfaces: **MMT Journey** `renderPathway` (read-only ladder + clickable L0–L5 metro to preview any level); **MLT** `renderMltPathway`/`_mltPwToggle` (LCL taps to mark). Frontend stamps `church_id` on insert (#211). PRs #101/#104/#105/#106; 37 base rungs seeded L0–L5.
+
+**Established July 4, 2026 (Session 57). Invariant #260 added - count now 260.**
+
+---
+
+### **261. SVI is a CARE lens, never an advancement gate — vitality × progression, pastoral priority follows vitality**
+
+The pathway measures **progression** ("am I moving up?" — competence/milestones, the visible ladder, Eph 4 maturing); the **SVI** measures **vitality** ("am I alive/abiding now?" — the weekly pulse, John 15). They are **orthogonal axes and must never be conflated.** **NEVER gate pathway advancement on the SVI** — the moment a care instrument becomes a promotion hurdle it invites gaming, pride, legalism (the Luke 6:40 trap). SVI feeds the **care loop** (dip → soft surfacing → the S55 check-in) and is **advisory context** for a pastor's promotion discernment (character-before-competence; FATLESS affirmed by a human), never a computed gate. The pastoral tool is the **Flock Map** quadrant (vitality × progression); colour follows **vitality** because a soul's aliveness matters more than its rung — the dangerous quadrant is "advancing but dry." AI stays conversation-starter, not verdict (#6). Auto rungs (devo-streak, service, EOLO) and SVI dimensions read the **same activity spine** — siblings, not duplicates.
+
+**Established July 4, 2026 (Session 57). Invariant #261 added - count now 261.**
+
+---
+
+### **262. Per-church pipeline = shared LEVEL frame (the 3M "right Model") + per-church RUNG contents (the "right Method")**
+
+A church may run MULTIPLY's template **or build its own pipeline** — but the split is deliberate. The **LEVEL FRAME (L0–L5, Mac Lake) is universal, shared, un-forkable** — the 3M's *right Model*, the common language keeping SVI (per-level weights), promotions, cross-church reports, and `leadership_pipeline.html` coherent. The **RUNG CONTENTS (books/lessons/competencies per level) are fully per-church** — the *right Method*, overlay-driven. Overlay algebra needs **zero new schema** (uses `pathway_rungs.published`): **keep** (no overlay → inherit base), **override** (same `rung_key`, overlay wins — cf. `ministry_archetypes` #244), **hide** (same `rung_key`, `published=false`), **add** (new `rung_key`), **reorder** (`sort_order`). Pastor-gated (`auth_level()>=5`, own-church overlay only). The tie to member progress is **free**: `pathway_progress` keys on `(level, rung_key)`, agnostic to base/overlay. RULE: churches own their **contents**, never the **frame** — changing the level count/meaning would shatter SVI, reports, the diagram. (Authoring surface parked.)
+
+**Established July 4, 2026 (Session 57). Invariant #262 added - count now 262.**
+
+---
+
+### **263. BTLI slide decks follow `BTLI_SLIDE_SPEC.md` — questions on their own slides, time on every slide, the whole guide in the notes**
+
+The standing standard for every BTLI lesson deck (repo root `BTLI_SLIDE_SPEC.md`, generic — not just L1): **(1)** every participant-guide question gets its **OWN dark-navy slide** (one per question), placed right after the content that sets it up, headed `<emoji> MOVEMENT · TANONG` with a gold **`Participant Guide Question`** tag; **(2)** a gold **timer badge on EVERY slide** top-right (`slide-min` + cumulative), per-slide minutes split from the **facilitator guide's movement pacing**, summing to movement totals + the lesson core time; **(3)** **generous, self-facilitating notes on EVERY slide** (~200–700 chars: exact question + pastoral notes + stories + cautions + tips, so the lecturer teaches from Presenter View without the guide); **(4)** **"Participant Guide" — never "Booklet"** (sweep slide text + notes). Tokens navy `0F1C34`/gold `D4A84A`/cream `FEFCF8`; generic branding (#26). Build via `python-pptx` (question slides from scratch, reorder sldIdLst, renumber, badges, notes), QA render→pdftoppm. Worked example: L2 "Bible Meditation" = 23 slides, 55-min core (PUKAW 8·TUKLAS 15·TALAKAY 12·GAWIN 12·DALHIN 8).
+
+**Established July 4, 2026 (Session 57). Invariant #263 added - count now 263.**
+
+---
+
+### **264. Ship well-supported emoji (footprints not the newer ladder) — and pure `.md` docs upload direct to `main`, no CC/PR**
+
+Two hygiene rules. **(a) Emoji rendering:** newer glyphs render as **tofu boxes** on many devices — the ladder (U+1FA9C, 2020) showed as a box in Chrome/Windows, so the pathway's identity icon is the older, universally-supported **footprints** (matching the MMT Journey tab), applied consistently across **MMT** ("My pathway" title) and **MLT** (Pathway section header); prefer long-standing emoji on any shipped surface and render-verify (#105/#245/#256 extend to emoji). **(b) Doc-only upload lane:** a pure documentation file (`.md`, no code) may be **uploaded straight to `main` via the GitHub web UI** (Add file → Upload files → Commit directly to main) — no CC branch/PR; keep CC + PR for code, migrations, or any deployed file. `BTLI_SLIDE_SPEC.md` landed this way (verified on `main`).
+
+**Established July 4, 2026 (Session 57). Invariant #264 added - count now 264.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
