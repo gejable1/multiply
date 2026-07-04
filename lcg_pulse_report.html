@@ -858,8 +858,10 @@ function indexMeetingsByLCG() {
   // Derive per-week flags: "weak" (met but ≤1 present) and "self-attested only"
   // (met with no leader-authoritative row → awaiting confirmation).
   lcgMap.forEach(entry => {
+    const flockSize = (entry.members || []).length;
     entry.meetingsByWeek.forEach(wk => {
-      if (wk.met && wk.attendance <= 1) wk.weak = true;
+      // A one-member LCG at 1 present is at FULL turnout — never "weak" (Gerry, S58).
+      if (wk.met && wk.attendance <= 1 && flockSize > 1) wk.weak = true;
       if (wk.met && !wk.leaderLogged) wk.selfAttestedOnly = true;
     });
   });
@@ -1001,7 +1003,7 @@ function render() {
       e.meetingsByWeek.forEach(wk => { totalAttendance += wk.attendance; });
       return { ...e, streak, totalAttendance };
     })
-    .sort((a,b) => b.streak - a.streak || b.totalAttendance - a.totalAttendance);
+    .sort((a,b) => (a.leader.name||'').localeCompare(b.leader.name||'')); // alphabetical (Gerry, S58)
 
   // ── Heartbeat (missed this week, sorted by silence length) ──
   const heartbeat = lcgsList
@@ -1020,7 +1022,22 @@ function render() {
       });
       return { ...e, silence, lastMet };
     })
-    .sort((a,b) => b.silence - a.silence);
+    .sort((a,b) => (a.leader.name||'').localeCompare(b.leader.name||'')); // alphabetical (Gerry, S58)
+
+  // ── Building Rhythm = met THIS week but NOT every week (active yet inconsistent) ──
+  //   The middle tier that used to fall through the cracks: not a Champion
+  //   (missed a week), not silent (met this week). Exhaustive partition with
+  //   Champions + Heartbeat now — every LCG lands in exactly one. Alphabetical.
+  const _championIds = new Set(champions.map(e => e.leader.id));
+  const building = lcgsList
+    .filter(e => e.meetingsByWeek[lastWeekIdx]?.met && !_championIds.has(e.leader.id))
+    .map(e => {
+      const weeksMet = e.meetingsByWeek.filter(wk => wk.met).length;
+      let lastMet = null;
+      e.meetingsByWeek.forEach(wk => wk.dates.forEach(d => { if (!lastMet || d > lastMet) lastMet = d; }));
+      return { ...e, weeksMet, lastMet };
+    })
+    .sort((a,b) => (a.leader.name||'').localeCompare(b.leader.name||''));
 
   // ── Build HTML ──
   const periodLabel = periodLabelText();
@@ -1096,6 +1113,45 @@ function render() {
       </div>
     `}
 
+    <!-- Building Rhythm -->
+    <div class="section-head">
+      <h2>🌱 Building Rhythm</h2>
+      <span class="sh-count">${building.length} LCG${building.length===1?'':'s'} · met this week, not every week yet</span>
+    </div>
+    ${building.length ? `
+      <div class="hb-grid">
+        ${building.map(e => {
+          window._pulseLeaders = window._pulseLeaders || {};
+          window._pulseLeaders[e.leader.id] = { leader: e.leader, weeksMet: e.weeksMet };
+          const canSendCheckIn = (L.leaderLevel || 0) >= 3;
+          return `
+            <div class="hb-card">
+              <div class="hb-row">
+                <div class="hb-avatar">${initials(e.leader.name)}</div>
+                <div style="min-width:0">
+                  <div class="hb-name">${escapeHTML(e.leader.name)}</div>
+                  <div class="hb-grp">${escapeHTML(e.leader.lc_group || 'LC Group')}</div>
+                </div>
+              </div>
+              <div class="hb-stats">
+                <div>📈 Met <strong>${e.weeksMet} of ${weekBuckets.length}</strong> week${weekBuckets.length===1?'':'s'}</div>
+                <div>👥 <strong>${e.members.length}</strong> member${e.members.length===1?'':'s'}</div>
+              </div>
+              ${_checkinChipHtml(e.leader.id)}
+              ${canSendCheckIn ? `
+                <button class="hb-action" onclick="openLeaderCheckInModal('${e.leader.id}')">
+                  📲 Encourage ${escapeHTML((e.leader.name||'').split(' ')[0])}
+                </button>
+              ` : ''}
+            </div>`;
+        }).join('')}
+      </div>
+    ` : `
+      <div class="hb-empty">
+        Walang LCG sa gitna ngayong period — Champion o kailangan ng heartbeat. 🙏
+      </div>
+    `}
+
     <!-- Heartbeat / Needs attention -->
     <div class="section-head">
       <h2>💬 Needs a Heartbeat</h2>
@@ -1159,13 +1215,7 @@ function render() {
         <tbody>
           ${lcgsList
             .slice() // copy
-            .sort((a,b) => {
-              // Order: champs first, then by member count desc
-              const aMet = a.meetingsByWeek.filter(w=>w.met).length;
-              const bMet = b.meetingsByWeek.filter(w=>w.met).length;
-              if (aMet !== bMet) return bMet - aMet;
-              return b.members.length - a.members.length;
-            })
+            .sort((a,b) => (a.leader.name||'').localeCompare(b.leader.name||'')) // alphabetical (Gerry, S58)
             .map(e => `
               <tr>
                 <td class="lcg-name">
@@ -1196,7 +1246,7 @@ function render() {
   // Stash for copy/print
   window._pulseSummary = {
     period: periodLabel, totalLCGs, onTrackThisWeek, missedThisWeek,
-    champions: champions.length, heartbeat: heartbeat.length,
+    champions: champions.length, building: building.length, heartbeat: heartbeat.length,
     sparkData
   };
 }
