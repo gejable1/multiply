@@ -369,6 +369,38 @@ header::after {
 .legend-dot {
   width: 10px; height: 10px; border-radius: 2px;
 }
+/* ── L5 Edit Mode (overlay CRUD) ── */
+#editToggle{ margin-left:auto; background:var(--gold); color:var(--ink); border-color:var(--gold); font-weight:700; }
+body.edit-on #editToggle{ background:var(--l3); color:#fff; border-color:var(--l3); }
+.edit-hint{ display:none; font-family:'DM Sans',sans-serif; font-size:11px; color:var(--muted);
+  background:var(--parchment2); border-bottom:1px solid var(--border); padding:6px 1.5rem; text-align:center; }
+body.edit-on .edit-hint{ display:block; }
+.rung-wrap{ display:inline-flex; flex-direction:column; gap:3px; vertical-align:top; margin:0 4px 4px 0; }
+.rung-wrap.tomb .tag-link{ opacity:.45; }
+.rung-actions{ display:flex; flex-wrap:wrap; gap:3px; }
+.rbtn{ font-family:'DM Sans',sans-serif; font-size:9.5px; font-weight:600; line-height:1.1;
+  padding:2px 6px; border:1px solid var(--border); border-radius:5px; background:var(--paper);
+  color:var(--gold-dim); cursor:pointer; white-space:nowrap; }
+.rbtn:hover{ background:var(--parchment2); }
+.rbtn-warn{ color:var(--l1); border-color:#e2c4c4; }
+.rung-add{ font-family:'DM Sans',sans-serif; font-size:10px; font-weight:700; padding:3px 9px;
+  margin-top:2px; border:1px dashed var(--gold); border-radius:6px; background:transparent;
+  color:var(--gold-dim); cursor:pointer; display:block; }
+.rung-add:hover{ background:var(--parchment2); }
+/* form fields */
+.rf-l{ display:block; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; color:var(--muted); margin:10px 0 4px; }
+.rf-in{ width:100%; box-sizing:border-box; font-family:'DM Sans',sans-serif; font-size:13px;
+  padding:8px 10px; border:1px solid var(--border); border-radius:7px; background:var(--paper); color:var(--ink); }
+.rf-in:focus{ outline:none; border-color:var(--gold); }
+.rbtn-gold{ background:var(--gold); color:var(--ink); border-color:var(--gold); font-size:12px; padding:7px 16px; font-weight:700; }
+/* toast */
+.pw-toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(12px);
+  font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; padding:10px 18px; border-radius:10px;
+  background:var(--ink); color:var(--paper); box-shadow:0 6px 24px rgba(0,0,0,.28); opacity:0; pointer-events:none;
+  transition:all .25s; z-index:400; max-width:90vw; }
+.pw-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.pw-toast.err{ background:var(--l1); }
+.pw-toast.ok{ background:var(--l3); }
 </style>
 </head>
 <body>
@@ -386,7 +418,9 @@ header::after {
   <button class="fbtn" onclick="filter('competence',this)">⚡ Competence</button>
   <button class="fbtn" onclick="filter('ministry',this)">⛪ Ministry</button>
   <button class="fbtn" onclick="filter('output',this)">🏆 Output</button>
+  <button class="fbtn" id="editToggle" style="display:none" onclick="toggleEdit()">✏️ Edit</button>
 </div>
+<div class="edit-hint">🔒 Levels are the fixed MULTIPLY frame — you customize the rungs within them.</div>
 
 <div class="pipeline" style="padding-top:1.5rem">
   <div class="col-headers">
@@ -526,6 +560,35 @@ header::after {
   </div>
 </div>
 
+<!-- L5 EDIT: add / customize / edit rung form -->
+<div class="modal-overlay" id="rungFormOverlay" onclick="closeRungFormOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-type" id="rfCtx"></div>
+        <div class="modal-title" id="rfTitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeRungForm()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="rf-l">Title <span style="color:var(--l1)">*</span></label>
+      <input id="rfTitleIn" class="rf-in" type="text" maxlength="120" placeholder="e.g. Real-Life Discipleship">
+      <label class="rf-l" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input id="rfTrack" type="checkbox" checked style="width:auto"> Trackable (counts toward a member's progress)
+      </label>
+      <label class="rf-l">Description</label>
+      <textarea id="rfDesc" class="rf-in" rows="3" placeholder="Optional — shown in the rung's detail card"></textarea>
+      <label class="rf-l">Author / Source <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <input id="rfAuthor" class="rf-in" type="text" maxlength="80" placeholder="e.g. Jim Putman">
+      <div id="rfErr" style="color:var(--l1);font-size:12px;min-height:15px;margin-top:6px"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="rbtn" onclick="closeRungForm()">Cancel</button>
+      <button class="rbtn rbtn-gold" onclick="saveRungForm()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
 // MULTIPLY Leadership Pipeline — data-driven render (S58, Path A, read-only)
@@ -556,17 +619,74 @@ const CAT_LABEL = { book:'📚 Book', training:'🎯 Training', lesson:'🎓 Les
 const LEVEL_NAME = {0:'New Believer',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Executive Leader'};
 
 let RUNG_BY_ID = {};
+let OVERLAY_BY_KEY = {}, BASE_KEYS = new Set();
+let editMode = false, RAW_ROWS = [];
+const isEditor = (window.LEADER?.leaderLevel || 0) >= (MultiplyShared.PASTOR_LEVEL || 5);
+
+// ═══════════════════ L5 OVERLAY-CRUD WRITE CONTRACTS ═══════════════════════
+// Client NEVER sends church_id — the server BEFORE INSERT trigger (061,
+// set_church_id_from_jwt) stamps it; RLS enforces church_id = auth_church_id()
+// AND auth_level() >= 5. Overlay unique is a PARTIAL index → no upsert(onConflict);
+// customize/tombstone do manual insert-or-update via OVERLAY_BY_KEY.
+const slug = s => ('x-'+String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Math.random().toString(36).slice(2,6)).slice(0,44);
+function nextSort(level,category){ return 100 + Object.values(RUNG_BY_ID).filter(r=>r.level===level&&r.category===category).length; }
+
+async function loadOverlays(){
+  const { data, error } = await db.from('pathway_rungs').select('*').not('church_id','is',null);
+  OVERLAY_BY_KEY = {}; (data||[]).forEach(r => OVERLAY_BY_KEY[r.level+'|'+r.rung_key] = r);
+  return error;
+}
+async function addRung(level, category, f){
+  return db.from('pathway_rungs').insert({ level, category, rung_key: slug(f.title_en),
+    title_en:f.title_en, description_en:f.description_en||null, trackable:f.trackable!==false,
+    published:true, sort_order:nextSort(level,category), meta:f.author?{author:f.author}:{} });
+}
+async function customizeBase(base, f){
+  const ex = OVERLAY_BY_KEY[base.level+'|'+base.rung_key];
+  const p = { title_en:f.title_en, description_en:f.description_en??base.description_en??null,
+              trackable:f.trackable??base.trackable, published:true, meta:f.meta||base.meta||{} };
+  return ex ? db.from('pathway_rungs').update(p).eq('id', ex.id)
+            : db.from('pathway_rungs').insert({ level:base.level, rung_key:base.rung_key,
+                category:base.category, sort_order:base.sort_order, ...p });
+}
+async function tombstoneBase(base){
+  const ex = OVERLAY_BY_KEY[base.level+'|'+base.rung_key];
+  return ex ? db.from('pathway_rungs').update({ published:false }).eq('id', ex.id)
+            : db.from('pathway_rungs').insert({ level:base.level, rung_key:base.rung_key,
+                category:base.category, title_en:base.title_en, sort_order:base.sort_order, published:false });
+}
+async function restoreBase(base){
+  const ex = OVERLAY_BY_KEY[base.level+'|'+base.rung_key];
+  return ex ? db.from('pathway_rungs').delete().eq('id', ex.id) : { error:null };
+}
+async function editOverlay(r, patch){
+  const { church_id, level, rung_key, id, ...safe } = patch;
+  return db.from('pathway_rungs').update(safe).eq('id', r.id);
+}
+async function deleteOverlay(r){ return db.from('pathway_rungs').delete().eq('id', r.id); }
+async function togglePublish(r){ return db.from('pathway_rungs').update({ published:!r.published }).eq('id', r.id); }
+async function toggleTrackable(r){ return db.from('pathway_rungs').update({ trackable:!r.trackable }).eq('id', r.id); }
 
 async function loadPipeline(){
   const { data, error } = await db.from('pathway_rungs').select('*');
   if (error) throw error;
+  RAW_ROWS = data || [];
+  await loadOverlays();
+  _resolveAndRender();
+}
+function _resolveAndRender(){
+  BASE_KEYS = new Set();
+  RAW_ROWS.forEach(r => { if (r.church_id == null) BASE_KEYS.add(r.level+'|'+r.rung_key); });
   const byKey = {};
-  (data||[]).forEach(r => {
+  RAW_ROWS.forEach(r => {
     const k = r.level + '|' + r.rung_key;
     const ex = byKey[k];
-    if (!ex || (r.church_id && !ex.church_id)) byKey[k] = r;
+    if (!ex || (r.church_id && !ex.church_id)) byKey[k] = r;   // overlay wins by key
   });
-  const rungs = Object.values(byKey).filter(r => r.published !== false);
+  // Read-only: hide published:false. Edit mode: keep tombstoned BASES (key ∈ BASE_KEYS)
+  // so they render greyed + Restore. Everything else unchanged.
+  const rungs = Object.values(byKey).filter(r =>
+    r.published !== false || (editMode && r.church_id && BASE_KEYS.has(r.level+'|'+r.rung_key)));
   RUNG_BY_ID = {};
   rungs.forEach(r => { RUNG_BY_ID[r.id] = r; });
   renderPipeline(rungs);
@@ -587,18 +707,44 @@ function renderPipeline(rungs){
         const cat = pair[0], label = pair[1];
         const items = ((byLC[level]||{})[cat]||[]).slice()
                         .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-        if (!items.length) return;
+        if (!items.length && !editMode) return;   // read-only path: unchanged (skip empty)
         html += '<span class="sec-label">'+label+'</span>';
-        items.forEach(r => {
-          const cls = CAT_TAG[cat] || 'tag-book';
-          const trk = r.trackable ? ' data-track="1"' : '';
-          html += '<button class="tag-link '+cls+'"'+trk+' onclick="openModal(\''+r.id+'\')">'
-                + escapeHTML(r.title_en) + '</button>';
-        });
+        items.forEach(r => { html += _chipHtml(r, cat); });
+        if (editMode) html += '<button class="rung-add" onclick="openAddForm('+level+',\''+cat+'\')">+ Add</button>';
       });
       box.innerHTML = html;
     });
   }
+}
+function _chipHtml(r, cat){
+  const cls = CAT_TAG[cat] || 'tag-book';
+  const trk = r.trackable ? ' data-track="1"' : '';
+  const chip = '<button class="tag-link '+cls+'"'+trk+' onclick="openModal(\''+r.id+'\')">'
+             + escapeHTML(r.title_en) + '</button>';
+  if (!editMode) return chip;                    // edit OFF → byte-identical read-only chip
+  const key = r.level+'|'+r.rung_key;
+  const isBase = (r.church_id == null);
+  const isTomb = (!r.published && r.church_id != null && BASE_KEYS.has(key));
+  if (isTomb){
+    return '<div class="rung-wrap tomb"><button class="tag-link '+cls+'" onclick="openModal(\''+r.id+'\')">'
+      + escapeHTML(r.title_en) + '</button>'
+      + '<div class="rung-actions"><button class="rbtn" onclick="actRestore(\''+r.id+'\')">↩ Restore</button></div></div>';
+  }
+  let actions;
+  if (isBase){
+    actions = '<button class="rbtn" onclick="actCustomize(\''+r.id+'\')">✎ Customize</button>'
+            + '<button class="rbtn rbtn-warn" onclick="actRemove(\''+r.id+'\')">✕ Remove</button>';
+  } else {
+    const trkLbl = r.trackable ? '◉ Trackable' : '○ Trackable';
+    const lastBtn = BASE_KEYS.has(key)
+      ? '<button class="rbtn" onclick="actRevert(\''+r.id+'\')">↩ Revert</button>'
+      : '<button class="rbtn rbtn-warn" onclick="actDelete(\''+r.id+'\')">🗑 Delete</button>';
+    actions = '<button class="rbtn" onclick="actEdit(\''+r.id+'\')">✎ Edit</button>'
+            + '<button class="rbtn" onclick="actHide(\''+r.id+'\')">◎ Hide</button>'
+            + '<button class="rbtn" onclick="actTrackable(\''+r.id+'\')">'+trkLbl+'</button>'
+            + lastBtn;
+  }
+  return '<div class="rung-wrap'+(isBase?' is-base':' is-overlay')+'">'+chip+'<div class="rung-actions">'+actions+'</div></div>';
 }
 
 function openModal(id){
@@ -638,6 +784,94 @@ function filter(type, btn){
   const show = colMap[type] || allCols;
   allCols.forEach(c => { if (!show.includes(c)) document.querySelectorAll(c).forEach(el => el.style.display='none'); });
 }
+
+// ═══════════════════════ L5 EDIT-MODE UI ═══════════════════════════════════
+function toggleEdit(){
+  editMode = !editMode;
+  document.body.classList.toggle('edit-on', editMode);
+  const b = document.getElementById('editToggle');
+  if (b) b.textContent = editMode ? '✓ Done' : '✏️ Edit';
+  _resolveAndRender();
+}
+function _rung(id){ return RUNG_BY_ID[id]; }
+async function _write(promise, ok){
+  try {
+    const res = await promise;
+    if (res && res.error) throw res.error;
+    toast(ok, 'ok');
+    await loadPipeline();   // refreshes overlays + base keys + re-renders
+  } catch(e){ toast('Error: ' + (e.message || e), 'err'); }
+}
+function actCustomize(id){ const r=_rung(id); if(r) openRungForm('customize', r); }
+function actEdit(id){ const r=_rung(id); if(r) openRungForm('edit', r); }
+function openAddForm(level, cat){ openRungForm('add', { level:level, category:cat }); }
+async function actRemove(id){ const r=_rung(id); if(r) _write(tombstoneBase(r), 'Removed from your pathway'); }
+async function actRevert(id){ const r=_rung(id); if(r && confirm('Revert to the MULTIPLY default? Your customization will be discarded.')) _write(restoreBase(r), 'Reverted to default'); }
+async function actDelete(id){ const r=_rung(id); if(r && confirm('Delete this rung?')) _write(deleteOverlay(r), 'Deleted'); }
+async function actHide(id){ const r=_rung(id); if(r) _write(togglePublish(r), 'Hidden'); }
+async function actTrackable(id){ const r=_rung(id); if(r) _write(toggleTrackable(r), r.trackable ? 'No longer trackable' : 'Now trackable'); }
+async function actRestore(id){ const r=_rung(id); if(r) _write(restoreBase(r), 'Restored'); }
+
+// ── Add / Customize / Edit form (sibling modal) ──
+let _rfMode = null, _rfTarget = null;
+function openRungForm(mode, target){
+  _rfMode = mode; _rfTarget = target;
+  const isAdd = (mode === 'add');
+  document.getElementById('rfCtx').textContent =
+    (CAT_LABEL[target.category] || target.category) + ' · Level ' + target.level + ' — ' + (LEVEL_NAME[target.level] || '');
+  document.getElementById('rfTitle').textContent =
+    mode === 'add' ? 'New rung' : (mode === 'customize' ? 'Customize rung' : 'Edit rung');
+  document.getElementById('rfTitleIn').value = isAdd ? '' : (target.title_en || '');
+  document.getElementById('rfTrack').checked  = isAdd ? true : (target.trackable !== false);
+  document.getElementById('rfDesc').value      = isAdd ? '' : (target.description_en || '');
+  document.getElementById('rfAuthor').value    = (target.meta && target.meta.author) || '';
+  document.getElementById('rfErr').textContent = '';
+  document.getElementById('rungFormOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeRungForm(){
+  document.getElementById('rungFormOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function closeRungFormOnOverlay(e){ if (e.target === document.getElementById('rungFormOverlay')) closeRungForm(); }
+async function saveRungForm(){
+  const title = document.getElementById('rfTitleIn').value.trim();
+  if (!title){ document.getElementById('rfErr').textContent = 'Title is required.'; return; }
+  const trackable = document.getElementById('rfTrack').checked;
+  const description_en = document.getElementById('rfDesc').value.trim() || null;
+  const author = document.getElementById('rfAuthor').value.trim();
+  let promise, ok;
+  if (_rfMode === 'add'){
+    const f = { title_en:title, trackable:trackable, description_en:description_en };
+    if (author) f.author = author;
+    promise = addRung(_rfTarget.level, _rfTarget.category, f); ok = 'Added';
+  } else if (_rfMode === 'customize'){
+    const f = { title_en:title, trackable:trackable, description_en:description_en };
+    if (author) f.meta = { author:author };
+    promise = customizeBase(_rfTarget, f); ok = 'Customized';
+  } else {
+    const patch = { title_en:title, trackable:trackable, description_en:description_en };
+    if (author) patch.meta = Object.assign({}, _rfTarget.meta || {}, { author:author });
+    promise = editOverlay(_rfTarget, patch); ok = 'Saved';
+  }
+  try {
+    const res = await promise;
+    if (res && res.error) throw res.error;
+    closeRungForm(); toast(ok, 'ok'); await loadPipeline();
+  } catch(e){ document.getElementById('rfErr').textContent = 'Error: ' + (e.message || e); }
+}
+
+// ── Toast ──
+function toast(msg, kind){
+  let t = document.getElementById('_pwToast');
+  if (!t){ t = document.createElement('div'); t.id = '_pwToast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.className = 'pw-toast show' + (kind === 'err' ? ' err' : ' ok');
+  clearTimeout(t._h); t._h = setTimeout(() => { t.className = 'pw-toast'; }, 2600);
+}
+
+// ── Boot: reveal the Edit toggle only for L5 editors ──
+if (isEditor){ const _et = document.getElementById('editToggle'); if (_et) _et.style.display = ''; }
 
 loadPipeline().catch(e => {
   console.error('Pipeline load failed:', e);
