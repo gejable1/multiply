@@ -403,6 +403,30 @@ body.edit-on .edit-hint{ display:block; }
 .pw-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 .pw-toast.err{ background:var(--l1); }
 .pw-toast.ok{ background:var(--l3); }
+/* ── S59 Step 4: AI-research chip enrichment ── */
+.rung-star{ font-size:11px; line-height:1; margin-left:3px; cursor:default; }
+.rs-badges{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:.75rem; }
+.rs-badge{ font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  padding:3px 9px; border-radius:20px; background:var(--parchment2); color:var(--gold-dim); border:1px solid var(--border); }
+.ss-grid{ display:grid; grid-template-columns:auto 1fr 1fr 1fr; gap:6px; margin:.4rem 0 .75rem; }
+.ss-h{ font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); text-align:center; padding:2px 0; }
+.ss-r{ font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; }
+.ss-cell{ font-size:11.5px; line-height:1.5; color:#3a2e20; background:var(--parchment);
+  border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
+/* Research disclosure (edit-mode + L5 only) */
+.rs-sec{ margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+.rs-h{ font-family:'Cormorant Garamond',serif; font-size:1.05rem; font-weight:700; color:var(--gold-dim); }
+.rs-help{ font-size:11px; color:var(--muted); margin:4px 0 8px; line-height:1.5; }
+.rs-step{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold-dim); font-weight:700; margin:12px 0 4px; }
+.rs-msg{ font-size:11px; min-height:14px; margin-top:6px; line-height:1.4; }
+.rs-ss-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; }
+.rs-mini{ font-size:11px; font-weight:600; color:var(--muted); margin:6px 0 2px; display:block; }
+@media (max-width:560px){
+  .ss-grid{ grid-template-columns:1fr; }
+  .ss-h{ display:none; }
+  .ss-r{ margin-top:6px; color:var(--gold-dim); }
+  .rs-ss-grid{ grid-template-columns:1fr; }
+}
 </style>
 </head>
 <body>
@@ -582,6 +606,58 @@ body.edit-on .edit-hint{ display:block; }
       <textarea id="rfDesc" class="rf-in" rows="3" placeholder="Optional — shown in the rung's detail card"></textarea>
       <label class="rf-l">Author / Source <span style="color:var(--muted);font-weight:400">(optional)</span></label>
       <input id="rfAuthor" class="rf-in" type="text" maxlength="80" placeholder="e.g. Jim Putman">
+
+      <!-- ✨ Research this (edit-mode + L5 only; shown/hidden by openRungForm) -->
+      <div id="rsSection" class="rs-sec" style="display:none">
+        <div class="rs-h">✨ Research this</div>
+        <p class="rs-help">Bring your own AI — copy the prompt, paste it into any AI (ChatGPT, Claude, Gemini…), then paste its reply below to auto-fill this rung's detail.</p>
+
+        <div class="rs-step">1 · Prompt</div>
+        <textarea id="rsPrompt" class="rf-in" rows="5" readonly style="font-size:11px"></textarea>
+        <button class="rbtn" type="button" onclick="rsCopyPrompt()" style="margin-top:6px">📋 Copy prompt</button>
+
+        <div class="rs-step">2 · Paste the AI's reply</div>
+        <textarea id="rsReply" class="rf-in" rows="5" placeholder="Paste the JSON the AI returned…" style="font-size:12px"></textarea>
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-top:6px">
+          <div style="flex:1">
+            <label class="rs-mini" style="margin-top:0">Which AI? (optional)</label>
+            <input id="rsAI" class="rf-in" type="text" maxlength="40" placeholder="e.g. ChatGPT">
+          </div>
+          <button class="rbtn rbtn-gold" type="button" onclick="rsParse()">Parse &amp; preview</button>
+        </div>
+        <div id="rsParseMsg" class="rs-msg"></div>
+
+        <div id="rsPreview" style="display:none">
+          <div class="rs-step">3 · Review &amp; edit, then save</div>
+          <label class="rs-mini">Summary (EN)</label>
+          <textarea id="rsF_summary_en" class="rf-in" rows="3"></textarea>
+          <label class="rs-mini">Summary (TL)</label>
+          <textarea id="rsF_summary_tl" class="rf-in" rows="3"></textarea>
+          <div class="rs-ss-grid">
+            <div><label class="rs-mini">Builds</label><input id="rsF_builds" class="rf-in" type="text" placeholder="character | competency | both"></div>
+            <div><label class="rs-mini">Source type</label><input id="rsF_source_type" class="rf-in" type="text" placeholder="book | training | event…"></div>
+            <div><label class="rs-mini">Author</label><input id="rsF_author" class="rf-in" type="text"></div>
+            <div><label class="rs-mini">Duration</label><input id="rsF_duration" class="rf-in" type="text" placeholder="~6 hrs reading"></div>
+          </div>
+          <label class="rs-mini">Key takeaways (one per line)</label>
+          <textarea id="rsF_takeaways" class="rf-in" rows="4"></textarea>
+          <label class="rs-mini">Scripture refs (one per line)</label>
+          <textarea id="rsF_scriptures" class="rf-in" rows="3"></textarea>
+          <div class="rs-step">Six Sources of Influence</div>
+          <div class="rs-ss-grid">
+            <div><label class="rs-mini">Personal · Motivation</label><textarea id="rsF_pm" class="rf-in" rows="2"></textarea></div>
+            <div><label class="rs-mini">Personal · Ability</label><textarea id="rsF_pa" class="rf-in" rows="2"></textarea></div>
+            <div><label class="rs-mini">Social · Motivation</label><textarea id="rsF_sm" class="rf-in" rows="2"></textarea></div>
+            <div><label class="rs-mini">Social · Ability</label><textarea id="rsF_sa" class="rf-in" rows="2"></textarea></div>
+            <div><label class="rs-mini">Structural · Motivation</label><textarea id="rsF_stm" class="rf-in" rows="2"></textarea></div>
+            <div><label class="rs-mini">Structural · Ability</label><textarea id="rsF_sta" class="rf-in" rows="2"></textarea></div>
+          </div>
+          <label class="rs-mini">External URL</label>
+          <input id="rsF_url" class="rf-in" type="text" placeholder="https://…">
+          <button class="rbtn rbtn-gold" type="button" onclick="rsSaveResearch()" style="margin-top:12px">✨ Save to chip</button>
+        </div>
+      </div>
+
       <div id="rfErr" style="color:var(--l1);font-size:12px;min-height:15px;margin-top:6px"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
@@ -795,7 +871,49 @@ function _chipHtml(r, cat, idx, count){
             + '<button class="rbtn" onclick="actTrackable(\''+r.id+'\')">'+trkLbl+'</button>'
             + lastBtn;
   }
-  return '<div class="rung-wrap'+(isBase?' is-base':' is-overlay')+'">'+chip+'<div class="rung-actions">'+arrows+actions+'</div></div>';
+  const star = (isEditor && editMode && !_hasDetail(r))
+    ? '<span class="rung-star" title="No detail yet — Customize → ✨ Research to fill it">✨</span>' : '';
+  return '<div class="rung-wrap'+(isBase?' is-base':' is-overlay')+'">'+chip+star+'<div class="rung-actions">'+arrows+actions+'</div></div>';
+}
+function _hasStructuredMeta(m){
+  m = m || {};
+  return !!(m.summary_en || (Array.isArray(m.key_takeaways) && m.key_takeaways.length)
+         || (m.six_sources && Object.keys(m.six_sources).length));
+}
+function _hasDetail(r){   // does this rung have any renderable detail (for the ✨ empty-chip marker)?
+  const m = r && r.meta || {};
+  return !!(m.body || _hasStructuredMeta(m) || (r && r.description_en));
+}
+function _richMetaHTML(r, meta){
+  const esc = escapeHTML;
+  let h = '';
+  const badges = [];
+  if (meta.builds)      badges.push(meta.builds);
+  if (meta.duration)    badges.push(meta.duration);
+  if (meta.source_type) badges.push(meta.source_type);
+  if (badges.length) h += '<div class="rs-badges">' + badges.map(b => '<span class="rs-badge">'+esc(b)+'</span>').join('') + '</div>';
+  if (meta.summary_en) h += '<p>'+esc(meta.summary_en)+'</p>';
+  if (meta.summary_tl) h += '<p style="color:var(--muted)">'+esc(meta.summary_tl)+'</p>';
+  if (Array.isArray(meta.key_takeaways) && meta.key_takeaways.length)
+    h += '<h3>Key takeaways</h3><ul>' + meta.key_takeaways.map(t => '<li>'+esc(t)+'</li>').join('') + '</ul>';
+  if (Array.isArray(meta.scripture_refs) && meta.scripture_refs.length)
+    h += '<p><strong>Scriptures:</strong> ' + meta.scripture_refs.map(esc).join(' &nbsp;·&nbsp; ') + '</p>';
+  const ss = meta.six_sources || {};
+  if (Object.keys(ss).length){
+    const cell = k => '<div class="ss-cell">' + (ss[k] ? esc(ss[k]) : '<span style="color:var(--muted)">—</span>') + '</div>';
+    h += '<h3>Six Sources of Influence</h3><div class="ss-grid">'
+       + '<div class="ss-h"></div><div class="ss-h">Personal</div><div class="ss-h">Social</div><div class="ss-h">Structural</div>'
+       + '<div class="ss-r">Motivation</div>' + cell('personal_motivation') + cell('social_motivation') + cell('structural_motivation')
+       + '<div class="ss-r">Ability</div>'    + cell('personal_ability')    + cell('social_ability')    + cell('structural_ability')
+       + '</div>';
+  }
+  if (meta.external_url){
+    const u = String(meta.external_url);
+    if (/^https?:\/\//i.test(u))
+      h += '<p><a href="'+esc(u)+'" target="_blank" rel="noopener" style="color:var(--gold-dim)">Official link ↗</a></p>';
+  }
+  if (meta.author) h += '<div style="margin-top:.75rem;font-size:11px;color:var(--muted)">Author / source: '+esc(meta.author)+'</div>';
+  return h;
 }
 function openModal(id){
   const r = RUNG_BY_ID[id];
@@ -804,9 +922,13 @@ function openModal(id){
   document.getElementById('modalType').textContent  = meta.type
       || ((CAT_LABEL[r.category]||'') + ' · Level ' + r.level + ' — ' + (LEVEL_NAME[r.level]||''));
   document.getElementById('modalTitle').textContent = meta.title || r.title_en || '';
-  document.getElementById('modalBody').innerHTML = meta.body
-      || (r.description_en ? '<p>'+escapeHTML(r.description_en)+'</p>'
-                           : '<p style="color:var(--muted)">Wala pang detalye para sa item na ito. Sa edit mode (susunod na hakbang), magagamit ang ✨ Research para punan ito mula sa kahit anong AI.</p>');
+  let body;
+  if (meta.body) body = meta.body;                       // legacy hand-authored HTML (back-compat)
+  else if (_hasStructuredMeta(meta)) body = _richMetaHTML(r, meta);
+  else body = r.description_en
+      ? '<p>'+escapeHTML(r.description_en)+'</p>'
+      : '<p style="color:var(--muted)">Wala pang detalye para sa item na ito. Sa edit mode, magagamit ang ✨ Research para punan ito mula sa kahit anong AI.</p>';
+  document.getElementById('modalBody').innerHTML = body;
   document.getElementById('modalFooter').textContent = meta.footer || '';
   document.getElementById('modalOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -878,6 +1000,7 @@ function openRungForm(mode, target){
   document.getElementById('rfDesc').value      = isAdd ? '' : (target.description_en || '');
   document.getElementById('rfAuthor').value    = (target.meta && target.meta.author) || '';
   document.getElementById('rfErr').textContent = '';
+  rsSetup(mode, target);   // ✨ Research this — edit-mode + L5 only, customize/edit only
   document.getElementById('rungFormOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -911,6 +1034,164 @@ async function saveRungForm(){
     if (res && res.error) throw res.error;
     closeRungForm(); toast(ok, 'ok'); await loadPipeline();
   } catch(e){ document.getElementById('rfErr').textContent = 'Error: ' + (e.message || e); }
+}
+
+// ═══════════════════ ✨ BRING-YOUR-OWN-AI RESEARCH (S59 Step 4) ═══════════════
+// Edit-mode + L5 only, fail-soft everywhere. Compose a prompt → user pastes it
+// into ANY AI → pastes the reply back → we fail-soft parse → editable preview →
+// Save routes through the EXISTING customizeBase/editOverlay (NO church_id;
+// server trigger 061 stamps it, RLS enforces L5-own-church).
+function buildResearchPrompt(chip){
+  const LEVEL_NAME = {0:'New Believer',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Executive Leader'};
+  const author = (chip.meta && chip.meta.author) || '';
+  return [
+"You are a top-tier expert in Christian disciplemaking and leadership development — fluent in Mac Lake's 5-level model (Leading Yourself -> Others -> Leaders -> a Department -> an Organization), Joseph Grenny's Six Sources of Influence, and biblical formation anchored in Luke 6:40 (a fully-trained disciple becomes like their teacher) and Galatians 5:22-23 (the fruit of the Spirit).",
+"",
+"I'm building a church leadership pipeline. Research this item and return ONLY a JSON object (no prose, no code fences) describing how it forms a disciple.",
+"",
+'ITEM: "'+chip.title_en+'"',
+"Category: "+chip.category+"   Pipeline level: L"+chip.level+" ("+(LEVEL_NAME[chip.level]||'')+")   Author/source: "+(author||'(unknown)'),
+"",
+"Return exactly this shape:",
+"{",
+'  "summary_en": "2-3 sentences: what this is + how it develops a disciple/leader at this level",',
+'  "summary_tl": "the same, in warm conversational Tagalog",',
+'  "builds": "character | competency | both",',
+'  "source_type": "book|training|event|song|movie|assessment|ministry|discipline|other",',
+'  "author": "creator/author if any, else null",',
+'  "duration": "realistic time to complete (e.g. ~6 hrs reading, 2-day retreat)",',
+'  "key_takeaways": ["3-5 short concrete takeaways a disciple should gain"],',
+'  "scripture_refs": ["2-4 anchoring verses, e.g. Luke 6:40"],',
+'  "six_sources": {',
+'    "personal_motivation": "how it makes the disciple WANT to change",',
+'    "personal_ability": "the skill/knowledge it builds",',
+'    "social_motivation": "how discipler/LC encourage it",',
+'    "social_ability": "help/accountability others provide",',
+'    "structural_motivation": "rewards/recognition that reinforce it",',
+'    "structural_ability": "tools/environment that make it easier"',
+'  },',
+'  "external_url": "official link if known, else null"',
+"}",
+"",
+"Ground every field in forming a Luke 6:40 disciple whose character shows Galatians 5:22-23 and whose competence fits leadership at this level. Return ONLY the JSON."
+  ].join("\n");
+}
+function parseResearchJSON(text){
+  if(!text) return {ok:false, raw:text||''};
+  let s = String(text).trim();
+  s = s.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim();   // strip a fence if the AI added one
+  const a=s.indexOf('{'), b=s.lastIndexOf('}');                         // grab the outermost {...} if prose surrounds it
+  if(a!==-1 && b!==-1 && b>a) s=s.slice(a,b+1);
+  try { const o=JSON.parse(s); return {ok:true, data:o}; }
+  catch(e){ return {ok:false, raw:text}; }                              // NEVER throw → UI falls back to manual fields
+}
+function researchToMeta(parsed, aiSource){
+  const p = parsed || {};
+  return {
+    type: null, title: null, body: null,        // keep legacy keys null; structured fields drive the rich modal
+    summary_en: p.summary_en||'', summary_tl: p.summary_tl||'',
+    builds: p.builds||null, source_type: p.source_type||null, author: p.author||null,
+    duration: p.duration||null,
+    key_takeaways: Array.isArray(p.key_takeaways)?p.key_takeaways:[],
+    scripture_refs: Array.isArray(p.scripture_refs)?p.scripture_refs:[],
+    six_sources: p.six_sources||{}, external_url: p.external_url||null,
+    ai_researched_at: new Date().toISOString(), ai_source: aiSource||null
+  };
+}
+async function saveResearch(chip, parsed, aiSource){
+  const meta = Object.assign({}, chip.meta||{}, researchToMeta(parsed, aiSource));
+  const desc = (parsed && parsed.summary_en) || chip.description_en || null;
+  if (chip.church_id == null)   // base chip → create/refresh overlay (NO church_id, server-stamped)
+    return customizeBase(chip, { title_en: chip.title_en, description_en: desc, trackable: chip.trackable, meta });
+  return editOverlay(chip, { description_en: desc, meta });   // own overlay → patch
+}
+
+// ── Research UI (inside the Add/Customize/Edit form modal) ──
+function rsSetup(mode, target){
+  const sec = document.getElementById('rsSection');
+  if (!sec) return;
+  const show = isEditor && editMode && mode !== 'add' && target && target.title_en;
+  sec.style.display = show ? '' : 'none';
+  if (!show) return;
+  document.getElementById('rsPrompt').value = buildResearchPrompt(target);
+  document.getElementById('rsReply').value = '';
+  document.getElementById('rsAI').value = '';
+  const msg = document.getElementById('rsParseMsg'); msg.textContent = ''; msg.style.color = '';
+  document.getElementById('rsPreview').style.display = 'none';
+  rsFill(target.meta || {});   // pre-seed preview fields from any existing meta (edit of an already-researched chip)
+}
+function rsCopyPrompt(){
+  const ta = document.getElementById('rsPrompt');
+  const done = () => toast('Prompt copied — paste it into any AI', 'ok');
+  const fallback = () => { try { ta.focus(); ta.select(); document.execCommand('copy'); done(); }
+                           catch(e){ toast('Select the prompt text and copy manually', 'err'); } };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(ta.value).then(done, fallback);
+  else fallback();
+}
+function _rsSet(id, v){ const el = document.getElementById(id); if (el) el.value = (v==null?'':v); }
+function rsFill(d){
+  d = d || {};
+  const ss = d.six_sources || {};
+  _rsSet('rsF_summary_en', d.summary_en);
+  _rsSet('rsF_summary_tl', d.summary_tl);
+  _rsSet('rsF_builds', d.builds);
+  _rsSet('rsF_source_type', d.source_type);
+  _rsSet('rsF_author', d.author);
+  _rsSet('rsF_duration', d.duration);
+  _rsSet('rsF_takeaways', Array.isArray(d.key_takeaways) ? d.key_takeaways.join('\n') : '');
+  _rsSet('rsF_scriptures', Array.isArray(d.scripture_refs) ? d.scripture_refs.join('\n') : '');
+  _rsSet('rsF_pm', ss.personal_motivation);
+  _rsSet('rsF_pa', ss.personal_ability);
+  _rsSet('rsF_sm', ss.social_motivation);
+  _rsSet('rsF_sa', ss.social_ability);
+  _rsSet('rsF_stm', ss.structural_motivation);
+  _rsSet('rsF_sta', ss.structural_ability);
+  _rsSet('rsF_url', d.external_url);
+}
+function rsParse(){
+  const res = parseResearchJSON(document.getElementById('rsReply').value);
+  const msg = document.getElementById('rsParseMsg');
+  if (res.ok){
+    msg.style.color = 'var(--l3)'; msg.textContent = '✓ Parsed — review & edit below, then Save to chip.';
+    rsFill(res.data || {});
+  } else {
+    msg.style.color = 'var(--l1)'; msg.textContent = '⚠ Couldn’t read that as JSON — fill the fields in manually below, then Save.';
+    // fail-soft: leave whatever is already in the fields; do NOT wipe or throw
+  }
+  document.getElementById('rsPreview').style.display = '';   // show the editable preview either way
+}
+function rsCollect(){
+  const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const lines = id => g(id).split('\n').map(s => s.trim()).filter(Boolean);
+  return {
+    summary_en: g('rsF_summary_en'), summary_tl: g('rsF_summary_tl'),
+    builds: g('rsF_builds') || null, source_type: g('rsF_source_type') || null,
+    author: g('rsF_author') || null, duration: g('rsF_duration') || null,
+    key_takeaways: lines('rsF_takeaways'), scripture_refs: lines('rsF_scriptures'),
+    six_sources: {
+      personal_motivation: g('rsF_pm'), personal_ability: g('rsF_pa'),
+      social_motivation: g('rsF_sm'), social_ability: g('rsF_sa'),
+      structural_motivation: g('rsF_stm'), structural_ability: g('rsF_sta')
+    },
+    external_url: g('rsF_url') || null
+  };
+}
+async function rsSaveResearch(){
+  if (!_rfTarget) return;
+  const collected = rsCollect();
+  const aiSource = (document.getElementById('rsAI').value || '').trim() || null;
+  const msg = document.getElementById('rsParseMsg');
+  try {
+    const res = await saveResearch(_rfTarget, collected, aiSource);
+    if (res && res.error) throw res.error;
+    closeRungForm();
+    toast('Research saved to chip', 'ok');
+    await loadPipeline();   // refreshes overlays + base keys + re-renders (loadPipeline calls loadOverlays)
+  } catch(e){
+    msg.style.color = 'var(--l1)';
+    msg.textContent = 'Error: ' + (e.message || e);
+  }
 }
 
 // ── Toast ──
