@@ -382,6 +382,8 @@ body.edit-on .edit-hint{ display:block; }
   padding:2px 6px; border:1px solid var(--border); border-radius:5px; background:var(--paper);
   color:var(--gold-dim); cursor:pointer; white-space:nowrap; }
 .rbtn:hover{ background:var(--parchment2); }
+.rarrow{ font-family:'DM Sans',sans-serif; font-size:10px; line-height:1; padding:2px 5px; border:1px solid var(--border); border-radius:5px; background:var(--paper); color:var(--gold-dim); cursor:pointer; }
+.rarrow:hover{ background:var(--parchment2); color:var(--ink); }
 .rbtn-warn{ color:var(--l1); border-color:#e2c4c4; }
 .rung-add{ font-family:'DM Sans',sans-serif; font-size:10px; font-weight:700; padding:3px 9px;
   margin-top:2px; border:1px dashed var(--gold); border-radius:6px; background:transparent;
@@ -621,6 +623,7 @@ const LEVEL_NAME = {0:'New Believer',1:'Team Member',2:'Leader',3:'Coach',4:'Dir
 let RUNG_BY_ID = {};
 let OVERLAY_BY_KEY = {}, BASE_KEYS = new Set();
 let editMode = false, RAW_ROWS = [];
+let SECTION_ORDER = {}, SECTION_ORDER_ROW = null;   // 3b: order_map {"level|category":[rung_key,...]}
 const isEditor = (window.LEADER?.leaderLevel || 0) >= (MultiplyShared.PASTOR_LEVEL || 5);
 
 // ═══════════════════ L5 OVERLAY-CRUD WRITE CONTRACTS ═══════════════════════
@@ -667,11 +670,50 @@ async function deleteOverlay(r){ return db.from('pathway_rungs').delete().eq('id
 async function togglePublish(r){ return db.from('pathway_rungs').update({ published:!r.published }).eq('id', r.id); }
 async function toggleTrackable(r){ return db.from('pathway_rungs').update({ trackable:!r.trackable }).eq('id', r.id); }
 
+
+// ─── 3b: full-interleave reorder via order_map (pathway_section_order) ───
+function _sectionComparator(level, cat){
+  const ord = SECTION_ORDER[level+'|'+cat] || [];
+  return (a,b)=>{
+    const ia=ord.indexOf(a.rung_key), ib=ord.indexOf(b.rung_key);
+    if(ia!==-1 && ib!==-1) return ia-ib;        // both ordered → by order_map
+    if(ia!==-1) return -1;                        // ordered before unordered
+    if(ib!==-1) return 1;
+    return (a.sort_order||0)-(b.sort_order||0);   // both unordered → sort_order fallback
+  };
+}
+function sectionRungs(level, cat){
+  // resolved + published (active, reorderable) rungs for this section, in display order
+  return Object.values(RUNG_BY_ID)
+    .filter(r => r.level===level && r.category===cat && r.published !== false)
+    .sort(_sectionComparator(level, cat));
+}
+async function saveSectionOrder(newMap){
+  if (SECTION_ORDER_ROW && SECTION_ORDER_ROW.id)
+    return db.from('pathway_section_order').update({ order_map:newMap, updated_at:new Date().toISOString() }).eq('id', SECTION_ORDER_ROW.id);
+  return db.from('pathway_section_order').insert({ order_map:newMap });   // NO church_id (server-stamped)
+}
+async function moveRung(rung, dir){   // dir: -1 up, +1 down
+  const okey = rung.level+'|'+rung.category;
+  const keys = sectionRungs(rung.level, rung.category).map(r=>r.rung_key);
+  const i = keys.indexOf(rung.rung_key), j = i+dir;
+  if (i<0 || j<0 || j>=keys.length) return;             // at edge → no-op
+  const t=keys[i]; keys[i]=keys[j]; keys[j]=t;          // swap
+  return saveSectionOrder(Object.assign({}, SECTION_ORDER, { [okey]: keys }));
+}
+async function loadSectionOrder(){
+  const { data, error } = await db.from('pathway_section_order').select('id, order_map').maybeSingle();
+  SECTION_ORDER_ROW = data || null;
+  SECTION_ORDER = (data && data.order_map) || {};
+  return error;
+}
+
 async function loadPipeline(){
   const { data, error } = await db.from('pathway_rungs').select('*');
   if (error) throw error;
   RAW_ROWS = data || [];
   await loadOverlays();
+  await loadSectionOrder();
   _resolveAndRender();
 }
 function _resolveAndRender(){
@@ -683,10 +725,10 @@ function _resolveAndRender(){
     const ex = byKey[k];
     if (!ex || (r.church_id && !ex.church_id)) byKey[k] = r;   // overlay wins by key
   });
-  // Read-only: hide published:false. Edit mode: keep tombstoned BASES (key ∈ BASE_KEYS)
-  // so they render greyed + Restore. Everything else unchanged.
+  // Read-only: hide published:false. Edit mode: keep ALL own overlays (hidden new
+  // overlays + tombstoned bases) so they render greyed + Show/Restore (3b Item 1).
   const rungs = Object.values(byKey).filter(r =>
-    r.published !== false || (editMode && r.church_id && BASE_KEYS.has(r.level+'|'+r.rung_key)));
+    r.published !== false || (editMode && r.church_id != null));
   RUNG_BY_ID = {};
   rungs.forEach(r => { RUNG_BY_ID[r.id] = r; });
   renderPipeline(rungs);
@@ -705,18 +747,21 @@ function renderPipeline(rungs){
       let html = '';
       CAT_SECTIONS[col].forEach(function(pair){
         const cat = pair[0], label = pair[1];
-        const items = ((byLC[level]||{})[cat]||[]).slice()
-                        .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+        const items = ((byLC[level]||{})[cat]||[]).slice().sort(_sectionComparator(level, cat));
         if (!items.length && !editMode) return;   // read-only path: unchanged (skip empty)
         html += '<span class="sec-label">'+label+'</span>';
-        items.forEach(r => { html += _chipHtml(r, cat); });
+        const actives = items.filter(r => r.published !== false);   // arrows/positions among active chips
+        items.forEach(r => {
+          const ai = (r.published !== false) ? actives.indexOf(r) : -1;
+          html += _chipHtml(r, cat, ai, actives.length);
+        });
         if (editMode) html += '<button class="rung-add" onclick="openAddForm('+level+',\''+cat+'\')">+ Add</button>';
       });
       box.innerHTML = html;
     });
   }
 }
-function _chipHtml(r, cat){
+function _chipHtml(r, cat, idx, count){
   const cls = CAT_TAG[cat] || 'tag-book';
   const trk = r.trackable ? ' data-track="1"' : '';
   const chip = '<button class="tag-link '+cls+'"'+trk+' onclick="openModal(\''+r.id+'\')">'
@@ -724,12 +769,18 @@ function _chipHtml(r, cat){
   if (!editMode) return chip;                    // edit OFF → byte-identical read-only chip
   const key = r.level+'|'+r.rung_key;
   const isBase = (r.church_id == null);
-  const isTomb = (!r.published && r.church_id != null && BASE_KEYS.has(key));
-  if (isTomb){
+  // hidden own overlay (published:false) → greyed + Restore (base returns) or Show (unhide) — no arrows
+  if (!r.published && r.church_id != null){
+    const btn = BASE_KEYS.has(key)
+      ? '<button class="rbtn" onclick="actRestore(\''+r.id+'\')">↩ Restore</button>'
+      : '<button class="rbtn" onclick="actShow(\''+r.id+'\')">◎ Show</button>';
     return '<div class="rung-wrap tomb"><button class="tag-link '+cls+'" onclick="openModal(\''+r.id+'\')">'
-      + escapeHTML(r.title_en) + '</button>'
-      + '<div class="rung-actions"><button class="rbtn" onclick="actRestore(\''+r.id+'\')">↩ Restore</button></div></div>';
+      + escapeHTML(r.title_en) + '</button><div class="rung-actions">'+btn+'</div></div>';
   }
+  // active chip → reorder arrows (omitted at section edges) + CRUD actions
+  let arrows = '';
+  if (idx > 0)                    arrows += '<button class="rarrow" title="Move up" onclick="actMove(\''+r.id+'\',-1)">▲</button>';
+  if (idx >= 0 && idx < count-1)  arrows += '<button class="rarrow" title="Move down" onclick="actMove(\''+r.id+'\',1)">▼</button>';
   let actions;
   if (isBase){
     actions = '<button class="rbtn" onclick="actCustomize(\''+r.id+'\')">✎ Customize</button>'
@@ -744,9 +795,8 @@ function _chipHtml(r, cat){
             + '<button class="rbtn" onclick="actTrackable(\''+r.id+'\')">'+trkLbl+'</button>'
             + lastBtn;
   }
-  return '<div class="rung-wrap'+(isBase?' is-base':' is-overlay')+'">'+chip+'<div class="rung-actions">'+actions+'</div></div>';
+  return '<div class="rung-wrap'+(isBase?' is-base':' is-overlay')+'">'+chip+'<div class="rung-actions">'+arrows+actions+'</div></div>';
 }
-
 function openModal(id){
   const r = RUNG_BY_ID[id];
   if (!r) return;
@@ -811,6 +861,8 @@ async function actDelete(id){ const r=_rung(id); if(r && confirm('Delete this ru
 async function actHide(id){ const r=_rung(id); if(r) _write(togglePublish(r), 'Hidden'); }
 async function actTrackable(id){ const r=_rung(id); if(r) _write(toggleTrackable(r), r.trackable ? 'No longer trackable' : 'Now trackable'); }
 async function actRestore(id){ const r=_rung(id); if(r) _write(restoreBase(r), 'Restored'); }
+async function actShow(id){ const r=_rung(id); if(r) _write(togglePublish(r), 'Shown'); }
+async function actMove(id, dir){ const r=_rung(id); if(!r) return; const p = moveRung(r, dir); if(!p) return; _write(p, 'Reordered'); }
 
 // ── Add / Customize / Edit form (sibling modal) ──
 let _rfMode = null, _rfTarget = null;
