@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 71,
+  "table_count": 72,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -12039,6 +12039,139 @@
         {
           "name": "trg_set_church_id",
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.pathway_rungs FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
+        }
+      ]
+    },
+    "pathway_section_order": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "order_map",
+          "ordinal": 3,
+          "data_type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 4,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 5,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "unique_constraints": [
+        {
+          "name": "pathway_section_order_church_id_key",
+          "columns": [
+            "church_id"
+          ]
+        }
+      ],
+      "check_constraints": [],
+      "indexes": [
+        {
+          "name": "pathway_section_order_church_id_key",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "church_id"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_section_order_church_id_key ON public.pathway_section_order USING btree (church_id)"
+        },
+        {
+          "name": "pathway_section_order_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX pathway_section_order_pkey ON public.pathway_section_order USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "pathway_section_order_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
+          "with_check": null
+        },
+        {
+          "name": "pathway_section_order_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 5))"
+        },
+        {
+          "name": "pathway_section_order_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "(church_id = auth_church_id())",
+          "with_check": null
+        },
+        {
+          "name": "pathway_section_order_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 5))"
+        }
+      ],
+      "triggers": [
+        {
+          "name": "trg_set_church_id",
+          "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.pathway_section_order FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
     },
