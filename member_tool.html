@@ -10344,11 +10344,18 @@ setInterval(() => {
 }, 30000);
 
 // Hook into renderHome chain
+// PERF: announcements are fetched ONCE on first Home render, then re-rendered
+// from cache on every subsequent render (no per-render DB hit). The interval +
+// visibility handler below keep the cache fresh.
+let _annsLoadedOnce = false;
 const _origRenderHome2 = renderHome;
 renderHome = function(){
   _origRenderHome2();
   try{ renderAttestCard(); }catch(e){ console.warn('[self-attest] renderAttestCard:', e); }
-  try{ loadPinnedAnnouncements(); }catch(e){ console.warn('[announcements]:', e); }
+  try{
+    if(!_annsLoadedOnce){ _annsLoadedOnce = true; loadPinnedAnnouncements(); }
+    else { renderPinnedAnnouncements(); }
+  }catch(e){ console.warn('[announcements]:', e); }
 };
 
 // Also re-render on language toggle
@@ -10359,8 +10366,13 @@ setLang = function(lang){
   try{ if(memberRow) renderPinnedAnnouncements(); }catch(e){}
 };
 
-// Poll for new announcements every 2 minutes (covers post-publish reach)
-setInterval(() => { if (memberRow) loadPinnedAnnouncements(); }, 120000);
+// Poll for new announcements every 2 minutes (covers post-publish reach).
+// PERF: visibility-gated — no DB polling while the PWA is backgrounded; also
+// refetch once when the member returns so they catch anything published while away.
+setInterval(() => { if (memberRow && document.visibilityState === 'visible') loadPinnedAnnouncements(); }, 120000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && memberRow) loadPinnedAnnouncements();
+});
 
 // ═══════════════════════════════════════════════════════════════════════
 // INSTALL HELPER  (How-to-install banner + modal; shared MMT/MLT pattern)
