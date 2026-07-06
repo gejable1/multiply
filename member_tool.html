@@ -2526,6 +2526,10 @@ body.lang-tl .tl-text{display:inline;}
   <div class="lc-detail" id="mtgGuideSheet" onclick="event.stopPropagation()">
     <button class="pr-top-close" onclick="closeMeetingGuideSheet()" aria-label="Close · Isara">✕</button>
     <h2><span class="en-text">📖 This Week's Study</span><span class="tl-text">📖 Aralin Ngayong Linggo</span></h2>
+    <label style="display:block;font-size:12px;color:var(--muted);margin:2px 0 4px">
+      <span class="en-text">Choose a study</span><span class="tl-text">Pumili ng aralin</span>
+    </label>
+    <select id="mtgGuideSelect" class="gc-input" onchange="_mtgSelectGuide(this.value)" style="cursor:pointer;font-weight:600;margin-bottom:12px"></select>
     <div class="lc-detail-meta" id="mtgGuideSheetMeta"></div>
     <div id="mtgGuideBody" style="font-size:14px;line-height:1.65;color:var(--ink)"></div>
     <div class="section-label" style="margin-top:18px"><div class="title">
@@ -6928,6 +6932,7 @@ function normalizePHPhone(raw){
 // ═══════════════════════════════════════════════════════════════
 // ═══════════ This Week's Study — member-facing published Participant's Guide (PR-3) ═══════════
 let _mmtGuide = null;
+let _mmtGuides = [];
 // ── Interactive responses for the study guide (PR-2): i_will / reach / notes,
 //    autosave (mirrors gratitude), optional share-with-leader. Keyed (member, guide). ──
 let _mtgResp = null, _mtgRespTimer = null, _mtgRespWired = false;
@@ -6997,15 +7002,23 @@ function _mtgWireResponse(){
 }
 async function loadMeetingGuide(){
   const wrap = document.getElementById('mtgGuideWrap'); if(!wrap) return;
-  _mmtGuide = null;
+  _mmtGuide = null; _mmtGuides = [];
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('id,participant_md,meeting_date')
+      .select('id,participant_md,meeting_date,devotional_id')
       .eq('status','published')
-      .order('meeting_date',{ ascending:false })
-      .limit(1);
+      .order('meeting_date',{ ascending:false });
     if(error) throw error;
-    _mmtGuide = (data && data[0]) || null;
+    _mmtGuides = data || [];
+    const ids = [...new Set(_mmtGuides.map(g=>g.devotional_id).filter(Boolean))];
+    if(ids.length){
+      try{
+        const { data: devos } = await db.from('devotionals').select('id,title').in('id', ids);
+        const tmap = {}; (devos||[]).forEach(d=>{ tmap[d.id] = d.title; });
+        _mmtGuides.forEach(g=>{ g._title = tmap[g.devotional_id] || ''; });
+      }catch(_e){ /* labels fall back to date-only (fail-soft) */ }
+    }
+    _mmtGuide = _mmtGuides[0] || null;
   }catch(e){ console.error('meeting guide load', e); }
   if(_mmtGuide){
     document.getElementById('mtgGuideMeta').textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
@@ -7014,9 +7027,37 @@ async function loadMeetingGuide(){
     wrap.style.display = 'none';
   }
 }
+function _mtgEsc(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _mtgFmtDate(d){
+  if(!d) return '';
+  const p = String(d).split('-').map(Number);
+  if(p.length!==3 || p.some(isNaN)) return String(d);
+  const dt = new Date(p[0], p[1]-1, p[2]);
+  return dt.toLocaleDateString(undefined,{ month:'short', day:'numeric', year:'numeric' });
+}
+function _mtgPopulateSelect(){
+  const sel = document.getElementById('mtgGuideSelect'); if(!sel) return;
+  const tl = document.body.classList.contains('lang-tl');
+  sel.innerHTML = _mmtGuides.map((g,i)=>{
+    const dstr = _mtgFmtDate(g.meeting_date);
+    const title = g._title ? ' \u2014 ' + _mtgEsc(g._title) : '';
+    const latest = i===0 ? (tl ? ' (pinakabago)' : ' (latest)') : '';
+    return '<option value="'+_mtgEsc(g.id)+'">'+_mtgEsc(dstr)+title+latest+'</option>';
+  }).join('');
+  sel.value = (_mmtGuide && _mmtGuide.id) || (_mmtGuides[0] && _mmtGuides[0].id) || '';
+}
+function _mtgSelectGuide(id){
+  const g = _mmtGuides.find(x=>x.id===id); if(!g) return;
+  clearTimeout(_mtgRespTimer);
+  _mmtGuide = g;
+  document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
+  document.getElementById('mtgGuideBody').innerHTML = mmtMd(_mmtGuide.participant_md || '');
+  mtgLoadResponse();
+}
 function openMeetingGuideSheet(){
   if(!_mmtGuide) return;
-  document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
+  _mtgPopulateSelect();
+  document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
   document.getElementById('mtgGuideBody').innerHTML = mmtMd(_mmtGuide.participant_md || '');
   _mtgWireResponse();
   mtgLoadResponse();
