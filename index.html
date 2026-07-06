@@ -31,9 +31,21 @@
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- PERF (S60): load fonts OFF the critical path. `media=print` makes the
+     browser fetch the stylesheet without render-blocking first paint; onload
+     flips it to `all` so the fonts apply once they arrive. display=swap already
+     prevents invisible text, so the shell paints instantly in the DM Sans
+     fallback and upgrades in place. <noscript> covers JS-off. -->
 <link rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap">
-<script src="multiply_shared.js?v=9"></script>
+  href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap"
+  media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap"></noscript>
+<!-- PERF (S60): DEFER the 159KB shared module so it downloads in parallel with
+     HTML parsing instead of gating first paint. Deferred scripts execute after
+     parse but BEFORE DOMContentLoaded, so boot() (wired to DOMContentLoaded
+     below) still finds MultiplyShared ready. -->
+<script defer src="multiply_shared.js?v=9"></script>
 <style>
   :root{
     --forest:#0e3a2c; --forest-2:#1a5547; --forest-3:#2d6e5a;
@@ -115,6 +127,11 @@
   .ov-btn:hover{ background:rgba(212,175,55,.24); }
   #ovFrame{ flex:1; width:100%; border:none; background:#fff; }
   .hide{ display:none !important; }
+  /* PERF (S60): with shared.js now deferred, the shell markup can paint before
+     boot() runs. Keep the home card hidden until boot() confirms a staying user
+     (L2+) and adds body.shell-ready — so redirect-path users (unauth → login,
+     level<2 → MMT) never flash the toolbar. The forest gradient shows meanwhile. */
+  body:not(.shell-ready) #home{ display:none; }
 </style>
 </head>
 <body>
@@ -160,7 +177,10 @@ let _overlayOpen = false;
 let _curFrameWin = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────
-(function boot(){
+// PERF (S60): shared.js is now DEFERRED (non-render-blocking), so boot() is
+// wired to DOMContentLoaded rather than run inline. Deferred scripts execute
+// before DOMContentLoaded, so MultiplyShared is guaranteed ready here.
+function boot(){
   if (!window.MultiplyShared){ location.replace('member_login.html'); return; }
   // Cover a pre-existing single session (A1): mint the counterpart if eligible.
   try { MultiplyShared.ensureBothSessions(); } catch(e){}
@@ -189,12 +209,23 @@ let _curFrameWin = null;
   // bounce here). Dynamic: a later promotion to L2+ restores the shell + toolbar.
   if (level < 2){ location.replace('member_tool.html'); return; }
 
+  // Staying user (L2+): reveal the shell (kept hidden until now so the redirect
+  // paths above never flash it) and paint their tools.
+  document.body.classList.add('shell-ready');
   document.getElementById('who').textContent = name;
   document.getElementById('roleLine').textContent =
     role ? (role + ' · Level ' + level) : ('Level ' + level);
 
   renderToolbar(level);
-})();
+}
+// Deferred shared.js runs before DOMContentLoaded; if the DOM is somehow already
+// parsed by the time this inline script runs, boot immediately (shared.js will
+// have executed too).
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
 
 // ── Role-toolbar ──────────────────────────────────────────────────────
 function renderToolbar(level){
