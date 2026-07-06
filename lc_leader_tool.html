@@ -1779,21 +1779,27 @@ async function loadMyMembers(){
     if(error) throw error;
     allMembers = data || [];
 
-    // Parallel fetch: which members have a real gifts_diagnostic row?
-    // Failures here are non-fatal — the UI gracefully degrades to treating
-    // all members as "no formal diagnostic" (which means no View buttons,
-    // never a broken state).
+    // Paint the home screen NOW — it does not depend on gifts_diagnostic.
+    refreshScopedMembers();
+    updateScopeCountsMobile();
+    renderHome();
+
+    // PERF (S60): the gifts_diagnostic lookup ONLY powers the member-modal
+    // "View" buttons — never the home screen — so it must not block first
+    // paint. Fetch it AFTER render; when it resolves, re-render the member
+    // list in place if the leader is already looking at it so View buttons
+    // appear without a manual refresh. Failures are non-fatal — the UI
+    // gracefully degrades to "no formal diagnostic" (no View buttons, never
+    // a broken state).
     try {
       const { data: gd } = await db.from('gifts_diagnostic').select('member_id');
       _membersWithGiftsDiag = new Set((gd || []).map(r => r.member_id).filter(Boolean));
+      const ms = document.getElementById('screenMembers');
+      if (ms && ms.classList.contains('active')) renderMemberList();
     } catch(e){
       console.warn('gifts_diagnostic lookup failed; View buttons will be hidden:', e);
       _membersWithGiftsDiag = new Set();
     }
-
-    refreshScopedMembers();
-    updateScopeCountsMobile();
-    renderHome();
   } catch(e) {
     console.error('Could not load members:', e);
     const stats = document.getElementById('statsRow');
@@ -7407,10 +7413,20 @@ async function acknowledgeHeadsUp(noticeId){
   }
 }
 
+// PERF (S60): visibility-gated poller. Skips the DB round-trip while the PWA
+// is backgrounded (phone locked / tab hidden) and does ONE immediate refresh
+// when the leader returns. This is the main cure for "gets slower the longer
+// it's open" — a long-lived session no longer fires background queries the
+// leader never sees.
+function _pollWhenVisible(fn, ms){
+  setInterval(() => { if (!document.hidden) fn(); }, ms);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) fn(); });
+}
+
 // Initial load — fire after a short delay so the gate finishes first
 setTimeout(loadHeadsUps, 800);
 // Re-poll every 2 minutes so leaders see new notices without manual refresh
-setInterval(loadHeadsUps, 120000);
+_pollWhenVisible(loadHeadsUps, 120000);
 
 // ═══════════════════════════════════════════════════════════════════════
 // PENDING CONFIRMATIONS  (LCL-side)
@@ -7595,9 +7611,9 @@ async function submitDispute(attendanceId, reason){
   }
 }
 
-// Initial load + poll every 90s
+// Initial load + poll every 90s (visibility-gated — see _pollWhenVisible)
 setTimeout(loadPendingConfirmations, 1000);
-setInterval(loadPendingConfirmations, 90000);
+_pollWhenVisible(loadPendingConfirmations, 90000);
 
 // ═══════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
