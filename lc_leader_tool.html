@@ -6393,7 +6393,7 @@ async function renderReports(){
           <div style="font-size:14px;font-weight:700;color:var(--text);line-height:1.2">LC Attendance Compliance</div>
           <div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35">Sunday snapshot · Champions / Faithfully Gathering / Awaiting · posted Wednesdays</div>
         </div>
-        <button onclick="_openLessonViewerModal('lc_attendance_report.html?embed=1','LC Attendance Compliance')"
+        <button onclick="_openLessonViewerModal('lc_attendance_report.html?embed=1','LC Attendance Compliance', true)"
           style="padding:8px 14px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
           Open →
         </button>
@@ -9304,7 +9304,7 @@ function _downloadAttachment(url, label){
   try { toast('Downloading ' + (label || 'file') + '…', 'success'); } catch(e) {}
 }
 
-function _openLessonViewerModal(url, label){
+function _openLessonViewerModal(url, label, hideNewTab){
   let modal = document.getElementById('lessonViewerModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -9313,6 +9313,7 @@ function _openLessonViewerModal(url, label){
     document.body.appendChild(modal);
   }
   const esc = MultiplyShared.escapeHTML;
+  const newTabHTML = hideNewTab ? '' : '<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--gold);padding:5px 10px;background:rgba(232,184,75,.12);border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0">↗ New tab</a>';
   modal.innerHTML = `
     <div style="padding:.65rem .9rem;display:flex;align-items:center;gap:.55rem;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
       <button onclick="_closeLessonViewer()" style="background:transparent;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">‹</button>
@@ -9320,8 +9321,7 @@ function _openLessonViewerModal(url, label){
         <div style="font-size:13.5px;color:var(--text);font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</div>
         <!-- URL line removed per Invariant #57 (Session 9): folder slugs are intentionally obscure; href on the "↗ New tab" button retains the URL for browser fetch. -->
       </div>
-      <a href="${esc(url)}" target="_blank" rel="noopener noreferrer"
-        style="font-size:11px;color:var(--gold);padding:5px 10px;background:rgba(232,184,75,.12);border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0">↗ New tab</a>
+      ${newTabHTML}
     </div>
     <iframe src="${esc(url)}" style="flex:1;border:none;width:100%;background:#fff"
       allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
