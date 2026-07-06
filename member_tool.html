@@ -3238,6 +3238,7 @@ function computeStreak(rows){
 // runs in PARALLEL with loadTodaysDevo at boot, so it must query the devotionals
 // table itself rather than read the todayDevo global (which may not be set yet).
 let _devoReflectionGap = false;  // true → show the reminder
+let _devoReflectionReason = 'empty';  // why the gap: 'short' (started but <10 words) | 'empty' (nothing today)
 let _reflectionReminderDismissed = false;  // per-session "maybe later" dismiss
 
 // Build + show the reflection reminder as a centered modal (styled like the MLT
@@ -3251,20 +3252,31 @@ function showReflectionReminderModal(){
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9500;padding:1rem;';
     document.body.appendChild(modal);
   }
-  // Monday reframe: Sunday is intentionally devo-free, so the "yesterday + today
-  // empty" gap is structural, not negligence. On Mondays we swap the (slightly
-  // guilt-toned) "you haven't written lately" for a fresh-week INVITATION that is
-  // true for everyone, regardless of last week's pattern. Other days keep the
-  // gentle original. getDay(): 1 = Monday, local device date (Manila phone = PHT).
+  // Three-way wording so the reminder explains WHY it fired (ends the "but I DID
+  // write something" confusion — Inv #62 + the 10-word rule):
+  //   • 'short'  → started today but under 10 words. ALWAYS this wording, even on
+  //                Monday, since "you haven't written" is simply wrong for them.
+  //   • 'empty' + Monday → keep the fresh-week INVITATION (Sunday is devo-free, so
+  //                the gap is structural, not negligence). getDay(): 1 = Monday, PHT.
+  //   • 'empty' + other day → gentle "God has a word for you — write back" invite.
   const _isMonday = (new Date().getDay() === 1);
-  const _rHeadEn = _isMonday ? 'First things first this week' : 'A space for your heart';
-  const _rHeadTl = _isMonday ? 'Unahin ang Panginoon ngayong linggo' : 'May puwang para sa iyong puso';
-  const _rBodyEn = _isMonday
-    ? "It's Monday. Before the to-do list takes over, give God the first word. Open today's devotional and jot down what He stirs. 🌱"
-    : "You haven't written a reflection lately. Even a sentence on what God is teaching you helps it take root. 🌱";
-  const _rBodyTl = _isMonday
-    ? "Lunes na. Bago madaganan ng to-do list, ibigay muna kay Lord ang unang salita. Buksan ang devotional ngayong araw at magtala kahit isang linya ng ginigising Niya sa puso mo. 🌱"
-    : "Wala ka pang naisusulat na tugon kamakailan. Kahit isang pangungusap lang tungkol sa itinuturo sa'yo ng Diyos, nakatutulong na ito mag-ugat. 🌱";
+  let _rHeadEn, _rHeadTl, _rBodyEn, _rBodyTl;
+  if (_devoReflectionReason === 'short') {
+    _rHeadEn = 'Almost there';
+    _rHeadTl = 'Malapit na';
+    _rBodyEn = "You started a reflection — it's just under 10 words, so it hasn't taken root yet. A sentence or two more and today counts. 🌱";
+    _rBodyTl = "May nasimulan ka nang tugon — kulang pa sa 10 salita, kaya hindi pa ito nag-uugat. Isa o dalawang pangungusap pa at bibilang na ang araw na ito. 🌱";
+  } else if (_isMonday) {
+    _rHeadEn = 'First things first this week';
+    _rHeadTl = 'Unahin ang Panginoon ngayong linggo';
+    _rBodyEn = "It's Monday. Before the to-do list takes over, give God the first word. Open today's devotional and jot down what He stirs. 🌱";
+    _rBodyTl = "Lunes na. Bago madaganan ng to-do list, ibigay muna kay Lord ang unang salita. Buksan ang devotional ngayong araw at magtala kahit isang linya ng ginigising Niya sa puso mo. 🌱";
+  } else {
+    _rHeadEn = 'A space for your heart';
+    _rHeadTl = 'May puwang para sa iyong puso';
+    _rBodyEn = "God already has a word for you today — take a quiet moment to write back. A sentence or two (around 10 words) is all it takes to complete today's devotional. 🌱";
+    _rBodyTl = "May salita nang inihanda ang Diyos para sa'yo ngayon — maglaan ng tahimik na sandali para tumugon. Isa o dalawang pangungusap (mga 10 salita) ang kailangan para makumpleto ang devotional ngayong araw. 🌱";
+  }
   modal.innerHTML = `<div style="background:#fff;max-width:400px;width:100%;border-radius:18px;padding:1.6rem 1.4rem 1.3rem;box-shadow:0 12px 40px rgba(0,0,0,.28);text-align:center;">
     <div style="font-size:34px;line-height:1;margin-bottom:8px;">📝</div>
     <h2 style="font-size:20px;font-weight:800;color:var(--ink,#2a2a2a);margin:0 0 8px;line-height:1.25;">
@@ -3335,6 +3347,10 @@ async function loadReflectionGap(){
     const doneToday = (data || []).some(r => _wordCount(r.reflection) >= 10);
     // Remind only when today's devotional exists AND is not yet done.
     _devoReflectionGap = !doneToday;
+    // Reason for the reminder wording: 'short' if they started today (a non-empty
+    // reflection, just under 10 words) vs 'empty' if nothing is written yet. Lets
+    // the modal explain WHY it re-prompts, ending the "but I wrote something" confusion.
+    _devoReflectionReason = (data || []).some(r => _wordCount(r.reflection) > 0) ? 'short' : 'empty';
   }catch(e){
     // Fail-soft: if we can't read, do NOT nag (never guilt on a read error).
     console.warn('reflection-gap check failed (non-fatal, no reminder):', e);
