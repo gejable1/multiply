@@ -8,6 +8,11 @@
 <title>Intervention Tracker — MULTIPLY</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js?v=9"></script>
+<!-- Embed mode (?embed=1): the shell modal owns the frame. Loading multiply_shared also gives us the
+     church-JWT client, which members RLS (migration 020) requires — anon reads return 0 rows. -->
+<script>try{var _emb=new URLSearchParams(location.search).get('embed')==='1';if(_emb)document.documentElement.classList.add('embed');window._exitTool=function(){if(_emb){try{window.parent._closeLessonViewer();}catch(e){}return true;}return false;};}catch(e){}</script>
+<style>html.embed .loading{position:absolute}html.embed .toast{position:absolute}html.embed .back-btn{display:none}</style>
 <style>
 :root{
   --bg:#f5f0e8;--surface:#ffffff;--surface2:#faf6ef;
@@ -289,13 +294,18 @@ const SB_URL='https://tirzeikbflolaclgtket.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
 let _db = null;
 function getDB() {
-  if (!_db) {
-    try {
-      _db = supabase.createClient('https://tirzeikbflolaclgtket.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8', {
-        auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
-      });
-    } catch(e) { console.error('Supabase init failed:', e); }
-  }
+  if (_db) return _db;
+  // Prefer the SHARED client — it attaches the church-scoped tenancy JWT so requests
+  // run as `authenticated`. members RLS (migration 020) only lets `authenticated` +
+  // matching church_id read/write; a plain-anon client gets 0 rows ("Member not found").
+  try {
+    if (window.MultiplyShared && MultiplyShared.getDB) { _db = MultiplyShared.getDB(); if (_db) return _db; }
+  } catch(e) { console.warn('Shared getDB unavailable, falling back to anon:', e); }
+  try {
+    _db = supabase.createClient(SB_URL, SB_KEY, {
+      auth: {persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
+    });
+  } catch(e) { console.error('Supabase init failed:', e); }
   return _db;
 }
 
@@ -953,6 +963,8 @@ async function saveIntervention() {
 // NAVIGATION
 // ═══════════════════════════════════════
 function goBack() {
+  // In embed mode, "back" closes the shell modal instead of navigating the iframe.
+  if (typeof _exitTool === 'function' && _exitTool()) return;
   // MULTIPLY standing rule: pages opened via window.open(_blank) close
   // themselves on Back so the user returns to the caller tab.
   try { window.close(); } catch(e) {}
