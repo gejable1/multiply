@@ -13825,7 +13825,7 @@ function openCareDetail(memberId){
       ? ' <span style="font-size:10.5px;font-weight:700;color:var(--gold,#a07a28);background:var(--warn-bg,#fef7e0);border-radius:6px;padding:1px 6px;">⚠ no LC meeting held</span>'
       : '';
     const right = (score === null)
-      ? `<span style="${MUT}">— · no data (not counted)</span>`
+      ? `<span style="${MUT}">— · ${obj.note === 'n/a' ? 'not applicable' : 'no data (not counted)'}</span>`
       : `${fmtNum(score)} × ${fmtNum(weight)} = ${fmtNum(score*weight)} <span style="${MUT}">(raw ${esc(fmtRaw(raw))})</span>`;
     return `<div class="crm-metric" style="padding-left:14px"><span>${esc(metricLabel(k))}${noteBadge}</span><span style="white-space:nowrap">${right}</span></div>`;
   }
@@ -13940,7 +13940,7 @@ function openCareDetail(memberId){
     if (ct === 'jsonb_extract') return `${fmtRaw(raw)} ${n === 1 ? 'person' : 'people'} on your EOLO list`;
     if (ct === 'boolean_check') return raw ? 'has an active ministry role' : 'no active ministry role';
     if (ct === 'date_recency') return (raw == null || n >= 99999) ? 'no diagnostic on record' : `last diagnostic ${fmtRaw(raw)} day${n === 1 ? '' : 's'} ago`;
-    if (ct === 'count_rows') return `${fmtRaw(raw)} record${n === 1 ? '' : 's'} in the period`;
+    if (ct === 'count_rows') return cfg.unit ? `${fmtRaw(raw)} ${cfg.unit}` : `${fmtRaw(raw)} record${n === 1 ? '' : 's'} in the period`;
     return `raw ${fmtRaw(raw)}`;
   };
   const tierStr = (meta, v) => {
@@ -13974,7 +13974,7 @@ function openCareDetail(memberId){
   const explainMetric = (key, v, meta, weekStart) => {
     const score = (v.score == null) ? null : Number(v.score);
     const weight = Number(v.weight) || 0;
-    if (score === null) return 'no data recorded — not counted.';
+    if (score === null) return v.note === 'n/a' ? 'not applicable to this member — not counted.' : 'no data recorded — not counted.';
     if (!meta) return `raw ${fmtRaw(v.raw)} → score ${fmtNum(v.score)} × weight ${fmtNum(weight)} = ${fmtNum(Number(v.score) * weight)}.`;
     const win = winStr(meta);
     return `${rawMeaning(meta, v)}${win ? (' (' + win + ')') : ''}. ${tierStr(meta, v)} → score ${fmtNum(score)}. × weight ${fmtNum(weight)} = ${fmtNum(score * weight)}.`;
