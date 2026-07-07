@@ -2970,4 +2970,68 @@ At the S60 open, a `raw.githubusercontent` fetch of the docs returned a pre-S58 
 
 ---
 
+### **279. In-app report embed — full rollout (MLT + MD), two marker conventions**
+
+Every report now opens in-app via `_openLessonViewerModal('X.html?embed=1', label, /*hideNewTab*/true)` (S61 #123 MLT: LC Member/Member Attendance/Quiz Scores; S63 #125 all 5 MD launchers + lcg_pulse). Each report carries an embed pass: newer metrics use `#embedFix` (a head `<script>` stamping `html.embed` + a `<style id="embedFix">` neutralizing its `position:fixed` → `absolute`); the pilot `lc_attendance` uses the OLDER method (`classList.add('embed')` + `html.embed` CSS, no `#embedFix` id) — both are embed-ready, so an `embedFix` grep of 0 is not "unpatched." `member_attendance`'s post-scroll `.detail-overlay` also gets `window.scrollTo(0,0)` on open in embed so the absolute overlay lands in view. The `.crm` care-detail modal is capped at `88vh` with an internally-scrolling body + pinned header so the ✕ is reachable on phone (S62 #124).
+
+**Established July 7, 2026 (Sessions 61–63). Invariant #279 added - count now 279.**
+
+---
+
+### **280. SVI count_rows is fully table-driven + self-prefetching; adding a metric = one seed row, no EF code**
+
+Metrics live in the GLOBAL `svi_metrics` catalog (no `church_id`). The count_rows handler issues its OWN per-metric bulk query from `compute_config {table, member_col, date_col, lookback_days, filter}`, DATE-CAPPED at weekStart (`.gte(lower)` AND `.lt(dateCol, weekStart+1)`) — so forward-dated rows (e.g. the pre-populated preaching schedule) are correctly excluded until they occur. Weight comes from `svi_weight_profiles.weights` JSONB keyed by `metric_key`; `weight <= 0 → skip`, so a newly-seeded metric defaults OFF for every church (opt-in) and disturbs no one until weighted. count_rows returns a NUMBER (never null) → 0 rows scores 0 unless `null_if_zero`.
+
+**Established July 7, 2026 (Session 64). Invariant #280 added - count now 280.**
+
+---
+
+### **281. `null_if_zero` and the sufficiency `metricsTotal--` are a matched pair; two distinct softenings**
+
+`compute_config.null_if_zero:true` → count_rows returns null when count===0 → the metric is EXCLUDED (not zeroed) for non-participants. But the loop pre-increments `metricsTotal` before compute, so a null n/a MUST `metricsTotal--` (and record `note:"n/a"`) — else the extra null denominators push regular members below the `metricsWithData >= ceil(metricsTotal/2)` sufficiency threshold and wrongly flip them to "insufficient." TWO softenings, never conflated: `null` = INAPPLICABLE (opt-in non-participant → excluded from the denominator) vs `floor` (#010, applicable-but-event-didn't-happen → floored to 4). Universal metrics (Prayer Meeting, Celebration) OMIT null_if_zero (0 = legit low signal); opt-in metrics (BTLI, batch, quiz, pathway, meeting-prep, guide-prep, preaching) SET it.
+
+**Established July 7, 2026 (Session 64). Invariant #281 added - count now 281.**
+
+---
+
+### **282. compute-svi-weekly was NOT church-scoped — a latent cross-church weight collision (fixed S64)**
+
+Members + weight profiles were loaded with NO church filter, and profiles were keyed by `applies_to_level` ONLY → different churches' profiles collided (last-loaded wins, non-deterministic). Benign only while every church's profile is a Rosehill copy; the instant a church's weights diverge, tuning may silently not apply. Fix: `church_id` added to both selects; `profilesByChurchLevel` keyed `${church_id}|${level}` + `defaultByChurch` per-church; per-member resolution by `member.church_id` with a no-profile guard (a church without a profile → honest "insufficient", not a crash or a collided score); snapshot stamped `church_id` (#211). This is the prerequisite for per-church weight tuning to take effect at all.
+
+**Established July 7, 2026 (Session 64). Invariant #282 added - count now 282.**
+
+---
+
+### **283. SVI weights are PER-LEVEL — editing "default" does not touch a member at a specific level**
+
+A metric appears in the care-detail modal AND counts toward a member's score only if it has weight>0 for that member's OWN `pipeline_level`. Symptom (S65): new metrics weighted at "default" moved lower-level dormants but NOT the L5 pastor; the tell was `Σweight = 129` (unchanged, the pre-Wave-5a total) in his modal. Fix: weight each metric at every level where it should count (student metrics L1–L2; leader metrics L4–L5). This is a feature — the pipeline is designed to measure different things at different levels.
+
+**Established July 7, 2026 (Session 65). Invariant #283 added - count now 283.**
+
+---
+
+### **284. Care-detail metric explanations are data-driven via `compute_config.unit`**
+
+The care-detail modal's `rawMeaning` count_rows branch reads `cfg.unit` for descriptive text ("6 Prayer Meetings attended"), falling back to the generic "N records in the period" when absent (`065` seeded a `unit` on all 10 Wave-5a metrics). n/a metrics (`note==='n/a'`) render "not applicable to this member — not counted" (vs "no data recorded"). Future metrics self-describe by carrying a `unit` — no modal edit needed. BOTH `multiply_dashboard.html` and `lc_leader_tool.html` have parallel `openCareDetail` explanation logic (rawMeaning/tierStr/explainMetric) — keep them in lockstep (S65 #128 edited both).
+
+**Established July 7, 2026 (Session 65). Invariant #284 added - count now 284.**
+
+---
+
+### **285. compute-svi-weekly is DASHBOARD-deployed (source `index.ts` at repo ROOT) — merging the PR ≠ live**
+
+The SVI compute EF's source lives at repo root as `index.ts` (NOT under `supabase/functions/`). Merging an EF PR updates the repo version-of-record but does NOT deploy it — the Pastor must paste the merged `index.ts` into the Supabase dashboard EF editor and redeploy (Verify-JWT OFF, #224). A CLI `supabase functions deploy compute-svi-weekly` won't find the root source. Reinforces #248: an EF change is a separate human-gated deploy that must land with/before the frontend expects it.
+
+**Established July 7, 2026 (Session 64). Invariant #285 added - count now 285.**
+
+---
+
+### **286. GitHub web-editor commits arrive CRLF → breaks pure-LF; and `schema_migrations` columns**
+
+A migration Gerry commits via the GitHub web editor lands with CRLF, violating the repo's pure-LF rule (`.gitattributes` #151) → git shows a perpetual phantom "modified" (both `064` and `065` did this, fixed by LF-normalization PRs #127 and #129 — pure CRLF→LF, SQL byte-identical). Prevention: route migration commits through CC (LF-clean) or git CLI, never the web editor. Related (reinforces #223 — read columns from schema.json, not memory): `schema_migrations` columns are `version, filename, applied_at, note` (NOT `name, description`); stamp via `insert into public.schema_migrations (version, filename, applied_at, note) values (...) on conflict (version) do nothing`.
+
+**Established July 7, 2026 (Sessions 64–65). Invariant #286 added - count now 286.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
