@@ -5,6 +5,9 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="shortcut icon" href="favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Embed mode (?embed=1): shell modal owns the frame; close via _exitTool. -->
+<script>try{var _emb=new URLSearchParams(location.search).get('embed')==='1';if(_emb)document.documentElement.classList.add('embed');window._exitTool=function(){if(_emb){try{window.parent._closeLessonViewer();}catch(e){}return true;}return false;};}catch(e){}</script>
+<style>html.embed .loading{position:absolute!important}html.embed a[onclick*="goBack"]{display:none}</style>
 <title>Ministry Recommender · MULTIPLY Pipeline</title>
 <style>
   :root {
@@ -1208,6 +1211,7 @@ window.closeModal = function() {
 // MULTIPLY standing rule: pages opened via window.open(_blank) close
 // themselves on Back so the user returns to the caller tab.
 window.goBack = function() {
+  if (typeof _exitTool === 'function' && _exitTool()) return; // In embed mode, close the shell modal
   try { window.close(); } catch(e) {}
   setTimeout(() => {
     if (document.referrer && document.referrer.includes(location.host)) {
