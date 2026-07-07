@@ -2196,11 +2196,8 @@ const GH_BASE = 'https://gejable1.github.io/multiply/';
 function openDebrief(id){
   const m=members.find(x=>x.id===id);
   if(!m){ console.warn('openDebrief: member not found for id', id); toast('Member not found','⚠️'); return; }
-  // Open the window FIRST so the browser keeps the user-gesture context (popup blockers)
-  const url = GH_BASE+'facilitator_debrief_guide.html?id='+encodeURIComponent(id);
-  const w = window.open(url, '_blank');
-  if(!w) toast('Popup blocked — allow popups for this site','⚠️');
-  else toast(`Opening debrief for ${m.name}`,'📋');
+  // Opens in the in-app modal (embed) like the reports / intervention tracker.
+  _openLessonViewerModal('facilitator_debrief_guide.html?id='+encodeURIComponent(id)+'&embed=1','Debrief Guide', true);
 }
 function openTrack(id){
   // Opens in the in-app modal (embed) like the reports; embed=1 lets the tracker
@@ -9756,7 +9753,7 @@ async function rProfileTab(m) {
         <div style="font-size:13px;font-weight:700;color:${sec.color};flex:1">${sec.label}</div>
         ${taken?`<div style="font-size:10px;color:var(--lighter)">Taken: ${taken}</div>`:'<div style="font-size:10px;background:#fff3cd;color:#856404;padding:2px 8px;border-radius:10px;font-weight:600">Not yet taken</div>'}
         <button onclick="copyProfileLink('${sec.key}','${m.id}')" title="Send link to member" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">📤 Send</button>
-        ${data ? `<button onclick="window.open(getResultsUrl('${sec.key}','${m.id}'),'_blank')" style="font-size:11px;padding:4px 10px;background:var(--green-bg);border:1.5px solid rgba(42,92,64,.3);border-radius:6px;cursor:pointer;color:var(--green);font-weight:600;font-family:'DM Sans',sans-serif">👁 View Results</button>` : ''}
+        ${data ? `<button onclick="_openLessonViewerModal(getResultsUrl('${sec.key}','${m.id}')+'&embed=1','Assessment Results', true)" style="font-size:11px;padding:4px 10px;background:var(--green-bg);border:1.5px solid rgba(42,92,64,.3);border-radius:6px;cursor:pointer;color:var(--green);font-weight:600;font-family:'DM Sans',sans-serif">👁 View Results</button>` : ''}
         <button onclick="window.open(getProfileUrl('${sec.key}','${m.id}'),'_blank')" title="Retake assessment" style="font-size:11px;padding:4px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif">${data ? '🔄 Retake' : '▶ Take'}</button>
       </div>
       <div id="result-${sec.key}" style="display:none">${rendered ? `<div style="padding:.65rem 1rem;border-top:1px solid var(--border)">${caveat}${rendered}</div>` : ''}</div>

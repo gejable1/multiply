@@ -5,6 +5,9 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="shortcut icon" href="favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Embed mode (?embed=1): the shell modal owns the frame; auth already handled via _readTenancyJwt. -->
+<script>try{var _emb=new URLSearchParams(location.search).get('embed')==='1';if(_emb)document.documentElement.classList.add('embed');window._exitTool=function(){if(_emb){try{window.parent._closeLessonViewer();}catch(e){}return true;}return false;};}catch(e){}</script>
+<style>html.embed #viewerCloseBtn{display:none}</style>
 <title>Profile Results — MULTIPLY Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -169,6 +172,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);font
 // navigate THIS tab to the firing page via the same-host referrer, then history,
 // then a safe home as a last resort that should rarely hit.
 function viewerClose(){
+  // In embed mode, close the shell modal instead of navigating the iframe.
+  if (typeof _exitTool === 'function' && _exitTool()) return;
   try { window.close(); } catch(e) {}
   setTimeout(() => {
     try {
