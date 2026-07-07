@@ -882,15 +882,18 @@ const CHECKIN_LABELS = {
   okay:           '👍 Okay, tuloy pa rin',
 };
 window._checkinByLeader = {};
+window._celebrationByLeader = {};
 async function loadCheckins() {
   window._checkinByLeader = {};
+  window._celebrationByLeader = {};
   try {
     const { data, error } = await db.from('lcg_leader_checkins')
-      .select('leader_member_id, status, reason_code, note, responded_at, sent_at')
+      .select('leader_member_id, status, reason_code, note, responded_at, sent_at, kind')
       .order('sent_at', { ascending: false });
     if (error) throw error;
     (data || []).forEach(r => {
-      if (!window._checkinByLeader[r.leader_member_id]) window._checkinByLeader[r.leader_member_id] = r;
+      const map = (r.kind === 'celebration') ? window._celebrationByLeader : window._checkinByLeader;
+      if (!map[r.leader_member_id]) map[r.leader_member_id] = r;
     });
   } catch (e) { console.error('loadCheckins failed:', e); }
 }
@@ -910,6 +913,14 @@ function _checkinChipHtml(leaderId) {
   const click = clickable ? ` onclick="openCheckinDetailModal('${leaderId}')" ` : '';
   const cur = clickable ? 'cursor:pointer;' : '';
   return `<div ${click}style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${cur}${style}">${text}${hint}</div>`;
+}
+
+function _celebrationChipHtml(leaderId) {
+  const c = window._celebrationByLeader[leaderId];
+  if (!c) return '';
+  const when = c.sent_at ? humanDate(c.sent_at) : '';
+  const style = 'background:rgba(80,170,120,.15);color:#7fd0a3;border:1px solid rgba(80,170,120,.4)';
+  return `<div style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${style}">🏆 Celebrated${when ? ' ' + when : ''}</div>`;
 }
 
 function openCheckinDetailModal(leaderId) {
@@ -1108,6 +1119,7 @@ function render() {
                   🏆 Celebrate ${escapeHTML((e.leader.name||'').split(' ')[0])}
                 </button>
               ` : ''}
+              ${_celebrationChipHtml(e.leader.id)}
             </div>`;
         }).join('')}
       </div>
@@ -1438,6 +1450,8 @@ function openLeaderShareModal(leaderId, kind) {
     : '🟢 Open WhatsApp & pick contact';
   const sendBtn = (kind === 'checkin')
     ? `<button onclick="_pulseSendCheckIn(this)" style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">📨 Send in-app check-in</button>`
+    : (kind === 'celebrate')
+    ? `<button onclick="_pulseSendCelebration(this)" style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">🏆 Send celebration in-app</button>`
     : '';
 
   modal.innerHTML = `
@@ -1496,6 +1510,23 @@ async function _pulseSendCheckIn(btn) {
     if (typeof reloadAndRender === 'function') reloadAndRender();
   } catch (e) {
     console.error('send check-in error:', e);
+    toast('Could not send: ' + (e.message || e), 'error');
+  }
+}
+
+async function _pulseSendCelebration(btn) {
+  if ((L.leaderLevel || 0) < 3) { toast('Send is for Coaches, Directors, and Pastor', 'error'); return; }
+  const d = window._pulseShareData;
+  if (!d || !d.targetLeaderId) { toast('Leader not found', 'error'); return; }
+  try {
+    const { error } = await db.from('lcg_leader_checkins')
+      .insert({ leader_member_id: d.targetLeaderId, sent_by: L.leaderId || null, status: 'sent', kind: 'celebration', message: d.fullText || d.plainText || null });
+    if (error) throw error;
+    toast('🏆 Celebration recorded for ' + (d.firstName || 'this leader'), 'success');
+    btn.closest('.share-link-modal')?.remove();
+    if (typeof reloadAndRender === 'function') reloadAndRender();
+  } catch (e) {
+    console.error('send celebration error:', e);
     toast('Could not send: ' + (e.message || e), 'error');
   }
 }
