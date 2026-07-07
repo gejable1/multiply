@@ -770,7 +770,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         Celebrate Champions · Encourage Faithful Gatherers · Gently nudge Awaiting groups
       </div>
     </div>
-    <button onclick="window.open('lc_attendance_report.html','_blank')"
+    <button onclick="_openLessonViewerModal('lc_attendance_report.html?embed=1','LC Attendance Compliance', true)"
             style="background:#b8860b;color:#fff;border:none;border-radius:10px;
                    padding:10px 18px;font-family:'DM Sans',sans-serif;font-weight:700;
                    font-size:13px;cursor:pointer;white-space:nowrap;
@@ -795,7 +795,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         See which LCGs are meeting weekly · spot silent groups · one-tap leader check-in
       </div>
     </div>
-    <button onclick="window.open('lcg_pulse_report.html','_blank')"
+    <button onclick="_openLessonViewerModal('lcg_pulse_report.html?embed=1','LCG Pulse Report', true)"
             style="background:#c2410c;color:#fff;border:none;border-radius:10px;
                    padding:10px 18px;font-family:'DM Sans',sans-serif;font-weight:700;
                    font-size:13px;cursor:pointer;white-space:nowrap;
@@ -820,7 +820,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         Each LCG · 7 assessment pills per member · salvation + intervention status at a glance
       </div>
     </div>
-    <button onclick="window.open('lc_member_report.html','_blank')"
+    <button onclick="_openLessonViewerModal('lc_member_report.html?embed=1','LC Member Report', true)"
             style="background:#2a5c40;color:#fff;border:none;border-radius:10px;
                    padding:10px 18px;font-family:'DM Sans',sans-serif;font-weight:700;
                    font-size:13px;cursor:pointer;white-space:nowrap;
@@ -845,7 +845,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         Per-member attendance across all events · Sunday &amp; Prayer split f2f/online · filterable columns
       </div>
     </div>
-    <button onclick="window.open('member_attendance_report.html','_blank')"
+    <button onclick="_openLessonViewerModal('member_attendance_report.html?embed=1','Member Attendance Breakdown', true)"
             style="background:#3d6b8c;color:#fff;border:none;border-radius:10px;
                    padding:10px 18px;font-family:'DM Sans',sans-serif;font-weight:700;
                    font-size:13px;cursor:pointer;white-space:nowrap;
@@ -870,7 +870,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         Usbong + BTLI · best of retakes
       </div>
     </div>
-    <button onclick="window.open('quiz_scores_report.html','_blank')"
+    <button onclick="_openLessonViewerModal('quiz_scores_report.html?embed=1','Quiz Scores', true)"
             style="background:#7c3aed;color:#fff;border:none;border-radius:10px;
                    padding:10px 18px;font-family:'DM Sans',sans-serif;font-weight:700;
                    font-size:13px;cursor:pointer;white-space:nowrap;
@@ -14012,6 +14012,38 @@ function openCareDetail(memberId){
     </div>`;
   document.getElementById('crModalOverlay').classList.add('show');
 }
+// ── In-app report viewer overlay (ported verbatim from MLT, Invariant #275).
+//    Renders an auth-gated report inside a same-origin iframe so it opens
+//    IN-APP instead of an Android custom-tab; shares this page's session. ──
+function _openLessonViewerModal(url, label, hideNewTab){
+  let modal = document.getElementById('lessonViewerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'lessonViewerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;z-index:9500';
+    document.body.appendChild(modal);
+  }
+  const esc = MultiplyShared.escapeHTML;
+  const newTabHTML = hideNewTab ? '' : '<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--gold);padding:5px 10px;background:rgba(232,184,75,.12);border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0">↗ New tab</a>';
+  modal.innerHTML = `
+    <div style="padding:.65rem .9rem;display:flex;align-items:center;gap:.55rem;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+      <button onclick="_closeLessonViewer()" style="background:transparent;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 8px;line-height:1">‹</button>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-size:13.5px;color:var(--text);font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</div>
+        <!-- URL line removed per Invariant #57 (Session 9): folder slugs are intentionally obscure; href on the "↗ New tab" button retains the URL for browser fetch. -->
+      </div>
+      ${newTabHTML}
+    </div>
+    <iframe src="${esc(url)}" style="flex:1;border:none;width:100%;background:#fff"
+      allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+  `;
+}
+
+function _closeLessonViewer(){
+  const m = document.getElementById('lessonViewerModal');
+  if (m) m.remove();
+}
+
 function closeCareDetail(){
   const ov = document.getElementById('crModalOverlay');
   if (ov) ov.classList.remove('show');
