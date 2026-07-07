@@ -114,23 +114,24 @@ async function runComputation(supabase: any, params: any) {
   // Load weight profiles
   const { data: profiles, error: pErr } = await supabase
     .from("svi_weight_profiles")
-    .select("profile_key,applies_to_level,weights,zone_thresholds,trend_thresholds")
+    .select("profile_key,applies_to_level,weights,zone_thresholds,trend_thresholds,church_id")
     .eq("is_active", true);
   if (pErr) throw new Error(`Loading svi_weight_profiles: ${pErr.message}`);
 
-  const profilesByLevel = new Map<number | null, any>();
+  const profilesByChurchLevel = new Map<string, any>();
+  const defaultByChurch = new Map<string, any>();
   for (const p of profiles || []) {
-    profilesByLevel.set(p.applies_to_level, p);
+    profilesByChurchLevel.set(`${p.church_id}|${p.applies_to_level}`, p);
+    if (p.applies_to_level === null) defaultByChurch.set(String(p.church_id), p);
   }
-  const defaultProfile = profilesByLevel.get(null);
-  if (!defaultProfile) {
-    throw new Error("No default svi_weight_profile (applies_to_level IS NULL) found.");
+  if (defaultByChurch.size === 0) {
+    throw new Error("No default svi_weight_profile (applies_to_level IS NULL) found for any church.");
   }
 
   // Load active members
   let memberQuery = supabase
     .from("members")
-    .select("id,name,lc_group,pipeline_level,discipler_id,ministry_role,ministry,ministry2,ministry3,eolo,enrolled_date,is_test_member")
+    .select("id,name,lc_group,pipeline_level,discipler_id,ministry_role,ministry,ministry2,ministry3,eolo,enrolled_date,is_test_member,church_id")
     .or("is_test_member.is.null,is_test_member.eq.false");
 
   if (params.member_id) {
@@ -268,7 +269,7 @@ async function runComputation(supabase: any, params: any) {
   for (const member of members) {
     try {
       const snapshot = computeMemberSnapshot(
-        member, metrics, profilesByLevel, defaultProfile, weekStart, systemStartDate, meetingsHeld, prefetch
+        member, metrics, profilesByChurchLevel, defaultByChurch, weekStart, systemStartDate, meetingsHeld, prefetch
       );
       results.push(snapshot);
     } catch (e) {
@@ -314,12 +315,20 @@ async function runComputation(supabase: any, params: any) {
 // =====================================================================
 function computeMemberSnapshot(
   member: any, metrics: any[],
-  profilesByLevel: Map<any, any>, defaultProfile: any,
+  profilesByChurchLevel: Map<string, any>, defaultByChurch: Map<string, any>,
   weekStart: string, systemStartDate: string | null,
   meetingsHeld: Map<string, Set<string>>, prefetch: any
 ) {
   const level = member.pipeline_level ?? 0;
-  const profile = profilesByLevel.get(level) || defaultProfile;
+  const _ck = String(member.church_id);
+  const profile = profilesByChurchLevel.get(`${_ck}|${level}`) || defaultByChurch.get(_ck);
+  if (!profile) {
+    return { member_id: member.id, member_name: member.name, church_id: member.church_id,
+      lc_group: member.lc_group, pipeline_level: level, week_start: weekStart,
+      profile_used: null, metric_scores: {}, category_scores: {}, total_score: null,
+      zone: "insufficient", trend: "new", trend_delta: null,
+      metrics_with_data: 0, metrics_total: 0 };
+  }
   const weights: Record<string, number> = profile.weights || {};
   const zoneThresholds = profile.zone_thresholds || { thriving: 70, warming: 40 };
   const trendThresholds = profile.trend_thresholds || { up: 5, down: -5 };
@@ -364,6 +373,11 @@ function computeMemberSnapshot(
       raw = null;
     }
 
+    if (raw === null && metric.compute_config?.null_if_zero) {
+      metricsTotal--;
+      metricScores[metric.metric_key] = { raw: null, score: null, weight, category: metric.category, note: "n/a" };
+      continue;
+    }
     let score = (raw === null || raw === undefined) ? null : applyScoreRules(raw, metric.score_rules);
     let note: string | null = null;
 
@@ -429,6 +443,7 @@ function computeMemberSnapshot(
   return {
     member_id: member.id,
     member_name: member.name,
+    church_id: member.church_id,
     lc_group: member.lc_group,
     pipeline_level: level,
     week_start: weekStart,
@@ -605,12 +620,14 @@ function computeDateRecency(member: any, metric: any, weekStart: string, prefetc
 // The bulk prefetch already applied each metric's table/member_col/date_col/
 // lookback/filter and grouped a per-member count into prefetch.countByMetric.
 // (window/filter semantics identical to the prior per-member count query.)
-function computeCountRows(member: any, metric: any, prefetch: any): number {
+function computeCountRows(member: any, metric: any, prefetch: any): number | null {
   if (!metric.compute_config?.table) {
     throw new Error(`compute_config.table missing for ${metric.metric_key}`);
   }
   const cm = prefetch.countByMetric.get(metric.metric_key);
-  return cm ? (cm.get(member.id) || 0) : 0;
+  const _c = cm ? (cm.get(member.id) || 0) : 0;
+  if (_c === 0 && metric.compute_config?.null_if_zero) return null;
+  return _c;
 }
 
 // =====================================================================
@@ -666,6 +683,7 @@ async function writeSnapshots(supabase: any, snapshots: any[], weekStart: string
   const rows = snapshots.map((s: any) => ({
     member_id: s.member_id,
     member_name: s.member_name,
+    church_id: s.church_id,
     lc_group: s.lc_group,
     pipeline_level: s.pipeline_level,
     week_start: weekStart,
