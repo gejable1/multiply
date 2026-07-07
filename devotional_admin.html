@@ -6,6 +6,8 @@
 <title>MULTIPLY — Devotional Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Word (.docx) → raw text, browser-side only. Read once, never uploaded/stored. -->
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.12.0/mammoth.browser.min.js"></script>
 <script src="multiply_shared.js?v=9"></script>
 <style>
 :root{
@@ -230,6 +232,24 @@ body{
 .bulk-info code{
   background:#fff;padding:1px 5px;border-radius:3px;
   font-family:ui-monospace,monospace;font-size:11px;
+}
+.upload-row{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 14px;margin-bottom:12px;
+  background:var(--gold-bg);border:1px solid var(--line-strong);
+  border-radius:10px;
+}
+.upload-row .upload-hint{
+  font-size:11.5px;color:var(--muted);font-style:italic;line-height:1.5;flex:1;min-width:180px;
+}
+.upload-row .upload-status{
+  font-size:12px;font-weight:600;color:var(--forest);
+}
+.upload-row .upload-status.err{color:var(--red);}
+.paste-divider{
+  font-size:11px;font-weight:700;color:var(--lighter);
+  letter-spacing:.12em;text-transform:uppercase;
+  text-align:center;margin:2px 0 10px;
 }
 .bulk-textarea{
   width:100%;min-height:280px;
@@ -482,7 +502,20 @@ body{
       <strong>📝 Weekly Summary blocks</strong> (appearing after Saturday's Prayer) are captured and stored on that Saturday's entry — they render as a 6th section in MMT at week's close.
       <br>
       <strong>Tip:</strong> Copy entire pages/document as plain text. Section headers should be on their own lines.
+      <br>
+      <strong>📄 Or just upload the file</strong> — a Word (<code>.docx</code>) or plain-text (<code>.txt</code>) devotional guide. It's read once in your browser to fill the box below, then discarded — nothing is uploaded or stored.
     </div>
+
+    <!-- Upload source file → fills the paste box → auto-parses. Read-only, never saved. -->
+    <div class="upload-row">
+      <input type="file" id="fileInput" accept=".docx,.txt" style="display:none"
+             onchange="handleFileUpload(this.files && this.files[0])">
+      <button class="btn primary" onclick="document.getElementById('fileInput').click()">📄 Upload Source File</button>
+      <span class="upload-hint">Word (.docx) or plain text (.txt) — read once in your browser, never stored.</span>
+      <span id="uploadStatus" class="upload-status"></span>
+    </div>
+
+    <div class="paste-divider">— or paste text manually below —</div>
 
     <textarea id="bulkText" class="bulk-textarea" placeholder="Paste your full month's devotional content here…&#10;&#10;Example format:&#10;&#10;May 1, 2025&#10;Title: The Dusty Carousel: Chasing the Wind&#10;&#10;Illustrative Story:&#10;…&#10;&#10;Passage:&#10;Ecclesiastes 1:1-11 (ESV)&#10;1 The words of the Preacher…&#10;&#10;Expository Explanation:&#10;…&#10;&#10;Response:&#10;…&#10;&#10;Prayer:&#10;…&#10;&#10;May 2, 2025&#10;Title: …&#10;…"></textarea>
 
@@ -793,6 +826,70 @@ function confirmDelete(){
       }
     }
   );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILE UPLOAD → extract raw text → reuse the bulk-paste pipeline.
+// Word (.docx) via mammoth.extractRawText; plain text (.txt) via Blob.text().
+// The file is read ONCE into browser memory and never uploaded or stored —
+// only the parsed devotional rows are saved, exactly like paste. Fail-closed
+// on every error path (unsupported type, reader not loaded, empty/short text).
+// ═══════════════════════════════════════════════════════════════
+async function handleFileUpload(file){
+  const statusEl = document.getElementById('uploadStatus');
+  const setStatus = (msg, isErr) => {
+    statusEl.textContent = msg || '';
+    statusEl.classList.toggle('err', !!isErr);
+  };
+  if(!file){ resetFileInput(); return; }
+
+  const name  = file.name || 'file';
+  const lower = name.toLowerCase();
+  const isDocx = lower.endsWith('.docx');
+  const isTxt  = lower.endsWith('.txt');
+  if(!isDocx && !isTxt){
+    setStatus('', false);
+    showToast('Only Word (.docx) or plain text (.txt) files are supported', true);
+    resetFileInput();
+    return;
+  }
+
+  setStatus(`Reading ${name}…`, false);
+  try{
+    let text = '';
+    if(isDocx){
+      if(typeof mammoth === 'undefined' || !mammoth.extractRawText){
+        throw new Error('Word reader not loaded — check your connection and retry');
+      }
+      const buf = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buf });
+      text = (result && result.value) || '';
+    } else {
+      text = await file.text();
+    }
+
+    if(!text || text.trim().length < 50){
+      setStatus('', false);
+      showToast('That file looks empty or too short to parse', true);
+      resetFileInput();
+      return;
+    }
+
+    document.getElementById('bulkText').value = text;
+    setStatus(`✓ Loaded ${name}`, false);
+    parseBulk(); // run the SAME Parse & Preview pipeline — nothing saves until you confirm
+  }catch(e){
+    console.error('File upload failed:', e);
+    setStatus('', false);
+    showToast('Could not read file: ' + (e && e.message ? e.message : 'unknown error'), true);
+  }
+  // Reset so re-selecting the SAME file still fires onchange next time.
+  resetFileInput();
+}
+
+function resetFileInput(){
+  const inp = document.getElementById('fileInput');
+  if(inp) inp.value = '';
 }
 
 // ═══════════════════════════════════════════════════════════════
