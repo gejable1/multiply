@@ -1131,6 +1131,10 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
         style="flex:1;min-width:120px;font-family:inherit;font-size:11.5px;font-weight:600;padding:8px 10px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
         🏆 LC Celebrate
       </button>
+      <button class="grtab" id="grtab-encourage" onclick="switchGreetingTab('encourage')"
+        style="flex:1;min-width:120px;font-family:inherit;font-size:11.5px;font-weight:600;padding:8px 10px;background:transparent;color:var(--muted);border:none;border-radius:6px;cursor:pointer">
+        📲 LC Encourage
+      </button>
     </div>
 
     <!-- PROFILE EDIT GREETING -->
@@ -1186,6 +1190,21 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       </div>
       <textarea id="celebrateTemplate" rows="9"
         placeholder="Hi Pastor {firstName}! 🏆..."
+        style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
+    </div>
+
+    <!-- LC ENCOURAGEMENT GREETING -->
+    <div id="grpane-encourage" style="display:none">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+        Sent from the LCG Pulse Report to encourage Building-Rhythm LCGs that met this week but not every week yet. Placeholders:
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px">{firstName}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{weeksMet}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{totalWeeks}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{lcGroup}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--gold);font-size:10.5px;margin-left:3px">{senderName}</code>
+      </div>
+      <textarea id="encourageTemplate" rows="9"
+        placeholder="Hi Pastor {firstName}! 🙏..."
         style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.55;resize:vertical;min-height:140px"></textarea>
     </div>
 
@@ -11187,11 +11206,19 @@ const _DEFAULT_CELEBRATE_GREETING =
   'at malasakit sa mga kapatid. Ipinagdarasal kita! 🙏💚\n\n' +
   'Keep up the great work!\n— {senderName}';
 
+const _DEFAULT_ENCOURAGE_GREETING =
+  'Hi Pastor {firstName}! 🙏\n\n' +
+  'Nakita ko na patuloy na nabubuo ang rhythm ng LCG mo sa {lcGroup} — ' +
+  'nakapag-meeting kayo {weeksMet} sa {totalWeeks} na linggo. Malapit ka nang maging Champion! ' +
+  'Ipagpatuloy mo lang, kapatid — nandito ako kung may maipagdadasal o maitutulong ako.\n\n' +
+  'God bless po!\n— {senderName}';
+
 // In-memory copies — populated by loadGreetingTemplates()
 let _greetingTemplate  = _DEFAULT_PROFILE_GREETING;
 let _assessTemplate    = _DEFAULT_ASSESS_GREETING;
 let _checkinTemplate   = _DEFAULT_CHECKIN_GREETING;
 let _celebrateTemplate = _DEFAULT_CELEBRATE_GREETING;
+let _encourageTemplate = _DEFAULT_ENCOURAGE_GREETING;
 // Tracks which tab is shown in Settings (for Reset/Preview buttons)
 let _currentGreetingTab = 'profile';
 
@@ -11205,6 +11232,8 @@ function _buildGreeting(template, vars){
     .replace(/\{assessName\}/g,   vars.assessName   || 'assessment')
     .replace(/\{silenceWeeks\}/g, String(vars.silenceWeeks != null ? vars.silenceWeeks : ''))
     .replace(/\{streakWeeks\}/g,  String(vars.streakWeeks  != null ? vars.streakWeeks  : ''))
+    .replace(/\{weeksMet\}/g,     String(vars.weeksMet     != null ? vars.weeksMet     : ''))
+    .replace(/\{totalWeeks\}/g,   String(vars.totalWeeks   != null ? vars.totalWeeks   : ''))
     .replace(/\{lcGroup\}/g,      vars.lcGroup      || 'your LC group');
 }
 
@@ -11230,6 +11259,7 @@ async function loadGreetingTemplates(){
     const tplAss   = data?.meta?.assessment_link_greeting;
     const tplCheck = data?.meta?.lcg_checkin_greeting;
     const tplCeleb = data?.meta?.lcg_celebration_greeting;
+    const tplEncour = data?.meta?.lcg_encouragement_greeting;
     if(typeof tplProf  === 'string' && tplProf.trim())  _greetingTemplate  = tplProf;
     else _greetingTemplate  = _DEFAULT_PROFILE_GREETING;
     if(typeof tplAss   === 'string' && tplAss.trim())   _assessTemplate    = tplAss;
@@ -11238,12 +11268,15 @@ async function loadGreetingTemplates(){
     else _checkinTemplate   = _DEFAULT_CHECKIN_GREETING;
     if(typeof tplCeleb === 'string' && tplCeleb.trim()) _celebrateTemplate = tplCeleb;
     else _celebrateTemplate = _DEFAULT_CELEBRATE_GREETING;
+    if(typeof tplEncour === 'string' && tplEncour.trim()) _encourageTemplate = tplEncour;
+    else _encourageTemplate = _DEFAULT_ENCOURAGE_GREETING;
   } catch(e){
     console.warn('Greeting template load failed — using defaults:', e.message);
     _greetingTemplate  = _DEFAULT_PROFILE_GREETING;
     _assessTemplate    = _DEFAULT_ASSESS_GREETING;
     _checkinTemplate   = _DEFAULT_CHECKIN_GREETING;
     _celebrateTemplate = _DEFAULT_CELEBRATE_GREETING;
+    _encourageTemplate = _DEFAULT_ENCOURAGE_GREETING;
   }
   // Populate the textareas in Settings tab if rendered
   const ta1 = document.getElementById('greetingTemplate');
@@ -11254,6 +11287,8 @@ async function loadGreetingTemplates(){
   if(ta3) ta3.value = _checkinTemplate;
   const ta4 = document.getElementById('celebrateTemplate');
   if(ta4) ta4.value = _celebrateTemplate;
+  const ta5 = document.getElementById('encourageTemplate');
+  if(ta5) ta5.value = _encourageTemplate;
 }
 
 function switchGreetingTab(which){
@@ -11264,12 +11299,14 @@ function switchGreetingTab(which){
     assess:    document.getElementById('grpane-assess'),
     checkin:   document.getElementById('grpane-checkin'),
     celebrate: document.getElementById('grpane-celebrate'),
+    encourage: document.getElementById('grpane-encourage'),
   };
   const tabs = {
     profile:   document.getElementById('grtab-profile'),
     assess:    document.getElementById('grtab-assess'),
     checkin:   document.getElementById('grtab-checkin'),
     celebrate: document.getElementById('grtab-celebrate'),
+    encourage: document.getElementById('grtab-encourage'),
   };
   // Bail if anything missing
   for(const k of Object.keys(panes)){ if(!panes[k] || !tabs[k]) return; }
@@ -11293,12 +11330,14 @@ async function saveGreetingTemplates(){
   const ta2 = document.getElementById('assessTemplate');
   const ta3 = document.getElementById('checkinTemplate');
   const ta4 = document.getElementById('celebrateTemplate');
+  const ta5 = document.getElementById('encourageTemplate');
   const status = document.getElementById('greetingStatus');
-  if(!ta1 || !ta2 || !ta3 || !ta4) return;
+  if(!ta1 || !ta2 || !ta3 || !ta4 || !ta5) return;
   const profileTpl   = ta1.value;
   const assessTpl    = ta2.value;
   const checkinTpl   = ta3.value;
   const celebrateTpl = ta4.value;
+  const encourageTpl = ta5.value;
   // Only the link-bearing templates require {url}; LC templates don't share links.
   if(!profileTpl.includes('{url}') || !assessTpl.includes('{url}')){
     if(!confirm('Profile or Assessment template is missing {url} — members will receive no link in that message. Save anyway?')) return;
@@ -11316,6 +11355,7 @@ async function saveGreetingTemplates(){
       assessment_link_greeting: assessTpl,
       lcg_checkin_greeting:     checkinTpl,
       lcg_celebration_greeting: celebrateTpl,
+      lcg_encouragement_greeting: encourageTpl,
       greeting_updated_at:      new Date().toISOString(),
       greeting_updated_by:      (LEADER && LEADER.leaderName) || 'Pastor'
     };
@@ -11326,6 +11366,7 @@ async function saveGreetingTemplates(){
     _assessTemplate    = assessTpl;
     _checkinTemplate   = checkinTpl;
     _celebrateTemplate = celebrateTpl;
+    _encourageTemplate = encourageTpl;
     if(status){ status.textContent = '✓ Saved'; status.style.color = 'var(--green)'; }
     toast('Greetings saved ✓');
     setTimeout(()=>{ if(status) status.textContent = ''; }, 3000);
@@ -11344,6 +11385,7 @@ function resetCurrentGreeting(){
     assess:    { taId: 'assessTemplate',     def: _DEFAULT_ASSESS_GREETING,    label: 'Assessment Link greeting' },
     checkin:   { taId: 'checkinTemplate',    def: _DEFAULT_CHECKIN_GREETING,   label: 'LC Check-in greeting' },
     celebrate: { taId: 'celebrateTemplate',  def: _DEFAULT_CELEBRATE_GREETING, label: 'LC Celebration greeting' },
+    encourage: { taId: 'encourageTemplate',  def: _DEFAULT_ENCOURAGE_GREETING, label: 'LC Encouragement greeting' },
   };
   const cfg = tabMap[_currentGreetingTab];
   if(!cfg) return;
@@ -11360,6 +11402,7 @@ function previewCurrentGreeting(){
     assess:    { taId: 'assessTemplate',    label: 'Assessment Link' },
     checkin:   { taId: 'checkinTemplate',   label: 'LC Check-in' },
     celebrate: { taId: 'celebrateTemplate', label: 'LC Celebration' },
+    encourage: { taId: 'encourageTemplate', label: 'LC Encouragement' },
   };
   const cfg = tabMap[_currentGreetingTab];
   if(!cfg) return;
@@ -11384,6 +11427,10 @@ function previewCurrentGreeting(){
     },
     celebrate: {
       firstName:'Levi', streakWeeks:4, lcGroup:'LCG South',
+      senderName
+    },
+    encourage: {
+      firstName:'Josiah', weeksMet:2, totalWeeks:4, lcGroup:'LCG East',
       senderName
     }
   };
