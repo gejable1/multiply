@@ -956,10 +956,20 @@ const GIFT_CLUSTER_COLORS = {
 
 function renderGifts(d, member) {
   const allScores = d.all_scores || {};
-  // Sort gift IDs by score desc
+  // Sort gift IDs by score desc, then by the SAVED ranking (primary→secondary→
+  // supporting), then alphabetical — so every surface agrees on order even when
+  // gifts tie. Without the saved-rank tie-break, different views broke ties by
+  // JSON key order and disagreed on which gift is "Primary". (#gifts-consistency)
   const giftIds = Object.keys(GIFTS_DATA);
-  const sorted = giftIds.slice().sort((a,b) => (allScores[b]||0) - (allScores[a]||0));
-  const total = Object.values(allScores).reduce((a,b) => a+(b||0), 0) || 1;
+  const _prio = {};
+  if (d.primary_gift)    _prio[d.primary_gift]    = 0;
+  if (d.secondary_gift)  _prio[d.secondary_gift]  = 1;
+  if (d.supporting_gift) _prio[d.supporting_gift] = 2;
+  const _pr = k => (k in _prio ? _prio[k] : 9);
+  const sorted = giftIds.slice().sort((a,b) =>
+    (allScores[b]||0) - (allScores[a]||0)
+    || _pr(a) - _pr(b)
+    || (a < b ? -1 : a > b ? 1 : 0));
 
   const primaryId   = d.primary_gift   || sorted[0];
   const secondaryId = d.secondary_gift || sorted[1];
@@ -995,20 +1005,30 @@ function renderGifts(d, member) {
     </div>`;
   }
 
-  // Score bars (top 8)
+  // Score bars (top 8). Bar width and % are score / 25 (per-gift max) — the same
+  // basis every other surface uses — so raw points and % never contradict.
   const sw = document.getElementById('scoresWrap');
   sw.innerHTML = '<div class="section-title">Top 8 Spiritual Gifts — Score Breakdown</div>';
-  sorted.slice(0, 8).forEach((id, i) => {
+  // Near-tie note: when the top gifts sit within a couple points, the order among
+  // them isn't meaningful — flag it as a cluster, not a strict ranking. (Inv #10)
+  const _s0 = allScores[sorted[0]] || 0, _s2 = allScores[sorted[2]] || 0;
+  if ((_s0 - _s2) <= 2) {
+    sw.innerHTML += `<div style="background:#fdf6e8;border:1px solid #e8d9b0;border-radius:8px;padding:.6rem .8rem;margin-bottom:.75rem;font-size:12px;color:#6b5215;line-height:1.5">⚖️ This member's top gifts are within a couple points — treat the top few as a <strong>cluster</strong>, not a strict 1-2-3 order.</div>`;
+  }
+  sorted.slice(0, 8).forEach((id) => {
     const g = GIFTS_DATA[id];
     if (!g) return;
     const s = allScores[id] || 0;
-    const pct = Math.round(s/total*100);
+    const pct = Math.round(s/25*100);
     const color = GIFT_CLUSTER_COLORS[g.cluster]?.bg || '#7a4010';
+    const badge = id===primaryId ? ' <span class="br-badge" style="background:#fdf0f4;color:#8a2040">Primary</span>'
+                : id===secondaryId ? ' <span class="br-badge" style="background:#fdf6e8;color:#b8882a">Secondary</span>'
+                : id===supportId ? ' <span class="br-badge" style="background:#e7f5ec;color:#2a5c40">Supporting</span>' : '';
     sw.innerHTML += `<div class="bar-row">
       <span class="br-icon">${g.emoji}</span>
-      <span class="br-name">${g.name}${i===0?' <span class="br-badge" style="background:#fdf0f4;color:#8a2040">Primary</span>':i===1?' <span class="br-badge" style="background:#fdf6e8;color:#b8882a">Secondary</span>':i===2?' <span class="br-badge" style="background:#e7f5ec;color:#2a5c40">Supporting</span>':''}</span>
+      <span class="br-name">${g.name}${badge}</span>
       <div class="br-track"><div class="br-fill" style="width:${Math.max(pct,3)}%;background:${color}"><span>${s}</span></div></div>
-      <span class="br-val">${s} pts</span>
+      <span class="br-val">${s}/25 · ${pct}%</span>
     </div>`;
   });
 

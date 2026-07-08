@@ -9834,9 +9834,20 @@ async function rProfileTab(m) {
         }
       }
 
-      // Extract top 5 from results object
+      // Extract top 5 from results object. Tie-break by the SAVED ranking
+      // (top_result→second_result→third_result), then alphabetical, so this view
+      // agrees with the results viewer / gifts report instead of breaking ties by
+      // JSON key order (which put a tied 'knowledge' ahead of the saved primary
+      // 'leadership'). (#gifts-consistency)
+      const _rankPrio = {};
+      if(r.top_result    != null) _rankPrio[String(r.top_result)]    = 0;
+      if(r.second_result != null) _rankPrio[String(r.second_result)] = 1;
+      if(r.third_result  != null) _rankPrio[String(r.third_result)]  = 2;
+      const _rp = k => (k in _rankPrio ? _rankPrio[k] : 9);
       let topN = scoreEntries
-        .sort((a,b)=>(b[1]||0)-(a[1]||0))
+        .sort((a,b)=> (b[1]||0)-(a[1]||0)
+            || _rp(String(a[0])) - _rp(String(b[0]))
+            || (String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0))
         .slice(0,5)
         .map(([k,v])=>({name: prettyKey(type,k), score: v}));
 
