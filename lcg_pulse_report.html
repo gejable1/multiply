@@ -1271,9 +1271,16 @@ function render() {
 function isoDate(d) { return d.toISOString().split('T')[0]; }
 function humanDate(iso) {
   try {
-    const d = new Date(iso + 'T12:00:00');
+    if (iso == null || iso === '') return '';
+    const s = String(iso);
+    // Accept BOTH shapes: a date-only 'YYYY-MM-DD' (pin to local noon so a UTC
+    // midnight can't roll it to the previous day) AND a full timestamptz like
+    // 'YYYY-MM-DDTHH:MM:SS+00:00' (parse as-is — appending 'T12:00:00' to a full
+    // timestamp yields Invalid Date, which is the celebration-chip bug this fixes).
+    const d = new Date(s.length <= 10 ? s + 'T12:00:00' : s);
+    if (isNaN(d.getTime())) return '';           // never emit the literal "Invalid Date"
     return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-  } catch(e) { return iso; }
+  } catch(e) { return ''; }
 }
 function humanRange(a, b) {
   return humanDate(isoDate(a)) + ' – ' + humanDate(isoDate(b));
