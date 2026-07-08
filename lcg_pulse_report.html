@@ -883,16 +883,20 @@ const CHECKIN_LABELS = {
 };
 window._checkinByLeader = {};
 window._celebrationByLeader = {};
+window._encouragementByLeader = {};
 async function loadCheckins() {
   window._checkinByLeader = {};
   window._celebrationByLeader = {};
+  window._encouragementByLeader = {};
   try {
     const { data, error } = await db.from('lcg_leader_checkins')
       .select('leader_member_id, status, reason_code, note, responded_at, sent_at, kind')
       .order('sent_at', { ascending: false });
     if (error) throw error;
     (data || []).forEach(r => {
-      const map = (r.kind === 'celebration') ? window._celebrationByLeader : window._checkinByLeader;
+      const map = (r.kind === 'celebration')   ? window._celebrationByLeader
+                : (r.kind === 'encouragement') ? window._encouragementByLeader
+                : window._checkinByLeader;
       if (!map[r.leader_member_id]) map[r.leader_member_id] = r;
     });
   } catch (e) { console.error('loadCheckins failed:', e); }
@@ -921,6 +925,14 @@ function _celebrationChipHtml(leaderId) {
   const when = c.sent_at ? humanDate(c.sent_at) : '';
   const style = 'background:rgba(80,170,120,.15);color:#7fd0a3;border:1px solid rgba(80,170,120,.4)';
   return `<div style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${style}">🏆 Celebrated${when ? ' ' + when : ''}</div>`;
+}
+
+function _encouragementChipHtml(leaderId) {
+  const c = window._encouragementByLeader[leaderId];
+  if (!c) return '';
+  const when = c.sent_at ? humanDate(c.sent_at) : '';
+  const style = 'background:rgba(80,170,120,.15);color:#7fd0a3;border:1px solid rgba(80,170,120,.4)';
+  return `<div style="margin-top:8px;display:inline-block;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;${style}">📲 Encouraged${when ? ' ' + when : ''}</div>`;
 }
 
 function openCheckinDetailModal(leaderId) {
@@ -1138,7 +1150,7 @@ function render() {
       <div class="hb-grid">
         ${building.map(e => {
           window._pulseLeaders = window._pulseLeaders || {};
-          window._pulseLeaders[e.leader.id] = { leader: e.leader, weeksMet: e.weeksMet };
+          window._pulseLeaders[e.leader.id] = { leader: e.leader, weeksMet: e.weeksMet, totalWeeks: weekBuckets.length };
           const canSendCheckIn = (L.leaderLevel || 0) >= 3;
           return `
             <div class="hb-card">
@@ -1153,9 +1165,9 @@ function render() {
                 <div>📈 Met <strong>${e.weeksMet} of ${weekBuckets.length}</strong> week${weekBuckets.length===1?'':'s'}</div>
                 <div>👥 <strong>${e.members.length}</strong> member${e.members.length===1?'':'s'}</div>
               </div>
-              ${_checkinChipHtml(e.leader.id)}
+              ${_encouragementChipHtml(e.leader.id)}
               ${canSendCheckIn ? `
-                <button class="hb-action" onclick="openLeaderCheckInModal('${e.leader.id}')">
+                <button class="hb-action" onclick="openLeaderEncourageModal('${e.leader.id}')">
                   📲 Encourage ${escapeHTML((e.leader.name||'').split(' ')[0])}
                 </button>
               ` : ''}
@@ -1349,8 +1361,16 @@ const _DEFAULT_CELEBRATE_TPL =
   'Salamat sa iyong faithfulness at malasakit sa mga kapatid. Ipinagdarasal kita! 🙏💚\n\n' +
   'Keep up the great work!\n— {senderName}';
 
+const _DEFAULT_ENCOURAGE_TPL =
+  'Hi Pastor {firstName}! 🙏\n\n' +
+  'Nakita ko na patuloy na nabubuo ang rhythm ng LCG mo sa {lcGroup} — ' +
+  'nakapag-meeting kayo {weeksMet} sa {totalWeeks} na linggo. Malapit ka nang maging Champion! ' +
+  'Ipagpatuloy mo lang, kapatid — nandito ako kung may maipagdadasal o maitutulong ako.\n\n' +
+  'God bless po!\n— {senderName}';
+
 let _checkinTpl   = _DEFAULT_CHECKIN_TPL;
 let _celebrateTpl = _DEFAULT_CELEBRATE_TPL;
+let _encourageTpl = _DEFAULT_ENCOURAGE_TPL;
 
 async function loadPulseTemplates() {
   try {
@@ -1359,8 +1379,10 @@ async function loadPulseTemplates() {
     if (error) throw error;
     const c = data?.meta?.lcg_checkin_greeting;
     const e = data?.meta?.lcg_celebration_greeting;
+    const n = data?.meta?.lcg_encouragement_greeting;
     if (typeof c === 'string' && c.trim()) _checkinTpl   = c;
     if (typeof e === 'string' && e.trim()) _celebrateTpl = e;
+    if (typeof n === 'string' && n.trim()) _encourageTpl = n;
   } catch (e) {
     console.warn('[lcg-pulse] template load failed; using defaults:', e.message);
   }
@@ -1372,6 +1394,8 @@ function _fillTemplate(tpl, vars) {
     .replace(/\{senderName\}/g,   vars.senderName   || 'your pastor')
     .replace(/\{silenceWeeks\}/g, String(vars.silenceWeeks != null ? vars.silenceWeeks : ''))
     .replace(/\{streakWeeks\}/g,  String(vars.streakWeeks  != null ? vars.streakWeeks  : ''))
+    .replace(/\{weeksMet\}/g,     String(vars.weeksMet     != null ? vars.weeksMet     : ''))
+    .replace(/\{totalWeeks\}/g,   String(vars.totalWeeks   != null ? vars.totalWeeks   : ''))
     .replace(/\{lcGroup\}/g,      vars.lcGroup      || 'your LC group');
 }
 
@@ -1402,6 +1426,16 @@ function buildCelebrationWithGreeting(leaderName, streakWeeks, lcGroup) {
     streakWeeks, lcGroup,
   });
 }
+function buildEncouragementBody(weeksMet, totalWeeks, lcGroup) {
+  return `Patuloy na nabubuo ang rhythm ng LCG mo sa ${lcGroup||'inyong LC'} — ${weeksMet} sa ${totalWeeks} na linggo kayong nag-meeting. Malapit nang maging Champion! Ipagpatuloy mo lang — nandito ako kung may maipagdadasal o maitutulong.`;
+}
+function buildEncouragementWithGreeting(leaderName, weeksMet, totalWeeks, lcGroup) {
+  return _fillTemplate(_encourageTpl, {
+    firstName:  (leaderName||'').split(' ')[0],
+    senderName: L.leaderName || 'your pastor',
+    weeksMet, totalWeeks, lcGroup,
+  });
+}
 // Backward-compat shim
 function buildCheckInMessage(leaderName, silenceWeeks) {
   return buildCheckInWithGreeting(leaderName, silenceWeeks, '');
@@ -1413,6 +1447,7 @@ function buildCheckInMessage(leaderName, silenceWeeks) {
 // Handles both Heartbeat check-ins and Champion celebrations.
 function openLeaderCheckInModal(leaderId) { openLeaderShareModal(leaderId, 'checkin'); }
 function openLeaderCelebrateModal(leaderId) { openLeaderShareModal(leaderId, 'celebrate'); }
+function openLeaderEncourageModal(leaderId) { openLeaderShareModal(leaderId, 'encourage'); }
 
 function openLeaderShareModal(leaderId, kind) {
   // Defense in depth — UI also hides the button for Levels < 3, but a
@@ -1435,6 +1470,13 @@ function openLeaderShareModal(leaderId, kind) {
     plainText = buildCelebrationBody(streak, lcGroup);
     fullText  = buildCelebrationWithGreeting(leader.name, streak, lcGroup);
     headline  = '🏆 Send Celebration';
+    accentColor = 'var(--green)';
+  } else if (kind === 'encourage') {
+    const weeksMet = entry.weeksMet || 0;
+    const totalWeeks = entry.totalWeeks || 0;
+    plainText = buildEncouragementBody(weeksMet, totalWeeks, lcGroup);
+    fullText  = buildEncouragementWithGreeting(leader.name, weeksMet, totalWeeks, lcGroup);
+    headline  = '📲 Send Encouragement';
     accentColor = 'var(--green)';
   } else {
     const silence = entry.silence || 0;
@@ -1459,6 +1501,8 @@ function openLeaderShareModal(leaderId, kind) {
     ? `<button onclick="_pulseSendCheckIn(this)" style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">📨 Send in-app check-in</button>`
     : (kind === 'celebrate')
     ? `<button onclick="_pulseSendCelebration(this)" style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">🏆 Send celebration in-app</button>`
+    : (kind === 'encourage')
+    ? `<button onclick="_pulseSendEncouragement(this)" style="padding:11px;background:var(--green);color:#0f0f13;border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-align:left">📲 Send encouragement in-app</button>`
     : '';
 
   modal.innerHTML = `
@@ -1534,6 +1578,23 @@ async function _pulseSendCelebration(btn) {
     if (typeof reloadAndRender === 'function') reloadAndRender();
   } catch (e) {
     console.error('send celebration error:', e);
+    toast('Could not send: ' + (e.message || e), 'error');
+  }
+}
+
+async function _pulseSendEncouragement(btn) {
+  if ((L.leaderLevel || 0) < 3) { toast('Send is for Coaches, Directors, and Pastor', 'error'); return; }
+  const d = window._pulseShareData;
+  if (!d || !d.targetLeaderId) { toast('Leader not found', 'error'); return; }
+  try {
+    const { error } = await db.from('lcg_leader_checkins')
+      .insert({ leader_member_id: d.targetLeaderId, sent_by: L.leaderId || null, status: 'sent', kind: 'encouragement', message: d.fullText || d.plainText || null });
+    if (error) throw error;
+    toast('📲 Encouragement recorded for ' + (d.firstName || 'this leader'), 'success');
+    btn.closest('.share-link-modal')?.remove();
+    if (typeof reloadAndRender === 'function') reloadAndRender();
+  } catch (e) {
+    console.error('send encouragement error:', e);
     toast('Could not send: ' + (e.message || e), 'error');
   }
 }
