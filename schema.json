@@ -6761,6 +6761,15 @@
           "default": null,
           "is_identity": false,
           "comment": null
+        },
+        {
+          "name": "kind",
+          "ordinal": 14,
+          "data_type": "text",
+          "nullable": false,
+          "default": "'checkin'::text",
+          "is_identity": false,
+          "comment": null
         }
       ],
       "primary_key": [
@@ -6775,7 +6784,11 @@
         },
         {
           "name": "lcg_checkins_status_chk",
-          "definition": "CHECK ((status = ANY (ARRAY['awaiting'::text, 'answered'::text, 'resolved'::text])))"
+          "definition": "CHECK ((status = ANY (ARRAY['awaiting'::text, 'answered'::text, 'resolved'::text, 'sent'::text])))"
+        },
+        {
+          "name": "lcg_leader_checkins_kind_chk",
+          "definition": "CHECK ((kind = ANY (ARRAY['checkin'::text, 'celebration'::text])))"
         }
       ],
       "indexes": [
@@ -6829,6 +6842,16 @@
           "command": "INSERT",
           "using": null,
           "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 3))"
+        },
+        {
+          "name": "lcg_checkins_member_read_celebration",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((kind = 'celebration'::text) AND (responded_at IS NOT NULL) AND (church_id = auth_church_id()) AND (leader_member_id = auth_discipler_id()))",
+          "with_check": null
         },
         {
           "name": "lcg_checkins_select",
