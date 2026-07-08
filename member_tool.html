@@ -7356,6 +7356,25 @@ async function loadCelebrationFeed(){
       };
     }
   }
+  // 1b) Perfect attendance last Wednesday Prayer Meeting — same rule as Sunday:
+  //     fires ONLY if the whole sharing LCG (≥2 members) was present.
+  let prayerAttendanceBadge = null;
+  if(eligible.length >= 2 && lcIds.length && _dates){
+    const lastWed = _dates.mostRecentWeekday(3); // 3 = Wednesday
+    const { data: pmRows, error: perr } = await db.from('attendance')
+      .select('member_id')
+      .eq('event_type','Prayer Meeting').eq('present', true)
+      .eq('event_date', lastWed).in('member_id', lcIds);
+    if(perr) throw perr;
+    const presentPM = new Set((pmRows || []).map(r => r.member_id));
+    if(eligible.every(m => presentPM.has(m.id))){
+      prayerAttendanceBadge = {
+        icon:'🙏',
+        label_en:'Perfect Prayer Meeting attendance last Wednesday — the whole LCG showed up!',
+        label_tl:'Perpektong attendance sa Prayer Meeting noong Miyerkoles — kumpleto ang buong LCG!'
+      };
+    }
+  }
   // 2) LCG devotional streak — how many are on a 6+ day streak this week.
   let streakBadge = null;
   const streakerCount = eligible.filter(m => (streakByMember.get(m.id) || 0) >= STREAK_FLOOR).length;
@@ -7392,7 +7411,7 @@ async function loadCelebrationFeed(){
       }
     }catch(e){ /* silent — RLS/absent → no badge (graceful before 067 runs) */ }
   }
-  celebrationGroupBadges = [pastorCelebrationBadge, attendanceBadge, streakBadge].filter(Boolean);
+  celebrationGroupBadges = [pastorCelebrationBadge, attendanceBadge, prayerAttendanceBadge, streakBadge].filter(Boolean);
 }
 
 function renderCelebrationFeed(){
