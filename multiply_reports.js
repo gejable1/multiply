@@ -534,10 +534,20 @@
 
   function _renderFullReport(member, gifts, opts) {
     const scores = gifts.all_scores || {};
-    // Sort by score desc; fall back to canonical order if scores missing
+    // Sort by score desc, then by the SAVED ranking (primary→secondary→supporting),
+    // then alphabetical — so this report agrees with the results viewer / assessment
+    // history on which tied gift is Primary, instead of breaking ties by JSON key
+    // order. top3 (and the Primary/Secondary/Supporting labels) follow from this. (#gifts-consistency)
+    const _prio = {};
+    if (gifts.primary_gift)    _prio[gifts.primary_gift]    = 0;
+    if (gifts.secondary_gift)  _prio[gifts.secondary_gift]  = 1;
+    if (gifts.supporting_gift) _prio[gifts.supporting_gift] = 2;
+    const _pr = k => (k in _prio ? _prio[k] : 9);
     const ranked = Object.entries(scores)
       .map(([id, score]) => ({ id, score: Number(score) || 0 }))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => b.score - a.score
+        || _pr(a.id) - _pr(b.id)
+        || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
     const maxScore = 25; // diagnostic rubric: 5 questions × max 5 each = 25 per gift
     const top3 = ranked.slice(0, 3);
