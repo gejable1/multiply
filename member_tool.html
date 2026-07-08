@@ -7366,7 +7366,33 @@ async function loadCelebrationFeed(){
       label_tl:`Ang LCG mo: ${streakerCount} miyembro ang 6+ araw nang sunud-sunod sa devotional`
     };
   }
-  celebrationGroupBadges = [attendanceBadge, streakBadge].filter(Boolean);
+  // 3) Pastor celebration (Phase 2b) — the LC leader's most recent ACKNOWLEDGED
+  //    celebration in the last 30 days. Migration 067 exposes ONLY acknowledged
+  //    rows for THIS member's own LC leader (leader_member_id = auth_discipler_id);
+  //    the leader's Amen (responded_at) is the consent gate. Pinned first, above
+  //    perfect-attendance and streak. Graceful before 067: RLS returns nothing → no badge.
+  let pastorCelebrationBadge = null;
+  if(lcLeaderId){
+    try{
+      const since30 = new Date(Date.now() - 30*24*3600*1000).toISOString();
+      const { data: celebRows } = await db.from('lcg_leader_checkins')
+        .select('sent_at, responded_at')
+        .eq('leader_member_id', lcLeaderId)
+        .eq('kind', 'celebration')
+        .not('responded_at','is',null)
+        .gte('sent_at', since30)
+        .order('sent_at', { ascending:false })
+        .limit(1);
+      if(celebRows && celebRows.length){
+        pastorCelebrationBadge = {
+          icon:'🏆',
+          label_en:'Your pastor celebrated your LC!',
+          label_tl:'Binati ng pastor ang inyong LC!'
+        };
+      }
+    }catch(e){ /* silent — RLS/absent → no badge (graceful before 067 runs) */ }
+  }
+  celebrationGroupBadges = [pastorCelebrationBadge, attendanceBadge, streakBadge].filter(Boolean);
 }
 
 function renderCelebrationFeed(){
