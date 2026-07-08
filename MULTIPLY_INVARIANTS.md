@@ -3034,4 +3034,44 @@ A migration Gerry commits via the GitHub web editor lands with CRLF, violating t
 
 ---
 
+### **287. Manual split by audience: pastor-manual = SVI computation/methods; leader-manual = shepherding playbook**
+
+The SVI documentation lives in two homes by audience. `md_manual.html` (MD, Pastor) Chapter 2 carries the full computation/methods — the 10 count-first signals, the score-rules→weighted-blend→n/a→Insufficient→trend build, per-church/per-level weights, and care-detail units. `mlt_manual.html` (MLT, Leader) Chapter 5 carries the shepherding playbook — four states, trend-reading, detail-drilldown care moves, low-pressure Taglish check-ins, celebrate-not-compare, and the Luke 6:40/Gal 5:22-23 anchor. Keep future SVI doc edits in the right home: methods → pastor, how-to-shepherd → leader.
+
+**Established July 8, 2026 (Session 66). Invariant #287 added - count now 287.**
+
+---
+
+### **288. Embed-mode sweep: MD/Settings pages open in-app via `_openLessonViewerModal(url?embed=1, label, true)`, never `window.open(_blank)`**
+
+Every MD/Settings launcher (viewers AND editors) opens inside the shell's iframe modal, matching the reports. Each embedded page adds the embed-class script (`?embed=1` → `document.documentElement.classList.add('embed')`) plus `html.embed` CSS flipping full-screen `position:fixed` overlays (gate blackout, modals, toasts) → `absolute` (Samsung Internet blanks fixed elements inside iframes). The page's own gate PASSES via the shared same-tab sessionStorage (a same-origin iframe shares the top document's sessionStorage — no gate-defer needed). Editors (Tier-2) additionally hide their own back-chrome under `html.embed`, and make their back handler embed-aware via a `_exitTool()` helper: in embed, exit = `window.parent._closeLessonViewer()`, NEVER `window.close()`→`location.href='multiply_dashboard.html'` (which navigates the IFRAME to the dashboard = dashboard-inside-modal).
+
+**Established July 8, 2026 (Session 66). Invariant #288 added - count now 288.**
+
+---
+
+### **289. `lcg_leader_checkins` is dual-kind (checkin | celebration); loaders MUST route by `kind`**
+
+Migration 066 added `kind text NOT NULL DEFAULT 'checkin'`. Check-ins are two-way (`status` awaiting→answered; reason/note/reply). Celebrations are one-way pastor kudos: `kind='celebration'`, `status='sent'`, `message` = the Settings-worded greeting, `responded_at` = the leader's "Amen" (the publish gate; no reply lifecycle). Any loader over this table MUST route celebrations to their own map so they never render as check-in chips/banners — Pulse `loadCheckins` splits `_checkinByLeader` vs `_celebrationByLeader`; MLT `_loadMyCheckin` filters `status='awaiting'` so `status='sent'` celebrations are excluded.
+
+**Established July 8, 2026 (Session 66). Invariant #289 added - count now 289.**
+
+---
+
+### **290. Verify CHECK-constraint DDL, not just schema.json column defaults, before inserting a new column value**
+
+schema.json shows a column's type/nullable/default but NOT its CHECK constraint. Inserting `status:'sent'` would have failed EVERY celebration insert against `lcg_checkins_status_chk CHECK (status IN ('awaiting','answered','resolved'))` (created in 054) — a bug invisible to an anchor patcher and to schema.json (caught by CC). Before writing a new enum-ish value, read the constraint DDL from the creating migration and extend the CHECK as a SUPERSET (drop-and-recreate keeping ALL existing allowed values, so no existing row is rejected). Migration 066 extended it to `('awaiting','answered','resolved','sent')`.
+
+**Established July 8, 2026 (Session 66). Invariant #290 added - count now 290.**
+
+---
+
+### **291. LC celebrations feed = a computed multi-source group-badge assembler; auto-wins are pull/compute badges, never materialized rows**
+
+`loadCelebrationFeed` assembles two tiers: `celebrationWins` (individual, capped) + `celebrationGroupBadges` (pinned, LCG-wide, `{icon,label_en,label_tl}`). New auto-surfaced wins are COMPUTED at render from their source tables — never fan-out inserts. Pastor celebration = a group badge read from `lcg_leader_checkins`, surfaced ONLY once the leader Amens it (`responded_at IS NOT NULL`), via an additive member-read RLS policy gated on `auth_discipler_id()` (migration 067) — the SECURITY-DEFINER "my LC leader" helper (047), preferred over subqueries for member-reads-about-their-leader. Perfect-attendance badges mirror the existing Sunday one: `_dates.mostRecentWeekday(d)` (0=Sun, 3=Wed) + the EXACT `event_type` string (Sunday='Sunday Service', Wednesday='Prayer Meeting'), firing only if the whole sharing LCG (≥2) was present.
+
+**Established July 8, 2026 (Session 66). Invariant #291 added - count now 291.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
