@@ -554,6 +554,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div style="color:var(--muted);font-size:18px">›</div>
   </div>
 
+  <!-- ─── PASTOR CELEBRATION BANNER (Phase 2a — one-way kudos; Amen publishes to LC feed) ─── -->
+  <div id="celebrationBanner" style="display:none;background:linear-gradient(135deg,rgba(80,170,120,.18),rgba(80,170,120,.04));border-bottom:1px solid rgba(80,170,120,.4);padding:11px 14px;align-items:center;gap:10px;font-size:13px;cursor:pointer" onclick="showScreen('screenCelebration')">
+    <div style="font-size:20px;flex-shrink:0">🏆</div>
+    <div style="flex:1;line-height:1.35">
+      <div style="font-weight:700;color:var(--text);margin-bottom:2px">Your pastor celebrated your LCG!</div>
+      <div style="font-size:11.5px;color:var(--muted)">Tap to see — isang tap lang</div>
+    </div>
+    <div style="color:var(--muted);font-size:18px">›</div>
+  </div>
+
   <div id="preachingReminderBanner" style="padding:0 14px"></div>
 
   <div class="home-header">
@@ -1219,6 +1229,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <button class="checkin-reason" onclick="_submitCheckin('personal')">🙏 May pinagdadaanan ako</button>
     <button class="checkin-reason" onclick="_submitCheckin('okay')">👍 Okay lang ako, tuloy pa rin</button>
     <textarea id="checkinNote" placeholder="May idadagdag ka pa? (optional)" style="margin-top:6px;width:100%;box-sizing:border-box;min-height:70px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;resize:vertical"></textarea>
+  </div>
+</div>
+
+<div class="screen" id="screenCelebration">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">🏆 Papuri sa LCG mo!</div>
+  </div>
+  <div id="celebrationMsg" style="padding:16px;font-size:14px;color:var(--text);line-height:1.6;white-space:pre-wrap;background:var(--surface);border-bottom:1px solid var(--border)"></div>
+  <div style="flex:1;overflow-y:auto;padding:20px 14px 40px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;color:var(--muted);line-height:1.55;text-align:center">
+      Nakita ka ng pastor mo — salamat sa faithfulness mo, kapatid. I-tap ang Amen para tanggapin ito (at makikita ng LCG mo ang papuring ito sa inyong celebrations feed). 💚
+    </div>
+    <button class="checkin-reason" style="text-align:center;justify-content:center;border-color:rgba(80,170,120,.45);color:#7fd0a3" onclick="_ackCelebration()">🙏 Amen — Salamat, Lord!</button>
   </div>
 </div>
 
@@ -1988,6 +2012,43 @@ async function _submitCheckin(reasonCode){
   } catch(e){ toast('Could not send: ' + (e.message || e), 'error'); }
 }
 
+async function _loadMyCelebration(){
+  const banner = document.getElementById('celebrationBanner');
+  if(!banner || !window.LEADER || !LEADER.leaderId) return;
+  try {
+    const { data, error } = await db.from('lcg_leader_checkins')
+      .select('id, sent_at, message')
+      .eq('leader_member_id', LEADER.leaderId)
+      .eq('kind', 'celebration')
+      .is('responded_at', null)
+      .order('sent_at', { ascending: false })
+      .limit(1);
+    if(error) throw error;
+    if(data && data.length){
+      const msgEl = document.getElementById('celebrationMsg');
+      if(msgEl) msgEl.textContent = data[0].message || 'Binati ka ng pastor mo para sa faithfulness ng LCG mo. 🏆';
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch(e){ /* silent — banner stays hidden on error */ }
+}
+
+async function _ackCelebration(){
+  if(!window.LEADER || !LEADER.leaderId){ toast('No celebration to acknowledge', 'error'); return; }
+  try {
+    const { error } = await db.from('lcg_leader_checkins')
+      .update({ responded_at: new Date().toISOString() })
+      .eq('leader_member_id', LEADER.leaderId)
+      .eq('kind', 'celebration')
+      .is('responded_at', null);
+    if(error) throw error;
+    const b = document.getElementById('celebrationBanner'); if(b) b.style.display = 'none';
+    toast('Amen! Salamat, kapatid. 🏆', 'success');
+    showScreen('screenHome');
+  } catch(e){ toast('Could not acknowledge: ' + (e.message || e), 'error'); }
+}
+
 function renderHome(){
   const m = currentLeader;
   // The session LEADER shim carries no photo_url, so look the leader up in the
@@ -2004,6 +2065,9 @@ function renderHome(){
 
   // Pastor check-in banner (shepherd's loop)
   _loadMyCheckin();
+
+  // Pastor celebration banner (Phase 2a — Amen publishes to LC feed)
+  _loadMyCelebration();
 
   // Home stats are kind-mirrored (Inv #164) — myMembers is the OPERATIONAL
   // (kind-visible) roster, so re-filter to the viewer's own kind for counts.
