@@ -6270,6 +6270,42 @@
           "default": "now()",
           "is_identity": false,
           "comment": null
+        },
+        {
+          "name": "source_guide_id",
+          "ordinal": 12,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "shared_to_library",
+          "ordinal": 13,
+          "data_type": "boolean",
+          "nullable": false,
+          "default": "false",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "facilitator_md_tl",
+          "ordinal": 14,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "participant_md_tl",
+          "ordinal": 15,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
         }
       ],
       "primary_key": [
@@ -6317,6 +6353,20 @@
           "on_update": "NO ACTION",
           "on_delete": "CASCADE",
           "definition": "FOREIGN KEY (lcl_id) REFERENCES members(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_meeting_guides_source_guide_id_fkey",
+          "columns": [
+            "source_guide_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "lc_meeting_guides",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (source_guide_id) REFERENCES lc_meeting_guides(id) ON DELETE SET NULL"
         }
       ],
       "unique_constraints": [],
@@ -6386,7 +6436,7 @@
             "authenticated"
           ],
           "command": "SELECT",
-          "using": "((church_id = auth_church_id()) AND ((lcl_id = auth_member_id()) OR ((status = 'published'::text) AND (lcl_id = auth_discipler_id()))))",
+          "using": "((church_id = auth_church_id()) AND ((lcl_id = auth_member_id()) OR ((status = 'published'::text) AND (lcl_id = auth_discipler_id())) OR ((status = 'published'::text) AND (shared_to_library = true) AND auth_is_leader())))",
           "with_check": null
         },
         {
@@ -18018,6 +18068,16 @@
       "security_definer": true,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public.auth_discipler_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT discipler_id FROM members WHERE id = auth_member_id()\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "auth_is_leader",
+      "arguments": "",
+      "returns": "boolean",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.auth_is_leader()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT COALESCE((SELECT is_facilitator FROM members WHERE id = auth_member_id()), false)\r\n$function$\n"
     },
     {
       "schema": "public",
