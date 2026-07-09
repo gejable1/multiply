@@ -6295,6 +6295,11 @@ function setLang(lang){
   try{
     if(document.getElementById('attestBackdrop')?.classList.contains('show')) renderAttestCard();
   }catch(e){ console.warn(e); }
+  // If the meeting-guide sheet is open, re-render its body so the participant
+  // guide switches to Tagalog (participant_md_tl) or back to English on toggle.
+  try{
+    if(document.getElementById('mtgGuideBackdrop')?.classList.contains('show')) _mtgRenderGuideBody();
+  }catch(e){ console.warn(e); }
 }
 function applySavedLang(){
   let lang = 'en';
@@ -7021,7 +7026,7 @@ async function loadMeetingGuide(){
   _mmtGuide = null; _mmtGuides = [];
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('id,participant_md,meeting_date,devotional_id')
+      .select('id,participant_md,participant_md_tl,meeting_date,devotional_id')
       .eq('status','published')
       .order('meeting_date',{ ascending:false });
     if(error) throw error;
@@ -7062,19 +7067,29 @@ function _mtgPopulateSelect(){
   }).join('');
   sel.value = (_mmtGuide && _mmtGuide.id) || (_mmtGuides[0] && _mmtGuides[0].id) || '';
 }
+function _mtgGuideBodyHtml(g){
+  if(!g) return '';
+  const tl = document.body.classList.contains('lang-tl');
+  const md = (tl && g.participant_md_tl && g.participant_md_tl.trim()) ? g.participant_md_tl : (g.participant_md || '');
+  return mmtMd(md);
+}
+function _mtgRenderGuideBody(){
+  const el = document.getElementById('mtgGuideBody');
+  if(el && _mmtGuide) el.innerHTML = _mtgGuideBodyHtml(_mmtGuide);
+}
 function _mtgSelectGuide(id){
   const g = _mmtGuides.find(x=>x.id===id); if(!g) return;
   clearTimeout(_mtgRespTimer);
   _mmtGuide = g;
   document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
-  document.getElementById('mtgGuideBody').innerHTML = mmtMd(_mmtGuide.participant_md || '');
+  document.getElementById('mtgGuideBody').innerHTML = _mtgGuideBodyHtml(_mmtGuide);
   mtgLoadResponse();
 }
 function openMeetingGuideSheet(){
   if(!_mmtGuide) return;
   _mtgPopulateSelect();
   document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
-  document.getElementById('mtgGuideBody').innerHTML = mmtMd(_mmtGuide.participant_md || '');
+  document.getElementById('mtgGuideBody').innerHTML = _mtgGuideBodyHtml(_mmtGuide);
   _mtgWireResponse();
   mtgLoadResponse();
   document.getElementById('mtgGuideBackdrop').classList.add('show');
