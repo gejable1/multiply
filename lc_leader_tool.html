@@ -1136,13 +1136,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="crm" id="crModal"></div>
 </div>
 
+<div class="crm-overlay" id="mpModalOverlay" onclick="if(event.target===this)_mpCloseModal()">
+  <div class="crm" id="mpModal" style="max-width:640px"></div>
+</div>
+
 <!-- ══════════════════ SCREEN: SEND LINKS ══════════════════ -->
 <div class="screen" id="screenMeetingPrep">
   <div class="topbar">
-    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-back" onclick="_mpBack()">←</div>
     <div class="tb-title">📖 Meeting Prep</div>
   </div>
   <div style="padding:14px;max-width:680px;margin:0 auto">
+
+    <div id="mpListView">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:700;color:var(--ink)">My lessons</div>
+        <button onclick="_mpNewLesson()" style="background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">+ New lesson</button>
+      </div>
+      <div id="mpMyList"></div>
+    </div>
+
+    <div id="mpCreateView" style="display:none">
+    <div onclick="_mpShowList()" style="cursor:pointer;color:var(--muted);font-size:12.5px;margin-bottom:10px">← My lessons</div>
 
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
       <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">1 · Pick the lesson</div>
@@ -1179,6 +1194,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <button onclick="mpSave('draft')" style="flex:1;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:11px;font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer">Save draft</button>
         <button onclick="mpSave('published')" style="flex:1;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:11px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">Publish to my group</button>
       </div>
+    </div>
+
     </div>
 
   </div>
@@ -1403,11 +1420,120 @@ function _mpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.get
 
 async function openMeetingPrep(){
   showScreen('screenMeetingPrep');
+  _mpShowList();
+}
+
+let _mpMyGuides = {};
+let _mpModalCur = null;
+let _mpModalGuideView = 'fac';
+
+function _mpFmtDate(iso){
+  try{ return new Date(iso+'T00:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
+  catch(e){ return iso; }
+}
+function _mpBack(){
+  if(document.getElementById('mpCreateView') && document.getElementById('mpCreateView').style.display !== 'none'){ _mpShowList(); }
+  else { showScreen('screenHome'); }
+}
+function _mpShowList(){
+  document.getElementById('mpCreateView').style.display = 'none';
+  document.getElementById('mpListView').style.display = '';
+  mpLoadMyLessons();
+}
+async function _mpNewLesson(){
+  document.getElementById('mpListView').style.display = 'none';
+  document.getElementById('mpCreateView').style.display = '';
   const d = document.getElementById('mpDate');
   if(d && !d.value){
     const recent = await _mpMostRecentGuideDate();
     d.value = recent || _mpToday();
   }
+  await mpLoadDevotional();
+  await mpLoadExisting();
+}
+async function mpLoadMyLessons(){
+  const me = _liveLeaderIdName();
+  const box = document.getElementById('mpMyList');
+  if(!box) return;
+  if(!me || !me.id){ box.innerHTML=''; return; }
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try{
+    const { data, error } = await db.from('lc_meeting_guides')
+      .select('id,meeting_date,status,devotional_id,facilitator_md,participant_md')
+      .eq('lcl_id', me.id).order('meeting_date',{ ascending:false });
+    if(error) throw error;
+    const guides = data || [];
+    const ids = [...new Set(guides.map(g=>g.devotional_id).filter(Boolean))];
+    let titles = {};
+    if(ids.length){
+      const { data: devos } = await db.from('devotionals').select('id,title').in('id', ids);
+      (devos||[]).forEach(d=>{ titles[d.id]=d.title; });
+    }
+    _mpMyGuides = {};
+    guides.forEach(g=>{ g._title = titles[g.devotional_id] || '(untitled lesson)'; _mpMyGuides[g.id]=g; });
+    if(!guides.length){
+      box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--muted)">'
+        + '<div style="font-size:30px;margin-bottom:8px">📖</div>'
+        + '<div style="font-size:14px;margin-bottom:4px;color:var(--ink)">No lessons yet</div>'
+        + '<div style="font-size:12.5px;line-height:1.5">Tap <strong style="color:var(--gold)">+ New lesson</strong> to prepare your first one.</div></div>';
+      return;
+    }
+    box.innerHTML = guides.map(function(g){
+      const chip = g.status==='published'
+        ? '<span style="font-size:10.5px;padding:2px 9px;border-radius:999px;background:rgba(80,170,120,.16);color:#7fd0a3;border:1px solid rgba(80,170,120,.4)">Published</span>'
+        : '<span style="font-size:10.5px;padding:2px 9px;border-radius:999px;background:rgba(212,175,55,.16);color:var(--gold);border:1px solid rgba(212,175,55,.4)">Draft</span>';
+      return '<div onclick="_mpOpenModal(\''+g.id+'\')" style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:8px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +   '<span style="font-size:13.5px;font-weight:600;color:var(--ink)">'+_mpEsc(g._title)+'</span>'+chip+'</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'
+        +   '<span style="font-size:11.5px;color:var(--muted)">'+_mpFmtDate(g.meeting_date)+'</span>'
+        +   '<span style="font-size:10px;color:var(--muted)">EN only</span></div></div>';
+    }).join('');
+  }catch(e){ console.error('my lessons', e); box.innerHTML='<div style="padding:16px;color:var(--muted);font-size:13px">Could not load your lessons.</div>'; }
+}
+function _mpOpenModal(id){
+  const g = _mpMyGuides[id]; if(!g) return;
+  _mpModalCur = g; _mpModalGuideView = 'fac';
+  _mpRenderModal();
+  document.getElementById('mpModalOverlay').classList.add('show');
+}
+function _mpCloseModal(){ document.getElementById('mpModalOverlay').classList.remove('show'); _mpModalCur=null; }
+function _mpModalLang(l){ try{ localStorage.setItem('mp_lang', l); }catch(e){} _mpRenderModal(); }
+function _mpModalGuideSet(v){ _mpModalGuideView = v; _mpRenderModal(); }
+function _mpRenderModal(){
+  const g = _mpModalCur; if(!g) return;
+  let lang='en'; try{ lang = localStorage.getItem('mp_lang')||'en'; }catch(e){}
+  const which = _mpModalGuideView;
+  const tlField = which==='fac' ? g.facilitator_md_tl : g.participant_md_tl;  // Phase B fields
+  const enField = which==='fac' ? g.facilitator_md    : g.participant_md;
+  const hasTL = !!(tlField && tlField.trim());
+  const noTL  = (lang==='tl' && !hasTL);
+  const body  = (lang==='tl' && hasTL) ? tlField : enField;
+  const gold='background:var(--gold);color:#0f0f13;border:1px solid var(--gold)';
+  const off ='background:transparent;color:var(--muted);border:1px solid var(--border)';
+  const pill=function(on){ return on?gold:off; };
+  const seg =function(on){ return on?'background:var(--surface2);color:var(--ink);border-bottom:2px solid var(--gold)':'background:transparent;color:var(--muted);border-bottom:2px solid transparent'; };
+  document.getElementById('mpModal').innerHTML =
+    '<div class="crm-head">'
+    + '<div style="min-width:0"><div style="font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_mpEsc(g._title)+'</div>'
+    +   '<div style="font-size:11.5px;color:var(--muted)">'+_mpFmtDate(g.meeting_date)+(g.status==='published'?' · Published':' · Draft')+'</div></div>'
+    + '<button class="x" onclick="_mpCloseModal()">✕</button></div>'
+    + '<div style="display:flex;gap:6px;padding:10px 18px 0">'
+    +   '<button onclick="_mpModalLang(\'en\')" style="font-size:11px;padding:4px 11px;border-radius:999px;cursor:pointer;'+pill(lang!=='tl')+'">English</button>'
+    +   '<button onclick="_mpModalLang(\'tl\')" style="font-size:11px;padding:4px 11px;border-radius:999px;cursor:pointer;'+pill(lang==='tl')+'">Tagalog</button></div>'
+    + '<div style="display:flex;margin:10px 0 0;border-bottom:1px solid var(--border)">'
+    +   '<button onclick="_mpModalGuideSet(\'fac\')" style="flex:1;font-size:12.5px;font-weight:600;padding:8px 0;cursor:pointer;'+seg(which==='fac')+'">Facilitator</button>'
+    +   '<button onclick="_mpModalGuideSet(\'par\')" style="flex:1;font-size:12.5px;font-weight:600;padding:8px 0;cursor:pointer;'+seg(which==='par')+'">Participant</button></div>'
+    + '<div class="crm-body" style="max-height:60vh;overflow-y:auto">'
+    +   (noTL ? '<div style="font-size:12px;background:rgba(212,175,55,.14);color:var(--gold);border:1px solid rgba(212,175,55,.4);padding:8px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">Walang Tagalog na bersyon pa — English muna ang ipinapakita.</div>' : '')
+    +   '<div style="font-size:13px;line-height:1.6;color:var(--ink)">'+mpMd(body||'')+'</div></div>'
+    + '<div style="padding:0 18px 16px"><button onclick="_mpEditGuide(\''+g.meeting_date+'\')" style="width:100%;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">✏️ Edit lesson</button></div>';
+}
+async function _mpEditGuide(date){
+  _mpCloseModal();
+  document.getElementById('mpListView').style.display='none';
+  document.getElementById('mpCreateView').style.display='';
+  const d = document.getElementById('mpDate'); if(d) d.value = date;
   await mpLoadDevotional();
   await mpLoadExisting();
 }
