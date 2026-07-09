@@ -1194,6 +1194,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <textarea id="mpParEdit" rows="6" oninput="mpRenderPreview()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
         <div id="mpParView" style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--ink)"></div>
       </div>
+      <div id="mpTlBlock" style="display:none">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+          <div style="font-weight:700;color:var(--ink);font-size:13px;margin-bottom:8px">🌐 Facilitator's Guide — Tagalog</div>
+          <textarea id="mpFacEditTl" rows="6" oninput="mpRenderPreview()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
+          <div id="mpFacViewTl" style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--ink)"></div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
+          <div style="font-weight:700;color:var(--ink);font-size:13px;margin-bottom:8px">🌐 Participant's Guide — Tagalog</div>
+          <textarea id="mpParEditTl" rows="6" oninput="mpRenderPreview()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
+          <div id="mpParViewTl" style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--ink)"></div>
+        </div>
+      </div>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12.5px;color:var(--muted);cursor:pointer">
         <input type="checkbox" id="mpShareLib" style="width:16px;height:16px;accent-color:var(--gold)">
         Also share to the church Library (other LC leaders can reuse this)
@@ -1468,13 +1480,16 @@ function _mpLangTag(g){
 async function _mpNewLesson(){
   document.getElementById('mpListView').style.display = 'none';
   document.getElementById('mpCreateView').style.display = '';
-  const d = document.getElementById('mpDate');
-  if(d && !d.value){
-    const recent = await _mpMostRecentGuideDate();
-    d.value = recent || _mpToday();
-  }
+  const d = document.getElementById('mpDate'); if(d) d.value = _mpToday();
+  document.getElementById('mpPaste').value = '';
+  document.getElementById('mpFacEdit').value = '';
+  document.getElementById('mpParEdit').value = '';
+  const ftl=document.getElementById('mpFacEditTl'); if(ftl) ftl.value = '';
+  const ptl=document.getElementById('mpParEditTl'); if(ptl) ptl.value = '';
+  _mpShowTl(false);
+  const sl=document.getElementById('mpShareLib'); if(sl) sl.checked = false;
+  document.getElementById('mpPreview').style.display = 'none';
   await mpLoadDevotional();
-  await mpLoadExisting();
 }
 async function mpLoadMyLessons(){
   const me = _liveLeaderIdName();
@@ -1689,7 +1704,8 @@ Prayer: ${d.prayer||''}
 Reflection questions: ${q}
 
 THE FACILITATOR'S GUIDE MUST FOLLOW THIS TIMED 1-HOUR FLOW
-0:00-0:08  Welcome & Positive/Negative (snack; each person shares ONE positive - a win or God-story from the week - AND ONE negative - a struggle, challenge, or burden they are carrying)
+0:00-0:03  Celebrate (the leader opens by naming the LC's wins from the past week - answered prayers, milestones, a member who reached out, the group meeting its goal - and the group gives thanks to God together)
+0:03-0:08  Welcome & Positive/Negative (snack; each person shares ONE positive - a win or God-story from the week - AND ONE negative - a struggle, challenge, or burden they are carrying)
 0:08-0:15  Connect to God (a song or psalm + opening prayer)
 0:15-0:18  Look Back (last week's "I will" + "who did you reach?")
 0:18-0:38  The Word (discuss THIS devotional, by questions - the main block)
@@ -1697,13 +1713,19 @@ THE FACILITATOR'S GUIDE MUST FOLLOW THIS TIMED 1-HOUR FLOW
 0:48-0:57  Pray for one another (by name; remember the empty chair). Do NOT ask for a fresh round of prayer requests here; instead the leader folds the NEGATIVES each person shared during Welcome into this closing prayer. If time allows, members briefly reshare their negative and pray for one another in pairs or as a group.
 0:57-1:00  Send-off (next step, end on time)
 
-OUTPUT FORMAT - use these EXACT fences, markdown inside, nothing outside them:
-===FACILITATOR===
+OUTPUT FORMAT - produce the guides in BOTH English and Tagalog. Use these EXACT fences, markdown inside, nothing outside them:
+===FACILITATOR_EN===
 # Facilitator's Guide - ${d.title||''}
 (timed script: for each segment above, what to say/do, plus 4-6 discussion questions for The Word drawn straight from the passage, with facilitation tips and timing cues)
-===PARTICIPANT===
+===PARTICIPANT_EN===
 # Participant's Guide - ${d.title||''}
 (the scripture reference, a 2-3 sentence framing, the reflection questions, and a short closing prayer. Do NOT add "I will" or "who I'll reach" prompts -- the Member Tool provides those as interactive fields.)
+===FACILITATOR_TL===
+# Gabay ng Facilitator - ${d.title||''}
+(the SAME facilitator guide above, fully rendered in warm, natural conversational Tagalog a Filipino small-group leader would actually use; keep Scripture references and direct quotes as-is)
+===PARTICIPANT_TL===
+# Gabay ng Kalahok - ${d.title||''}
+(the SAME participant guide above, in natural Tagalog)
 ===END===`;
 }
 
@@ -1715,19 +1737,31 @@ async function mpCopyPrompt(){
 
 function mpParse(){
   const raw = document.getElementById('mpPaste').value || '';
-  const fi = raw.indexOf('===FACILITATOR===');
-  const pi = raw.indexOf('===PARTICIPANT===');
-  const ei = raw.indexOf('===END===');
-  if(fi>=0 && pi>fi && ei>pi){
-    const fac = raw.slice(fi+'===FACILITATOR==='.length, pi).trim();
-    const par = raw.slice(pi+'===PARTICIPANT==='.length, ei).trim();
-    document.getElementById('mpFacEdit').value = fac;
-    document.getElementById('mpParEdit').value = par;
-    toast('Parsed into two guides — review below','✅');
-  }else{
-    document.getElementById('mpFacEdit').value = raw;
-    document.getElementById('mpParEdit').value = '';
-    toast("Couldn't find the guide markers — split the text into the two boxes by hand",'⚠️');
+  const feEN='===FACILITATOR_EN===', peEN='===PARTICIPANT_EN===', feTL='===FACILITATOR_TL===', peTL='===PARTICIPANT_TL===', end='===END===';
+  const seg=function(a,b){ const i=raw.indexOf(a), j=(b&&raw.indexOf(b)>=0)?raw.indexOf(b):raw.length; return (i>=0 && j>i)?raw.slice(i+a.length,j).trim():''; };
+  if(raw.indexOf(feEN)>=0 && raw.indexOf(peEN)>=0){
+    document.getElementById('mpFacEdit').value = seg(feEN, peEN);
+    document.getElementById('mpParEdit').value = seg(peEN, raw.indexOf(feTL)>=0 ? feTL : end);
+    const facTl = raw.indexOf(feTL)>=0 ? seg(feTL, peTL) : '';
+    const parTl = raw.indexOf(peTL)>=0 ? seg(peTL, end) : '';
+    document.getElementById('mpFacEditTl').value = facTl;
+    document.getElementById('mpParEditTl').value = parTl;
+    _mpShowTl(!!(facTl || parTl));
+    toast('Parsed English + Tagalog — review below','✅');
+  } else {
+    const fi = raw.indexOf('===FACILITATOR==='), pi = raw.indexOf('===PARTICIPANT==='), ei = raw.indexOf('===END===');
+    if(fi>=0 && pi>fi && ei>pi){
+      document.getElementById('mpFacEdit').value = raw.slice(fi+'===FACILITATOR==='.length, pi).trim();
+      document.getElementById('mpParEdit').value = raw.slice(pi+'===PARTICIPANT==='.length, ei).trim();
+      toast('Parsed into two guides — review below','✅');
+    } else {
+      document.getElementById('mpFacEdit').value = raw;
+      document.getElementById('mpParEdit').value = '';
+      toast("Couldn't find the guide markers — split the text into the boxes by hand",'⚠️');
+    }
+    document.getElementById('mpFacEditTl').value = '';
+    document.getElementById('mpParEditTl').value = '';
+    _mpShowTl(false);
   }
   document.getElementById('mpPreview').style.display = '';
   mpRenderPreview();
@@ -1736,6 +1770,11 @@ function mpParse(){
 function mpRenderPreview(){
   document.getElementById('mpFacView').innerHTML = mpMd(document.getElementById('mpFacEdit').value);
   document.getElementById('mpParView').innerHTML = mpMd(document.getElementById('mpParEdit').value);
+  const ft=document.getElementById('mpFacViewTl'); if(ft) ft.innerHTML = mpMd(document.getElementById('mpFacEditTl').value);
+  const pt=document.getElementById('mpParViewTl'); if(pt) pt.innerHTML = mpMd(document.getElementById('mpParEditTl').value);
+}
+function _mpShowTl(show){
+  const b=document.getElementById('mpTlBlock'); if(b) b.style.display = show ? 'block' : 'none';
 }
 
 // minimal, escaping markdown -> html (headings, bold, italic, bullet lists, paragraphs)
@@ -1757,7 +1796,7 @@ async function mpLoadExisting(){
   const date = document.getElementById('mpDate').value || _mpToday();
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('facilitator_md,participant_md,raw_paste,status,shared_to_library')
+      .select('facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,raw_paste,status,shared_to_library')
       .eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
     if(error) throw error;
     const _sl = document.getElementById('mpShareLib');
@@ -1765,6 +1804,9 @@ async function mpLoadExisting(){
       document.getElementById('mpPaste').value = data.raw_paste || '';
       document.getElementById('mpFacEdit').value = data.facilitator_md || '';
       document.getElementById('mpParEdit').value = data.participant_md || '';
+      document.getElementById('mpFacEditTl').value = data.facilitator_md_tl || '';
+      document.getElementById('mpParEditTl').value = data.participant_md_tl || '';
+      _mpShowTl(!!(data.facilitator_md_tl || data.participant_md_tl));
       if(_sl) _sl.checked = !!data.shared_to_library;
       document.getElementById('mpPreview').style.display = '';
       mpRenderPreview();
@@ -1772,6 +1814,9 @@ async function mpLoadExisting(){
       document.getElementById('mpPaste').value = '';
       document.getElementById('mpFacEdit').value = '';
       document.getElementById('mpParEdit').value = '';
+      document.getElementById('mpFacEditTl').value = '';
+      document.getElementById('mpParEditTl').value = '';
+      _mpShowTl(false);
       if(_sl) _sl.checked = false;
       document.getElementById('mpPreview').style.display = 'none';
     }
@@ -1789,6 +1834,8 @@ async function mpSave(status){
   const payload = {
     lcl_id: me.id, devotional_id: _mpDevo.id, meeting_date: date,
     facilitator_md: fac, participant_md: par,
+    facilitator_md_tl: (document.getElementById('mpFacEditTl').value||'').trim() || null,
+    participant_md_tl: (document.getElementById('mpParEditTl').value||'').trim() || null,
     raw_paste: document.getElementById('mpPaste').value || null, status: status,
     shared_to_library: !!(document.getElementById('mpShareLib') && document.getElementById('mpShareLib').checked)
   };
