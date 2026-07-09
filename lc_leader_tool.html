@@ -1149,10 +1149,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div style="padding:14px;max-width:680px;margin:0 auto">
 
     <div id="mpListView">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-size:15px;font-weight:700;color:var(--ink)">My lessons</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button id="mpTabMine" onclick="_mpTab('mine')" style="flex:1;font-family:inherit;font-size:13px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:var(--surface2);color:var(--ink);border:1px solid var(--border)">My lessons</button>
+        <button id="mpTabLib" onclick="_mpTab('lib')" style="flex:1;font-family:inherit;font-size:13px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:transparent;color:var(--muted);border:1px solid var(--border)">Library</button>
+      </div>
+      <div id="mpNewRow" style="display:flex;justify-content:flex-end;margin-bottom:10px">
         <button onclick="_mpNewLesson()" style="background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">+ New lesson</button>
       </div>
+      <div id="mpLibHint" style="display:none;font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Ready-made lessons shared by other LC leaders in your church. Open one and tap <strong style="color:var(--gold)">Share to my LCG</strong>.</div>
       <div id="mpMyList"></div>
     </div>
 
@@ -1190,6 +1194,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <textarea id="mpParEdit" rows="6" oninput="mpRenderPreview()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
         <div id="mpParView" style="margin-top:10px;font-size:13px;line-height:1.6;color:var(--ink)"></div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12.5px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="mpShareLib" style="width:16px;height:16px;accent-color:var(--gold)">
+        Also share to the church Library (other LC leaders can reuse this)
+      </label>
       <div style="display:flex;gap:10px;margin-bottom:24px">
         <button onclick="mpSave('draft')" style="flex:1;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:11px;font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer">Save draft</button>
         <button onclick="mpSave('published')" style="flex:1;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:11px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">Publish to my group</button>
@@ -1435,10 +1443,27 @@ function _mpBack(){
   if(document.getElementById('mpCreateView') && document.getElementById('mpCreateView').style.display !== 'none'){ _mpShowList(); }
   else { showScreen('screenHome'); }
 }
+let _mpCurrentTab = 'mine';
 function _mpShowList(){
   document.getElementById('mpCreateView').style.display = 'none';
   document.getElementById('mpListView').style.display = '';
-  mpLoadMyLessons();
+  _mpTab(_mpCurrentTab || 'mine');
+}
+function _mpTab(which){
+  _mpCurrentTab = which;
+  const on ='background:var(--surface2);color:var(--ink);border:1px solid var(--border)';
+  const off='background:transparent;color:var(--muted);border:1px solid var(--border)';
+  const base='flex:1;font-family:inherit;font-size:13px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;';
+  const tm=document.getElementById('mpTabMine'), tl=document.getElementById('mpTabLib');
+  if(tm) tm.style.cssText = base+(which==='mine'?on:off);
+  if(tl) tl.style.cssText = base+(which==='lib'?on:off);
+  const nr=document.getElementById('mpNewRow'); if(nr) nr.style.display = which==='mine'?'flex':'none';
+  const lh=document.getElementById('mpLibHint'); if(lh) lh.style.display = which==='lib'?'block':'none';
+  if(which==='lib') mpLoadLibrary(); else mpLoadMyLessons();
+}
+function _mpLangTag(g){
+  const tl = (g.facilitator_md_tl && g.facilitator_md_tl.trim()) || (g.participant_md_tl && g.participant_md_tl.trim());
+  return '<span style="font-size:10px;color:var(--muted)">'+(tl?'EN · TL':'EN only')+'</span>';
 }
 async function _mpNewLesson(){
   document.getElementById('mpListView').style.display = 'none';
@@ -1459,7 +1484,7 @@ async function mpLoadMyLessons(){
   box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('id,meeting_date,status,devotional_id,facilitator_md,participant_md')
+      .select('id,meeting_date,status,devotional_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,shared_to_library,source_guide_id')
       .eq('lcl_id', me.id).order('meeting_date',{ ascending:false });
     if(error) throw error;
     const guides = data || [];
@@ -1487,13 +1512,55 @@ async function mpLoadMyLessons(){
         +   '<span style="font-size:13.5px;font-weight:600;color:var(--ink)">'+_mpEsc(g._title)+'</span>'+chip+'</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'
         +   '<span style="font-size:11.5px;color:var(--muted)">'+_mpFmtDate(g.meeting_date)+'</span>'
-        +   '<span style="font-size:10px;color:var(--muted)">EN only</span></div></div>';
+        +   _mpLangTag(g)+'</div></div>';
     }).join('');
   }catch(e){ console.error('my lessons', e); box.innerHTML='<div style="padding:16px;color:var(--muted);font-size:13px">Could not load your lessons.</div>'; }
 }
-function _mpOpenModal(id){
-  const g = _mpMyGuides[id]; if(!g) return;
-  _mpModalCur = g; _mpModalGuideView = 'fac';
+let _mpLibGuides = {};
+let _mpModalSource = 'mine';
+async function mpLoadLibrary(){
+  const me = _liveLeaderIdName();
+  const box = document.getElementById('mpMyList');
+  if(!box) return;
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try{
+    let q = db.from('lc_meeting_guides')
+      .select('id,meeting_date,status,devotional_id,lcl_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl')
+      .eq('status','published').eq('shared_to_library', true)
+      .order('meeting_date',{ ascending:false });
+    if(me && me.id) q = q.neq('lcl_id', me.id);
+    const { data, error } = await q;
+    if(error) throw error;
+    const guides = data || [];
+    const dids = [...new Set(guides.map(g=>g.devotional_id).filter(Boolean))];
+    const lids = [...new Set(guides.map(g=>g.lcl_id).filter(Boolean))];
+    let titles={}, authors={};
+    if(dids.length){ const { data:dv } = await db.from('devotionals').select('id,title').in('id',dids); (dv||[]).forEach(d=>{ titles[d.id]=d.title; }); }
+    if(lids.length){ const { data:ms } = await db.from('members').select('id,name,lc_group').in('id',lids); (ms||[]).forEach(m=>{ authors[m.id]= m.lc_group || (((m.name||'').split(' ')[0])+"'s LCG"); }); }
+    _mpLibGuides = {};
+    guides.forEach(g=>{ g._title = titles[g.devotional_id]||'(untitled lesson)'; g._author = authors[g.lcl_id]||'another LC'; _mpLibGuides[g.id]=g; });
+    if(!guides.length){
+      box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--muted)">'
+        + '<div style="font-size:30px;margin-bottom:8px">📚</div>'
+        + '<div style="font-size:14px;margin-bottom:4px;color:var(--ink)">Library is empty</div>'
+        + '<div style="font-size:12.5px;line-height:1.5">When other leaders share a lesson to the church Library, it shows up here.</div></div>';
+      return;
+    }
+    box.innerHTML = guides.map(function(g){
+      return '<div onclick="_mpOpenModal(\''+g.id+'\',\'lib\')" style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:8px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +   '<span style="font-size:13.5px;font-weight:600;color:var(--ink)">'+_mpEsc(g._title)+'</span>'
+        +   '<span style="font-size:10.5px;color:var(--muted);white-space:nowrap">👥 '+_mpEsc(g._author)+'</span></div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">'
+        +   '<span style="font-size:11.5px;color:var(--muted)">'+_mpFmtDate(g.meeting_date)+'</span>'
+        +   _mpLangTag(g)+'</div></div>';
+    }).join('');
+  }catch(e){ console.error('library', e); box.innerHTML='<div style="padding:16px;color:var(--muted);font-size:13px">Could not load the library.</div>'; }
+}
+function _mpOpenModal(id, source){
+  source = source || 'mine';
+  const g = (source==='lib' ? _mpLibGuides[id] : _mpMyGuides[id]); if(!g) return;
+  _mpModalCur = g; _mpModalSource = source; _mpModalGuideView = 'fac';
   _mpRenderModal();
   document.getElementById('mpModalOverlay').classList.add('show');
 }
@@ -1527,7 +1594,11 @@ function _mpRenderModal(){
     + '<div class="crm-body" style="max-height:60vh;overflow-y:auto">'
     +   (noTL ? '<div style="font-size:12px;background:rgba(212,175,55,.14);color:var(--gold);border:1px solid rgba(212,175,55,.4);padding:8px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">Walang Tagalog na bersyon pa — English muna ang ipinapakita.</div>' : '')
     +   '<div style="font-size:13px;line-height:1.6;color:var(--ink)">'+mpMd(body||'')+'</div></div>'
-    + '<div style="padding:0 18px 16px"><button onclick="_mpEditGuide(\''+g.meeting_date+'\')" style="width:100%;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">✏️ Edit lesson</button></div>';
+    + '<div style="padding:0 18px 16px">'
+    +   (_mpModalSource==='lib'
+        ? '<button onclick="_mpShareToLcg(\''+g.id+'\')" style="width:100%;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">📲 Share to my LCG</button>'
+        : '<button onclick="_mpEditGuide(\''+g.meeting_date+'\')" style="width:100%;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">✏️ Edit lesson</button>')
+    +   '</div>';
 }
 async function _mpEditGuide(date){
   _mpCloseModal();
@@ -1536,6 +1607,32 @@ async function _mpEditGuide(date){
   const d = document.getElementById('mpDate'); if(d) d.value = date;
   await mpLoadDevotional();
   await mpLoadExisting();
+}
+async function _mpShareToLcg(srcId){
+  const src = _mpLibGuides[srcId]; if(!src){ toast('Lesson not found','⚠️'); return; }
+  const me = _liveLeaderIdName();
+  if(!me || !me.id){ toast('Session not ready — reopen this screen','⚠️'); return; }
+  const date = prompt('Meeting date for your copy (YYYY-MM-DD):', _mpToday());
+  if(!date) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('Use date format YYYY-MM-DD','⚠️'); return; }
+  try{
+    const { data: existing } = await db.from('lc_meeting_guides')
+      .select('id').eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
+    if(existing && existing.id && !confirm('You already have a lesson on '+date+'. Replace it with this one?')) return;
+    const payload = {
+      lcl_id: me.id, devotional_id: src.devotional_id, meeting_date: date,
+      facilitator_md: src.facilitator_md, participant_md: src.participant_md,
+      facilitator_md_tl: src.facilitator_md_tl || null, participant_md_tl: src.participant_md_tl || null,
+      status: 'published', source_guide_id: src.id
+    };
+    let res;
+    if(existing && existing.id) res = await db.from('lc_meeting_guides').update(payload).eq('id', existing.id);
+    else res = await db.from('lc_meeting_guides').insert(payload);
+    if(res.error) throw res.error;
+    toast('Shared to your LCG 🎉','✅');
+    _mpCloseModal();
+    _mpTab('mine');
+  }catch(e){ console.error('share', e); toast('Could not share: '+(e.message||e),'⚠️'); }
 }
 async function _mpMostRecentGuideDate(){
   const me = _liveLeaderIdName(); if(!me || !me.id) return null;
@@ -1660,19 +1757,22 @@ async function mpLoadExisting(){
   const date = document.getElementById('mpDate').value || _mpToday();
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('facilitator_md,participant_md,raw_paste,status')
+      .select('facilitator_md,participant_md,raw_paste,status,shared_to_library')
       .eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
     if(error) throw error;
+    const _sl = document.getElementById('mpShareLib');
     if(data){
       document.getElementById('mpPaste').value = data.raw_paste || '';
       document.getElementById('mpFacEdit').value = data.facilitator_md || '';
       document.getElementById('mpParEdit').value = data.participant_md || '';
+      if(_sl) _sl.checked = !!data.shared_to_library;
       document.getElementById('mpPreview').style.display = '';
       mpRenderPreview();
     } else {
       document.getElementById('mpPaste').value = '';
       document.getElementById('mpFacEdit').value = '';
       document.getElementById('mpParEdit').value = '';
+      if(_sl) _sl.checked = false;
       document.getElementById('mpPreview').style.display = 'none';
     }
   }catch(e){ console.error('guide load', e); toast('Could not load your saved guide','⚠️'); }
@@ -1689,7 +1789,8 @@ async function mpSave(status){
   const payload = {
     lcl_id: me.id, devotional_id: _mpDevo.id, meeting_date: date,
     facilitator_md: fac, participant_md: par,
-    raw_paste: document.getElementById('mpPaste').value || null, status: status
+    raw_paste: document.getElementById('mpPaste').value || null, status: status,
+    shared_to_library: !!(document.getElementById('mpShareLib') && document.getElementById('mpShareLib').checked)
   };
   try{
     const { data: existing } = await db.from('lc_meeting_guides')
