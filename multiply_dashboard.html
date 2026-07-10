@@ -1050,6 +1050,19 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <div id="sviWeightsStatus" style="font-size:11px;color:var(--muted);margin-top:.65rem;min-height:14px"></div>
   </div>
 
+  <div class="ss" id="sviWindowsSection" style="display:none"><div class="st">🗓️ SVI Windows <span style="display:inline-flex;align-items:center;gap:3px;font-size:9.5px;background:var(--surface2);color:var(--muted);padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:.5rem;vertical-align:middle"><span style="font-size:10px">🔒</span>Pastor only</span></div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.55;margin:.5rem 0 .5rem">
+      Set how many <strong>days</strong> back each metric looks when scoring — <strong>for your church</strong>. Leave a row at its default to follow the platform default. Shorter = a more recent, responsive care-lens; longer = steadier. Save, or Save &amp; Recompute to apply now.
+    </div>
+    <div id="sviWindowRows"></div>
+    <div class="svw-actions">
+      <button class="sbtn svwin-savebtn" style="margin-top:0;background:var(--green);padding:7px 14px;font-size:11.5px" onclick="saveSviWindows(false)">💾 Save</button>
+      <button class="sbtn svwin-savebtn" style="margin-top:0;background:var(--gold);color:#1a1206;padding:7px 14px;font-size:11.5px" onclick="saveSviWindows(true)">⚡ Save &amp; Recompute</button>
+      <button class="sbtn" style="margin-top:0;background:var(--surface2);color:var(--muted);padding:7px 14px;font-size:11.5px" onclick="loadSviWindows()">↺ Revert</button>
+    </div>
+    <div id="sviWindowsStatus" style="font-size:11px;color:var(--muted);margin-top:.65rem;min-height:14px"></div>
+  </div>
+
   <!-- ─── ASSESSMENT INSTRUMENT VERSIONS (Pastor-configurable) ─── -->
   <!-- Tracks when each personality/diagnostic instrument was redesigned.
        Results dated BEFORE the cutoff get a soft "conversation-starter,
@@ -11900,6 +11913,7 @@ loadHeadsUpSettings();
 // reliably ready by then). Wired via _navTo('settings', initSettingsPanel).
 function initSettingsPanel(){
   try { if(typeof loadSviWeights==='function') loadSviWeights(); } catch(e){}
+  try { if(typeof loadSviWindows==='function') loadSviWindows(); } catch(e){}
   try { if(typeof loadGreetingTemplates==='function') loadGreetingTemplates(); } catch(e){}
   try { if(typeof loadDiagSettings==='function') loadDiagSettings(); } catch(e){}
   try { if(typeof loadHeadsUpSettings==='function') loadHeadsUpSettings(); } catch(e){}
@@ -14273,6 +14287,100 @@ async function saveSviWeights(recompute){
   }catch(e){
     if(status){ status.textContent="⚠ "+(e.message||"Save failed"); status.style.color="var(--red)"; }
     toast("Save failed: "+e.message,"❌");
+  }finally{
+    btns.forEach(b=>b.disabled=false);
+  }
+}
+
+/* ===== SVI Windows editor (Settings, Pastor-only) — Wave 5b-2b =====
+   Per-church measurement windows (lookback_days) for the count/rate metrics the
+   compute-svi-weekly EF resolves per church. input≠default → insert/update override
+   (autostamp trigger stamps church_id from the JWT); input=default → delete the
+   override (revert to global). JWT'd db + RLS scope everything to the pastor's church. */
+let _sviWinMetrics = [];
+let _sviWinOverrides = new Map();
+
+async function loadSviWindows(){
+  const sec = document.getElementById("sviWindowsSection");
+  if(!sec) return;
+  const isPastor = (typeof LeaderScope!=="undefined") && LeaderScope.isPastor && LeaderScope.isPastor();
+  sec.style.display = isPastor ? "block" : "none";
+  if(!isPastor) return;
+  const status = document.getElementById("sviWindowsStatus");
+  try{
+    const [mRes,oRes] = await Promise.all([
+      db.from("svi_metrics").select("metric_key,display_name,category,compute_type,compute_config,sort_order").eq("is_active",true).order("sort_order"),
+      db.from("svi_metric_overrides").select("id,metric_key,compute_config_override").eq("is_active",true)
+    ]);
+    if(mRes.error) throw mRes.error;
+    if(oRes.error) throw oRes.error;
+    _sviWinMetrics = (mRes.data||[]).filter(m=>{
+      const cfg = m.compute_config||{};
+      return (m.compute_type==="count_rows"||m.compute_type==="rate_rows") && cfg.lookback_days!=null;
+    }).map(m=>({ metric_key:m.metric_key, display_name:m.display_name, category:m.category, globalLb:Number(m.compute_config.lookback_days) }));
+    _sviWinOverrides = new Map();
+    (oRes.data||[]).forEach(o=> _sviWinOverrides.set(o.metric_key, {id:o.id, compute_config_override:o.compute_config_override||{}}));
+    _sviWinRender();
+    if(status) status.textContent="";
+  }catch(e){
+    if(status){ status.textContent="⚠ "+(e.message||"Load failed"); status.style.color="var(--red)"; }
+  }
+}
+
+function _sviWinRender(){
+  const host = document.getElementById("sviWindowRows"); if(!host) return;
+  if(_sviWinMetrics.length===0){ host.innerHTML = `<div style="font-size:11.5px;color:var(--muted);padding:8px 0">No window-able metrics.</div>`; return; }
+  host.innerHTML = _sviWinMetrics.map(m=>{
+    const ov = _sviWinOverrides.get(m.metric_key);
+    const cur = (ov && ov.compute_config_override && ov.compute_config_override.lookback_days!=null) ? Number(ov.compute_config_override.lookback_days) : m.globalLb;
+    const wk = Math.round(m.globalLb/7*10)/10;
+    const overridden = cur!==m.globalLb;
+    return `<div class="svw-row"><div class="svw-name"><span>${m.display_name||m.metric_key}</span><span class="svw-cat">${m.category||""}${overridden?" · overridden":""}</span></div>`
+      + `<input type="number" min="1" max="730" step="1" class="svw-inp" id="svwin_${m.metric_key}" value="${cur}">`
+      + `<span class="svw-pct" style="width:auto;white-space:nowrap">days <span style="color:var(--lighter)">(def ${m.globalLb}d·${wk}w)</span></span></div>`;
+  }).join("");
+}
+
+async function saveSviWindows(recompute){
+  if(!((typeof LeaderScope!=="undefined") && LeaderScope.isPastor && LeaderScope.isPastor())){ toast("Only the Pastor can edit windows","🔒"); return; }
+  const status=document.getElementById("sviWindowsStatus");
+  const btns=document.querySelectorAll(".svwin-savebtn"); btns.forEach(b=>b.disabled=true);
+  try{
+    let changed=0;
+    for(const m of _sviWinMetrics){
+      const el=document.getElementById("svwin_"+m.metric_key); if(!el) continue;
+      const n=Math.round(Number(el.value)); if(!(n>=1 && n<=730)){ throw new Error("Days must be 1–730 ("+(m.display_name||m.metric_key)+")"); }
+      const ov=_sviWinOverrides.get(m.metric_key);
+      if(n===m.globalLb){
+        if(ov && ov.id){ const {error}=await db.from("svi_metric_overrides").delete().eq("id",ov.id); if(error) throw error; _sviWinOverrides.delete(m.metric_key); changed++; }
+      } else if(ov && ov.id){
+        const merged=Object.assign({}, ov.compute_config_override||{}, {lookback_days:n});
+        const {error}=await db.from("svi_metric_overrides").update({compute_config_override:merged, updated_at:new Date().toISOString()}).eq("id",ov.id); if(error) throw error;
+        ov.compute_config_override=merged; changed++;
+      } else {
+        const {data,error}=await db.from("svi_metric_overrides").insert({metric_key:m.metric_key, compute_config_override:{lookback_days:n}}).select("id").single();
+        if(error) throw error;
+        _sviWinOverrides.set(m.metric_key, {id:data.id, compute_config_override:{lookback_days:n}}); changed++;
+      }
+    }
+    _sviWinRender();
+    if(status){ status.textContent="✓ Saved "+changed+" window change"+(changed===1?"":"s"); status.style.color="var(--green)"; }
+    toast("Windows saved ✓");
+    if(recompute){
+      if(status){ status.textContent="✓ Saved — recomputing all members (this can take ~30–60s)…"; status.style.color="var(--gold)"; }
+      try{
+        const j=await _sviInvokeCompute();
+        if(typeof loadCareRadar==="function") await loadCareRadar();
+        if(status){ status.textContent="✓ Saved & recomputed ("+((j&&j.snapshots_written)||0)+" snapshots)"; status.style.color="var(--green)"; }
+        toast("Saved & recomputed ✓");
+      }catch(ce){
+        if(status){ status.textContent="Saved. Recompute couldn’t run in-page — use the report’s ⚡ Compute now button."; status.style.color="var(--gold)"; }
+        toast("Saved. Recompute manually.","info");
+      }
+    }
+  }catch(e){
+    if(status){ status.textContent="⚠ "+(e.message||"Save failed"); status.style.color="var(--red)"; }
+    toast("Save failed: "+(e.message||""),"❌");
   }finally{
     btns.forEach(b=>b.disabled=false);
   }
