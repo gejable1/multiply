@@ -182,7 +182,7 @@ async function runComputation(supabase: any, params: any) {
   //    runs (the filtered `members` above may hold just one person).
   const { data: allLite } = await supabase
     .from("members")
-    .select("id,pipeline_level,discipler_id")
+    .select("id,pipeline_level,discipler_id,church_id")
     .or("is_test_member.is.null,is_test_member.eq.false");
   const liteById = new Map<string, any>((allLite || []).map((m: any) => [m.id, m]));
 
