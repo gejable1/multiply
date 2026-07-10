@@ -571,6 +571,7 @@ function computeMetric(member: any, metric: any, weekStart: string, systemStartD
     case "date_recency":   return computeDateRecency(member, metric, weekStart, prefetch);
     case "count_rows":     return computeCountRows(member, metric, prefetch);
     case "rate_rows":      return computeRateRows(member, metric, prefetch);
+    case "count_fields":   return computeCountFields(member, metric);
     default:
       throw new Error(`Unknown compute_type: ${metric.compute_type}`);
   }
@@ -703,6 +704,23 @@ function computeBooleanCheck(member: any, metric: any): boolean {
     );
   }
   throw new Error(`No boolean_check handler for: ${cfg.check}`);
+}
+
+// --- count_fields handler (Wave 5b Option B) — GENERIC: counts non-empty member columns ---
+// Counts how many of compute_config.fields are non-empty on the member row.
+// Returns null when the count is below compute_config.min_count (default 1) — n/a,
+// sufficiency-guarded — so members below the threshold are neither rewarded nor penalised.
+function computeCountFields(member: any, metric: any): number | null {
+  const cfg = metric.compute_config || {};
+  const fields: string[] = Array.isArray(cfg.fields) ? cfg.fields : [];
+  let n = 0;
+  for (const f of fields) {
+    const v = member[f];
+    if (v != null && String(v).trim() !== "") n++;
+  }
+  const minCount = cfg.min_count != null ? Number(cfg.min_count) : 1;
+  if (n < minCount) return null;
+  return n;
 }
 
 // --- date_recency handler (diagnostic recency) — reads prefetch ---
