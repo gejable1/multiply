@@ -235,6 +235,60 @@ async function runComputation(supabase: any, params: any) {
     countByMetric.set(m.metric_key, cm);
   }
 
+  // ── rate_rows metrics (Wave 5b-1) — present ÷ opportunities.
+  //    rostered   : denom = member's own logged sessions (present+absent) for the event_type
+  //                 in-window → present/(present+absent); 0 logged = not enrolled = null (n/a);
+  //                 an absence counts against the rate.
+  //    events_held: denom = distinct church-held dates (≥1 present) for the event_type in-window
+  //                 → present/held; church held 0 = null (n/a); present 0 while held>0 = 0 (counted).
+  const rateByMetric = new Map<string, Map<string, number>>();        // rostered   : member_id -> rate 0..1
+  const rhPresentByMetric = new Map<string, Map<string, number>>();   // events_held: member_id -> present count
+  const rhHeldByMetric = new Map<string, Map<string, Set<string>>>(); // events_held: church_id -> Set(date)
+  for (const m of metrics) {
+    if (m.compute_type !== "rate_rows") continue;
+    const cfg = m.compute_config || {};
+    const table = cfg.table || "attendance";
+    const memberCol = cfg.member_col || "member_id";
+    const dateCol = cfg.date_col || "event_date";
+    const eventType = cfg.event_type;
+    const mode = cfg.denominator_mode || "rostered";
+    const lookbackDays = Number(cfg.lookback_days || 56);
+    const ws = new Date(weekStart + "T00:00:00Z");
+    const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - lookbackDays + 1);
+    const upper = new Date(ws); upper.setUTCDate(upper.getUTCDate() + 1);
+    const rows = await fetchAllPaged((f, t) => {
+      let q = supabase.from(table).select(`${memberCol},present,${dateCol}`)
+        .gte(dateCol, lower.toISOString()).lt(dateCol, upper.toISOString());
+      if (eventType) q = q.eq("event_type", eventType);
+      if (mode === "events_held") q = q.eq("present", true);
+      return q.range(f, t);
+    });
+    if (mode === "events_held") {
+      const pres = new Map<string, number>();
+      const held = new Map<string, Set<string>>();
+      for (const r of rows) {
+        const id = (r as any)[memberCol]; if (!id) continue;
+        pres.set(id, (pres.get(id) || 0) + 1);
+        const ch = String(liteById.get(id)?.church_id ?? ""); if (!ch) continue;
+        if (!held.has(ch)) held.set(ch, new Set());
+        held.get(ch)!.add(String((r as any)[dateCol]).slice(0, 10));
+      }
+      rhPresentByMetric.set(m.metric_key, pres);
+      rhHeldByMetric.set(m.metric_key, held);
+    } else {
+      const agg = new Map<string, { p: number; t: number }>();
+      for (const r of rows) {
+        const id = (r as any)[memberCol]; if (!id) continue;
+        const a = agg.get(id) || { p: 0, t: 0 };
+        a.t++; if ((r as any).present === true) a.p++;
+        agg.set(id, a);
+      }
+      const rm = new Map<string, number>();
+      for (const [id, a] of agg) if (a.t > 0) rm.set(id, a.p / a.t);
+      rateByMetric.set(m.metric_key, rm);
+    }
+  }
+
   // Prior snapshots @ weekStart−28d (trend baseline).
   const priorStr = dayStr(weekStart, 28);
   const priorRowsAll = await fetchAllPaged((f, t) => supabase.from("svi_snapshots")
@@ -260,6 +314,7 @@ async function runComputation(supabase: any, params: any) {
   const prefetch = {
     attendanceByMember, devotionalByMember, interventionsByMember,
     diagnosticLatestByMember, countByMetric, priorScoreByMember,
+    rateByMetric, rhPresentByMetric, rhHeldByMetric,
   };
 
   // Compute per member
@@ -469,6 +524,7 @@ function computeMetric(member: any, metric: any, weekStart: string, systemStartD
     case "boolean_check":  return computeBooleanCheck(member, metric);
     case "date_recency":   return computeDateRecency(member, metric, weekStart, prefetch);
     case "count_rows":     return computeCountRows(member, metric, prefetch);
+    case "rate_rows":      return computeRateRows(member, metric, prefetch);
     default:
       throw new Error(`Unknown compute_type: ${metric.compute_type}`);
   }
@@ -628,6 +684,25 @@ function computeCountRows(member: any, metric: any, prefetch: any): number | nul
   const _c = cm ? (cm.get(member.id) || 0) : 0;
   if (_c === 0 && metric.compute_config?.null_if_zero) return null;
   return _c;
+}
+
+// --- rate_rows handler (Wave 5b-1) — present ÷ opportunities, reads prefetch ---
+// rostered   : prefetch.rateByMetric holds present/(present+absent) per ENROLLED member;
+//              a member absent from the map = not enrolled = null (n/a).
+// events_held: rate = member present ÷ distinct church-held dates; held=0 = null (n/a);
+//              present=0 while held>0 = 0 (counted, church-wide expectation).
+function computeRateRows(member: any, metric: any, prefetch: any): number | null {
+  const key = metric.metric_key;
+  const mode = metric.compute_config?.denominator_mode || "rostered";
+  if (mode === "events_held") {
+    const held = prefetch.rhHeldByMetric.get(key)?.get(String(member.church_id))?.size || 0;
+    if (held === 0) return null;
+    const pres = prefetch.rhPresentByMetric.get(key)?.get(member.id) || 0;
+    return pres / held;
+  }
+  const rm = prefetch.rateByMetric.get(key);
+  if (!rm || !rm.has(member.id)) return null;
+  return rm.get(member.id)!;
 }
 
 // =====================================================================
