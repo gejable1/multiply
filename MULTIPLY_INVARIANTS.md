@@ -3138,4 +3138,28 @@ The MMT Filipino toggle flips a `lang-tl` class on `document.body` (50+ static s
 
 ---
 
+### **300. SVI `rate_rows` compute_type — the rate engine (present ÷ opportunities), feeds the existing `rate_to_score`**
+
+Wave 5a metrics were count-first (raw count over a window). Wave 5b-1 adds a `rate_rows` compute_type to `compute-svi-weekly`: a dedicated denominator prefetch + a `computeRateRows` handler returning a 0..1 rate, scored by the ALREADY-existing `rate_to_score` rule (the scoring half pre-existed; only the compute half — numerator ÷ denominator — was missing). Zero regression on the 6 count metrics (untouched). Migration 070 converted 4 attendance-cadence metrics in place (`prayer_meeting_att`, `gather_sunday_school`, `growth_btli_att`, `growth_batch_att`); the other 6 stay `count_rows` — they have no natural denominator (you can't count "gratitude opportunities held"). Result on live data: dormant lessened, thriving increased — faithful attendance the raw count undervalued is now measured fairly.
+
+**Established July 10, 2026 (Session 68). Invariant #300 added - count now 300.**
+
+---
+
+### **301. Two SVI denominator modes: `rostered` (an absent is an absent) vs `events_held`; both n/a paths route through `null_if_zero`**
+
+`rostered` (Sunday School / BTLI / Special Batch — opt-in tracks): denom = the member's OWN logged sessions (present+absent) for the event_type in-window → present/(present+absent). A logged **absence lowers the rate** (Pastor Gerry's explicit rule — "an absent is an absent"). Enrollment is detected FREE from attendance: **0 logged rows (neither present nor absent) = not enrolled = null (n/a)**, preserving the #281 opt-in fairness. `events_held` (Prayer Meeting — church-wide, no roster): denom = distinct church-held dates (≥1 present anywhere in that church) → present/held; **held=0 = null (n/a)**; **present=0 while held>0 = rate 0 (counted)** — a real church-wide-expectation care-flag. Both n/a cases route through the existing `null_if_zero` + `metricsTotal--` sufficiency guard, so non-participants never flip regulars to "insufficient". Mode is chosen per-metric via `compute_config.denominator_mode`.
+
+**Established July 10, 2026 (Session 68). Invariant #301 added - count now 301.**
+
+---
+
+### **302. `svi_metrics.compute_type` is CHECK-gated — widen the constraint BEFORE adding a new compute_type (#290 in practice)**
+
+`svi_metrics_compute_type_check` allow-listed only `sql_query/jsonb_extract/count_rows/boolean_check/date_recency/manual_override` — a raw UPDATE to `compute_type='rate_rows'` would have been rejected at the constraint. Migration 070 does `DROP CONSTRAINT IF EXISTS` + re-`ADD` the CHECK with `rate_rows` included FIRST, before the UPDATEs. A fresh instance of #290: always verify the originating CHECK DDL (not just schema.json column defaults) before inserting a new enum-style value — this applies to `compute_type`, not just `kind` columns.
+
+**Established July 10, 2026 (Session 68). Invariant #302 added - count now 302.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
