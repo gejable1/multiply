@@ -128,6 +128,36 @@ async function runComputation(supabase: any, params: any) {
     throw new Error("No default svi_weight_profile (applies_to_level IS NULL) found for any church.");
   }
 
+  // ── Per-church metric overrides (Wave 5b-2) — a church may override a metric's
+  //    window (compute_config.lookback_days) or any compute_config knob; the override
+  //    JSONB shallow-merges over the GLOBAL svi_metrics.compute_config. Wrapped so the EF
+  //    still runs if the table doesn't exist yet (pre-migration deploy).
+  const overrideByChurchMetric = new Map<string, any>();  // `${church_id}|${metric_key}` -> override obj
+  try {
+    const { data: ovRows } = await supabase
+      .from("svi_metric_overrides")
+      .select("church_id,metric_key,compute_config_override")
+      .eq("is_active", true);
+    for (const o of ovRows || []) {
+      overrideByChurchMetric.set(`${o.church_id}|${o.metric_key}`, o.compute_config_override || {});
+    }
+  } catch (_e) { /* table not present yet — no overrides, global windows apply */ }
+  // effective lookback_days for a (church, metric): override wins, else the metric's global.
+  const effLookback = (churchId: any, metricKey: string, globalLb: number): number => {
+    const ov = overrideByChurchMetric.get(`${churchId}|${metricKey}`);
+    const v = ov && ov.lookback_days;
+    return (v === undefined || v === null) ? globalLb : Number(v);
+  };
+  // widest lookback across the global default + every church override for a metric — the
+  // bulk fetch spans this so each member can later be bounded to their own church window.
+  const widestLookback = (metricKey: string, globalLb: number): number => {
+    let w = globalLb;
+    for (const [k, ov] of overrideByChurchMetric) {
+      if (k.endsWith(`|${metricKey}`) && ov && ov.lookback_days != null) w = Math.max(w, Number(ov.lookback_days));
+    }
+    return w;
+  };
+
   // Load active members
   let memberQuery = supabase
     .from("members")
@@ -152,7 +182,7 @@ async function runComputation(supabase: any, params: any) {
   //    runs (the filtered `members` above may hold just one person).
   const { data: allLite } = await supabase
     .from("members")
-    .select("id,pipeline_level,discipler_id")
+    .select("id,pipeline_level,discipler_id,church_id")
     .or("is_test_member.is.null,is_test_member.eq.false");
   const liteById = new Map<string, any>((allLite || []).map((m: any) => [m.id, m]));
 
@@ -217,6 +247,7 @@ async function runComputation(supabase: any, params: any) {
     const memberCol = cfg.member_col || "member_id";
     const dateCol = cfg.date_col || null;
     const lookbackDays = Number(cfg.lookback_days || (cfg.lookback_weeks ? cfg.lookback_weeks * 7 : 30));
+    const fetchLb = widestLookback(m.metric_key, lookbackDays);            // 5b-2: span the widest church window
     const cols = [memberCol].concat(dateCol ? [dateCol] : []).join(",");
     const rows = await fetchAllPaged((f, t) => {
       let q = supabase.from(table).select(cols);
@@ -224,14 +255,21 @@ async function runComputation(supabase: any, params: any) {
       for (const [c, v] of Object.entries(filter)) q = Array.isArray(v) ? q.in(c, v) : q.eq(c, v);
       if (dateCol) {
         const ws = new Date(weekStart + "T00:00:00Z");
-        const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - lookbackDays + 1);
+        const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - fetchLb + 1);
         const upper = new Date(ws); upper.setUTCDate(upper.getUTCDate() + 1); // include weekStart day
         q = q.gte(dateCol, lower.toISOString()).lt(dateCol, upper.toISOString());
       }
       return q.range(f, t);
     });
     const cm = new Map<string, number>();
-    for (const r of rows) { const id = (r as any)[memberCol]; if (!id) continue; cm.set(id, (cm.get(id) || 0) + 1); }
+    for (const r of rows) {
+      const id = (r as any)[memberCol]; if (!id) continue;
+      if (dateCol) {                                                       // 5b-2: bound to the member's OWN church window
+        const lb = effLookback(liteById.get(id)?.church_id, m.metric_key, lookbackDays);
+        if (String((r as any)[dateCol]).slice(0, 10) < dayStr(weekStart, lb - 1)) continue;
+      }
+      cm.set(id, (cm.get(id) || 0) + 1);
+    }
     countByMetric.set(m.metric_key, cm);
   }
 
@@ -253,8 +291,9 @@ async function runComputation(supabase: any, params: any) {
     const eventType = cfg.event_type;
     const mode = cfg.denominator_mode || "rostered";
     const lookbackDays = Number(cfg.lookback_days || 56);
+    const fetchLb = widestLookback(m.metric_key, lookbackDays);           // 5b-2: span the widest church window
     const ws = new Date(weekStart + "T00:00:00Z");
-    const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - lookbackDays + 1);
+    const lower = new Date(ws); lower.setUTCDate(lower.getUTCDate() - fetchLb + 1);
     const upper = new Date(ws); upper.setUTCDate(upper.getUTCDate() + 1);
     const rows = await fetchAllPaged((f, t) => {
       let q = supabase.from(table).select(`${memberCol},present,${dateCol}`)
@@ -263,11 +302,17 @@ async function runComputation(supabase: any, params: any) {
       if (mode === "events_held") q = q.eq("present", true);
       return q.range(f, t);
     });
+    // 5b-2: a row counts for a member only if it falls inside THAT member's church window.
+    const inWin = (r: any): boolean => {
+      const lb = effLookback(liteById.get((r as any)[memberCol])?.church_id, m.metric_key, lookbackDays);
+      return String((r as any)[dateCol]).slice(0, 10) >= dayStr(weekStart, lb - 1);
+    };
     if (mode === "events_held") {
       const pres = new Map<string, number>();
       const held = new Map<string, Set<string>>();
       for (const r of rows) {
         const id = (r as any)[memberCol]; if (!id) continue;
+        if (!inWin(r)) continue;
         pres.set(id, (pres.get(id) || 0) + 1);
         const ch = String(liteById.get(id)?.church_id ?? ""); if (!ch) continue;
         if (!held.has(ch)) held.set(ch, new Set());
@@ -279,6 +324,7 @@ async function runComputation(supabase: any, params: any) {
       const agg = new Map<string, { p: number; t: number }>();
       for (const r of rows) {
         const id = (r as any)[memberCol]; if (!id) continue;
+        if (!inWin(r)) continue;
         const a = agg.get(id) || { p: 0, t: 0 };
         a.t++; if ((r as any).present === true) a.p++;
         agg.set(id, a);
