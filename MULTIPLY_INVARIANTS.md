@@ -3074,4 +3074,68 @@ schema.json shows a column's type/nullable/default but NOT its CHECK constraint.
 
 ---
 
+### **292. `lcg_leader_checkins` is now TRI-kind (checkin | celebration | encouragement); Building-Rhythm gets a one-way encouragement**
+
+Migration 068 extended the CHECK to `kind IN ('checkin','celebration','encouragement')`. Encouragement is a one-way pastoral nudge for the LCG Pulse “🌱 Building Rhythm” tier (a leader keeping cadence but not yet thriving): `kind='encouragement'`, `status='sent'`, `message` = the editable `lcg_encouragement_greeting` (5th tab in MD Settings → Message Greetings). Distinct from both the “Needs a Heartbeat” two-way check-in and the celebration kudos flow. Extends the route-by-kind rule (#289) — `_encouragementByLeader` is its own bucket; the CHECK-DDL-superset discipline (#290) applied again.
+
+**Established July 10, 2026 (Session 67). Invariant #292 added - count now 292.**
+
+---
+
+### **293. In-app embed extends to standalone manuals, not just reports**
+
+The MLT User’s Manual (and the SVI manual pair) now open inside the shell’s iframe modal via `_openLessonViewerModal('..._manual.html?embed=1', label, true)` — the reports pattern (#288), replacing `window.open(..., '_blank', 'noopener')`. The manual carries the embed-class script + a `<style id="embedFix">` that flips its off-canvas sidebar `position:fixed`→`absolute` under `html.embed` on Samsung Internet. Any standalone HTML surface opened from a tool should use this embed pattern, never a new tab.
+
+**Established July 10, 2026 (Session 67). Invariant #293 added - count now 293.**
+
+---
+
+### **294. Fetch-first: CC cuts every branch off the FRESHEST `origin/main` (stale-base guard)**
+
+A PR (#147) was cut from a local `main` that lagged `origin` by one merge (#146) — the branch silently dropped the just-merged change; the byte-for-byte back-check caught it (branch missing a line that was on `main`), fixed by rebasing `--force-with-lease` onto `origin/main`. Standing rule: every CC task opens with `git fetch origin` + `git checkout -b <branch> origin/main`. The back-check (branch-vs-current-`main` diff = EXACTLY the intended files) is what surfaces a stale base; run it before every merge.
+
+**Established July 10, 2026 (Session 67). Invariant #294 added - count now 294.**
+
+---
+
+### **295. Meeting-guide church Library = opt-in share + Share-to-my-LCG CLONE with provenance**
+
+Migration 069 added `shared_to_library boolean` (opt-in at publish) + `source_guide_id uuid REFERENCES lc_meeting_guides(id) ON DELETE SET NULL`. Leaders browse `published AND shared_to_library` guides church-wide (RLS-scoped). “Share to my LCG” does NOT reference-in-place — it CLONES the guide into a new row the borrower owns (their `lcl_id`, date defaults to today + editable, confirm-replace on the `UNIQUE(church,lcl,date)` collision, `status='published'`), stamping `source_guide_id` for honor. Borrowing is copy-with-provenance, never shared ownership. (S67 follow-up: the Library also lists your OWN shared guides, tagged “· you”; opening your own offers Edit, not clone-to-self, via a per-guide `_mine` flag.)
+
+**Established July 10, 2026 (Session 67). Invariant #295 added - count now 295.**
+
+---
+
+### **296. `auth_is_leader()` — SECURITY-DEFINER leader-read RLS helper (prefer over inline EXISTS)**
+
+Migration 069’s `auth_is_leader()` (`RETURNS boolean … SECURITY DEFINER SET search_path=public`, mirroring `auth_discipler_id()` from 047) returns `members.is_facilitator` for the JWT caller, bypassing members-RLS to avoid policy recursion. It gates the 3rd branch of `lcmg_select` (any church leader reads the shared library). Prefer a SECURITY-DEFINER boolean helper over an inline `EXISTS(SELECT … FROM members …)` for “is the caller a leader/role” checks inside another table’s RLS — the subquery runs under the caller’s members-RLS and can silently return false.
+
+**Established July 10, 2026 (Session 67). Invariant #296 added - count now 296.**
+
+---
+
+### **297. Bilingual meeting guides via `*_md_tl` + a graceful-degrade 4-section parser**
+
+The Meeting-Prep AI prompt now requests EN + TL in four fences (`===FACILITATOR_EN===`/`PARTICIPANT_EN`/`FACILITATOR_TL`/`PARTICIPANT_TL`/`===END===`). `mpParse` splits four sections AND stays backward-compatible with the old two-section output (`===FACILITATOR===`/`===PARTICIPANT===`); with EN-only it fills EN and hides the Tagalog editor. Columns `facilitator_md_tl`/`participant_md_tl` (069) feed the modal EN/TL toggle; the `#mpTlBlock` editor reveals only when TL content exists. Caveat: bilingual doubles AI output and can truncate on free tools — the parser must degrade to EN-only cleanly, never error.
+
+**Established July 10, 2026 (Session 67). Invariant #297 added - count now 297.**
+
+---
+
+### **298. Deliver CC edits as readable `str_replace` anchor blocks, not base64 — the transport-drift lesson**
+
+An 18 KB base64 patcher drifted in chat transit: it decoded cleanly and `ast`-parsed cleanly, but its sha256 no longer matched — content changed somewhere in transport, correctly caught by CC’s `sha256sum -c` gate (nothing run or committed). Preferred delivery for edits to an existing file: readable old→new `str_replace` anchor blocks, extractable to a single copyable block via `<<<FIND>>>/<<<REPLACE>>>/<<<END>>>` markers (fence-safe; `ast`-extract the pairs from the proven patcher so they’re byte-accurate). `str_replace`’s match-exactly-once IS the drift guard; Claude still proves every edit on a throwaway `/tmp` copy (node --check + jsdom) and keeps that proven output as the byte-for-byte back-check reference. Reserve base64 only when content genuinely can’t be expressed as clean anchors.
+
+**Established July 10, 2026 (Session 67). Invariant #298 added - count now 298.**
+
+---
+
+### **299. MMT guide bodies pick the language SOURCE column + re-render; the CSS `.tl-text`/`.en-text` toggle can’t touch rendered markdown**
+
+The MMT Filipino toggle flips a `lang-tl` class on `document.body` (50+ static spans switch via `.en-text`/`.tl-text` CSS). But a meeting guide is rendered-markdown HTML in one node — CSS can’t swap its content. So a guide body must READ the right source column at render time: `_mtgGuideBodyHtml(g)` returns `mmtMd(participant_md_tl)` when `document.body.classList.contains('lang-tl')` AND it’s non-empty, else `mmtMd(participant_md)` (graceful EN fallback); `setLang()` re-renders the open guide sheet so it flips live. Any dynamic JS-built or markdown-rendered surface (guides, sermon detail, pipeline) needs an explicit language re-render on toggle — only static `.en-text`/`.tl-text` spans self-switch. Completes the bilingual meeting-guide loop (author EN+TL #297 → member reads in their language).
+
+**Established July 10, 2026 (Session 67). Invariant #299 added - count now 299.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
