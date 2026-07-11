@@ -3162,4 +3162,52 @@ Wave 5a metrics were count-first (raw count over a window). Wave 5b-1 adds a `ra
 
 ---
 
+### **303. `svi_metric_overrides` — per-church metric-window overrides (mirrors the `svi_weight_profiles` tenancy pattern; a REGULAR composite unique, unlike the partial-index #267 case)**
+
+Wave 5b-2a added `public.svi_metric_overrides` (`church_id`, `metric_key`, `compute_config_override jsonb`, `is_active`, `UNIQUE(church_id, metric_key)`) so a church can tune any count/rate metric's `lookback_days` WITHOUT touching the GLOBAL `svi_metrics` catalog (#032 — `svi_metrics` has no `church_id`). RLS = the same 4-policy `auth_church_id()` shape as `svi_weight_profiles`, plus a `set_church_id_from_jwt` BEFORE INSERT trigger so the client sends no `church_id` (#266). Because the unique is a REGULAR composite (not a partial index like `pathway_rungs` #267), PostgREST `onConflict` COULD target it — but the client still does **manual insert-or-update-by-id** (load existing overrides → UPDATE by id / INSERT / DELETE by id) for robustness and to sidestep any autostamp+onConflict interaction.
+
+**Established July 11, 2026 (Session 69). Invariant #303 added - count now 303.**
+
+---
+
+### **304. SVI per-church windows: widest-fetch + per-member-bound — and ONLY `count_rows`/`rate_rows` are window-able**
+
+The EF resolves each member's effective window as `override.lookback_days ?? metric.compute_config.lookback_days`. To keep the bulk prefetch single-pass (#170), it fetches the WIDEST window across all churches (`widestLookback`) ONCE, then bounds each member's rows by their OWN church's window (`effLookback`) inside the `count_rows` and `rate_rows` prefetch loops. IMPORTANT: only `count_rows` and `rate_rows` honor per-church windows — the `sql_query` metrics compute their windows internally and are NOT wired to overrides. The MD SVI Windows UI therefore exposes ONLY the count/rate metrics — expose only what the engine actually honors.
+
+**Established July 11, 2026 (Session 69). Invariant #304 added - count now 304.**
+
+---
+
+### **305. A lite/backfill projection must SELECT every column a downstream `.get()` reads — the `allLite`/`church_id` silent-null bug, caught by a parity spot-check on REAL data**
+
+The EF's `allLite` backfill query selected `id,pipeline_level,discipler_id` but NOT `church_id`, so `liteById.get(id)?.church_id` was always `undefined`. That silently broke the `events_held` prayer denominator (every held-date keyed to `""` → dropped → held=0 → prayer n/a for ALL members) since Wave 5b-1, and neutered per-church windows. The one-line fix (add `church_id` to the select) revived prayer as a live weight-10 dimension. LESSON: a lite/backfill projection must include EVERY column any downstream `.get()` reads — a missing column fails SILENTLY as `undefined`, not an error. Caught only because the 5b-2a dry-run was spot-checked against Gerry's REAL attendance data (548 present rows / 22 held dates → prayer showing n/a was the tell), not synthetic — parity spot-check on real data, not merely "it ran clean".
+
+**Established July 11, 2026 (Session 69). Invariant #305 added - count now 305.**
+
+---
+
+### **306. MD SVI Windows UI — pastor tunes per-metric windows without SQL; input=default DELETES the override**
+
+Wave 5b-2b added a pastor-only "🗓️ SVI Windows" MD Settings section (mirrors the SVI Weights editor). One days-input per window-able metric (`count_rows`/`rate_rows` with a `lookback_days`), pre-filled with `override ?? global`. Save logic: input ≠ global default → insert/update the override; input = global default → DELETE the override (revert to global, never store a redundant row). Client uses the JWT'd `db` → RLS + autostamp scope everything to the pastor's own church. Reuses `_sviInvokeCompute()` + `loadCareRadar()`; Save & Recompute applies immediately.
+
+**Established July 11, 2026 (Session 69). Invariant #306 added - count now 306.**
+
+---
+
+### **307. Reward "more of X" WITHOUT lowering anyone: ADD an n/a-below-threshold bonus metric at weight 0 — don't grade the existing boolean (Option B) + the generic `count_fields` compute_type**
+
+To reward multi-ministry service, grading the existing `service_ministry_role` boolean into a count (Option A) would have DROPPED role-only members (who have `ministry_role` but no named ministry) from 10→0 — a regression. Option B instead KEEPS the boolean untouched and ADDS a separate `service_multi_ministry` bonus metric: n/a (null) for 0–1 ministries, 7 for two, 10 for three — so only multi-servers rise, nobody falls. PATTERN: to reward "more of X" without penalizing "some X", add an additive bonus metric that returns null below the threshold (sufficiency-guarded #281), seeded at weight 0 (zero effect until the pastor weights it — no surprise shift). Enabled by a new GENERIC `count_fields` compute_type: counts non-empty configured member columns (`fields`), returns null below `min_count`. CHECK-widened first (#290/#302).
+
+**Established July 11, 2026 (Session 69). Invariant #307 added - count now 307.**
+
+---
+
+### **308. Emitting FIND/REPLACE anchors from a file SLICE: never re-wrap a newline-terminated slice — the phantom trailing-blank-line trap**
+
+When generating FIND/REPLACE anchor blocks by SLICING a region out of a proven file, the slice often already ends in a newline (or two). Wrapping it with an extra newline on each side then adds a phantom trailing blank line inside the FIND portion → it matches ZERO times against the real file. This bit Option B's EF EDIT 2 (FIND carried two trailing blanks; the file had one between functions). CC correctly stopped, reported loudly (#298), and re-anchored on the next stable line — the merged result was byte-identical to intent. The verify-by-reapply guard checks the OUTCOME (re-applied result == proven file) but NOT the emission artifact, because it re-applies the in-memory strings, not the wrapped prompt text. FIX: emit slices verbatim — never add wrapping newlines around a newline-terminated slice; or anchor on a stable non-blank line.
+
+**Established July 11, 2026 (Session 69). Invariant #308 added - count now 308.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
