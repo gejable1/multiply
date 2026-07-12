@@ -1684,7 +1684,6 @@ async function toggleMltAddMember(){
     if (btn){ btn.disabled = false; btn.style.opacity='1'; }
   }
 }
-initMltAddMemberToggle();
 let _churchNamePainted = false;
 async function paintChurchName(){
   if (_churchNamePainted) return;
@@ -1744,6 +1743,15 @@ function leaderMenu(){
 
 // LeaderScope from shared module — wired to this page's `members` array.
 const LeaderScope = MultiplyShared.makeLeaderScope(() => members);
+
+// initMltAddMemberToggle() reads LeaderScope, so its call MUST sit BELOW the
+// `const` above. It used to be called ~60 lines earlier, guarded by
+// `typeof LeaderScope !== 'undefined'` -- but `typeof` does NOT protect a
+// temporal-dead-zone binding: for a let/const declared later in the same scope
+// it throws instead of returning 'undefined'. The async function therefore
+// rejected with "Cannot access 'LeaderScope' before initialization" and the
+// Pastor's MLT add-member toggle silently never initialized.
+initMltAddMemberToggle();
 
 // Update the count badges in the view-tabs UI.
 function updateScopeCounts(){
