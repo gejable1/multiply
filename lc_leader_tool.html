@@ -3242,6 +3242,106 @@ async function renderMltPathway(mem){
 // Overlay-resolved rung map, filled by renderMltPathway (level -> {rung_key: row}).
 const _mltRungCache = {};
 
+// The nine fruit of the Spirit (Gal 5:22-23). These are NOT tasks. A rung named
+// "Joy" is not something a disciple "completes" -- it is character being formed,
+// and the pathway revisits the same fruit at L1, L2 and L3 on purpose. Telling
+// someone "You completed Love" (three times over) is both awkward and the exact
+// opposite of what this church teaches, so fruit rungs get FORMATION language:
+// the discipler bears witness ("sees it growing in you"), never certifies.
+//
+// We key on the TITLE, not the `category` column, because category='character'
+// is a mixed bag -- it also holds plain milestones like "Water baptism",
+// "Completed BTLI 101" and "90-day devotional streak", which correctly keep
+// achievement language.
+//
+// TL names stay here as a safety net even though migration 074 backfilled
+// pathway_rungs.title_tl: a church OVERLAY rung could still arrive with a NULL
+// title_tl. A real title_tl from the DB always wins.
+const _MLT_FRUIT_TL = {
+  'love': 'Pag-ibig',
+  'joy': 'Kagalakan',
+  'peace': 'Kapayapaan',
+  'patience': 'Pagtitiis',
+  'kindness': 'Kabaitan',
+  'goodness': 'Kabutihan',
+  'faithfulness': 'Katapatan',
+  'gentleness': 'Kahinahunan',
+  'self-control': 'Pagpipigil sa sarili',
+  'selfcontrol': 'Pagpipigil sa sarili',
+  'self control': 'Pagpipigil sa sarili'
+};
+
+// Choose the message shape. Fruit -> formation. Everything else -> achievement,
+// tuned per category. All eight live categories are covered (character, book,
+// training, lesson, discipline, ministry, assessment, coaching, competency);
+// anything new falls back to the generic wording rather than breaking.
+function _mltRungMessage(rung, en, tl){
+  const key = String(en).trim().toLowerCase();
+  if(Object.prototype.hasOwnProperty.call(_MLT_FRUIT_TL, key)){
+    return {
+      tEn: '🍇 Fruit is growing in you',
+      tTl: '🍇 May bungang lumalago sa’yo',
+      bEn: 'Your discipler sees "' + en + '" growing in you. Character is formed, not finished — keep walking. (Galatians 5:22-23)',
+      bTl: 'Nakikita ng iyong discipler na lumalago ang "' + tl + '" sa’yo. Hinuhubog ang karakter, hindi tinatapos — ipagpatuloy mo lang. (Galacia 5:22-23)'
+    };
+  }
+  const cat = String(rung.category || '').toLowerCase();
+  if(cat === 'book') return {
+    tEn: '📚 You finished a book!',
+    tTl: '📚 Natapos mo ang isang aklat!',
+    bEn: 'Your discipler marked "' + en + '" as read. Well done — keep feeding your mind.',
+    bTl: 'Minarkahan ng iyong discipler na nabasa mo na ang "' + tl + '". Magaling — patuloy mong pakainin ang iyong isip.'
+  };
+  if(cat === 'training') return {
+    tEn: '🎓 Training complete!',
+    tTl: '🎓 Tapos na ang pagsasanay!',
+    bEn: 'Your discipler marked "' + en + '" as complete. New capacity — now use it.',
+    bTl: 'Minarkahan ng iyong discipler na tapos na ang "' + tl + '". Bagong kakayahan — gamitin mo na.'
+  };
+  if(cat === 'lesson') return {
+    tEn: '📖 Lesson complete!',
+    tTl: '📖 Tapos na ang aralin!',
+    bEn: 'Your discipler marked "' + en + '" as complete. One more step into the Word.',
+    bTl: 'Minarkahan ng iyong discipler na tapos na ang "' + tl + '". Isa pang hakbang sa Salita.'
+  };
+  if(cat === 'discipline') return {
+    tEn: '🌿 A habit is taking root',
+    tTl: '🌿 May ugaling nag-uugat',
+    bEn: 'Your discipler sees "' + en + '" becoming part of your life. Habits are how grace takes hold.',
+    bTl: 'Nakikita ng iyong discipler na nagiging bahagi na ng buhay mo ang "' + tl + '". Sa ugali humahawak ang biyaya.'
+  };
+  if(cat === 'competency') return {
+    tEn: '💪 A new capability',
+    tTl: '💪 Bagong kakayahan',
+    bEn: 'Your discipler affirms you can now do "' + en + '". Skill is given so it can be spent on others.',
+    bTl: 'Kinikilala ng iyong discipler na kaya mo nang gawin ang "' + tl + '". Ibinibigay ang kakayahan para ipamahagi.'
+  };
+  if(cat === 'coaching') return {
+    tEn: '🧭 You are not walking alone',
+    tTl: '🧭 Hindi ka nag-iisa sa paglalakad',
+    bEn: 'Your discipler marked "' + en + '". Someone is walking this road with you.',
+    bTl: 'Minarkahan ng iyong discipler ang "' + tl + '". May kasama kang naglalakad sa daang ito.'
+  };
+  if(cat === 'ministry') return {
+    tEn: '🙌 You stepped into ministry!',
+    tTl: '🙌 Pumasok ka sa ministeryo!',
+    bEn: 'Your discipler marked "' + en + '". You are not just growing — you are giving.',
+    bTl: 'Minarkahan ng iyong discipler ang "' + tl + '". Hindi ka lang lumalago — nagbibigay ka na.'
+  };
+  if(cat === 'assessment') return {
+    tEn: '🧭 You completed an assessment',
+    tTl: '🧭 Natapos mo ang isang pagsusuri',
+    bEn: 'Your discipler marked "' + en + '" as complete. Knowing yourself is part of the walk.',
+    bTl: 'Minarkahan ng iyong discipler na tapos na ang "' + tl + '". Bahagi ng paglakad ang pagkilala sa sarili.'
+  };
+  return {
+    tEn: '🎉 You completed a step!',
+    tTl: '🎉 May natapos kang hakbang!',
+    bEn: 'Your discipler marked "' + en + '" as complete. Keep going — we see you.',
+    bTl: 'Minarkahan ng iyong discipler na tapos na ang "' + tl + '". Ipagpatuloy mo lang — nakikita ka namin.'
+  };
+}
+
 // Tell the DISCIPLE their rung was completed -- the first member-bound "celebration"
 // notification, and the reason the MMT inbox exists. Bilingual text is carried in
 // payload.en / payload.tl (the new shape); title/body stay populated in the legacy
@@ -3251,11 +3351,9 @@ async function _mltCelebrateRung(mem, level, rungKey){
   try{
     const rung = (_mltRungCache[level] || {})[rungKey] || {};
     const en = rung.title_en || rungKey;
-    const tl = rung.title_tl || en;
-    const tEn = '🎉 You completed a step!';
-    const tTl = '🎉 May natapos kang hakbang!';
-    const bEn = 'Your discipler marked "' + en + '" as complete. Keep going — we see you.';
-    const bTl = 'Minarkahan ng iyong discipler na tapos na ang "' + tl + '". Ipagpatuloy mo lang — nakikita ka namin.';
+    const tl = rung.title_tl || _MLT_FRUIT_TL[String(en).trim().toLowerCase()] || en;
+    const m  = _mltRungMessage(rung, en, tl);
+    const tEn = m.tEn, tTl = m.tTl, bEn = m.bEn, bTl = m.bTl;
     await db.from('notifications').insert({
       recipient_id: mem.id,
       kind: 'celebration',
