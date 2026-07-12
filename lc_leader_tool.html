@@ -3208,6 +3208,10 @@ async function renderMltPathway(mem){
     if(progRes.error) throw progRes.error;
     const byKey = {};
     (rungRes.data||[]).forEach(r=>{ const ex=byKey[r.rung_key]; if(!ex || (r.church_id && !ex.church_id)) byKey[r.rung_key]=r; });
+    // Cache the overlay-resolved rung map so _mltPwToggle can name the rung in the
+    // celebration notification without re-querying (and without re-deriving the
+    // base-vs-church-overlay precedence resolved just above).
+    _mltRungCache[lvl] = byKey;
     const rungs = Object.values(byKey).filter(r=>r.published!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
     if(!rungs.length){ host.innerHTML = `<div style="color:var(--muted);font-size:12px">No rungs defined for this level yet.</div>`; return; }
@@ -3235,6 +3239,38 @@ async function renderMltPathway(mem){
   }
 }
 
+// Overlay-resolved rung map, filled by renderMltPathway (level -> {rung_key: row}).
+const _mltRungCache = {};
+
+// Tell the DISCIPLE their rung was completed -- the first member-bound "celebration"
+// notification, and the reason the MMT inbox exists. Bilingual text is carried in
+// payload.en / payload.tl (the new shape); title/body stay populated in the legacy
+// " · " / "\n\n" form so any older reader still renders correctly.
+// Non-fatal by design: a failed notification must NEVER undo a marked rung.
+async function _mltCelebrateRung(mem, level, rungKey){
+  try{
+    const rung = (_mltRungCache[level] || {})[rungKey] || {};
+    const en = rung.title_en || rungKey;
+    const tl = rung.title_tl || en;
+    const tEn = '🎉 You completed a step!';
+    const tTl = '🎉 May natapos kang hakbang!';
+    const bEn = 'Your discipler marked "' + en + '" as complete. Keep going — we see you.';
+    const bTl = 'Minarkahan ng iyong discipler na tapos na ang "' + tl + '". Ipagpatuloy mo lang — nakikita ka namin.';
+    await db.from('notifications').insert({
+      recipient_id: mem.id,
+      kind: 'celebration',
+      title: tEn + ' · ' + tTl,
+      body:  bEn + '\n\n' + bTl,
+      payload: {
+        en: { title: tEn, body: bEn },
+        tl: { title: tTl, body: bTl },
+        rung_key: rungKey, level: level, event: 'rung_completed'
+      },
+      church_id: mem.church_id || null
+    });
+  }catch(e){ console.warn('[mlt-pathway] celebration notification failed (non-fatal):', e); }
+}
+
 async function _mltPwToggle(memberId, level, rungKey, isDone){
   const mem = myMembers.find(function(m){ return m.id===memberId; });
   if(!mem){ toast('Member not found','error'); return; }
@@ -3249,6 +3285,7 @@ async function _mltPwToggle(memberId, level, rungKey, isDone){
       const res = await db.from('pathway_progress').insert({ member_id: memberId, level: level, rung_key: rungKey, marked_by: LEADER.leaderId });
       if(res.error) throw res.error;
       toast('Marked done ✓','success');
+      _mltCelebrateRung(mem, level, rungKey);   // fire-and-forget; never blocks the mark
     }
     renderMltPathway(mem);
   }catch(e){
