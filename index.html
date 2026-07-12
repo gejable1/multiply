@@ -45,6 +45,12 @@
      HTML parsing instead of gating first paint. Deferred scripts execute after
      parse but BEFORE DOMContentLoaded, so boot() (wired to DOMContentLoaded
      below) still finds MultiplyShared ready. -->
+<!-- Supabase SDK must load BEFORE multiply_shared.js: getDB() needs it, and
+     logoutLeader() calls getDB() to stamp leader_sessions.ended_at. Without it
+     the shell logged "Supabase SDK not loaded" and logout silently skipped that
+     write. Both tags are `defer`, so they execute in document order (SDK first)
+     without blocking first paint. -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="multiply_shared.js?v=9"></script>
 <style>
   :root{

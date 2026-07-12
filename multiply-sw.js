@@ -25,7 +25,7 @@
 //       .then(() => self.registration.unregister())); });
 // ─────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'multiply-shell-v1-2026-06-15';
+const CACHE_VERSION = 'multiply-shell-v2-2026-07-12';
 const SHELL_ASSETS = [
   './',
   'index.html',
@@ -87,7 +87,16 @@ async function networkFirst(req) {
   // the cache in the background even when the timeout below wins the race.
   const netPromise = fetch(req).then(fresh => {
     if (fresh && fresh.ok) {
-      caches.open(CACHE_VERSION).then(c => c.put(req, fresh.clone()).catch(() => {}));
+      // Clone NOW, synchronously, while the body is still untouched. caches.open()
+      // is async: by the time it resolves, `fresh` has already been handed to
+      // respondWith() and the browser has begun reading its body, so a clone()
+      // deferred until then throws "Response body is already used" -- and because
+      // it throws while evaluating the argument, .catch() never sees it, producing
+      // an UNHANDLED rejection and a cache write that silently never happens.
+      const copy = fresh.clone();
+      caches.open(CACHE_VERSION)
+        .then(c => c.put(req, copy))
+        .catch(() => {});
     }
     return fresh;
   });
