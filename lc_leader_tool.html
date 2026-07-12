@@ -3129,6 +3129,7 @@ function openMember(id){
   buildDetailSections(mem);
   showScreen('screenDetail');
   if(typeof renderMltPathway==='function') renderMltPathway(mem);
+  if(typeof renderMltEolo==='function') renderMltEolo(mem);
   // Refresh Mark Present button to reflect today's attendance state
   _refreshMarkPresentBtn();
   // Show transfer button only if I'm this member's current LCL (or Pastor)
@@ -3533,7 +3534,89 @@ function buildDetailSections(mem){
       </div>
       <div class="ds-body"><div id="mltPathwayHost" style="font-size:12px;color:var(--muted)">Loading…</div></div>
     </div>`;
+
+  html += `<div class="ds-card">
+      <div class="ds-header" onclick="this.closest('.ds-card').classList.toggle('open')">
+        <div class="ds-icon">🌏</div>
+        <div class="ds-title">EOLO</div>
+        <div class="ds-chevron">▼</div>
+      </div>
+      <div class="ds-body"><div id="mltEoloHost" style="font-size:12px;color:var(--muted)">Loading…</div></div>
+    </div>`;
   sections.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────
+// EOLO card (read-only). `eolo` is deliberately EXCLUDED from
+// loadMyMembers()'s projection for payload reasons, so we lazy-fetch
+// it for the ONE member being viewed rather than re-inflating every
+// row in the list. Members own this data — they edit it in the Member
+// Tool; the LCL only watches and encourages. Visibility reuses the
+// existing LeaderScope tiers (no new permission rules invented).
+const MLT_EOLO_STEPS = [
+  'Identified', 'Prayer started', 'Conversation',
+  'Gospel shared', 'Church invited', 'EGR attended', 'Responded'
+];
+
+async function renderMltEolo(mem){
+  const host = document.getElementById('mltEoloHost');
+  if(!host || !mem) return;
+
+  if(!LeaderScope.canSee('pastoral', mem)){
+    host.innerHTML = `<div style="font-size:12px;color:var(--muted)">🔒 Visible to this member\u2019s discipler only.</div>`;
+    return;
+  }
+
+  host.innerHTML = `<div style="color:var(--muted);font-size:12px">Loading…</div>`;
+  try{
+    const {data, error} = await db.from('members')
+      .select('eolo').eq('id', mem.id).maybeSingle();
+    if(error) throw error;
+
+    const people = (data && Array.isArray(data.eolo) ? data.eolo : [])
+      .filter(p => p && p.name && String(p.name).trim());
+
+    if(!people.length){
+      host.innerHTML = `<div style="font-size:12px;color:var(--muted)">No EOLO person yet.</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Every Level 1+ member should identify one person to love and reach. Encourage them to add one in their Member Tool.</div>`;
+      return;
+    }
+
+    const N = MLT_EOLO_STEPS.length;
+    let h = '';
+    people.forEach(function(p, idx){
+      const steps = p.steps || {};
+      const nDone = MLT_EOLO_STEPS.filter((_, i) => steps[i]).length;
+      const pct   = Math.round(nDone / N * 100);
+      const full  = nDone === N;
+
+      h += `<div style="padding:10px 0;border-top:${idx===0?'none':'1px solid var(--border)'}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${MultiplyShared.escapeHTML(String(p.name))}</div>
+          <div style="font-size:12px;font-weight:700;color:${full?'var(--green)':'var(--muted)'};flex:none">${nDone} / ${N}${full?' ✦':''}</div>
+        </div>
+        <div style="height:6px;background:var(--surface3);border-radius:999px;overflow:hidden;margin-bottom:8px">
+          <div style="height:100%;width:${pct}%;background:var(--green);border-radius:999px"></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">`;
+
+      MLT_EOLO_STEPS.forEach(function(label, i){
+        const on = !!steps[i];
+        h += `<span style="font-size:10px;padding:3px 7px;border-radius:999px;white-space:nowrap;${on
+          ? 'background:var(--green);color:#0e3a2c;font-weight:600'
+          : 'background:var(--surface3);color:var(--muted)'}">${on?'✓ ':''}${MultiplyShared.escapeHTML(label)}</span>`;
+      });
+
+      h += `</div></div>`;
+    });
+
+    h += `<div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid var(--border);padding-top:8px">👁 View only — the member updates this in their Member Tool.</div>`;
+    host.innerHTML = h;
+
+  }catch(e){
+    console.error('renderMltEolo', e);
+    host.innerHTML = `<div style="font-size:12px;color:var(--muted)">Could not load EOLO.</div>`;
+  }
 }
 
 function saveNote(memberId){
