@@ -282,8 +282,8 @@ body{
     <div class="step-title">Where to next?</div>
     <div class="step-sub">Pick how you want to use MULTIPLY today. You can switch later — both work the same data.</div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.5rem;">
-      <button class="dest-btn" onclick="goToDestination('desktop')">
+    <div id="destGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.5rem;">
+      <button class="dest-btn" id="destDesktop" onclick="goToDestination('desktop')">
         <div class="dest-icon">💻</div>
         <div class="dest-label">Desktop Dashboard</div>
         <div class="dest-sub">Full features · Best on laptop</div>
@@ -293,6 +293,10 @@ body{
         <div class="dest-label">Mobile Tool</div>
         <div class="dest-sub">Phone-friendly · Quick actions</div>
       </button>
+    </div>
+    <div id="destNote" style="display:none;margin-top:.6rem;font-size:12px;color:var(--muted);text-align:center;line-height:1.5;">
+      The Mobile Tool is your home base — it has everything you need:
+      pathway rungs, attendance, EOLO, meeting guides and your care list.
     </div>
   </div>
 
@@ -602,6 +606,41 @@ function showDestinationChooser(){
   document.getElementById('lName3').textContent = selectedLeader.name;
   document.getElementById('lRole3').textContent =
     selectedLeader.facilitator_role || LN[selectedLeader.pipeline_level||0];
+
+  _gateDestinationChooser();
+}
+
+// MD is for Coach (L3) and above -- LCLs (L0-L2) work in the Mobile Tool.
+// Keep MD_MIN_LEVEL in sync with multiply_dashboard.html and index.html
+// (TOOLS.md.minLevel). This hides the option; the dashboard itself also
+// redirects, so a bookmark cannot walk around it.
+const MD_MIN_LEVEL = 3;
+
+function _gateLeaderLevel(){
+  try{
+    const raw = sessionStorage.getItem('multiply_leader_session');
+    if(raw){
+      const s = JSON.parse(raw);
+      if(s && s.leaderLevel != null) return s.leaderLevel || 0;
+    }
+  }catch(e){ /* fall through to the search row */ }
+  return (selectedLeader && selectedLeader.pipeline_level) || 0;
+}
+
+function _gateDestinationChooser(){
+  const grid = document.getElementById('destGrid');
+  const desk = document.getElementById('destDesktop');
+  const note = document.getElementById('destNote');
+  if(!grid || !desk) return;
+  if(_gateLeaderLevel() < MD_MIN_LEVEL){
+    desk.style.display = 'none';
+    grid.style.gridTemplateColumns = '1fr';
+    if(note) note.style.display = '';
+  }else{
+    desk.style.display = '';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    if(note) note.style.display = 'none';
+  }
 }
 
 function goToDestination(which){

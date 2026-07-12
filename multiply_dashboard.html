@@ -449,8 +449,22 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     location.replace('leader_login.html');
     return;
   }
+  // MD is for Coach (L3) and above. LCLs (L0-L2) belong in the Mobile
+  // Leader Tool, which now covers their whole workflow (pathway rungs,
+  // attendance, EOLO, SVI, meeting guides). Three gates enforce this:
+  // the shell registry (index.html md.minLevel), the login chooser, and
+  // this one -- the backstop for a bookmark, a typed URL, or an installed
+  // PWA shortcut. NOTE: this is a UX/role gate, NOT a security boundary;
+  // RLS is the real boundary. Change MD_MIN_LEVEL in all three places
+  // together if the threshold ever moves.
+  const MD_MIN_LEVEL = 3;
+
   function _gate(){
     if (!MultiplyShared.gateOrRedirect('leader_login.html')) return;
+    if (((window.LEADER && window.LEADER.leaderLevel) || 0) < MD_MIN_LEVEL){
+      location.replace('lc_leader_tool.html');
+      return;
+    }
     // Session is valid; reveal the dashboard.
     document.body.classList.add('leader-authenticated');
     const blackout = document.getElementById('leaderGateBlackout');
