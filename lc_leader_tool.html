@@ -1302,15 +1302,47 @@ const db = MultiplyShared.getDB();
 // We hydrate it from the shared LEADER session so existing code keeps
 // working unchanged. Shape mirrors what selectLeader() used to set.
 const currentLeader = (function buildCurrentLeaderShim(){
-  const L = window.LEADER || {};
-  return {
-    id:               L.leaderId,
-    name:             L.leaderName,
-    pipeline_level:   L.leaderLevel,
-    facilitator_role: L.leaderRole,
-    lc_group:         L.leaderLcGroup,
-    discipler_name:   null, // not in session; rarely needed in mobile views
+  // Inv #169 (root-cause fix, not a patch): this shim used to snapshot
+  // window.LEADER at PARSE time. Inside the shell iframe the session has not
+  // arrived yet at that moment (it comes later via postMessage), so every field
+  // froze as undefined. The damage was silent and wide:
+  //   * Add Member showed a BLANK "Discipler" box despite "Auto-set to you"
+  //   * saveNewMember wrote discipler_id: null -> ORPHAN members, invisible in
+  //     their own LCL's list -> the LCL re-added them -> DUPLICATES
+  //   * the L2 level clamp in saveNewMember never fired (myLvl read as 0)
+  //   * openChangeLevel refused real LCLs ("Only LCLs (Level 2) can...")
+  // Resolve every property LIVE at read time instead. Cache only once a real
+  // session appears, so we retry across the embed handshake but never re-parse
+  // sessionStorage on every read afterwards.
+  let _sess = null;
+  function live(){
+    if (_sess) return _sess;
+    try {
+      const s = MultiplyShared.getValidSession && MultiplyShared.getValidSession();
+      if (s && (s.leaderId || s.leaderName)) { _sess = s; return s; }
+    } catch(e){}
+    const L = window.LEADER || {};
+    if (L.leaderId || L.leaderName) { _sess = L; return L; }
+    return {}; // session not here yet -- do NOT cache; retry on the next read
+  }
+  const FIELDS = {
+    id:               function(){ return live().leaderId; },
+    name:             function(){ return live().leaderName; },
+    pipeline_level:   function(){ return live().leaderLevel; },
+    facilitator_role: function(){ return live().leaderRole; },
+    lc_group:         function(){ return live().leaderLcGroup; },
   };
+  const o = {};
+  const overrides = {};
+  Object.keys(FIELDS).forEach(function(k){
+    Object.defineProperty(o, k, {
+      enumerable: true,
+      get: function(){ return (k in overrides) ? overrides[k] : FIELDS[k](); },
+      set: function(v){ overrides[k] = v; } // legacy assignment still works
+    });
+  });
+  o.discipler_name = null; // not in session; rarely needed in mobile views
+  return o;
 })();
 
 let myMembers = [];
@@ -3036,6 +3068,15 @@ async function saveNewMember(){
     }
   } catch(e) { console.warn('[add-member] creator-flag lookup failed; defaulting to non-guest/non-test:', e); }
 
+  // Belt-and-braces (Inv #169): resolve the discipler from the LIVE session and
+  // REFUSE to save without one. An orphan member (discipler_id: null) is invisible
+  // in its own LCL's list -- exactly what drove the duplicate epidemic.
+  const _disc = _liveLeaderIdName();
+  if(!_disc.id){
+    toast('Session not ready - please reload and try again. (Member NOT saved.)','error');
+    return;
+  }
+
   const payload = {
     name,
     contact:        document.getElementById('amContact').value.trim()  || null,
@@ -3046,8 +3087,8 @@ async function saveNewMember(){
     enrolled_date:  document.getElementById('amEnrolled').value        || null,
     lc_group:       document.getElementById('amLcGroup').value.trim()  || null,
     pipeline_level: levelInput,
-    discipler_id:   currentLeader?.id   || null,
-    discipler_name: currentLeader?.name || null,
+    discipler_id:   _disc.id   || null,
+    discipler_name: _disc.name || null,
     is_external_user: _creatorExt,
     is_test_member:   _creatorTest,
     updated_at:     new Date().toISOString(),
