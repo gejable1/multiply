@@ -3298,4 +3298,94 @@ Three times this session the byte-for-byte back-check failed, and **every time t
 
 ---
 
+### **320. A duplicate `display` in an inline style silently defeats the earlier one — and `el.style.display = ''` DELETES the property, it does not restore it**
+
+MLT's heads-up banner flashed "0 heads-ups from your LC" on every boot. It read like a race condition; it was not. The element carried **two** `display` declarations in one `style` attribute — `style="display:none; …padding:11px 14px; display:flex; …"`. Last declaration wins, so the CSSOM resolved `display:flex` **at parse time**: the banner was VISIBLE from first paint until `renderHeadsUpBanner()` ran (behind a `setTimeout(…, 800)` **and** a DB round-trip) and hid it. The `display:none` the author believed in had been overridden the whole time. **A duplicate property in an inline style is invisible in review — the eye reads the first declaration and stops.**
+
+The same bug has a **second half**. The show-branch did `banner.style.display = ''`, intending "restore it." But `el.style` is a declaration block: the two declarations collapse into ONE entry whose value is `flex`, and assigning `''` **removes the property entirely**. With no stylesheet rule for `#headsUpBanner`, the div fell back to `display:block` — icon, text and chevron stacking vertically instead of sitting in a row. It only ever "looked fine" because nobody had a pending notice while looking.
+
+**RULE:** one `display` per inline style, ever. Never write `style.display = ''` meaning "put it back" — **set the intended value explicitly** (`'flex'`, `'block'`). `''` is only correct when a stylesheet rule is *known* to supply the fallback (e.g. `.qa-btn { display:flex }`), and even then, say so in a comment. **Corollary:** when a collapsed/hidden state is wanted, prefer **not emitting the markup at all** over hiding it with `display:none` — a node that isn't there cannot be un-hidden by a stray declaration.
+
+**Established July 14, 2026 (Session 71). Invariant #320 added - count now 320.**
+
+---
+
+### **321. `json.dumps` without `ensure_ascii=False` turns emoji into lone surrogates — a Python string literal will NOT recombine them, and the FIND matches zero**
+
+Generating a CC patch script mechanically from a proven diff, the emitted `PAIRS` were serialized with `json.dumps(...)`. Every hunk then matched **zero** times against a file they had been derived from minutes earlier. The cause: `json.dumps` defaults to `ensure_ascii=True`, which encodes 📋 as the surrogate pair `\ud83d\udccb`. **JSON parsers recombine that into one character. Python source does not** — `"\ud83d\udccb"` is a two-element string of lone surrogates, and it is not equal to `"📋"`. The FIND string was quietly a different string from the file.
+
+Same family as **#312** (`\UXXXXXXXX` is not valid JS): *an escape form that is valid in one language and junk in another.* The failure mode is the dangerous one — no exception, no warning, just a silent non-match that looks like a stale anchor.
+
+**RULE:** any time Python emits string literals that will be re-parsed as Python (patch scripts, anchor blocks, generated code), pass **`ensure_ascii=False`** and write the file as UTF-8. The emoji, box-drawing chars (`─ ═ ▸ ▾ ·`) and arrows in this codebase are everywhere; assume every generated literal contains one.
+
+**Established July 14, 2026 (Session 71). Invariant #321 added - count now 321.**
+
+---
+
+### **322. The CLIENT must never be the authority on WHO the caller is — `auth-login` trusts `body.stamp`, so every shell login is invisible to `leader_sessions`**
+
+`auth-login` decides whether a login is a leader login with `const isLeader = body.stamp === "leader"` — **a flag supplied by the browser.** Only `leader_login.html` (the LEGACY page) sends it. The unified shell `index.html` redirects **everyone, leaders included**, to `member_login.html`, which does not. So `stampLogin()` takes the `else` branch, updates `members.member_last_login`, and **inserts no `leader_sessions` row at all**.
+
+Result: `leader_sessions` does not measure "how often a leader opens MLT." It measures **"how often a leader used the old login page."** As leaders migrated to the shell and the PWA, their rows stopped appearing — and the resulting graph looked exactly like a collapse in engagement. `leader_last_login` is stale for the same reason (the Pastor's read `2026-07-07` while his `member_last_login` read `2026-07-13`).
+
+The server already loads `pipeline_level` in `MEMBER_COLS`. **It has the answer and asks the client anyway.** This is the same class of error as a client-side permission gate — the difference is that a permission gate fails *loudly* when abused, while an identity flag fails *silently* and corrupts a year of telemetry.
+
+**RULE:** the server derives identity, level and role from **its own DB read**, never from the request body. A client-supplied hint may select a *destination*; it may never establish a *fact*.
+
+**Established July 14, 2026 (Session 71). Invariant #322 added - count now 322.**
+
+---
+
+### **323. `ended_at IS NULL` does not mean "active" — it means "never explicitly closed," and one logout rewrites the whole history**
+
+Every one of the Pastor's 20 `leader_sessions` rows carried the **identical** `ended_at` — `2026-07-12 13:27:16.893` — including sessions from June 14 that had expired weeks earlier. Both writers (`multiply_shared.js`, `multiply_dashboard.html`) are **correct**: they filter `.eq('leader_id', id).is('ended_at', null)`. The bug is that **nothing ever reaps an expired session.** `ended_at` is written *only* on an explicit logout, and people don't log out — they close the app. So the NULLs accumulate, and the first real Logout matches **every session the leader ever had** and stamps them all in one write.
+
+Three consequences: (a) `ended_at` / `ended_reason` are **junk** — session duration is unmeasurable; (b) every logout write-amplifies across the member's entire history; (c) **the landmine** — any future code reading `ended_at IS NULL` as "currently active" would see a leader with 40 past logins as **40 concurrent sessions**. Nothing reads it that way today. Something will.
+
+**RULE:** a lifecycle column needs a writer for **every** way the lifecycle can end, not just the polite one. If a session can expire, something must stamp `ended_at = expires_at, ended_reason = 'expired'`. Until then, treat `ended_at IS NULL` as "unknown," never as "open," and never build a filter on it.
+
+**Established July 14, 2026 (Session 71). Invariant #323 added - count now 323.**
+
+---
+
+### **324. Validate the instrument before you interpret it — a telemetry column with no PROVEN end-to-end write path is not evidence**
+
+From `leader_sessions` I built a confident, vivid story: weekly logins had collapsed **93%** (706 → 48), **18 of 49 leaders** had last opened MLT in a single five-day window, and that window sat on **June 15** — the exact date the service-worker cache froze (#310). I produced charts. I told the Pastor **not to hold his LC meeting**, and drafted an apology to send to sixty leaders for a bug that had locked them out.
+
+**All of it was an artifact of #322.** The instrument was broken. The correct query — `member_last_login`, the column the shell actually writes — showed **46 of 49 leaders active in the last 7 days and 49 of 49 in the last 30.** Engagement had never fallen at all. The "cliff" was leaders **changing front doors.**
+
+I even wrote the words *"validate the instrument before you act on it"* — and then did not do it myself, until a single row that didn't fit (the Pastor's own) forced the check.
+
+**RULE:** before any conclusion is drawn from a telemetry column, **prove the write path end-to-end**: perform the action, then confirm the row appears. A column that *exists* is not a column that is *written*. And a chart is not evidence — it is a rendering of whatever the column happened to contain. **The more compelling the narrative, the more urgently the instrument needs auditing** — a broken metric that tells a boring story gets checked; one that tells a thrilling story gets believed.
+
+**Established July 14, 2026 (Session 71). Invariant #324 added - count now 324.**
+
+---
+
+### **325. A rate is a lie until its denominator is audited — count only the people who COULD have participated**
+
+Announcements ride on MMT/MLT, and member engagement read **35% active in 7 days / 60% in 30** — comfortably "below 50%," and the Pastor was preparing to address it with his LC leaders.
+
+Then the denominator: of **161 members, 38 have no PIN.** They have never been given a credential. **They cannot log in.** They were not ignoring the church — the door was never opened for them.
+
+Recompute against the 123 who actually hold a key: **122 of 123 have used it. One single person received a PIN and never opened the app.** Adoption is not 35%. It is **99%**. The bottleneck was never motivation — it was **onboarding**, and the 38 un-onboarded members had been silently diluting every percentage the platform had ever produced.
+
+**RULE:** before reporting any rate about people, subtract everyone who was structurally unable to participate — no PIN, no discipler, not yet enrolled, test/external (`is_test_member`, `is_external_user`). Report the excluded count **alongside** the rate, never folded into it. A denominator that includes the unable does not measure obedience; **it measures your own onboarding, and blames it on them.**
+
+**Established July 14, 2026 (Session 71). Invariant #325 added - count now 325.**
+
+---
+
+### **326. A DISPLAY typeface is not a TEXT typeface — MMT sets its reading body in Fraunces, and a member thought his vision was failing**
+
+A member reported that in the MMT devotional "some capital letters appear wavy," and believed he was having an **episode affecting his eyesight.** He was not. MMT sets body text in **Fraunces** (58 declarations) — an "old style" soft-serif in the Windsor/Souvenir/Cooper lineage, shipping a variable axis literally named **WONK** that introduces deliberately wonky, swashed letterforms. Its stems swell and taper, its serifs curve rather than sit flat, and its stroke contrast is high. At body size, on a phone, thin strokes drift toward the rendering threshold and **shimmer**; soft swelling stems on capitals read as **undulating**. MMT also carries **31 `text-transform:uppercase` rules** — a row of high-contrast, soft-serifed, wonky *capitals* is the worst case, and capitals are exactly what he named.
+
+**A display face was doing a text face's job.** Legibility for aging eyes turns on **low stroke contrast**, **large x-height**, **open counters** and **unambiguous letterforms**. Fraunces fails the first and, on the WONK axis, the last.
+
+**RULE:** display faces set headings; text faces set paragraphs. For MMT's reading surfaces use a **screen-reading serif** (Literata, Source Serif 4 — keeps the Scripture feel), keep Fraunces for `h1`–`h3`, never `text-transform:uppercase` on anything a person actually reads, and offer an **Easy Read** mode (Atkinson Hyperlegible, Braille Institute, built for low vision). **AND — the pastoral half:** perceiving straight lines as wavy (*metamorphopsia*) is a real ophthalmic symptom. When a member reports it, fix the font **and** ask him to check whether door frames, tile grout or printed text look wavy too, one eye at a time. A typography fix must never quietly mask a retina.
+
+**Established July 14, 2026 (Session 71). Invariant #326 added - count now 326.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
