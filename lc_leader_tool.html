@@ -1149,6 +1149,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div style="padding:14px;max-width:680px;margin:0 auto">
 
     <div id="mpListView">
+      <div id="mpCelebrate" style="display:none;background:linear-gradient(135deg,rgba(80,170,120,.16),rgba(80,170,120,.03));border:1px solid rgba(80,170,120,.35);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px">🎉 Celebrate these wins</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:9px">From the past 7 days — read them out at the meeting.</div>
+        <div id="mpCelebrateList"></div>
+      </div>
       <div style="display:flex;gap:6px;margin-bottom:12px">
         <button id="mpTabMine" onclick="_mpTab('mine')" style="flex:1;font-family:inherit;font-size:13px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:var(--surface2);color:var(--ink);border:1px solid var(--border)">My lessons</button>
         <button id="mpTabLib" onclick="_mpTab('lib')" style="flex:1;font-family:inherit;font-size:13px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:transparent;color:var(--muted);border:1px solid var(--border)">Library</button>
@@ -1473,6 +1478,91 @@ function _mpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.get
 async function openMeetingPrep(){
   showScreen('screenMeetingPrep');
   _mpShowList();
+  _mpLoadCelebrations();   // fire-and-forget; must never block Meeting Prep
+}
+
+// ── "Celebrate these wins" ──────────────────────────────────────────────────
+// Rungs completed by this leader's people in the last 7 days (the LC meets weekly,
+// so the window is exactly one meeting cycle -- no win gets read out twice).
+//
+// ONLY rungs flagged meta.celebrate_publicly = true appear here (migration 076).
+// That flag is FAIL-CLOSED and it exists for a pastoral reason: public celebration
+// is for EVENTS ("Ana finished Mere Christianity", "Ben was baptized"), never for
+// STATES. Character, assurance of salvation, moral standing and pastoral follow-up
+// are never spoken to the room -- because the SILENCE about everyone else would
+// become a verdict. Those still notify the disciple privately; they just are not
+// read aloud.
+//
+// SCOPE: myMembers (the LeaderScope discipler tree) -- the same scope the rest of
+// MLT uses. NOT lc_group: that column is empty for essentially every leader, so
+// scoping by it would render an empty feed. Known gap: someone who attends the LC
+// but is discipled by another leader will not appear here until lc_group is real.
+const MP_CELEBRATE_DAYS = 7;
+
+async function _mpLoadCelebrations(){
+  const card = document.getElementById('mpCelebrate');
+  const list = document.getElementById('mpCelebrateList');
+  if(!card || !list) return;
+
+  try{
+    const ids = (myMembers || []).map(function(m){ return m.id; }).filter(Boolean);
+    if(!ids.length){ card.style.display = 'none'; return; }
+
+    const cutoff = new Date(Date.now() - MP_CELEBRATE_DAYS * 86400000).toISOString();
+    const [progRes, rungRes] = await Promise.all([
+      db.from('pathway_progress')
+        .select('member_id, level, rung_key, completed_at')
+        .in('member_id', ids)
+        .gte('completed_at', cutoff)
+        .order('completed_at', { ascending: false }),
+      db.from('pathway_rungs').select('*')
+    ]);
+    if(progRes.error) throw progRes.error;
+    if(rungRes.error) throw rungRes.error;
+
+    // Overlay precedence, same rule as renderMltPathway: a church row beats its base twin.
+    const byKey = {};
+    (rungRes.data || []).forEach(function(r){
+      const k = r.level + '|' + r.rung_key;
+      const ex = byKey[k];
+      if(!ex || (r.church_id && !ex.church_id)) byKey[k] = r;
+    });
+
+    const EMOJI = { book:'📚', lesson:'📖', training:'🎓', ministry:'🙌', character:'💧' };
+    const nameById = {};
+    (myMembers || []).forEach(function(m){ nameById[m.id] = m.name || 'Someone'; });
+
+    const wins = [];
+    (progRes.data || []).forEach(function(p){
+      const rung = byKey[p.level + '|' + p.rung_key];
+      if(!rung) return;
+      if(!rung.meta || rung.meta.celebrate_publicly !== true) return;  // FAIL-CLOSED
+      const en = rung.title_en || p.rung_key;
+      const tl = rung.title_tl || '';
+      wins.push({
+        who:   nameById[p.member_id] || 'Someone',
+        what:  en,
+        alt:   (tl && tl !== en) ? tl : '',
+        emoji: EMOJI[String(rung.category || '').toLowerCase()] || '🎉'
+      });
+    });
+
+    if(!wins.length){ card.style.display = 'none'; return; }
+
+    list.innerHTML = wins.map(function(w){
+      return '<div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;font-size:13px;line-height:1.45">'
+        + '<span style="flex:none">' + w.emoji + '</span>'
+        + '<span><strong>' + MultiplyShared.escapeHTML(w.who) + '</strong> — '
+        + MultiplyShared.escapeHTML(w.what)
+        + (w.alt ? ' <span style="color:var(--muted)">(' + MultiplyShared.escapeHTML(w.alt) + ')</span>' : '')
+        + '</span></div>';
+    }).join('');
+    card.style.display = '';
+
+  }catch(e){
+    console.warn('_mpLoadCelebrations (non-fatal):', e);
+    card.style.display = 'none';
+  }
 }
 
 let _mpMyGuides = {};
