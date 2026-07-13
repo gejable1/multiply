@@ -590,67 +590,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 
   <div id="alertsWrap"></div>
 
-  <!-- ════ L5 SELF-ATTEST CARD (hidden unless leaderLevel >= 5) ════ -->
-  <!-- Cream-on-dark card. ALL text colors must be hardcoded dark hex
-       values, NOT var(--text)/var(--muted) — those vars are tuned for
-       the dark home background and disappear on this light surface.
-       (Bug fix · May 16, 2026 — followed the Pending Confirmations
-       card's color pattern so the two cream cards look consistent.) -->
-  <div id="l5SelfAttestCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
-       background:linear-gradient(135deg, #fdfaf3, #f7f1e1);
-       border:1px solid #e3d4a8; border-radius:var(--r);">
-    <div onclick="_toggleL5Attest()" title="Tap to show/hide" style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;cursor:pointer;user-select:none;">
-      <span style="font-size:22px;">📋</span>
-      <div style="font-weight:700;font-size:14.5px;color:#3a2c0a;">My Attendance</div>
-      <div style="margin-left:auto;font-size:10.5px;color:#7a5800;font-style:italic;">
-        For Pastoral Staff
-      </div>
-      <span id="l5AttestChevron" style="font-size:15px;color:#7a5800;margin-left:.5rem;transition:transform .18s ease;transform:rotate(-90deg);">▾</span>
-    </div>
-    <div id="l5AttestBody" style="display:none;">
-    <div style="font-size:12px;color:#5a4316;margin-bottom:.65rem;line-height:1.5;">
-      Mark yourself present at events you attended. No one logs attendance for Pastoral Staff
-      so this keeps your attendance record honest. 🙏
-    </div>
-    <!-- Date field (Session 19): defaults to TODAY (the "tap while at the
-         event" rule, May 2026) but is pickable for backdating. Cream-styled
-         to match the card — the dark-theme .att-date-input vars would clash
-         on this light surface (same reason the buttons hardcode brown-on-cream). -->
-    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem;">
-      <label for="l5AttestDate" style="font-size:11.5px;font-weight:600;color:#7a5800;white-space:nowrap;">Date:</label>
-      <input type="date" id="l5AttestDate" onchange="_l5DateManuallySet = true;"
-             style="flex:1;min-width:0;background:#fffdf7;border:1px solid #d8c690;
-                    border-radius:var(--r-sm);padding:.5rem .6rem;color:#3a2c0a;
-                    font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;outline:none;">
-    </div>
-    <div id="l5AttestPickerRow" style="display:flex;flex-wrap:wrap;gap:.45rem;">
-      <!-- Buttons inserted by renderL5AttestCard() -->
-    </div>
-    <div id="l5LastMarkedRow" style="margin-top:.7rem;font-size:11.5px;color:#7a5800;min-height:14px;line-height:1.5;">
-      <!-- Last marked status -->
-    </div>
-    </div>
-  </div>
-  <!-- ════ END L5 SELF-ATTEST CARD ════ -->
-
-  <!-- ════ PREACHING CALENDAR CARD (visible only to preachers) ════ -->
-  <!-- Shown when the current user is in the `preachers` table. Gives
-       quick access to the Sunday + Wednesday preaching schedule.
-       Click takes them to preaching_calendar.html where they can also
-       request swaps on their own upcoming assignments.
-       Visibility decided by isPreacher() check on init. -->
-  <div id="preachingCalendarCard" style="display:none; margin-bottom:1rem; padding:.85rem 1rem;
-       background:linear-gradient(135deg, rgba(184,136,42,.10), rgba(184,136,42,.03));
-       border:1px solid rgba(184,136,42,.35); border-radius:var(--r);
-       display:none; align-items:center; gap:10px; cursor:pointer;"
-       onclick="window.open('preaching_calendar.html?me=' + encodeURIComponent((window.LEADER && LEADER.leaderId) || ''), '_blank')">
-    <div style="font-size:22px;flex-shrink:0;">📣</div>
-    <div style="flex:1;line-height:1.4;">
-      <div style="font-weight:700;font-size:13.5px;color:var(--text);">Preaching Calendar</div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">See the Sun + Wed schedule · request swaps</div>
-    </div>
-    <div style="font-size:18px;color:var(--muted);">›</div>
-  </div>
+  <!-- ════ L5 SELF-ATTEST + PREACHING CALENDAR — RELOCATED ════
+       Both used to sit here as full-width Home cards. They now live in
+       Quick Actions (#qaMyAttendance -> screenMyAttendance, and
+       #qaPreachingCalendar -> preaching_calendar.html), which is where every
+       other destination in MLT lives. Home keeps the things that DEMAND
+       attention (alerts, heads-ups, preaching reminder, pending confirmations);
+       Quick Actions holds the things you GO to. -->
 
   <!-- ════ PENDING CONFIRMATIONS CARD (LCL-side; visible if any pending) ════ -->
   <div id="pendingConfirmCard" style="display:none; margin-bottom:1rem; padding:1rem 1.1rem;
@@ -690,6 +636,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-icon">✅</div>
       <div class="qa-label">Attendance</div>
       <div class="qa-desc">Log today's meeting</div>
+    </div>
+    <!-- My Attendance — Pastoral Staff (L5) self-attest. Gated in JS by
+         renderL5AttestCard(); was a full-width Home card until Session 71. -->
+    <div class="qa-btn" id="qaMyAttendance" onclick="showScreen('screenMyAttendance')" style="display:none">
+      <div class="qa-icon">📋</div>
+      <div class="qa-label">My Attendance</div>
+      <div class="qa-desc">Mark yourself present · Pastoral Staff</div>
+    </div>
+    <!-- Preaching Calendar — visible only to members in the `preachers` table.
+         Gated in JS alongside the preaching reminder banner. -->
+    <div class="qa-btn" id="qaPreachingCalendar" style="display:none"
+         onclick="window.open('preaching_calendar.html?me=' + encodeURIComponent((window.LEADER && LEADER.leaderId) || ''), '_blank')">
+      <div class="qa-icon">📣</div>
+      <div class="qa-label">Preaching Calendar</div>
+      <div class="qa-desc">Sun + Wed schedule · request swaps</div>
     </div>
     <!-- Ministry Attendance — visible only to ministry heads (gated in JS) -->
     <div class="qa-btn" id="qaMinistryAtt" onclick="showMinistryAttendance()" style="display:none">
@@ -731,6 +692,57 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div class="qa-icon">📖</div>
       <div class="qa-label">User's Manual</div>
       <div class="qa-desc">How to use this app · step-by-step</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ SCREEN: MY ATTENDANCE ══════════════════ -->
+<!-- L5 self-attest. Nobody logs attendance FOR Pastoral Staff, so they mark
+     themselves. Lived as a folding Home card until Session 71; now a screen
+     reached from Quick Actions (#qaMyAttendance), like every other destination.
+     The fold + chevron + the `mlt_attest_open` localStorage key are RETIRED —
+     a screen has nothing to fold into.
+     The cream surface is kept deliberately: every text colour inside is a
+     hardcoded dark hex, NOT var(--text)/var(--muted), because those vars are
+     tuned for the dark background and vanish on a light surface (Inv #93).
+     Re-theming this to the dark palette is a separate job, not a free rename. -->
+<div class="screen" id="screenMyAttendance">
+  <div class="topbar">
+    <div class="tb-back" onclick="showScreen('screenHome')">←</div>
+    <div class="tb-title">My Attendance</div>
+  </div>
+  <div style="padding:14px">
+    <div style="padding:1rem 1.1rem;
+         background:linear-gradient(135deg, #fdfaf3, #f7f1e1);
+         border:1px solid #e3d4a8; border-radius:var(--r);">
+      <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;">
+        <span style="font-size:22px;">📋</span>
+        <div style="font-weight:700;font-size:14.5px;color:#3a2c0a;">My Attendance</div>
+        <div style="margin-left:auto;font-size:10.5px;color:#7a5800;font-style:italic;">
+          For Pastoral Staff
+        </div>
+      </div>
+      <div style="font-size:12px;color:#5a4316;margin-bottom:.65rem;line-height:1.5;">
+        Mark yourself present at events you attended. No one logs attendance for Pastoral Staff
+        so this keeps your attendance record honest. 🙏
+      </div>
+      <!-- Date field (Session 19): defaults to TODAY (the "tap while at the
+           event" rule, May 2026) but is pickable for backdating. Cream-styled
+           to match the card — the dark-theme .att-date-input vars would clash
+           on this light surface (same reason the buttons hardcode brown-on-cream). -->
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem;">
+        <label for="l5AttestDate" style="font-size:11.5px;font-weight:600;color:#7a5800;white-space:nowrap;">Date:</label>
+        <input type="date" id="l5AttestDate" onchange="_l5DateManuallySet = true;"
+               style="flex:1;min-width:0;background:#fffdf7;border:1px solid #d8c690;
+                      border-radius:var(--r-sm);padding:.5rem .6rem;color:#3a2c0a;
+                      font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;outline:none;">
+      </div>
+      <div id="l5AttestPickerRow" style="display:flex;flex-wrap:wrap;gap:.45rem;">
+        <!-- Buttons inserted by renderL5AttestCard() -->
+      </div>
+      <div id="l5LastMarkedRow" style="margin-top:.7rem;font-size:11.5px;color:#7a5800;min-height:14px;line-height:1.5;">
+        <!-- Last marked status -->
+      </div>
     </div>
   </div>
 </div>
@@ -2088,6 +2100,7 @@ function showScreen(id){
   if(id==='screenReports') renderReports();
   if(id==='screenSendLinks') renderSendLinks();
   if(id==='screenMyProfile') renderMyProfile();
+  if(id==='screenMyAttendance') renderL5AttestCard();
   window.scrollTo(0,0);
 
   // Push to screen history (skip if same as current).
@@ -2530,8 +2543,11 @@ function renderHome(){
           .eq('member_id', LEADER.leaderId)
           .limit(1);
         if (!error && data && data.length > 0) {
-          const card = document.getElementById('preachingCalendarCard');
-          if (card) card.style.display = 'flex';
+          // Session 71: was the #preachingCalendarCard Home card; now the
+          // Quick Action. .qa-btn is a column flex, so 'flex' restores it
+          // (flex-direction comes from the class).
+          const qa = document.getElementById('qaPreachingCalendar');
+          if (qa) qa.style.display = 'flex';
         }
       } catch(e) { /* silent — card stays hidden on error */ }
     })();
@@ -2682,34 +2698,32 @@ function _l5FmtShort(dateStr){
   return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}`;
 }
 
-// ── "My Attendance" fold: collapsed by default to save real estate;
-//    remembers the leader's last open/closed choice (localStorage). ──
-function _applyL5AttestFold(){
-  const body = document.getElementById('l5AttestBody');
-  const chev = document.getElementById('l5AttestChevron');
-  if (!body) return;
-  let open = false;
-  try { open = localStorage.getItem('mlt_attest_open') === '1'; } catch(e){}
-  body.style.display = open ? 'block' : 'none';
-  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
-}
-function _toggleL5Attest(){
-  const body = document.getElementById('l5AttestBody');
-  const chev = document.getElementById('l5AttestChevron');
-  if (!body) return;
-  const open = (body.style.display === 'none');
-  body.style.display = open ? 'block' : 'none';
-  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
-  try { localStorage.setItem('mlt_attest_open', open ? '1' : '0'); } catch(e){}
-}
+// ── "My Attendance" fold RETIRED (Session 71). The card became
+//    screenMyAttendance, reached from the Quick Actions grid, so there is
+//    nothing left to fold. _applyL5AttestFold / _toggleL5Attest and the
+//    `mlt_attest_open` localStorage key are gone. The stale key is harmless
+//    and self-expiring — nothing reads it. ──
 
 async function renderL5AttestCard(){
-  const card = document.getElementById('l5SelfAttestCard');
-  if (!card) return;
-  const isL5 = LEADER && (LEADER.leaderLevel || 0) >= 5;
-  if (!isL5) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
-  _applyL5AttestFold();
+  // Session 71: the card moved to screenMyAttendance. This function now does
+  // two jobs — (a) gate the Quick Action that reaches the screen, and (b)
+  // populate that screen. It is called from renderHome() (to set the gate) and
+  // again from showScreen('screenMyAttendance') (to refresh on open).
+  //
+  // Level is read LIVE via _liveLeaderLevel(): in the shell iframe, LEADER is
+  // still empty when this first runs and only fills in via postMessage
+  // (#169/#315). The old `LEADER.leaderLevel` read worked only because
+  // renderHome happened to run after the re-sync — a coincidence, not a
+  // guarantee. _liveLeaderLevel() prefers the live session and is safe either way.
+  const isL5 = _liveLeaderLevel() >= 5;
+
+  const qa = document.getElementById('qaMyAttendance');
+  if (qa) qa.style.display = isL5 ? 'flex' : 'none';   // .qa-btn is a column flex
+  if (!isL5) return;
+
+  // Everything below populates the screen; harmless if it isn't on-screen yet.
+  const row0 = document.getElementById('l5AttestPickerRow');
+  if (!row0) return;
 
   // Default the date field to today (only if not already set, so a leader's
   // backdated pick survives a re-render). Reset the manual-override flag each
