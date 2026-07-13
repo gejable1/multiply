@@ -857,6 +857,12 @@
   //     → drop-in renderer. Injects banner HTML into containerId.
   //     opts.onSwapClick(assignment) → custom handler (default: open admin)
   //     opts.bilingual = true → emit en-text/tl-text spans (for MMT)
+  //     opts.defaultCollapsed = true → assignment banners start SHRUNK to a
+  //       one-line chip (title + day summary + caret). The member can toggle;
+  //       the choice is remembered per (preach_date|stage), so escalating from
+  //       7d → 3d → 0d reverts to this default. Callers set it from the live
+  //       pipeline level (currently: L5 = true). The swap-target banner is
+  //       never collapsed — it is an actionable request, not a reminder.
   // ═════════════════════════════════════════════════════════════
 
   // ─── Timezone-safe local-date helper (see preaching_admin for rationale) ─
@@ -1060,6 +1066,65 @@
     catch (e) { /* localStorage unavailable */ }
   }
 
+  // ─── Collapse state (mirrors the dismiss idiom above) ────────────────
+  // Key: multiply_preaching_collapsed_<member_id>_<collapse_key>
+  // where <collapse_key> is "<preach_date>|<stage>" (single) or a comma-join
+  // of those pairs (combined) — i.e. the SAME shape as the dismiss keys.
+  //
+  // Tri-state on purpose: '1' = collapsed, '0' = expanded, ABSENT = fall back
+  // to the caller's default. Because the STAGE is baked into the key, an
+  // escalation (7d → 3d → 0d) mints a NEW key with no stored value, so the
+  // banner reverts to the default. A weekly preacher (default-collapsed) stays
+  // shrunk; an occasional preacher (default-expanded) is re-opened as the day
+  // nears. The nag survives; the clutter does not.
+  function _preaching_collapseKey(memberId, ck) {
+    return 'multiply_preaching_collapsed_' + memberId + '_' + ck;
+  }
+
+  function _preaching_isCollapsed(memberId, ck, dflt) {
+    try {
+      const v = localStorage.getItem(_preaching_collapseKey(memberId, ck));
+      if (v === '1') return true;
+      if (v === '0') return false;
+    } catch (e) { /* localStorage unavailable */ }
+    return !!dflt;
+  }
+
+  function _preaching_setCollapsed(memberId, ck, val) {
+    try { localStorage.setItem(_preaching_collapseKey(memberId, ck), val ? '1' : '0'); }
+    catch (e) { /* localStorage unavailable */ }
+  }
+
+  // ─── Collapsible shell — shared by the single + combined assignment banners
+  // so the two can never drift apart (same contract as _preaching_colors).
+  // Collapsed renders the title row ONLY: icon + title + summary + caret + ✕.
+  // The body is NOT EMITTED when collapsed — we do not hide it with
+  // `display:none`, because an element carrying two display declarations is
+  // exactly the trap that produced the MLT heads-up flash.
+  // The swap-target banner deliberately does NOT use this shell: it is an
+  // actionable request from another preacher, not a recurring reminder.
+  function _preaching_shellHTML(o) {
+    const c = o.colors;
+    const collapsed = !!o.collapsed;
+    const caret = collapsed ? '▸' : '▾';
+    const dot = collapsed && o.summaryHTML
+      ? '<span style="font-weight:500;color:rgba(0,0,0,.72)"> · ' + o.summaryHTML + '</span>'
+      : '';
+    return (
+      '<div style="background:' + c.bg + ';border:1.5px solid ' + c.border + ';border-radius:10px;padding:' + (collapsed ? '8px 12px' : '11px 14px') + ';margin-bottom:.75rem;display:flex;align-items:' + (collapsed ? 'center' : 'flex-start') + ';gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
+        '<div style="width:' + (collapsed ? '24px;height:24px;font-size:13px' : '36px;height:36px;font-size:18px') + ';border-radius:50%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.18)">' + c.icon + '</div>' +
+        '<div style="flex:1;min-width:0;line-height:1.4">' +
+          '<div data-preaching-action="toggle" data-collapse-key="' + escapeHTML(o.collapseKey) + '" title="' + (collapsed ? 'Expand' : 'Collapse') + '" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none">' +
+            '<div style="font-weight:700;font-size:13.5px;color:#1a1612;flex:1;min-width:0;' + (collapsed ? 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' : '') + '">' + o.titleHTML + dot + '</div>' +
+            '<span style="font-size:11px;color:rgba(0,0,0,.6);flex-shrink:0">' + caret + '</span>' +
+          '</div>' +
+          (collapsed ? '' : '<div style="margin-top:2px">' + o.bodyHTML + '</div>') +
+        '</div>' +
+        o.dismissHTML +
+      '</div>'
+    );
+  }
+
   // Drop-in HTML renderer for both MLT and MMT.
   // The banner is injected into containerId (which should be an empty div
   // located at the top of the home screen).
@@ -1111,10 +1176,16 @@
         live.push({ a, stage });
       }
     }
+    // opts.defaultCollapsed — the CALLER decides who starts shrunk. shared.js
+    // stays level-agnostic: MLT/MMT read the live pipeline level and pass a
+    // boolean. Today that is "L5 starts collapsed"; the policy can change in
+    // one place without touching this module.
+    const dfltCollapsed = !!opts.defaultCollapsed;
+
     if (live.length === 1) {
-      parts.push(_preaching_assignmentBannerHTML(live[0].a, live[0].stage, bilingual));
+      parts.push(_preaching_assignmentBannerHTML(live[0].a, live[0].stage, bilingual, memberId, dfltCollapsed));
     } else if (live.length >= 2) {
-      parts.push(_preaching_combinedBannerHTML(live, bilingual));
+      parts.push(_preaching_combinedBannerHTML(live, bilingual, memberId, dfltCollapsed));
     }
 
     container.innerHTML = parts.join('');
@@ -1128,7 +1199,12 @@
         const preachDate = btn.dataset.preachDate;
         const stage = btn.dataset.stage;
         const swapId = btn.dataset.swapId;
-        if (action === 'dismiss') {
+        if (action === 'toggle') {
+          const ck = btn.dataset.collapseKey || '';
+          const now = _preaching_isCollapsed(memberId, ck, !!opts.defaultCollapsed);
+          _preaching_setCollapsed(memberId, ck, !now);
+          _preaching_renderReminderBanner(containerId, memberId, opts);
+        } else if (action === 'dismiss') {
           _preaching_dismiss(memberId, preachDate, stage);
           // Re-render
           _preaching_renderReminderBanner(containerId, memberId, opts);
@@ -1191,7 +1267,7 @@
     };
   }
 
-  function _preaching_assignmentBannerHTML(assignment, stage, bilingual) {
+  function _preaching_assignmentBannerHTML(assignment, stage, bilingual, memberId, defaultCollapsed) {
     const meta = _preaching_dayMeta(assignment.preach_date, assignment.service_type);
     const dateLabel = meta.dateLabel;
     // Actual day-count for the 1–3 day ('3d') bucket so the copy never lies.
@@ -1227,30 +1303,44 @@
       '0d': isSunday ? 'This Morning' : 'Tonight'
     };
 
-    return (
-      '<div style="background:' + c.bg + ';border:1.5px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
-        '<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.18)">' + c.icon + '</div>' +
-        '<div style="flex:1;min-width:0;line-height:1.4">' +
-          '<div style="font-weight:700;font-size:13.5px;margin-bottom:2px;color:#1a1612">' + escapeHTML(titles[stage]) + '</div>' +
-          '<div style="font-size:12.5px;color:#1a1612">' +
-            (bilingual && m.tl
-              ? '<span class="en-text">' + escapeHTML(m.en) + '</span><span class="tl-text">' + escapeHTML(m.tl) + '</span>'
-              : escapeHTML(m.en)) +
-          '</div>' +
-          '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
-            '<button type="button" data-preaching-action="request-swap" data-assignment-id="' + assignment.id + '" data-preach-date="' + assignment.preach_date + '" style="background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;font-weight:600;color:#1a1612">🔄 Request Swap</button>' +
-            '<button type="button" data-preaching-action="view-calendar" style="background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:#1a1612;font-weight:500">📅 View Calendar</button>' +
-          '</div>' +
-        '</div>' +
-        '<button type="button" data-preaching-action="dismiss" data-preach-date="' + assignment.preach_date + '" data-stage="' + stage + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
-      '</div>'
-    );
+    // Collapse key carries the stage → escalation re-applies the default.
+    const collapseKey = assignment.preach_date + '|' + stage;
+    const collapsed = _preaching_isCollapsed(memberId, collapseKey, defaultCollapsed);
+
+    // Collapsed summary: the DATE only. The stage titles above already carry the
+    // day word ("Upcoming · This Sunday", "Tonight"), so repeating it would read
+    // "This Sunday · Sunday (Jul 19)". A date needs no translation.
+    const summaryHTML = escapeHTML(meta.shortDate);
+
+    const bodyHTML =
+      '<div style="font-size:12.5px;color:#1a1612">' +
+        (bilingual && m.tl
+          ? '<span class="en-text">' + escapeHTML(m.en) + '</span><span class="tl-text">' + escapeHTML(m.tl) + '</span>'
+          : escapeHTML(m.en)) +
+      '</div>' +
+      '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
+        '<button type="button" data-preaching-action="request-swap" data-assignment-id="' + assignment.id + '" data-preach-date="' + assignment.preach_date + '" style="background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;font-weight:600;color:#1a1612">🔄 Request Swap</button>' +
+        '<button type="button" data-preaching-action="view-calendar" style="background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:#1a1612;font-weight:500">📅 View Calendar</button>' +
+      '</div>';
+
+    const dismissHTML =
+      '<button type="button" data-preaching-action="dismiss" data-preach-date="' + assignment.preach_date + '" data-stage="' + stage + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>';
+
+    return _preaching_shellHTML({
+      colors: c,
+      collapseKey: collapseKey,
+      collapsed: collapsed,
+      titleHTML: escapeHTML(titles[stage]),
+      summaryHTML: summaryHTML,
+      bodyHTML: bodyHTML,
+      dismissHTML: dismissHTML
+    });
   }
 
   // Combined banner for 2+ engagements in the same window (e.g. Wednesday
   // midweek + Sunday service in one week). One message, urgency colored by
   // the NEAREST engagement; each row keeps its own Swap action.
-  function _preaching_combinedBannerHTML(live, bilingual) {
+  function _preaching_combinedBannerHTML(live, bilingual, memberId, defaultCollapsed) {
     const items = live
       .map(x => ({ a: x.a, stage: x.stage, meta: _preaching_dayMeta(x.a.preach_date, x.a.service_type) }))
       .sort((p, q) => p.meta.diffDays - q.meta.diffDays);
@@ -1281,23 +1371,38 @@
     const close = bilingual ? '<span class="en-text">' + escapeHTML(closeEN) + '</span><span class="tl-text">' + escapeHTML(closeTL) + '</span>' : escapeHTML(closeEN);
 
     // Dismiss-all carries every (preach_date|stage) shown so one ✕ clears the set.
+    // The SAME string is the collapse key — one identity for the whole set, and
+    // it changes the moment any engagement escalates a stage.
     const dismissKeys = items.map(it => it.a.preach_date + '|' + it.stage).join(',');
+    const collapsed = _preaching_isCollapsed(memberId, dismissKeys, defaultCollapsed);
 
-    return (
-      '<div style="background:' + c.bg + ';border:1.5px solid ' + c.border + ';border-radius:10px;padding:11px 14px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.12)">' +
-        '<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.18)">' + c.icon + '</div>' +
-        '<div style="flex:1;min-width:0;line-height:1.4">' +
-          '<div style="font-weight:700;font-size:13.5px;margin-bottom:3px;color:#1a1612">Preaching This Week</div>' +
-          '<div style="font-size:12.5px;color:#1a1612;margin-bottom:4px">' + head + '</div>' +
-          rowsHTML +
-          '<div style="font-size:12px;color:#1a1612;margin-top:5px">' + close + '</div>' +
-          '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
-            '<button type="button" data-preaching-action="view-calendar" style="background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:#1a1612;font-weight:500">📅 View Calendar</button>' +
-          '</div>' +
-        '</div>' +
-        '<button type="button" data-preaching-action="dismiss-all" data-preach-keys="' + dismissKeys + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>' +
-      '</div>'
-    );
+    // Collapsed summary: just the day words — "Wed + Sun".
+    const summaryEN = items.map(it => it.meta.dayWord.slice(0, 3)).join(' + ');
+    const summaryTL = items.map(it => it.meta.dayWordTL.slice(0, 3)).join(' + ');
+    const summaryHTML = (bilingual)
+      ? '<span class="en-text">' + escapeHTML(summaryEN) + '</span><span class="tl-text">' + escapeHTML(summaryTL) + '</span>'
+      : escapeHTML(summaryEN);
+
+    const bodyHTML =
+      '<div style="font-size:12.5px;color:#1a1612;margin-bottom:4px">' + head + '</div>' +
+      rowsHTML +
+      '<div style="font-size:12px;color:#1a1612;margin-top:5px">' + close + '</div>' +
+      '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' +
+        '<button type="button" data-preaching-action="view-calendar" style="background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.25);font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:6px;cursor:pointer;color:#1a1612;font-weight:500">📅 View Calendar</button>' +
+      '</div>';
+
+    const dismissHTML =
+      '<button type="button" data-preaching-action="dismiss-all" data-preach-keys="' + dismissKeys + '" title="Dismiss" style="background:transparent;border:none;font-size:16px;cursor:pointer;color:rgba(0,0,0,.65);padding:0 4px;line-height:1;flex-shrink:0">✕</button>';
+
+    return _preaching_shellHTML({
+      colors: c,
+      collapseKey: dismissKeys,
+      collapsed: collapsed,
+      titleHTML: 'Preaching This Week',
+      summaryHTML: summaryHTML,
+      bodyHTML: bodyHTML,
+      dismissHTML: dismissHTML
+    });
   }
 
   function _preaching_swapTargetBannerHTML(swap, requesterName, requesterDate, targetDate, bilingual) {
