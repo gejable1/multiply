@@ -1191,7 +1191,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
       <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">2 · Copy the prompt → run it in any AI</div>
       <textarea id="mpPrompt" readonly rows="7" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12px;line-height:1.5;resize:vertical"></textarea>
       <button onclick="mpCopyPrompt()" style="margin-top:8px;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:10px 16px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">📋 Copy Prompt</button>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.4">Paste into ChatGPT, Gemini, Claude — any AI you like — then copy its full reply.</div>
+      <!-- AI links. The old copy said "paste into ChatGPT, Gemini, Claude" and
+           stopped there — which assumes the leader knows those are PLACES you can
+           go. For a first-timer they are just three words, and she is left holding
+           a prompt with nowhere to put it. These links answer the only question
+           that was actually blocking her: WHERE.
+           Gemini is FIRST on purpose — most of our leaders are on Android and are
+           already signed into Google, so it opens and works on the first tap.
+           ChatGPT and Claude both bounce a first-timer into a signup wall.
+           rel="noopener noreferrer" is CORRECT here and must not be "fixed" away:
+           Inv #268 (noopener strips sessionStorage and breaks the leader session)
+           is about IN-APP navigation to our own pages. These are third-party
+           origins that never shared our sessionStorage, so noopener is simply the
+           right security default. -->
+      <div id="mpAiHint" style="font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.45">
+        Copy the prompt, then open an AI and paste it in. <strong style="color:var(--ink);font-weight:600">New to this? Tap Gemini</strong> — it opens with your Google account, no sign-up.
+      </div>
+      <div id="mpAiLinks" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding:8px;border-radius:8px;border:1px solid transparent;transition:border-color .2s ease,background .2s ease">
+        <a href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" style="flex:1 1 auto;text-align:center;min-width:96px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--ink);text-decoration:none">Gemini ↗</a>
+        <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" style="flex:1 1 auto;text-align:center;min-width:96px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--ink);text-decoration:none">ChatGPT ↗</a>
+        <a href="https://claude.ai/new" target="_blank" rel="noopener noreferrer" style="flex:1 1 auto;text-align:center;min-width:96px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--ink);text-decoration:none">Claude ↗</a>
+      </div>
     </div>
 
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
@@ -1809,6 +1829,7 @@ async function mpLoadDevotional(){
     titleEl.style.color = 'var(--ink)';
     document.getElementById('mpPrompt').value = mpBuildPrompt(_mpDevo);
     document.getElementById('mpStep2').style.display = '';
+    _mpDisarmAiLinks();   // new date = new prompt; the old "Copied ✓" would be a lie
   }else{
     titleEl.textContent = 'No devotional found for '+date+'. Pick another day.';
     titleEl.style.color = 'var(--muted)';
@@ -1867,6 +1888,32 @@ async function mpCopyPrompt(){
   const t = document.getElementById('mpPrompt');
   try{ await navigator.clipboard.writeText(t.value); toast('Prompt copied — paste it into your AI','✅'); }
   catch(e){ t.focus(); t.select(); try{document.execCommand('copy');}catch(_){} toast('Prompt copied','✅'); }
+  _mpArmAiLinks();
+}
+
+// After the prompt is on the clipboard, the next action is "go somewhere and
+// paste". Say so, and make the links look like the next step — otherwise the
+// leader is holding a copied prompt and staring at three grey buttons.
+// (Copy first, THEN leave: if she taps a link before copying she lands on
+// Gemini with an empty clipboard, and that failure is silent and confusing.)
+function _mpDisarmAiLinks(){
+  const hint = document.getElementById('mpAiHint');
+  const row  = document.getElementById('mpAiLinks');
+  if (hint) hint.innerHTML = 'Copy the prompt, then open an AI and paste it in. <strong style="color:var(--ink);font-weight:600">New to this? Tap Gemini</strong> \u2014 it opens with your Google account, no sign-up.';
+  if (row){
+    row.style.borderColor = 'transparent';
+    row.style.background  = 'transparent';
+  }
+}
+
+function _mpArmAiLinks(){
+  const hint = document.getElementById('mpAiHint');
+  const row  = document.getElementById('mpAiLinks');
+  if (hint) hint.innerHTML = 'Copied \u2713 &mdash; now tap one below, paste it in, then copy the AI\u2019s full reply back into step 3.';
+  if (row){
+    row.style.borderColor = 'var(--gold)';
+    row.style.background  = 'rgba(184,136,42,.07)';
+  }
 }
 
 function mpParse(){
