@@ -20,7 +20,7 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 - `multiply-schema.json` — read before writing ANY SQL/seed. **LOCAL-only snapshot** of the live DB (gitignored, never pushed); it can lag the live DB — regenerate it from Supabase when the schema changes, and inspect actual stored payloads when unsure.
 
 ## Core files
-- `multiply_shared.js` — shared module (sessions, dates, SVI, preaching, swap modal, etc.). Loaded by every tool as `multiply_shared.js?v=N` (**currently v=4**).
+- `multiply_shared.js` — shared module (sessions, dates, SVI, preaching, swap modal, etc.). Loaded by every tool as `multiply_shared.js?v=N` (**currently v=10** — bump ALL 21 consumers together, Inv #138).
 - `multiply_dashboard.html` (MD, Pastor) · `lc_leader_tool.html` (MLT, LC leaders) · `member_tool.html` (MMT, members) · `preaching_calendar.html`
 - Reports: `lc_attendance_report.html`, `lc_member_report.html`, `lcg_pulse_report.html`, `member_attendance_report.html`
 - Assessments: `*_diagnostic.html` / `*_profile.html` (Spiritual Gifts, Salvation, DISC, Enneagram, Love Language, Strengths, Conflict Style).
