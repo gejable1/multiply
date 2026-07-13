@@ -3210,4 +3210,92 @@ When generating FIND/REPLACE anchor blocks by SLICING a region out of a proven f
 
 ---
 
+### **309. Sandboxed iframes must carry `allow-modals` — a blocked `confirm()` returns falsy and the guard bails SILENTLY**
+
+`_openLessonViewerModal` embedded every admin tool with `sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"` — no `allow-modals`. In such a sandbox the browser **silently ignores** `confirm()`/`alert()`/`prompt()`; `confirm()` returns falsy. Every confirm-gated destructive action therefore opened with `const ok = confirm(...); if(!ok) return;` and **bailed instantly with zero feedback** — the button looked dead. This was not an Attendance-Admin bug: six MD tools were affected (attendance, preaching ×6 confirms, lesson-quiz-editor ×5, leadership-pipeline ×2, devotional, transfer). `alert()` was muzzled too, so even the ERROR path was silent. Fixed in all three embed hosts (MD #161, MLT+MMT #162). RULE: any sandboxed iframe whose target may call a modal needs `allow-modals`; the absence of the token is invisible until a destructive action quietly does nothing.
+
+**Established July 13, 2026 (Session 70). Invariant #309 added - count now 309.**
+
+---
+
+### **310. Service worker: clone the Response BEFORE the async gap — `caches.open()` is async and the body is gone by the time it resolves**
+
+`networkFirst` did `caches.open(CACHE_VERSION).then(c => c.put(req, fresh.clone()))`. `caches.open()` is **async**: by the time it resolves, `fresh` has already been handed to `respondWith()` and the browser has begun reading its body, so the deferred `clone()` throws *"Response body is already used"*. Worse, it throws **while evaluating the argument**, so the trailing `.catch()` never sees it → an UNHANDLED rejection **and a cache write that never happens**. Line 77 routes every HTML doc and every JS file through `networkFirst`, so the cache had been frozen since `CACHE_VERSION = 'multiply-shell-v1-2026-06-15'` — which very plausibly explains months of hard-refresh pain. FIX: `const copy = fresh.clone();` **synchronously**, then hand `copy` to the async chain. `cacheFirst` was NOT affected — it clones before `fresh` is ever returned. Bump `CACHE_VERSION` in the same PR so the frozen cache is evicted on activate.
+
+**Established July 13, 2026 (Session 70). Invariant #310 added - count now 310.**
+
+---
+
+### **311. `typeof` does NOT protect a temporal-dead-zone binding — it throws for a `let`/`const` declared later in the same scope**
+
+`initMltAddMemberToggle()` was called at top level ~60 lines ABOVE `const LeaderScope = ...`, and guarded itself with `typeof LeaderScope !== 'undefined' && ...`. That guard is a **false friend**: `typeof` only saves you from an *undeclared* variable. For a `let`/`const` in its TDZ it **throws a ReferenceError** rather than returning `'undefined'`. The async function therefore rejected with *"Cannot access 'LeaderScope' before initialization"*, and the Pastor's MLT add-member permission toggle silently never initialized. FIX: move the CALL below the declaration. RULE: `typeof` is not a TDZ guard; ordering is. If a defensive `typeof` sits in front of a `const` from the same module, that is a bug in waiting.
+
+**Established July 13, 2026 (Session 70). Invariant #311 added - count now 311.**
+
+---
+
+### **312. `\UXXXXXXXX` is not JavaScript — the capital-U escape is a Python-ism that becomes junk TEXT**
+
+While generating an emoji through a Python heredoc, `\\U0001F54A` was written into a JS source string. **JavaScript has no `\U` escape** (only `\uXXXX` and surrogate pairs like `\uD83D\uDD4A`, plus `\u{...}`). The backslash is simply dropped and the user sees the literal text `U0001F54A`. My proven copy therefore carried a real bug that would have rendered *"Nothing new yet. U0001F54A"* to the member; the literal `🕊` that CC shipped from the prompt was **correct**. RULE: emit emoji as literal UTF-8 characters, or as `\uXXXX`/surrogate pairs — never `\UXXXXXXXX`. Add `grep -c '\\U0001'` → 0 to the self-verify of any file carrying emoji.
+
+**Established July 13, 2026 (Session 70). Invariant #312 added - count now 312.**
+
+---
+
+### **313. Diagnostic SQL run in the Supabase SQL Editor MUST carry an explicit tenant filter — the Editor runs as owner and bypasses RLS**
+
+A gate-impact query (`WHERE is_facilitator AND pipeline_level < 3`) was handed over with **no `church_id` filter**. The SQL Editor runs as owner, so RLS is off (#186) and the result spanned **every tenant**: 12 of the 60 rows returned were **Agape** members, not Rosehill. The Pastor spotted one name (Tofy) and reasonably suspected a tenancy leak; the wall was in fact intact — migration 028 had moved him correctly. The bug was the query. A cross-tenant result read as single-tenant is **worse than no result**: it manufactures false alarms and can equally mask real ones. RULE: every diagnostic SELECT in the Editor joins `churches` and filters `c.slug = '<tenant>'`, or is explicitly labelled as cross-tenant. This is a direct corollary of #186 and it bites the author, not the app.
+
+**Established July 13, 2026 (Session 70). Invariant #313 added - count now 313.**
+
+---
+
+### **314. The MD level gate lives in THREE files and must move as one**
+
+MD had **no level gate at all**: `gateOrRedirect()` only checks that a valid session exists, and `leader_login` offered a free Desktop/Mobile chooser. In 14,396 lines `leaderLevel` appeared 14 times and the only runtime UI gate was the "+ Add Member" button. So an L2 LCL could reach Settings, Attendance Admin, Preaching Admin, Lesson/Quiz Editor, SVI weight profiles and Bulk Send. Restricting MD to Coach (L3+) required **three** coordinated gates: `index.html` (shell registry `TOOLS.md.minLevel`), `leader_login.html` (hide the Desktop option), and `multiply_dashboard.html` (`MD_MIN_LEVEL` entry backstop for bookmarks / typed URLs / installed PWA). Miss any one and the restriction leaks. RULE: `MD_MIN_LEVEL` is duplicated in three files by deliberate tradeoff (centralizing it in `multiply_shared.js` would force a `?v=` bump across every tool); each copy carries a comment pointing at the other two, and they move together. **This is a UX/role gate, NOT a security boundary — RLS remains the only real boundary.**
+
+**Established July 13, 2026 (Session 70). Invariant #314 added - count now 314.**
+
+---
+
+### **315. Session-derived identity must resolve LIVE, never snapshot at parse time — the frozen shim was the ROOT CAUSE of the duplicate-member epidemic**
+
+MLT's `currentLeader` was built by an anonymous IIFE that snapshotted `window.LEADER` at **parse time**. Inside the shell iframe the session arrives later via postMessage (#169), so every field froze as `undefined`. The damage was silent and wide: (a) Add Member showed a **blank Discipler box** despite the hint "Auto-set to you"; (b) `saveNewMember` wrote **`discipler_id: null`** → an **ORPHAN member**, invisible in its own LCL's list → the LCL assumed the save failed and **added the person again → DUPLICATES**; (c) the L2 level clamp never fired (`myLvl` read as 0); (d) `openChangeLevel` rejected real LCLs. A prior band-aid (`currentLeader.pipeline_level = lvl;`) had patched one symptom without seeing the disease. FIX (#166): rebuild the shim with `Object.defineProperty` getters that resolve from the live session on each read, caching only once a real session appears; a setter preserves the legacy assignment. **One change healed all 35 call sites.** Plus belt-and-braces: `saveNewMember` now REFUSES to save when no discipler resolves. RULE: never snapshot session-derived identity into a `const` at module scope. Resolve it live, or you will ship an orphan.
+
+**Established July 13, 2026 (Session 70). Invariant #315 added - count now 315.**
+
+---
+
+### **316. Public celebration is for EVENTS, never for STATES — and the flag is FAIL-CLOSED**
+
+When the Pastor asked for rung completions to reach the LC's celebrations, the temptation was to broadcast them all. The rungs make that catastrophic: `category='character'` holds the nine fruit of the Spirit **alongside** "No moral failure 5 yrs", "No active church discipline", "Financial integrity audit", "Assurance of salvation", "Family affirmation". Announcing *"Joy is growing in Ana"* makes the room ask **why not Ben** — the **silence about everyone else becomes a verdict**. Announcing *"no moral failure"* tells the room that moral failure is being **measured**. The Pastor drew the line himself and drew it better than the proposal: **books, training, lessons, ministry onboarding, baptism, EGR** — all things that HAPPENED. *"Ana finished Mere Christianity"* affirms Ana and says nothing about Ben: he simply has not read it yet. Migration 076 encodes this as `meta.celebrate_publicly`, set on exactly 56 base + 3 Rosehill overlay rungs. **Default = absent = PRIVATE.** Fail-open would mean a sensitive rung added a year from now gets broadcast silently and nobody notices. Private notification to the disciple still fires for **every** rung — they still hear that they are seen; it is simply not spoken aloud.
+
+**Established July 13, 2026 (Session 70). Invariant #316 added - count now 316.**
+
+---
+
+### **317. Do not type-check by substring or by `category` — assert on an explicit allowlist**
+
+Twice in one session a string was mistaken for a type. (a) The celebration message keyed on `category`, but `category='character'` is a **mixed bag** — it holds "Joy" (formation) next to "Completed BTLI 101" (achievement), so category-keyed copy would have been wrong for the majority. FIX: key on the **title** against an explicit nine-fruit table. (b) Migration 076's safety guard used `title_en ILIKE '%discipline%'` to catch "No active church discipline" — and **false-alarmed on the BOOK "Disciplines of a Christian Coach (Webb)"**, which is correctly celebratable. FIX: assert on **category membership**, which is what was actually decided. RULE: a human-readable title is not a type. When a decision has been made about a set of rows, encode the SET (an allowlist, or a column), and assert against the set — never against letters that happen to look similar.
+
+**Established July 13, 2026 (Session 70). Invariant #317 added - count now 317.**
+
+---
+
+### **318. The bytes proven must be the bytes shipped — a hand-edited prompt invalidates its own back-check**
+
+Three times this session the byte-for-byte back-check failed, and **every time the fault was mine, not CC's**: after proving an edit on a `/tmp` copy I reworded a comment (twice) or reflowed a line (once) while writing the CC prompt. The branch then matched the PROMPT but not my PROVEN COPY — so my own reference was stale and the back-check reported a false difference. Worse, in one case the proof copy contained a **real bug** (#312) that the prompt did not, meaning the artifact I "proved" was the broken one. This is the same family as the stale-base trap in #162. RULE: generate the prompt **from** the proven bytes, or re-prove after any hand edit. If the prompt is touched by hand, the proof is void and must be re-run before it can serve as a back-check reference.
+
+**Established July 13, 2026 (Session 70). Invariant #318 added - count now 318.**
+
+---
+
+### **319. Do not self-verify with grep-match COUNTS — measure the things that cannot be miscounted**
+
+**Eight times** in one session a CC self-verify count came back different from the spec's expectation, and **eight times CC was right and the spec was wrong**. The pattern is always the same: I count the places I am ADDING a token and forget (a) that my own **comments** contain the token, (b) that a `console.warn`/error path references the function, and (c) that a **pre-existing unrelated line** also matches the grep (`cat === 'btli'`, a nine-hundred-line-away match). CC surfacing these instead of silently "correcting" toward my wrong number is exactly right — a silent fix toward a bad expectation is how real drift hides. RULE: self-verify on quantities that **cannot** be miscounted — **byte delta**, **file count**, `git diff --numstat`, **syntax check**, byte-for-byte `cmp` against the proven copy. Where a grep count is genuinely useful, state it as "≥ N" or enumerate the expected lines rather than asserting an exact total.
+
+**Established July 13, 2026 (Session 70). Invariant #319 added - count now 319.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
