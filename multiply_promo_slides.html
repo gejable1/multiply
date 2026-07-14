@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MULTIPLY — Member Tool &amp; Leader Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   MULTIPLY promo deck.
+
+   The palettes are NOT invented — they are lifted from the two tools
+   themselves, so that when a member or leader opens the real app it
+   *recognises* this deck.
+
+     Act I  · MEMBER TOOL — parchment, gold, forest   (member_tool.html)
+     Act II · LEADER TOOL — midnight, gold, emerald   (lc_leader_tool.html)
+
+   The deck dusks from parchment into midnight at the handover. That
+   change of world IS the argument: the member is given a book to read,
+   the leader is given a watchtower to stand in.
+
+   The progress bar is a row of RUNGS — the pathway. The deck's own
+   progress is the pipeline. It is the one piece of decoration that
+   earns its place by meaning something.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* Act I — parchment (from member_tool.html) */
+  --p-bg:#f5f0e6; --p-bg2:#ede5d3; --p-paper:#fbf7ef;
+  --p-ink:#1c1810; --p-soft:#3d342a; --p-muted:#6b5f4f;
+  --p-gold:#b8882a; --p-gold-hi:#d4af37; --p-forest:#0e3a2c;
+
+  /* Act II — midnight (from lc_leader_tool.html) */
+  --m-bg:#1a2540; --m-bg2:#25315a; --m-surface:#303d68;
+  --m-gold:#e8b84b; --m-gold-hi:#f5d78e; --m-green:#34d399;
+  --m-blue:#60a5fa; --m-text:#f0f0f8; --m-muted:#8888a8;
+
+  /* live tokens — swapped by the act */
+  --bg:var(--p-bg); --bg2:var(--p-bg2); --paper:var(--p-paper);
+  --ink:var(--p-ink); --soft:var(--p-soft); --muted:var(--p-muted);
+  --gold:var(--p-gold); --gold-hi:var(--p-gold-hi); --accent:var(--p-forest);
+
+  --display:'Fraunces',Georgia,serif;
+  --body:'DM Sans',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+
+body.act-leader{
+  --bg:var(--m-bg); --bg2:var(--m-bg2); --paper:var(--m-surface);
+  --ink:var(--m-text); --soft:#c9c9de; --muted:var(--m-muted);
+  --gold:var(--m-gold); --gold-hi:var(--m-gold-hi); --accent:var(--m-green);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+html,body{height:100%;overflow:hidden}
+
+body{
+  font-family:var(--body);
+  background:var(--bg);
+  color:var(--ink);
+  transition:background 1400ms cubic-bezier(.4,0,.2,1), color 1400ms ease;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── ambient: a slow drifting wash. Reads as lamplight on paper in
+      Act I, and as a night sky in Act II. Same code, two moods. ── */
+#wash{
+  position:fixed;inset:-25%;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(48% 42% at 22% 26%, color-mix(in srgb, var(--gold) 22%, transparent), transparent 62%),
+    radial-gradient(46% 40% at 80% 76%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 64%),
+    radial-gradient(60% 55% at 55% 50%, color-mix(in srgb, var(--bg2) 85%, transparent), transparent 70%);
+  filter:blur(46px);
+  animation:drift 26s ease-in-out infinite alternate;
+  transition:background 1400ms ease;
+}
+@keyframes drift{
+  0%  {transform:translate3d(0,0,0) scale(1)}
+  50% {transform:translate3d(2.5%,-2%,0) scale(1.07)}
+  100%{transform:translate3d(-2%,2.5%,0) scale(1.03)}
+}
+
+/* ── grain: keeps the parchment from looking like flat CSS ── */
+#grain{
+  position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.055;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ═══ stage ═══ */
+#stage{position:relative;z-index:2;height:100%;display:grid;place-items:center;padding:5.5rem 6vw 7rem}
+
+.slide{
+  display:none;width:100%;max-width:1080px;
+  text-align:center;
+}
+.slide.live{display:block}
+
+/* staggered entrance — each child rises in turn */
+.slide.live > *{animation:rise 900ms cubic-bezier(.16,1,.3,1) both}
+.slide.live > *:nth-child(1){animation-delay:.05s}
+.slide.live > *:nth-child(2){animation-delay:.20s}
+.slide.live > *:nth-child(3){animation-delay:.35s}
+.slide.live > *:nth-child(4){animation-delay:.50s}
+.slide.live > *:nth-child(5){animation-delay:.65s}
+@keyframes rise{
+  from{opacity:0;transform:translateY(30px) scale(.985);filter:blur(7px)}
+  to  {opacity:1;transform:none;filter:none}
+}
+
+/* ═══ type ═══ */
+.eyebrow{
+  font-family:var(--mono);font-size:.72rem;font-weight:700;
+  letter-spacing:.26em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:1.5rem;
+}
+.eyebrow::before{content:'— '}
+.eyebrow::after{content:' —'}
+
+.glyph{
+  font-size:clamp(3.4rem,8vw,6rem);line-height:1;margin-bottom:1.4rem;
+  filter:drop-shadow(0 8px 26px color-mix(in srgb, var(--gold) 40%, transparent));
+  animation:rise 900ms cubic-bezier(.16,1,.3,1) both, breathe 5.5s ease-in-out 1s infinite;
+}
+@keyframes breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-11px)}}
+
+h1{
+  font-family:var(--display);
+  font-weight:900;
+  font-size:clamp(2.9rem,7.4vw,6.4rem);
+  line-height:.98;letter-spacing:-.03em;
+  color:var(--ink);
+  margin-bottom:1.3rem;
+}
+h1 em{font-style:normal;color:var(--gold);}
+
+h2{
+  font-family:var(--display);
+  font-weight:600;
+  font-size:clamp(2.1rem,4.6vw,3.7rem);
+  line-height:1.08;letter-spacing:-.02em;
+  color:var(--ink);margin-bottom:1.1rem;
+}
+
+.tl{
+  font-family:var(--display);font-weight:300;font-style:italic;
+  font-size:clamp(1.15rem,2.3vw,1.75rem);
+  color:var(--gold);margin-bottom:1.4rem;
+}
+
+p.lede{
+  font-size:clamp(1.05rem,1.85vw,1.4rem);
+  line-height:1.62;color:var(--soft);
+  max-width:60ch;margin:0 auto 1.1rem;
+}
+p.lede strong{color:var(--ink);font-weight:700}
+
+.note{
+  font-size:clamp(.9rem,1.3vw,1.02rem);
+  color:var(--muted);max-width:52ch;margin:1.4rem auto 0;line-height:1.6;
+}
+
+/* the pull-quote panel — the deck's one "card" */
+.panel{
+  display:inline-block;margin-top:1.7rem;padding:1.15rem 1.9rem;
+  background:color-mix(in srgb, var(--paper) 78%, transparent);
+  border:1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  border-left:4px solid var(--gold);
+  border-radius:4px;
+  font-size:clamp(.95rem,1.5vw,1.12rem);
+  color:var(--ink);text-align:left;max-width:60ch;line-height:1.6;
+  box-shadow:0 18px 50px -22px rgba(0,0,0,.4);
+}
+
+/* verse slide */
+.verse{
+  font-family:var(--display);font-weight:300;font-style:italic;
+  font-size:clamp(1.5rem,3.3vw,2.5rem);
+  line-height:1.42;color:var(--ink);max-width:24ch;margin:0 auto 1.3rem;
+}
+.ref{font-family:var(--mono);font-size:.82rem;letter-spacing:.2em;color:var(--gold);text-transform:uppercase}
+
+/* the nine fruit, as chips */
+.fruit{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-top:1.9rem}
+.fruit span{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;
+  padding:.42rem .8rem;border-radius:999px;
+  border:1px solid color-mix(in srgb, var(--gold) 48%, transparent);
+  color:var(--gold);
+}
+
+/* ═══ RUNG BAR — the signature. The deck's progress IS the pathway. ═══ */
+#rungs{
+  position:fixed;top:0;left:0;right:0;z-index:5;
+  display:flex;gap:3px;padding:14px 16px 0;
+}
+.rung{
+  flex:1;height:4px;border-radius:2px;
+  background:color-mix(in srgb, var(--ink) 13%, transparent);
+  overflow:hidden;position:relative;
+  transition:background 900ms ease;
+}
+.rung.done{background:color-mix(in srgb, var(--gold) 62%, transparent)}
+.rung .fill{
+  position:absolute;inset:0;width:0;
+  background:linear-gradient(90deg, var(--gold), var(--gold-hi));
+  box-shadow:0 0 12px color-mix(in srgb, var(--gold) 70%, transparent);
+}
+.rung.act2{opacity:.55}
+
+/* ═══ chrome ═══ */
+#label{
+  position:fixed;top:26px;left:22px;z-index:5;
+  font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);
+}
+#label b{color:var(--gold)}
+
+#count{
+  position:fixed;top:26px;right:22px;z-index:5;
+  font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.18em;
+  color:var(--muted);
+}
+
+#bar{
+  position:fixed;bottom:0;left:0;right:0;z-index:5;
+  display:flex;align-items:center;justify-content:center;gap:.55rem;
+  padding:16px;
+}
+button{
+  font-family:var(--mono);font-size:.7rem;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;
+  background:color-mix(in srgb, var(--paper) 62%, transparent);
+  color:var(--soft);
+  border:1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius:999px;padding:.55rem 1.05rem;cursor:pointer;
+  transition:.18s ease;
+}
+button:hover{background:var(--gold);color:var(--bg);border-color:var(--gold);transform:translateY(-2px)}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+#play{min-width:5.6rem}
+
+#hint{
+  position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:5;
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);opacity:.62;white-space:nowrap;
+}
+
+/* the dusk wipe at the act break */
+#dusk{
+  position:fixed;inset:0;z-index:20;pointer-events:none;
+  background:linear-gradient(160deg,var(--m-bg),var(--m-bg2));
+  transform:translateY(101%);
+}
+#dusk.fall{animation:dusk 1500ms cubic-bezier(.76,0,.24,1) forwards}
+@keyframes dusk{
+  0%  {transform:translateY(101%)}
+  46% {transform:translateY(0)}
+  54% {transform:translateY(0)}
+  100%{transform:translateY(-101%)}
+}
+
+@media (max-width:640px){
+  #stage{padding:5rem 7vw 6.5rem}
+  .panel{padding:1rem 1.2rem}
+  #hint{display:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body>
+
+<div id="wash"></div>
+<div id="grain"></div>
+<div id="dusk"></div>
+
+<div id="rungs"></div>
+<div id="label">MULTIPLY · <b id="actName">Member Tool</b></div>
+<div id="count">01 / 20</div>
+
+<main id="stage">
+
+  <!-- ══════════ COVER ══════════ -->
+  <section class="slide" data-act="member">
+    <div class="eyebrow">Rosehill Church</div>
+    <h1>MULT<em>I</em>PLY</h1>
+    <div class="tl">Ang simbahang nagpaparami ng alagad</div>
+    <p class="lede">Two tools. One mission. <strong>Every member growing. Every leader watching over someone.</strong></p>
+  </section>
+
+  <!-- ══════════ ACT I — MEMBER TOOL ══════════ -->
+  <section class="slide" data-act="member">
+    <div class="glyph">📱</div>
+    <div class="eyebrow">Act One</div>
+    <h2>The Member Tool</h2>
+    <div class="tl">Ang gamit mo sa paglago</div>
+    <p class="lede">Your walk with God, in your pocket. Not a church app full of notices — <strong>a place to grow.</strong></p>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">📖</div>
+    <div class="eyebrow">Every day</div>
+    <h2>Devotional</h2>
+    <div class="tl">Araw-araw na Salita</div>
+    <p class="lede">Open it. Read the passage. Then <strong>write what God said to you</strong> — your reflection is saved, and it stays yours.</p>
+    <div class="panel">Basahin. Pagnilayan. Isulat. Hindi ka mag-iisa sa paglalakbay — ang bawat araw ay may Salita para sa iyo.</div>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">🎓</div>
+    <div class="eyebrow">Learn</div>
+    <h2>Lessons &amp; Quizzes</h2>
+    <div class="tl">Usbong · BTLI</div>
+    <p class="lede">Watch the video. Read the lesson. Take the quiz — <strong>70% to pass, and three tries</strong>, because this is formation, not an exam.</p>
+    <p class="note">Your leader can see that you finished. Nobody has to chase you for a piece of paper.</p>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">🙏</div>
+    <div class="eyebrow">Bring it to God</div>
+    <h2>Prayer</h2>
+    <div class="tl">Panalangin ng araw · Kahilingan</div>
+    <p class="lede">Send a prayer request straight to your leader. And here is the part that matters: <strong>when someone prays for you, it is recorded.</strong></p>
+    <div class="panel">Hindi lang ito nakalista sa isang papel. <strong>May taong nagdadasal para sa'yo</strong> — at alam mo iyon.</div>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">👣</div>
+    <div class="eyebrow">Journey · Lakbay</div>
+    <h2>See how far you've come</h2>
+    <p class="lede">The pathway shows every step of growth — and marks each one you complete. <strong>You are not wandering. You are being led somewhere.</strong></p>
+    <p class="note">Not a leaderboard. Nobody is ranked. This is your road, and only yours.</p>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">🌱</div>
+    <div class="eyebrow">Discover · Tuklas</div>
+    <h2>How God made you</h2>
+    <p class="lede">Spiritual gifts. Strengths. How you work, and how you handle conflict. <strong>Find out where you fit</strong> — so you serve from who you are, not from who's available.</p>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">🌍</div>
+    <div class="eyebrow">EOLO</div>
+    <h2>Each One, Love One</h2>
+    <p class="lede">One person. Prayed for. Followed up. <strong>Loved.</strong></p>
+    <div class="panel">Hindi mo kailangang abutin ang buong mundo. <strong>Isa lang.</strong> Kung ang bawat isa sa atin ay may isa — mararating natin ang lahat.</div>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">🔔</div>
+    <div class="eyebrow">You are seen</div>
+    <h2>Someone rejoices with you</h2>
+    <p class="lede">Finish a step and your discipler knows — <strong>not to check up on you, but to celebrate with you.</strong> Growth that nobody notices is a lonely thing.</p>
+  </section>
+
+  <section class="slide" data-act="member">
+    <div class="glyph">🇵🇭</div>
+    <div class="eyebrow">One tap</div>
+    <h2>English or Tagalog</h2>
+    <p class="lede">Buong app, dalawang wika. <strong>Basahin sa wikang pinakamalapit sa puso mo.</strong></p>
+  </section>
+
+  <!-- ══════════ ACT II — LEADER TOOL ══════════ -->
+  <section class="slide" data-act="leader">
+    <div class="glyph">🗼</div>
+    <div class="eyebrow">Act Two</div>
+    <h2>The Leader Tool</h2>
+    <div class="tl">Hindi ito dashboard. Bantayan ito.</div>
+    <p class="lede">This is not a dashboard for managing people. <strong>It is a watchtower for keeping them.</strong></p>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">👥</div>
+    <div class="eyebrow">My Group</div>
+    <h2>Your people, by name</h2>
+    <p class="lede">Who they are. Where they are on the pathway. What they finished last week. <strong>Everything you need to shepherd them — in one place.</strong></p>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">📊</div>
+    <div class="eyebrow">Spiritual Vitality</div>
+    <h2>A care lens. Not a scoreboard.</h2>
+    <p class="lede">The Spiritual Vitality Index does <strong>not</strong> rank your members and it does <strong>not</strong> grade their walk with God.</p>
+    <div class="panel">It answers one question, and only one: <strong>who has gone quiet, and needs a visit?</strong><br><br>Ang numero ay hindi hatol. <strong>Ito ay paanyaya na dalawin ang isang tao.</strong></div>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">👣</div>
+    <div class="eyebrow">Pathway</div>
+    <h2>Encourage. Track. Celebrate.</h2>
+    <p class="lede">See every step your disciples take, and mark it with them. <strong>You bear witness to their growth — you never certify it.</strong> Only God grows a person.</p>
+    <p class="note">And when one of them finishes something, you will be the first to know — so you can be the first to rejoice.</p>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">🌱</div>
+    <div class="eyebrow">Assessment Review</div>
+    <h2>Place them where they'll flourish</h2>
+    <p class="lede">Read your members' spiritual gifts and strengths. <strong>Stop filling slots with whoever says yes.</strong> Put people where God already built them to thrive.</p>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">✅</div>
+    <div class="eyebrow">Attendance &amp; Heads-ups</div>
+    <h2>Notice who is missing</h2>
+    <p class="lede">Log the meeting in seconds. And when someone slips away, <strong>you are told — not so you can scold them, but so you can go and find them.</strong></p>
+    <div class="panel">Ang isang tupa na nawawala ay hindi isang numero. <strong>Siya ay hinahanap.</strong></div>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">📖</div>
+    <div class="eyebrow">Meeting Prep</div>
+    <h2>Sunday's devotional, ready by Tuesday</h2>
+    <p class="lede">Turn the daily devotional into a full one-hour LC study — <strong>facilitator guide and participant guide, English and Tagalog.</strong> Prepare in minutes, not hours.</p>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">📣</div>
+    <div class="eyebrow">Reach them</div>
+    <h2>Announcements &amp; Links</h2>
+    <p class="lede">Send the word out. See who has received it. <strong>Send each member their own private link</strong> — no group chat, no lost message.</p>
+  </section>
+
+  <section class="slide" data-act="leader">
+    <div class="glyph">📈</div>
+    <div class="eyebrow">Reports</div>
+    <h2>Know your flock</h2>
+    <p class="lede">Attendance. Quizzes. Pathway progress. <strong>The truth about your group, whenever you ask for it.</strong></p>
+  </section>
+
+  <!-- ══════════ CLOSE ══════════ -->
+  <section class="slide" data-act="leader">
+    <div class="eyebrow">The target</div>
+    <p class="verse">“Everyone who is fully trained will be like their teacher.”</p>
+    <div class="ref">Luke 6:40</div>
+    <p class="lede" style="margin-top:1.8rem">The goal was never an app. <strong>The goal is a disciple</strong> — with the character of Christ and the competence to lead.</p>
+    <div class="fruit">
+      <span>Love</span><span>Joy</span><span>Peace</span><span>Patience</span><span>Kindness</span>
+      <span>Goodness</span><span>Faithfulness</span><span>Gentleness</span><span>Self-control</span>
+    </div>
+  </section>
+
+</main>
+
+<div id="hint">Space · pause &nbsp;|&nbsp; ← → · move &nbsp;|&nbsp; F · fullscreen</div>
+
+<div id="bar">
+  <button id="prev" aria-label="Previous slide">← Prev</button>
+  <button id="play" aria-label="Pause or play">❚❚ Pause</button>
+  <button id="next" aria-label="Next slide">Next →</button>
+  <button id="full" aria-label="Toggle fullscreen">⛶ Full</button>
+  <button id="restart" aria-label="Restart from the beginning">↻ Restart</button>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var slides   = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var rungWrap = document.getElementById('rungs');
+  var countEl  = document.getElementById('count');
+  var actEl    = document.getElementById('actName');
+  var duskEl   = document.getElementById('dusk');
+  var playBtn  = document.getElementById('play');
+
+  var i = 0, paused = false, timer = null, raf = null, started = 0, span = 0;
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Build the rung bar: one rung per slide. The deck's progress
+        is literally the pathway. ── */
+  var rungs = slides.map(function(s){
+    var r = document.createElement('div');
+    r.className = 'rung' + (s.dataset.act === 'leader' ? ' act2' : '');
+    var f = document.createElement('div');
+    f.className = 'fill';
+    r.appendChild(f);
+    rungWrap.appendChild(r);
+    return r;
+  });
+
+  /* ── DURATION IS EARNED, NOT FIXED ──────────────────────────────
+     A slide is held in proportion to how much there is to read.
+
+     CALIBRATION MATTERS. The first pass used 3800ms + 430ms/word and
+     16 of the 20 slides slammed into the ceiling — which meant the
+     clamp was doing all the work and text length changed nothing.
+     The real slides run 17 to 55 words, so the curve is tuned to map
+     THAT range onto 6.6s → 14.2s, and nothing clamps.
+
+     200ms/word ≈ 300 words per minute of silent reading. Deliberately
+     unhurried: half this audience is reading their second language,
+     off a projector, at the back of a hall.
+     ─────────────────────────────────────────────────────────────── */
+  function durationOf(slide){
+    var text  = (slide.innerText || '').replace(/\s+/g, ' ').trim();
+    var words = text ? text.split(' ').length : 0;
+    var ms    = 3200 + words * 200;
+    return Math.max(6000, Math.min(14500, ms));
+  }
+
+  function paint(){
+    rungs.forEach(function(r, n){
+      r.classList.toggle('done', n < i);
+      r.querySelector('.fill').style.width = (n < i ? '100%' : '0%');
+    });
+    countEl.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(slides.length).padStart(2, '0');
+  }
+
+  /* Advance the current rung's fill in real time, so the room can
+     see how long is left. */
+  function tick(){
+    if (paused) return;
+    var pct = Math.min(100, ((Date.now() - started) / span) * 100);
+    rungs[i].querySelector('.fill').style.width = pct + '%';
+    if (pct < 100) raf = requestAnimationFrame(tick);
+  }
+
+  function show(n, dir){
+    var prevAct = slides[i] ? slides[i].dataset.act : 'member';
+    i = (n + slides.length) % slides.length;
+    var act = slides[i].dataset.act;
+
+    slides.forEach(function(s){ s.classList.remove('live'); });
+
+    /* The handover: parchment dusks into midnight. Only when moving
+       FORWARD into the leader act — a backward step shouldn't re-play
+       the moment, that would read as a glitch. */
+    var crossing = (prevAct === 'member' && act === 'leader' && dir !== -1);
+
+    function land(){
+      document.body.classList.toggle('act-leader', act === 'leader');
+      actEl.textContent = (act === 'leader') ? 'Leader Tool' : 'Member Tool';
+      slides[i].classList.add('live');
+      paint();
+      span = durationOf(slides[i]);
+      started = Date.now();
+      cancelAnimationFrame(raf);
+      if (!paused) {
+        raf = requestAnimationFrame(tick);
+        clearTimeout(timer);
+        timer = setTimeout(function(){ show(i + 1, 1); }, span);
+      }
+    }
+
+    if (crossing && !reduced) {
+      duskEl.classList.remove('fall');
+      void duskEl.offsetWidth;          /* restart the animation */
+      duskEl.classList.add('fall');
+      setTimeout(land, 700);            /* land while the curtain covers */
+    } else {
+      land();
+    }
+  }
+
+  function setPaused(p){
+    paused = p;
+    playBtn.textContent = p ? '▶ Play' : '❚❚ Pause';
+    if (p) {
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    } else {
+      /* resume the remainder, don't restart the slide */
+      var done = Date.now() - started;
+      var left = Math.max(600, span - done);
+      started = Date.now() - done;
+      raf = requestAnimationFrame(tick);
+      timer = setTimeout(function(){ show(i + 1, 1); }, left);
+    }
+  }
+
+  document.getElementById('next').onclick    = function(){ show(i + 1, 1); };
+  document.getElementById('prev').onclick    = function(){ show(i - 1, -1); };
+  document.getElementById('restart').onclick = function(){ document.body.classList.remove('act-leader'); show(0, 1); };
+  playBtn.onclick = function(){ setPaused(!paused); };
+  document.getElementById('full').onclick = function(){
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(function(){});
+  };
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === ' ')          { e.preventDefault(); setPaused(!paused); }
+    else if (e.key === 'ArrowRight') show(i + 1, 1);
+    else if (e.key === 'ArrowLeft')  show(i - 1, -1);
+    else if (e.key.toLowerCase() === 'f') document.getElementById('full').click();
+  });
+
+  show(0, 1);
+})();
+</script>
+</body>
+</html>
