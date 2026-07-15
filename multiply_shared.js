@@ -1219,9 +1219,16 @@
             alert('Swap request: contact Pastor or open preaching_admin.html to manage swaps.');
           }
         } else if (action === 'view-calendar') {
-          // Pass the member id so the calendar can personalize even when opened
-          // in a context that doesn't share the session (PWA → external browser).
-          window.open('preaching_calendar.html?me=' + encodeURIComponent(memberId || ''), '_blank');
+          // Each tool embeds the calendar in its own in-frame modal (MLT
+          // _openLessonViewerModal / MMT _mmtOpenLessonViewerModal). If a host
+          // provides onViewCalendar, use it; otherwise fall back to a new tab —
+          // preaching_calendar.html itself renders this banner and has no modal,
+          // so the fallback keeps that context working.
+          if (typeof opts.onViewCalendar === 'function') {
+            opts.onViewCalendar(memberId);
+          } else {
+            window.open('preaching_calendar.html?me=' + encodeURIComponent(memberId || ''), '_blank');
+          }
         } else if (action === 'respond-swap') {
           if (typeof opts.onRespondSwap === 'function') {
             opts.onRespondSwap(swapId);
