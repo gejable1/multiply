@@ -275,6 +275,7 @@ When designing any new lesson, retreat, devotional, or training, ask:
 
 - `MULTIPLY_INVARIANTS.md` — Standing rules, technical patterns, pastoral principles
 - `MULTIPLY_PIPELINE_DIAGRAM.md` — The 5-level Mac Lake pipeline with FATS, training, books
+- `GIVING_JOURNEY.md` — Pastoral doctrine for the discipleship of giving (the Giving Journey / Landas ng Pagtitiwala)
 - `btli1_l1_spec.md` — BTLI 1 Lesson 1 build specification
 - `HANDOFF.md` — Current operational state (disposable)
 
