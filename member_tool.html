@@ -2602,12 +2602,15 @@ body.lang-tl .tl-text{display:inline;}
   <div class="lc-detail" id="mtgGuideSheet" onclick="event.stopPropagation()">
     <button class="pr-top-close" onclick="closeMeetingGuideSheet()" aria-label="Close · Isara">✕</button>
     <h2><span class="en-text">📖 This Week's Study</span><span class="tl-text">📖 Aralin Ngayong Linggo</span></h2>
+    <div id="mtgSelectBlock">
     <label style="display:block;font-size:12px;color:var(--muted);margin:2px 0 4px">
       <span class="en-text">Choose a study</span><span class="tl-text">Pumili ng aralin</span>
     </label>
     <select id="mtgGuideSelect" class="gc-input" onchange="_mtgSelectGuide(this.value)" style="cursor:pointer;font-weight:600;margin-bottom:12px"></select>
+    </div>
     <div class="lc-detail-meta" id="mtgGuideSheetMeta"></div>
     <div id="mtgGuideBody" style="font-size:14px;line-height:1.65;color:var(--ink)"></div>
+    <div id="mtgRespBlock">
     <div class="section-label" style="margin-top:18px"><div class="title">
       <span class="en-text">My Response</span><span class="tl-text">Aking Sagot</span>
     </div></div>
@@ -2629,6 +2632,7 @@ body.lang-tl .tl-text{display:inline;}
       <span class="tl-text">🔒 ibahagi sa aking lider</span>
     </label>
     <span class="gc-status" id="mtgRespStatus"></span>
+    </div>
     <button class="lc-detail-close" onclick="closeMeetingGuideSheet()">
       <span class="en-text">Close</span><span class="tl-text">Isara</span>
     </button>
@@ -7298,12 +7302,13 @@ async function loadMeetingGuide(){
     }
     _mmtGuide = _mmtGuides[0] || null;
   }catch(e){ console.error('meeting guide load', e); }
+  const _meta = document.getElementById('mtgGuideMeta');
   if(_mmtGuide){
-    document.getElementById('mtgGuideMeta').textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
-    wrap.style.display = '';
-  }else{
-    wrap.style.display = 'none';
+    if(_meta) _meta.textContent = 'Meeting · ' + (_mmtGuide.meeting_date || '');
+  }else if(_meta){
+    _meta.innerHTML = '<span class="en-text">No study shared this week yet</span><span class="tl-text">Wala pang aralin ngayong linggo</span>';
   }
+  wrap.style.display = '';
 }
 function _mtgEsc(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function _mtgFmtDate(d){
@@ -7343,7 +7348,18 @@ function _mtgSelectGuide(id){
   mtgLoadResponse();
 }
 function openMeetingGuideSheet(){
-  if(!_mmtGuide) return;
+  var _sb = document.getElementById('mtgSelectBlock'), _rb = document.getElementById('mtgRespBlock');
+  if(!_mmtGuide){
+    if(_sb) _sb.style.display = 'none';
+    if(_rb) _rb.style.display = 'none';
+    var _sm = document.getElementById('mtgGuideSheetMeta'); if(_sm) _sm.textContent = '';
+    var _gb = document.getElementById('mtgGuideBody');
+    if(_gb) _gb.innerHTML = `<div style="font-size:14px;line-height:1.65;color:var(--muted)"><span class="en-text">This is where your Life Group's weekly study will appear. When this week's guide is shared with you, you'll find it here — with space to write your "I will," the one person you'll reach this week, and your notes.</span><span class="tl-text">Dito lalabas ang lingguhang aralin ng iyong Life Group. Kapag may naibahaging gabay sa iyo ngayong linggo, makikita mo ito rito — may puwang para isulat ang iyong "gagawin ko," ang taong aabutin mo ngayong linggo, at ang iyong mga tala.</span></div>`;
+    document.getElementById('mtgGuideBackdrop').classList.add('show');
+    return;
+  }
+  if(_sb) _sb.style.display = '';
+  if(_rb) _rb.style.display = '';
   _mtgPopulateSelect();
   document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
   document.getElementById('mtgGuideBody').innerHTML = _mtgGuideBodyHtml(_mmtGuide);
