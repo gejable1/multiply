@@ -2734,6 +2734,7 @@ body.lang-tl .tl-text{display:inline;}
 
     <!-- Wave 3 controls: seed EOLO names + the opt-in "pray today" reminder -->
     <div class="pr-list-controls">
+      <button class="pr-act primary" onclick="openPersonalPrayer()">✍️ <span class="en-text">Add my own</span><span class="tl-text">Magdagdag ng sarili</span></button>
       <button class="pr-act primary" onclick="seedEoloToList()">➕ <span class="en-text">Add my EOLO ones</span><span class="tl-text">Idagdag ang EOLO ko</span></button>
       <label class="pr-reminder-ctl">
         <span class="en-text">🔔 Pray-today reminder</span><span class="tl-text">🔔 Paalala</span>
@@ -2745,6 +2746,42 @@ body.lang-tl .tl-text{display:inline;}
     <div id="prListBox"></div>
     <button class="lc-detail-close" onclick="closePrayerMyList()">
       <span class="en-text">Close</span><span class="tl-text">Isara</span>
+    </button>
+  </div>
+</div>
+
+<!-- Personal prayer item — a member's OWN item on their list. Private by
+     construction (source:'personal', no audience, never shared, never a
+     request). Mirrors the compose sheet's chrome, minus everything social. -->
+<div class="lc-detail-backdrop" id="personalPrayerBackdrop" onclick="closePersonalPrayer(event)">
+  <div class="lc-detail" id="personalPrayerSheet" onclick="event.stopPropagation()" style="max-width:420px">
+    <button class="pr-top-close" onclick="closePersonalPrayer()" aria-label="Close · Isara">✕</button>
+    <h2>
+      <span class="en-text">✍️ Add to my list</span>
+      <span class="tl-text">✍️ Idagdag sa listahan</span>
+    </h2>
+    <div class="lc-detail-meta">
+      <span class="en-text">This stays on your list only — no one else sees it.</span>
+      <span class="tl-text">Sa listahan mo lang ito — walang ibang makakakita.</span>
+    </div>
+
+    <div class="pr-field-label">
+      <span class="en-text">Title (a name or a few words)</span><span class="tl-text">Pamagat (pangalan o ilang salita)</span>
+    </div>
+    <input type="text" class="eolo-name-input" id="personalPrayerTitle" maxlength="80"
+           placeholder="e.g. My mother · Nanay ko" style="font-family:var(--font-read)">
+
+    <div class="pr-field-label">
+      <span class="en-text">Details (optional)</span><span class="tl-text">Detalye (opsyonal)</span>
+    </div>
+    <textarea class="pr-textarea" id="personalPrayerBody" maxlength="1000"
+              placeholder="What are you praying for? · Ano ang idinadalangin mo?"></textarea>
+
+    <button class="pr-compose-btn" id="personalPrayerSubmit" style="margin-top:16px" onclick="submitPersonalPrayer()">
+      🙏 <span class="en-text">Add to my list</span><span class="tl-text">Idagdag</span>
+    </button>
+    <button class="lc-detail-close" onclick="closePersonalPrayer()">
+      <span class="en-text">Cancel</span><span class="tl-text">Kanselahin</span>
     </button>
   </div>
 </div>
@@ -12464,6 +12501,55 @@ function _prayerItemHTML(r){
     ${metrics}
     ${acts.length ? `<div class="pr-actions">${acts.join('')}</div>` : ''}
   </div>`;
+}
+
+// ── Personal prayer item (source:'personal') — the member's OWN list entry.
+//    Private by construction: request_id NULL, no audience, never shared. The
+//    render path (_prayerListItemHTML) already draws these with a Sarili/Personal
+//    tag and a Mark-answered button. ──
+function openPersonalPrayer(){
+  const t = document.getElementById('personalPrayerTitle');
+  const b = document.getElementById('personalPrayerBody');
+  if(t) t.value = '';
+  if(b) b.value = '';
+  document.getElementById('personalPrayerBackdrop').classList.add('show');
+  if(t) setTimeout(() => t.focus(), 50);
+}
+function closePersonalPrayer(e){
+  if(e && e.target !== document.getElementById('personalPrayerBackdrop')) return;
+  document.getElementById('personalPrayerBackdrop').classList.remove('show');
+}
+async function submitPersonalPrayer(){
+  const tl = _prayerTL();
+  const title = (document.getElementById('personalPrayerTitle').value || '').trim();
+  const body  = (document.getElementById('personalPrayerBody').value  || '').trim();
+  if(!title){
+    showToast(tl ? 'Maglagay ng pamagat.' : 'Please add a title.');
+    return;
+  }
+  const btn = document.getElementById('personalPrayerSubmit');
+  if(btn) btn.disabled = true;
+  try{
+    const { error } = await db.from('prayer_list_items').insert({
+      member_id: MEMBER.memberId,
+      source:    'personal',
+      title:     title,
+      body:      body || null,
+      status:    'praying',
+      church_id: memberRow.church_id || null
+    });
+    if(error) throw error;
+    document.getElementById('personalPrayerBackdrop').classList.remove('show');
+    await loadPrayerMyList();
+    _computePrayerRelevance(); renderPrayerCta();
+    renderMyPrayerList();
+    showToast(tl ? 'Naidagdag sa listahan mo. 🙏' : 'Added to your list. 🙏');
+  }catch(e){
+    console.warn('submitPersonalPrayer failed:', e);
+    showToast(tl ? 'Hindi naidagdag. Subukan ulit.' : 'Could not add it. Try again.');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 }
 
 // ── My List render ──
