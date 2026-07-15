@@ -3388,4 +3388,80 @@ A member reported that in the MMT devotional "some capital letters appear wavy,"
 
 ---
 
+### **327. The handoff's own fix-list is a hypothesis, not a spec — re-derive the fix from the file before executing the plan**
+
+Session 71 handed Session 72 a four-point fix for the MMT font (#326): (1) Literata for body, (2) demote Fraunces, (3) "add the A−/A+ slider," (4) "kill uppercase in the reading flow." Auditing the actual file before writing a line: **the slider already existed** (`FONT_STEPS=[0.9,1.0,1.1,1.25,1.4]`, `adjustFont()`, `multiply_mmt_fontscale`, applied as `zoom`) — a dead bullet; and **there was no uppercase in the reading flow** — all 31 `text-transform:uppercase` rules were chrome (tabs, pills, eyebrows), so that bullet was a no-op too. The diagnosis was also loose: `body{font-family:'DM Sans'}` — MMT does not set *body* text in Fraunces; it sets the *reading surfaces* in it, which was the part that mattered.
+
+**RULE:** a HANDOFF TODO is a prior instance's hypothesis written before the fix was attempted. Treat it exactly like a pending/parked note (#97): verify each claim against the current file before acting. Two of four bullets here were already-done or non-existent. Re-derive; don't execute on faith.
+
+**Established July 14, 2026 (Session 72). Invariant #327 added - count now 327.**
+
+---
+
+### **328. A stylesheet sweep is not a typography audit — the worst offenders were inline in JS template strings, and a CSS custom property crosses that boundary**
+
+The Fraunces fix (#326) looked like a handful of CSS selectors. A `grep` of the stylesheet would have caught them and **missed twelve more** `font-family:'Fraunces','Georgia',serif` declarations living inside JS template literals — the sermon body, three quiz question stems, the quiz reflection textarea, lesson prose, the Library transcript, encouragement blocks — every one a surface a person *reads* or *types into*, none visible to a CSS grep. A residual-audit pass then found three more (an EOLO subtitle set light-on-dark at 12.5px, two typed-into inputs). Final count: 25 reading surfaces, not the 4 first assumed.
+
+The elegant half: rather than swap 25 literals, introduce a CSS custom property — `--font-read` (Literata) with `--font-display` (Fraunces) and `--font-easy` (Atkinson) — and repoint every surface to `var(--font-read)`. Then `body.easy-read{ --font-read:var(--font-easy); }` flips **both** the stylesheet rules *and* the inline `style=` literals in one class, because **a CSS variable crosses the inline-style boundary a class selector cannot reach.** One token beats two sweeps.
+
+**RULE:** to change how a rendered surface looks, sweep the *rendered surface* (CSS + inline `style=` in JS templates), not just the stylesheet. And prefer a CSS custom property over N literal edits — it is the one mechanism that reaches inline styles without touching them.
+
+**Established July 14, 2026 (Session 72). Invariant #328 added - count now 328.**
+
+---
+
+### **329. A new-file heredoc is where transport drift hides — base64 the proven bytes, never hand-retype; a 2-byte drift passes every grep and only the SHA catches it**
+
+`GIVING_JOURNEY.md` was authored and proven (SHA `40f83bfe…`, 16,476 bytes). Handed to CC as a heredoc, CC's copy hashed to `b7493d74…` — **16,478 bytes.** Same 180 lines, same 85 non-ASCII characters, same emoji and em-dashes; two stray invisible bytes (whitespace) had crept into the hand-typed heredoc. CC's diagnosis reasoned "the same characters transported byte-exact into `md_manual.html`, so this file is verbatim too" — and **talked past its own byte count**, which was the actual tell. The fix was not to hunt the 2 bytes but to make the shipped file equal the proven file: base64-encode the proven copy, have CC `base64 -d` it (zero retyping), re-verify → exact `40f83bfe…`.
+
+**RULE:** when a whole new file (or any large block that cannot be a `str_replace` anchor against existing content) must reach CC, deliver it as **base64 of the proven bytes** and have CC decode it — never as a heredoc to be re-typed. This is the `m.md` splice discipline extended to whole-file creation. And when a SHA gate disagrees, the byte *count* is decisive over the byte *characters*: same chars + different count = invisible-whitespace drift, still a real defect. The bytes you prove must be the bytes you ship (#318); a 2-byte drift passes every grep-count check and only the SHA catches it (#319).
+
+**Established July 14, 2026 (Session 72). Invariant #329 added - count now 329.**
+
+---
+
+### **330. GIVING IS A HEART ISSUE — the discipleship of giving is a path of TRUST, and the platform teaches it but never measures it**
+
+The pastor asked to help disciples grow in generosity, expressed in giving. The design that emerged (see `GIVING_JOURNEY.md`) rests on the conviction that money is never a neutral resource but a **rival god** (Mt 6:24) and a **diagnostic of the heart** (Mt 6:21) — so giving is faith, trust, gratitude, accountability, and the recognition of God's ownership, not merely generosity. Hence the **Giving Journey / *Landas ng Pagtitiwala*** (Path of Trust): six rungs (First Fruits → Rhythm → Proportional → The Tithe → Sacrificial → A Generous Life), anchored in 2 Cor 8–9 and **never Malachi's storehouse threat**, framed in formation language ("Trust is being formed in you," never "Giving: complete"), mapped across the pipeline (L1 give-at-all → L2 know-your-portion/model-it → L3 form-other-givers/giving-costs → L4 generosity-as-a-way-of-life; #331).
+
+**RULE:** any giving feature disciples the heart; it does not run a collection drive. It **teaches** the journey (visible to all, in the manual, on the pipeline) and **never measures** a person's actual giving as a metric, rank, or flag. The moment giving becomes a number the system tracks about a person, it has become the tax it was built to prevent.
+
+**Established July 14, 2026 (Session 72). Invariant #330 added - count now 330.**
+
+---
+
+### **331. The path is the discipler's; the YES is the disciple's — obedience can be required, faith cannot be installed**
+
+The pastoral knot: how to avoid *abdication* ("the disciple decides his own path in his own time" — the parent who says "go to school whenever you want") without tipping into *coercion* (manufacturing a "yes" through pressure, a dashboard, comparison, guilt — the tax God rejects, 2 Cor 9:7). The resolution: the parent commands the outward step and **woos** the inward heart, and knows the difference. **Obedience can be required. Faith cannot be installed.** The discipler owns the *summons* — the path is his to set, the invitation his to issue, loud and persistent and by name. The disciple owns only the *yielding* — not "will you grow" (not his to refuse) but "will you open your hand" (his alone, or it is not a gift).
+
+**RULE (the volunteer-only yes):** the discipler may invite as hard as he likes; the **system may not press at all.** For the Giving Journey specifically: the giving rungs appear on a member's pipeline — his own MMT view *and* his LCL's MLT view — **only after the member's own action** opens a covenant (naming one leader to walk it with). RLS enforces member-insert-only on the covenant; the LCL can never flip the switch, and once opened, marks the rungs like any other rung *because he was invited*. The invitation is a shepherd's voice, never a notification.
+
+**Established July 14, 2026 (Session 72). Invariant #331 added - count now 331.**
+
+---
+
+### **332. Absence is not a verdict — and the finance wall is permanent**
+
+Two guardrails the Giving Journey made explicit, extending #316 ("public celebration is for events not states; the silence about everyone else becomes a verdict"):
+
+**(a) Absence is not a verdict.** The giving rungs do not sit visible-but-unchecked on every member's pipeline — a row of grey giving rungs would itself accuse ("this one hasn't started giving"). They are **absent** until the member opts in (#331). No dashboard, no leaderboard, no ranking of who gives what; no AI flag, no "0% for three weeks" alert, ever. The **0% member is invisible to the machine** — a lost job, a sick spouse, debt — and his leader learns it the ancient way, by asking, and answers it the Acts 4 way: give to him, do not measure him.
+
+**(b) The finance wall.** The discipleship platform **never reads the church finance office's actual giving records** — not for privacy, but because *self-disclosure and audited record are different acts*: one is confession (it disciples), the other is audit (it polices). The private calculator lives only on the member's device; if he ever shares a number, he shares it, and it is never checked against a ledger behind his back.
+
+**RULE:** guard both walls in every future giving feature. A build that adds a giving dashboard, a low-giving flag, or a finance-ledger cross-check has broken the doctrine, not merely a setting.
+
+**Established July 14, 2026 (Session 72). Invariant #332 added - count now 332.**
+
+---
+
+### **333. Doctrine belongs in two homes, two voices — the repo teaches the builder, the manual teaches the pastor**
+
+The Giving Journey's rationale was committed twice: `GIVING_JOURNEY.md` (canonical doctrine for builders — includes the RLS/guardrail/plumbing framing) and a new **"The Giving Journey"** chapter under a **"The heart of MULTIPLY"** nav group in `md_manual.html` (pastoral voice only — the four convictions, the six rungs, a pastor's examination of conscience; no build talk), reachable in-app via MD → Manual. A markdown file governs how the system is built; an in-app page shapes how a pastor uses it, and a pastor who misunderstands the *why* can invert a feature into its opposite. Same doctrine, different audience, different voice.
+
+**RULE:** when a feature's design carries pastoral rationale a *user* must understand (not just a builder), commit it in both homes — the repo doc for build-time truth, and the in-app manual (pastoral voice, plumbing stripped) for the person who wields it. `md_manual.html` is a scroll-spy single-page manual; a new chapter is one nav `<a>` + one `<section id>`, and the scroll-spy picks it up automatically.
+
+**Established July 14, 2026 (Session 72). Invariant #333 added - count now 333.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
