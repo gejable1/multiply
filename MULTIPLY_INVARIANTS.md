@@ -3464,4 +3464,84 @@ The Giving Journey's rationale was committed twice: `GIVING_JOURNEY.md` (canonic
 
 ---
 
+### **334. The covenant-gate — a consent table makes a doctrine-sensitive feature visible only to those who opted in; absence renders as nothing**
+
+The Giving Journey is gated by `giving_covenant` (member-insert-only RLS, no finance columns — consent + companionship, never amount/percentage/income, #330). Its six rungs (`meta.track='giving'`) are filtered OUT of the normal pathway metro AND its done-count, and appear only inside a dedicated section that renders ONLY when an open covenant exists — on the member's view (MMT) and the companion's (MLT). Non-participants never see the rungs; the leader is never shown who *hasn't* opened one and can never ask why. In pixels: `host.innerHTML=''` on an empty query, never a "not started" row.
+
+**RULE:** for a consent-gated, doctrine-sensitive feature, gate visibility on a member-insert-only table; render empty as nothing, never as an absence-state; never surface a roster of who hasn't opted in — even to the pastor. Scope the RLS to the two parties only.
+
+**Established July 16, 2026 (Session 73). Invariant #334 added - count now 334.**
+
+---
+
+### **335. Formation renders as formation, never a scoreboard**
+
+Giving-rung completion (LCL-affirmed in `pathway_progress`) shows the member a soft formation line — "Your companion sees this becoming true in you" — with no checkmark, no count, no progress bar. `celebrate_publicly=false` + `trackable=false` keep it off every feed and metric. And because `renderPathway` computes `nDone` by filtering the *already-giving-filtered* `rungs` list, a giving completion never leaks into the pipeline progress bar even though it lives in the same `pathway_progress` table.
+
+**RULE:** for formation/character/giving rungs, completion is a private acknowledgment in formation language, never a triumphant state; exclude the track from BOTH the list and the done-count. Public celebration is for events, not states (#316).
+
+**Established July 16, 2026 (Session 73). Invariant #335 added - count now 335.**
+
+---
+
+### **336. `category='formation'` is not free — widen the CHECK**
+
+`pathway_rungs.category` carries a CHECK (`pathway_rungs_category_check`) that did NOT include `'formation'`; seeding the giving rungs required a drop-if-exists + re-add of that constraint with the value appended (safe — adding an allowed value never invalidates existing rows). The jumpstart had named `category='formation'` as if already valid; the database rejected it.
+
+**RULE:** before seeding a row with a new enum-ish value, read the CHECK from the migration / `schema.json`; if the value is new, widen the constraint in the same migration. Never trust a summary that names a column value without confirming it's allowed (extends #290).
+
+**Established July 16, 2026 (Session 73). Invariant #336 added - count now 336.**
+
+---
+
+### **337. Mirror the proven `pathway_progress` writer — triggers and defaults are invisible but load-bearing**
+
+Marking a rung done already had a proven prod pattern (`_mltPwToggle`): `insert({ member_id, level, rung_key, marked_by })` — NO `church_id` (stamped by trigger `trg_set_church_id`), NO `completed_at` (column default `now()`); delete keyed by `member_id + level + rung_key`; and **row-existence = done** (`renderPathway` builds its `done` set from presence, not from `completed_at`). A first draft that set `church_id`/`completed_at` explicitly and deleted without `level` would have fought the trigger/default and mismatched the done-check — caught by reading the existing writer before shipping.
+
+**RULE:** before writing a new writer for an existing table, read how that table is already written in prod and mirror it exactly. Column defaults and triggers do not appear in the client code but are load-bearing (extends #246 to writes).
+
+**Established July 16, 2026 (Session 73). Invariant #337 added - count now 337.**
+
+---
+
+### **338. The BASE/WANT gate is what makes a wrong-context push impossible**
+
+This session CC was, at different moments, on a stale Session-44 clone, then bound to the *wrong repo* (`eastbridge-op`, a different app), then a stale session after a device switch. Each time the BASE-sha gate (the repo file must equal the parent we patched) + the WANT-sha gate (result must equal the proven copy) + CC's read-first discipline halted the swap before any clobber — three times, zero damage. Verifying the true upstream (codeload + `git ls-remote`, never a cached clone) settled ground truth each time.
+
+**RULE:** every CC file-swap gates on BOTH `sha(repo file)==BASE` and `sha(uploaded)==WANT`, and CC confirms `pwd`/`origin` before anything outward-facing. A new device or new session can silently point CC at a stale clone or the wrong repo; the gate, not vigilance, is the safety.
+
+**Established July 16, 2026 (Session 73). Invariant #338 added - count now 338.**
+
+---
+
+### **339. The uploaded file lands at a separate path with a possible suffix — target the real path, prove it by WANT**
+
+CC's uploads arrive at `/root/.claude/uploads/…/<hash>-<name>.html` (sometimes `_N`-suffixed from a repeat download), NOT at repo root and NOT at a predictable `/mnt/user-data/uploads` glob. A swap that globs a fixed location reports "no upload found" even when the correct bytes are present.
+
+**RULE:** in a CC upload-swap prompt, set a `UP` variable to the real upload path CC reports and let the WANT-sha prove identity — the filename suffix and mount location are irrelevant once the bytes hash to WANT.
+
+**Established July 16, 2026 (Session 73). Invariant #339 added - count now 339.**
+
+---
+
+### **340. codeload tarballs go stale like raw — SHA-check after every merge**
+
+At session open the tarball read count #326 while `main` was #333 (the #183 doc-splice hadn't re-cached); mid-session, branch tarballs sometimes lagged a merge by a minute. The "this can't be a cache" reasoning was wrong once — a coherent-but-behind snapshot is exactly what a time-ordered CDN cache produces.
+
+**RULE:** after a merge, re-pull and confirm the file's sha (or pin to the commit via the GitHub API when not rate-limited) before trusting a codeload read; internal coherence does not prove freshness. #278 applies to codeload, not just `raw.githubusercontent`.
+
+**Established July 16, 2026 (Session 73). Invariant #340 added - count now 340.**
+
+---
+
+### **341. The Giving Journey begins at L1, not L0**
+
+"Visible from the beginning" in `GIVING_JOURNEY.md` means from the *start of the pathway* — which begins at L1 — not L0. The rungs seed at L1–L4; the MMT door is L1-gated (`pipeline_level < 1 → host.innerHTML=''`). An L0 member seeing a door to a path whose first rung didn't yet exist for them was the tell.
+
+**RULE:** for the Giving Journey, "from the beginning" = from L1; the door and rungs are gated `pipeline_level >= 1`. `GIVING_JOURNEY.md` wording reads "visible from L1 onward" to remove the L0 ambiguity.
+
+**Established July 16, 2026 (Session 73). Invariant #341 added - count now 341.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
