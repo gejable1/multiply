@@ -1008,7 +1008,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"Here's a question I want to explore with you from what you wrote. If you stood before God today and He asked you 'Why should I let you into heaven?' — what would your honest answer be?"</div>
+        <div class="ask-box" data-ask="a-basis">"You wrote that the basis for God accepting you is [reference their A5 answer]. I want to explore that with you. If you stood before God today and He asked 'Why should I let you into heaven?' — what would your honest answer be?"</div>
         <div class="note-text">This is the single most diagnostic question in the entire debrief. Their answer instantly reveals whether they are trusting in Christ or in their own righteousness.</div>
         <div class="green-light">
           <div class="green-light-title">✅ Grace-based answer — proceed with confidence</div>
@@ -1046,7 +1046,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You rated your confidence at [their B1 score] out of 5. Tell me more about that. What does your assurance — or your uncertainty — actually rest on day to day?"</div>
+        <div class="ask-box" data-ask="b-basis">"You described the basis of your confidence as [reference their B2 answer]. Tell me more about that. What does your assurance — or your uncertainty — actually rest on day to day?"</div>
         <ul class="follow-ups">
           <li>If confident: "What would you say to someone who told you that confidence is arrogant?"</li>
           <li>If uncertain: "When you feel unsure about your salvation, what usually triggered that feeling?"</li>
@@ -1227,7 +1227,7 @@ body {
       <div class="script-body">
         <div class="ask-box">"Looking at your spiritual habits — what's working? Which of these disciplines feels most natural and consistent for you right now?"</div>
         <div class="note-text">Then identify the two or three lowest-scoring disciplines. Do not address all of them — that is overwhelming and counterproductive. Pick the one foundational habit that, if built, would most strengthen everything else. For most people at Level 1, that is daily Bible reading and journaling.</div>
-        <div class="ask-box">"You rated [lowest habit] at [score]. What's been getting in the way of that becoming more consistent for you?"</div>
+        <div class="ask-box">"Looking at your spiritual habits — which one has been hardest to keep consistent lately? What's been getting in the way of that?"</div>
         <ul class="follow-ups">
           <li>"Is it a time issue, a motivation issue, or a 'I don't know how' issue?"</li>
           <li>"What does your morning/evening routine look like right now?"</li>
@@ -1687,6 +1687,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!res.data) return;
         var d = res.data;
         _memberName = d.name || '';
+        _fillPlaceholder('[Name]', (_memberName.split(' ')[0] || _memberName));
         _memberDisciplerId = d.discipler_id || null;
         _memberDisciplerName = d.discipler_name || d.discipler || '';
         _memberDiagZone = d.diagnostic_zone || null;
@@ -1705,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load most recent diagnostic results (including open_answers)
     db.from('diagnostic_results')
-      .select('open_answers, date_taken, total_score, diag_zone')
+      .select('open_answers, date_taken, total_score, diag_zone, section_fruit_love, section_fruit_joy, section_fruit_peace, section_fruit_patience, section_fruit_kindness, section_fruit_goodness, section_fruit_faithfulness, section_fruit_gentleness, section_fruit_self_control')
       .eq('member_id', id)
       .order('date_taken', { ascending: false })
       .limit(1)
@@ -1713,6 +1714,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!res.data || !res.data.length) return;
         var row = res.data[0];
         _memberOpenAnswers = row.open_answers || null;
+        _fillFruitPlaceholders(row);
 
         // Show AI panel only if there are open answers to analyze
         var panel = document.getElementById('aiPanel');
@@ -2286,6 +2288,12 @@ window.parseAIResponse = function() {
   // (rather than aiBody, which now hosts the prompt-and-paste UI).
   renderAIResultsInto(parsed, out);
   _revealTailorPill();
+  // Auto-apply the tailored guide on a fresh parse too (mirrors resume), so the
+  // guide immediately reflects the member's answers instead of leaving the pastor
+  // on the analyses panel. They can flip back with the pill.
+  if (_aiParsedJson && _aiParsedJson.tailored && Object.keys(_aiParsedJson.tailored).length) {
+    applyTailoredGuide();
+  }
 };
 
 // Module-scope buffers so saveDebrief can persist AI work alongside the typed summary
@@ -2356,6 +2364,30 @@ function renderAIResultsInto(parsed, container) {
 // own words. Toggle between the standard template and the tailored one.
 // The scaffold (sections, guardrails, note fields) is never touched.
 // ─────────────────────────────────────────────────────────────────
+// Fill fixed placeholders in the standard guide text from real member data
+// (name + fruit scores) at load, before any tailoring — so both the standard
+// and tailored views show real values instead of raw [brackets].
+function _fillPlaceholder(bracket, value){
+  if (!value) return;
+  document.querySelectorAll('.ask-box').forEach(function(el){
+    if (el.children.length === 0 && el.textContent.indexOf(bracket) !== -1){
+      el.textContent = el.textContent.split(bracket).join(value);
+    }
+  });
+}
+var _FRUIT_COLS = [
+  ['section_fruit_love','Love'],['section_fruit_joy','Joy'],['section_fruit_peace','Peace'],
+  ['section_fruit_patience','Patience'],['section_fruit_kindness','Kindness'],['section_fruit_goodness','Goodness'],
+  ['section_fruit_faithfulness','Faithfulness'],['section_fruit_gentleness','Gentleness'],['section_fruit_self_control','Self-control']
+];
+function _fillFruitPlaceholders(row){
+  var scored = _FRUIT_COLS.filter(function(f){ return row[f[0]] != null; });
+  if (!scored.length) return;
+  var hi = scored.reduce(function(a,b){ return row[b[0]] > row[a[0]] ? b : a; });
+  var lo = scored.reduce(function(a,b){ return row[b[0]] < row[a[0]] ? b : a; });
+  _fillPlaceholder('[highest-rated fruit]', hi[1]);
+  _fillPlaceholder('[lowest-rated fruit]', lo[1]);
+}
 var _guideMode = 'standard';
 var _stdAskText = {};  // ask-id -> original (standard) question text, snapshotted before tailoring
 
@@ -2400,6 +2432,8 @@ function applyTailoredGuide(){
   var pill = document.getElementById('tailorPill');
   if (pill) { pill.textContent = '↩ Standard guide'; pill.style.display = 'block'; }
   aiToast('🎯 Guide tailored to ' + ((_memberName || 'member').split(' ')[0]) + ' — ' + n + ' question' + (n===1?'':'s') + ' filled from their answers');
+  var _fa = document.querySelector('.ask-box[data-ask].tailored');
+  if (_fa && _fa.scrollIntoView) _fa.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 function showStandardGuide(){
@@ -2413,6 +2447,8 @@ function showStandardGuide(){
   var pill = document.getElementById('tailorPill');
   if (pill) pill.textContent = '🎯 Tailor to ' + ((_memberName || 'member').split(' ')[0]);
   aiToast('↩ Standard guide restored');
+  var _fs = document.querySelector('.ask-box[data-ask]');
+  if (_fs && _fs.scrollIntoView) _fs.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 // Backwards-compat: keep window.runAIAssist as an alias so any stale
