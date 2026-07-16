@@ -590,6 +590,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 
   <div id="alertsWrap"></div>
 
+  <!-- Giving Journey companions — disciples who named THIS leader as their
+       covenant partner. Invisible when none (absence is not a verdict, #332). -->
+  <div id="givingCompanionsHost" style="margin-bottom:1rem"></div>
+
   <!-- ════ L5 SELF-ATTEST + PREACHING CALENDAR — RELOCATED ════
        Both used to sit here as full-width Home cards. They now live in
        Quick Actions (#qaMyAttendance -> screenMyAttendance, and
@@ -2559,6 +2563,9 @@ function renderHome(){
 
   // Async-load incoming transfers card (Invariant #45 — pending TO me)
   _refreshIncomingTransfersCard();
+
+  // Async-load Giving Journey companions (disciples walking it WITH this leader)
+  _refreshGivingCompanions();
 
   // L5 self-attest card (Pastor + Pastoral Staff only)
   renderL5AttestCard();
@@ -4937,6 +4944,49 @@ async function _refreshIncomingTransfersCard(){
     </div>`;
   }catch(e){
     console.error('Failed to load incoming transfers:', e);
+    host.innerHTML='';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// GIVING JOURNEY — companions view (MLT, slice 3)
+// ─────────────────────────────────────────────────────────
+// Shows ONLY the disciples who named THIS leader as their giving
+// covenant partner (RLS scopes to partner_id = auth_member_id()).
+// Invisible when none — the leader is never shown who HASN'T opened
+// one, and can never ask why (#331/#332). No progress, no ranking,
+// no amounts, no church-wide view — even for the pastor. The leader
+// walks alongside; he does not measure. (GIVING_JOURNEY.md)
+// ═══════════════════════════════════════════════════════
+async function _refreshGivingCompanions(){
+  const host = document.getElementById('givingCompanionsHost');
+  if(!host) return;
+  if(!LEADER || !LEADER.leaderId){ host.innerHTML=''; return; }
+  try{
+    const { data, error } = await db.from('giving_covenant')
+      .select('member_id, opened_at')
+      .eq('partner_id', LEADER.leaderId)
+      .eq('status', 'open');
+    if(error) throw error;
+    if(!data || !data.length){ host.innerHTML=''; return; }   // absence is invisible
+    const rows = data
+      .sort((a,b)=> String(a.opened_at||'').localeCompare(String(b.opened_at||'')))
+      .map(c=>{
+        const nm    = _findMemberName(c.member_id) || 'a disciple';
+        const since = c.opened_at ? String(c.opened_at).slice(0,10) : '';
+        return `<div style="padding:.4rem 0;border-top:1px solid var(--line);font-size:13px;font-weight:600">${MultiplyShared.escapeHTML(nm)}${since?`<span style="color:var(--muted);font-weight:400;font-size:11px"> · since ${since}</span>`:''}</div>`;
+      }).join('');
+    host.innerHTML = `<div style="padding:1rem 1.1rem;background:rgba(52,168,83,.06);border:1px solid rgba(52,168,83,.28);border-radius:var(--r)">
+      <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.5rem">
+        <span style="font-size:20px">\u{1F331}</span>
+        <div style="font-weight:700;font-size:14px">The Giving Journey <span style="color:var(--muted);font-weight:600">· Landas ng Pagtitiwala</span></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:.5rem">These disciples opened their giving journey to you \u2014 walking it openly, with you as companion.</div>
+      ${rows}
+      <div style="font-size:10.5px;color:var(--muted);margin-top:.7rem;line-height:1.55;font-style:italic">Walk alongside \u2014 ask, pray, and share your own story. This is theirs to open and theirs to close. There is nothing here to measure.</div>
+    </div>`;
+  }catch(e){
+    console.error('Failed to load giving companions:', e);
     host.innerHTML='';
   }
 }
