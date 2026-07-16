@@ -1956,6 +1956,11 @@ async function _loadPastDebrief(debriefId, mode){
         renderAIResultsInto(data.ai_parsed_json, out);
       }
       _revealTailorPill();
+      // Re-apply the tailored view on resume so the guide looks the way it was left
+      // (unless it was explicitly saved in standard mode).
+      if (_aiParsedJson && _aiParsedJson.tailored && _aiParsedJson._guideMode !== 'standard') {
+        applyTailoredGuide();
+      }
     }
   } catch(e) {
     alert('Could not load debrief: ' + e.message);
@@ -2352,6 +2357,7 @@ function renderAIResultsInto(parsed, container) {
 // The scaffold (sections, guardrails, note fields) is never touched.
 // ─────────────────────────────────────────────────────────────────
 var _guideMode = 'standard';
+var _stdAskText = {};  // ask-id -> original (standard) question text, snapshotted before tailoring
 
 function _tailoredCount(){
   var t = _aiParsedJson && _aiParsedJson.tailored;
@@ -2382,14 +2388,15 @@ function applyTailoredGuide(){
   var n = 0;
   document.querySelectorAll('.ask-box[data-ask]').forEach(function(el){
     var key = el.dataset.ask;
+    if (!(key in _stdAskText)) _stdAskText[key] = el.textContent;  // snapshot standard text once (survives quotes)
     if (!t[key] || !String(t[key]).trim()) return;
-    if (el.dataset.std === undefined) el.dataset.std = el.textContent;
     var _tt = String(t[key]).trim().replace(/^[\s"'\u201C\u2018]+|[\s"'\u201D\u2019]+$/g, '').trim();
     el.textContent = '"' + _tt + '"';
     el.classList.add('tailored');
     n++;
   });
   _guideMode = 'tailored';
+  if (_aiParsedJson) _aiParsedJson._guideMode = 'tailored';
   var pill = document.getElementById('tailorPill');
   if (pill) { pill.textContent = '↩ Standard guide'; pill.style.display = 'block'; }
   aiToast('🎯 Guide tailored to ' + ((_memberName || 'member').split(' ')[0]) + ' — ' + n + ' question' + (n===1?'':'s') + ' filled from their answers');
@@ -2397,10 +2404,12 @@ function applyTailoredGuide(){
 
 function showStandardGuide(){
   document.querySelectorAll('.ask-box[data-ask].tailored').forEach(function(el){
-    if (el.dataset.std !== undefined) el.textContent = el.dataset.std;
+    var key = el.dataset.ask;
+    if (key in _stdAskText) el.textContent = _stdAskText[key];
     el.classList.remove('tailored');
   });
   _guideMode = 'standard';
+  if (_aiParsedJson) _aiParsedJson._guideMode = 'standard';
   var pill = document.getElementById('tailorPill');
   if (pill) pill.textContent = '🎯 Tailor to ' + ((_memberName || 'member').split(' ')[0]);
   aiToast('↩ Standard guide restored');
