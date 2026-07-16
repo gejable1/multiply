@@ -4958,6 +4958,8 @@ async function _refreshIncomingTransfersCard(){
 // no amounts, no church-wide view — even for the pastor. The leader
 // walks alongside; he does not measure. (GIVING_JOURNEY.md)
 // ═══════════════════════════════════════════════════════
+let _gjCoState = null;
+
 async function _refreshGivingCompanions(){
   const host = document.getElementById('givingCompanionsHost');
   if(!host) return;
@@ -4968,26 +4970,102 @@ async function _refreshGivingCompanions(){
       .eq('partner_id', LEADER.leaderId)
       .eq('status', 'open');
     if(error) throw error;
-    if(!data || !data.length){ host.innerHTML=''; return; }   // absence is invisible
-    const rows = data
+    if(!data || !data.length){ host.innerHTML=''; _gjCoState=null; return; }   // absence is invisible
+
+    const memberIds = data.map(c=>c.member_id);
+    const [rungRes, progRes] = await Promise.all([
+      db.from('pathway_rungs').select('*').is('church_id', null),
+      db.from('pathway_progress').select('member_id, rung_key').in('member_id', memberIds)
+    ]);
+    if(rungRes.error) throw rungRes.error;
+    const rungs = (rungRes.data||[]).filter(r=>r.meta && r.meta.track==='giving')
+      .sort((a,b)=> ((a.level||0)-(b.level||0)) || ((a.sort_order||0)-(b.sort_order||0)));
+    const affByMember = {};
+    if(!progRes.error){
+      (progRes.data||[]).forEach(pr=>{
+        (affByMember[pr.member_id] = affByMember[pr.member_id] || new Set()).add(pr.rung_key);
+      });
+    }
+    _gjCoState = { rungs, list: data
       .sort((a,b)=> String(a.opened_at||'').localeCompare(String(b.opened_at||'')))
-      .map(c=>{
-        const nm    = _findMemberName(c.member_id) || 'a disciple';
-        const since = c.opened_at ? String(c.opened_at).slice(0,10) : '';
-        return `<div style="padding:.4rem 0;border-top:1px solid var(--line);font-size:13px;font-weight:600">${MultiplyShared.escapeHTML(nm)}${since?`<span style="color:var(--muted);font-weight:400;font-size:11px"> · since ${since}</span>`:''}</div>`;
-      }).join('');
-    host.innerHTML = `<div style="padding:1rem 1.1rem;background:rgba(52,168,83,.06);border:1px solid rgba(52,168,83,.28);border-radius:var(--r)">
-      <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.5rem">
-        <span style="font-size:20px">\u{1F331}</span>
-        <div style="font-weight:700;font-size:14px">The Giving Journey <span style="color:var(--muted);font-weight:600">· Landas ng Pagtitiwala</span></div>
-      </div>
-      <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:.5rem">These disciples opened their giving journey to you \u2014 walking it openly, with you as companion.</div>
-      ${rows}
-      <div style="font-size:10.5px;color:var(--muted);margin-top:.7rem;line-height:1.55;font-style:italic">Walk alongside \u2014 ask, pray, and share your own story. This is theirs to open and theirs to close. There is nothing here to measure.</div>
-    </div>`;
+      .map(c=>({
+        member_id: c.member_id,
+        name:      _findMemberName(c.member_id) || 'a disciple',
+        since:     c.opened_at ? String(c.opened_at).slice(0,10) : '',
+        affirmed:  affByMember[c.member_id] || new Set(),
+        expanded:  false
+      })) };
+    _gjRenderCompanions();
   }catch(e){
     console.error('Failed to load giving companions:', e);
     host.innerHTML='';
+  }
+}
+
+function _gjRenderCompanions(){
+  const host = document.getElementById('givingCompanionsHost');
+  if(!host || !_gjCoState) return;
+  const esc = (s)=>MultiplyShared.escapeHTML(s||'');
+  const cards = _gjCoState.list.map(d=>{
+    const chev = d.expanded ? '\u25BE' : '\u25B8';
+    const head = `<div onclick="_gjToggleExpand('${d.member_id}')" style="padding:.5rem 0;border-top:1px solid var(--line);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:.4rem">
+        <span style="color:var(--muted);font-size:11px">${chev}</span>
+        <span>${esc(d.name)}</span>
+        ${d.since?`<span style="color:var(--muted);font-weight:400;font-size:11px"> \u00b7 since ${d.since}</span>`:''}</div>`;
+    if(!d.expanded) return head;
+    const rungRows = _gjCoState.rungs.map((r,i)=>{
+      const on = d.affirmed.has(r.rung_key);
+      const dot = on
+        ? `<span style="width:16px;height:16px;border-radius:50%;background:#34a853;flex:none;display:inline-block"></span>`
+        : `<span style="width:16px;height:16px;border-radius:50%;border:1.5px solid var(--muted);flex:none;display:inline-block"></span>`;
+      const sub = on
+        ? `<span style="color:#34a853">Affirmed \u00b7 tap to undo</span>`
+        : `<span style="color:var(--muted)">Affirm \u2014 I\u2019ve seen this forming in them</span>`;
+      return `<div onclick="_gjAffirm('${d.member_id}','${r.rung_key}',${r.level||0},${!on})" style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0 .4rem 1.2rem;cursor:pointer">
+          ${dot}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600">${i+1}. ${esc(r.title_en)}</div>
+            <div style="font-size:10.5px;margin-top:1px">${sub}</div>
+          </div></div>`;
+    }).join('');
+    return head + `<div style="padding-bottom:.3rem">${rungRows}</div>`;
+  }).join('');
+  host.innerHTML = `<div style="padding:1rem 1.1rem;background:rgba(52,168,83,.06);border:1px solid rgba(52,168,83,.28);border-radius:var(--r)">
+      <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.5rem">
+        <span style="font-size:20px">\u{1F331}</span>
+        <div style="font-weight:700;font-size:14px">The Giving Journey <span style="color:var(--muted);font-weight:600">\u00b7 Landas ng Pagtitiwala</span></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:.3rem">These disciples opened their giving journey to you \u2014 tap a name to affirm what you\u2019ve seen forming, one-on-one.</div>
+      ${cards}
+      <div style="font-size:10.5px;color:var(--muted);margin-top:.7rem;line-height:1.55;font-style:italic">Walk alongside \u2014 ask, pray, and share your own story. Affirm in a one-on-one, never as a score. This is theirs to open and theirs to close.</div>
+    </div>`;
+}
+
+function _gjToggleExpand(memberId){
+  if(!_gjCoState) return;
+  const d = _gjCoState.list.find(x=>x.member_id===memberId);
+  if(d){ d.expanded = !d.expanded; _gjRenderCompanions(); }
+}
+
+async function _gjAffirm(memberId, rungKey, level, turnOn){
+  if(!_gjCoState) return;
+  const mem = (typeof myMembers!=='undefined'?myMembers:[]).find(function(m){ return m.id===memberId; });
+  const canMark = mem && ((mem.discipler_id === LEADER.leaderId) || (((currentLeader && currentLeader.pipeline_level)||0) >= 5));
+  if(!canMark){ if(typeof toast==='function') toast('You can only affirm your own disciples.','error'); return; }
+  try{
+    if(turnOn){
+      const res = await db.from('pathway_progress').insert({ member_id: memberId, level: level, rung_key: rungKey, marked_by: LEADER.leaderId });
+      if(res.error) throw res.error;
+    } else {
+      const res = await db.from('pathway_progress').delete().eq('member_id', memberId).eq('level', level).eq('rung_key', rungKey);
+      if(res.error) throw res.error;
+    }
+    const d = _gjCoState.list.find(x=>x.member_id===memberId);
+    if(d){ if(turnOn) d.affirmed.add(rungKey); else d.affirmed.delete(rungKey); }
+    _gjRenderCompanions();
+  }catch(e){
+    console.warn('[giving affirm] failed:', e);
+    if(typeof toast==='function') toast('Could not save \u2014 '+(e.message||e),'error');
   }
 }
 
