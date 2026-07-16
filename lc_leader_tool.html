@@ -29,7 +29,7 @@
   --gold:#e8b84b;--gold2:#f5d78e;--green:#34d399;--red:#f87171;
   --blue:#60a5fa;--purple:#a78bfa;--orange:#fb923c;
   --text:#f0f0f8;--muted:#8888a8;--lighter:#5a5a78;
-  --z1:#34d399;--z2:#60a5fa;--z3:#fb923c;--z4:#f87171;
+  --z1:#34d399;--z2:#d4a010;--z3:#fb923c;--z4:#f87171;
   --r:14px;--r-sm:8px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -189,7 +189,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
 .mc-right{text-align:right;flex-shrink:0;}
 .zone-badge{font-size:9px;font-weight:800;padding:3px 8px;border-radius:12px;letter-spacing:.05em;}
 .z1-badge{background:rgba(52,211,153,.15);color:var(--z1);}
-.z2-badge{background:rgba(96,165,250,.15);color:var(--z2);}
+.z2-badge{background:rgba(212,160,16,.15);color:var(--z2);}
 .z3-badge{background:rgba(251,146,60,.15);color:var(--z3);}
 .z4-badge{background:rgba(248,113,113,.15);color:var(--z4);}
 .z0-badge{background:var(--surface2);color:var(--muted);}
@@ -800,7 +800,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
   <div class="filter-tabs">
     <button class="ftab active" data-f="all" onclick="setFilter('all',this)">All</button>
     <button class="ftab" data-f="z1" onclick="setFilter('z1',this)">Zone 1 ✅</button>
-    <button class="ftab" data-f="z2" onclick="setFilter('z2',this)">Zone 2 🔵</button>
+    <button class="ftab" data-f="z2" onclick="setFilter('z2',this)">Zone 2 🟡</button>
     <button class="ftab" data-f="z3" onclick="setFilter('z3',this)">Zone 3 🟠</button>
     <button class="ftab" data-f="z4" onclick="setFilter('z4',this)">Zone 4 🔴</button>
     <button class="ftab" data-f="no_diag" onclick="setFilter('no_diag',this)">No Diag</button>
@@ -2073,7 +2073,7 @@ if (MultiplyShared.isEmbedMode && MultiplyShared.isEmbedMode()){
 const LEVEL_NAMES = {0:'Pre-Pipeline',1:'Team Member',2:'Leader',3:'Coach',4:'Director',5:'Exec. Leader'};
 const ZONE_DATA = {
   1:{label:'Zone 1 ✅',desc:'Healthy & Multiplying',color:'var(--z1)',bg:'rgba(52,211,153,.15)'},
-  2:{label:'Zone 2 🔵',desc:'Stable & Growing',color:'var(--z2)',bg:'rgba(96,165,250,.15)'},
+  2:{label:'Zone 2 🟡',desc:'Uncertain — needs debrief',color:'var(--z2)',bg:'rgba(212,160,16,.15)'},
   3:{label:'Zone 3 🟠',desc:'Needs Intervention',color:'var(--z3)',bg:'rgba(251,146,60,.15)'},
   4:{label:'Zone 4 🔴',desc:'Critical — Act Now',color:'var(--z4)',bg:'rgba(248,113,113,.15)'},
 };
@@ -2089,7 +2089,7 @@ const ASSESSMENTS = [
 const NEXT_STEPS = {
   4:'Prayerfully reach out this week. Offer to meet one-on-one. Start with the Salvation Diagnostic if not done.',
   3:'Follow up from last meeting. Invite to next LC. Encourage daily devotional.',
-  2:'Continue current track. Look for an area of ministry to involve them. Schedule discipleship check-in.',
+  2:'Debrief with them about their assurance — walk through the diagnostic together, then begin the Assurance Formation track.',
   1:'Identify who they can disciple next. Begin BTLI or next training track.',
 };
 
@@ -3686,7 +3686,7 @@ function buildDetailSections(mem){
         <div class="nsb-label">Recommended Action</div>
         <div class="nsb-text">${NEXT_STEPS[z]||NEXT_STEPS[4]}</div>
         ${!mem.diagnostic_zone?`<button class="nsb-action" onclick="openSalvationDiag()">📋 Open Salvation Diagnostic</button>`:
-          z>=3?`<button class="nsb-action" onclick="openInterventionTracker()">🛤 Open Intervention Tracker</button>`:''}
+          z>=2?`<button class="nsb-action" onclick="openDebrief()">📋 Debrief Guide</button><button class="nsb-action" onclick="openInterventionTracker()">🛤 Intervention Tracker</button>`:''}
       </div>
     </div>
   </div>`;
@@ -4006,10 +4006,17 @@ function openSalvationDiag(){
   window.open(url,'_blank');
 }
 
+function openDebrief(){
+  if(!currentMember) return;
+  // In-app modal (embed) — mirrors MD's openDebrief. The debrief file reads the
+  // member's free-text answers by id and shares this leader's JWT via sessionStorage.
+  _openLessonViewerModal('facilitator_debrief_guide.html?id='+encodeURIComponent(currentMember.id)+'&embed=1','Debrief Guide', true);
+}
+
 function openInterventionTracker(){
   if(!currentMember) return;
-  const url = BASE_URL+'intervention_tracker.html?id='+currentMember.id;
-  window.open(url,'_blank');
+  // Modal flip (was window.open '_blank') — matches MD + the S72 in-app direction.
+  _openLessonViewerModal('intervention_tracker.html?id='+encodeURIComponent(currentMember.id)+'&embed=1','Intervention Tracker', true);
 }
 
 function openAssessmentLink(){
