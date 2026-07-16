@@ -805,7 +805,7 @@ body {
 <div id="aiPanel" class="ai-panel" style="display:none; margin: 20px 24px;">
   <div class="ai-panel-header">
     <div>
-      <h3>🤖 AI Pastoral Assist</h3>
+      <h3>🤖 AI Assisted Debrief</h3>
       <p>Builds a careful, pastoral prompt from this member's written answers · Take it to ChatGPT, Claude, Gemini, or Grok for follow-up question suggestions</p>
     </div>
     <button class="ai-run-btn" id="aiRunBtn" onclick="buildAIPrompt()">📋 Build AI Prompt</button>
@@ -1823,6 +1823,14 @@ async function openPastDebriefs(){
     document.body.appendChild(modal);
   }
   modal.style.display = 'flex';
+  // In embed mode the modal is position:absolute (see top-of-file style) and would
+  // otherwise anchor to the document top — invisible when the guide is scrolled down.
+  // Pin it to the currently-visible area so the list (or empty-state) is always seen.
+  if (document.documentElement.classList.contains('embed')) {
+    modal.style.top = window.scrollY + 'px';
+    modal.style.bottom = 'auto';
+    modal.style.height = window.innerHeight + 'px';
+  }
   document.getElementById('pastDebriefsBody').innerHTML =
     '<div style="text-align:center;padding:2rem;color:#6b5f4f;">Loading...</div>';
 
@@ -2091,7 +2099,10 @@ window.buildAIPrompt = function() {
     '- Flag theological concerns clearly but gently\n' +
     '- You may flag: works-righteousness, false assurance, lack of assurance, bitterness/unforgiveness, isolation, unresolved sin patterns\n' +
     '- For each question, provide: (1) a brief flag (CLEAR/NEEDS CLARIFICATION/CONCERN), and (2) 2–3 follow-up questions\n\n' +
-    'RESPONSE FORMAT — respond ONLY with valid JSON, no markdown:\n' +
+    'RESPONSE FORMAT — respond with ONE valid JSON object and NOTHING else:\n' +
+    '- No markdown, no code fences, no text before or after the JSON. No trailing commas.\n' +
+    '- Use straight ASCII double-quotes (") ONLY as JSON key/string delimiters.\n' +
+    '- Do NOT put a double-quote character INSIDE any string value. To quote the member\'s words, use single quotes (\'like this\').\n' +
     '{\n' +
     '  "analyses": [\n' +
     '    {\n' +
@@ -2106,10 +2117,10 @@ window.buildAIPrompt = function() {
     '    }\n' +
     '  ],\n' +
     '  "overall_note": "One paragraph of overall pastoral observations for the facilitator — what to prioritize in the conversation.",\n' +
-    '  "tailored": { "ASK_ID": "the full debrief question rewritten with its [bracketed placeholders] resolved from the member\'s actual answers — keep the pastoral wording, the quotation marks, and the tone; change ONLY what is inside the brackets" }\n' +
+    '  "tailored": { "ASK_ID": "the full debrief question rewritten with its [bracketed placeholders] resolved from the member\'s actual answers — keep the pastoral wording and tone; change ONLY what is inside the brackets; do NOT wrap it in quotation marks, and use single quotes for any of the member\'s words" }\n' +
     '}\n\n' +
     'TAILORING RULES (for the "tailored" object):\n' +
-    '- Fill each question\'s [brackets] using ONLY the member\'s written answers above; quote or summarise their real words.\n' +
+    '- Fill each question\'s [brackets] using ONLY the member\'s written answers above; quote or summarise their real words (single quotes for their words).\n' +
     '- Keep every other word of the question exactly as written — do not add, remove, or reorder sentences.\n' +
     '- If you cannot tell what a bracket should contain from their answers, OMIT that ASK_ID entirely. Never guess, never invent a quote, never fill in a name.\n' +
     '- Never write a verdict about their salvation, and never put a next step or recommendation into a question.';
@@ -2240,6 +2251,13 @@ window.parseAIResponse = function() {
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     cleaned = cleaned.slice(firstBrace, lastBrace + 1);
   }
+  // Forgiving repairs for BYO-AI output. We ask the model to keep double-quotes out
+  // of string values (single quotes for the member's words), so straight double-quotes
+  // should only be JSON structure — safe to normalise curly quotes and drop trailing commas.
+  cleaned = cleaned
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1');
   var parsed;
   try {
     parsed = JSON.parse(cleaned);
@@ -2366,7 +2384,8 @@ function applyTailoredGuide(){
     var key = el.dataset.ask;
     if (!t[key] || !String(t[key]).trim()) return;
     if (el.dataset.std === undefined) el.dataset.std = el.textContent;
-    el.textContent = String(t[key]).trim();
+    var _tt = String(t[key]).trim().replace(/^[\s"'\u201C\u2018]+|[\s"'\u201D\u2019]+$/g, '').trim();
+    el.textContent = '"' + _tt + '"';
     el.classList.add('tailored');
     n++;
   });
