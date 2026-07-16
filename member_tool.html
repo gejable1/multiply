@@ -11242,8 +11242,12 @@ function _givingRender(view, st){
     const name = esc(st.partnerName || '');
     const withEn = name ? `Walking it openly with <b>${name}</b>` : 'Walking it openly with your companion';
     const withTl = name ? `Ilinalakad nang bukas kasama si <b>${name}</b>` : 'Ilinalakad nang bukas kasama ang iyong kasama';
+    const aff = st.affirmed || new Set();
     const rows = (st.rungs||[]).map((r,i)=>{
-      return `<div style="padding:.5rem 0;border-top:1px solid var(--line)"><div style="font-size:12.5px;font-weight:600;color:var(--ink)"><span style="color:var(--muted);font-weight:700">${i+1}. </span><span class="en-text">${esc(r.title_en)}</span><span class="tl-text">${esc(r.title_tl||r.title_en)}</span></div><div style="font-size:11px;color:var(--muted);line-height:1.55;margin-top:2px"><span class="en-text">${esc(r.description_en)}</span><span class="tl-text">${esc(r.description_tl||r.description_en)}</span></div></div>`;
+      const affLine = aff.has(r.rung_key)
+        ? `<div style="font-size:11px;color:var(--leaf);font-weight:600;margin-top:4px"><span class="en-text">\u{1F331} Your companion sees this becoming true in you.</span><span class="tl-text">\u{1F331} Nakikita ng iyong kasama na nagiging totoo ito sa iyo.</span></div>`
+        : '';
+      return `<div style="padding:.5rem 0;border-top:1px solid var(--line)"><div style="font-size:12.5px;font-weight:600;color:var(--ink)"><span style="color:var(--muted);font-weight:700">${i+1}. </span><span class="en-text">${esc(r.title_en)}</span><span class="tl-text">${esc(r.title_tl||r.title_en)}</span></div><div style="font-size:11px;color:var(--muted);line-height:1.55;margin-top:2px"><span class="en-text">${esc(r.description_en)}</span><span class="tl-text">${esc(r.description_tl||r.description_en)}</span></div>${affLine}</div>`;
     }).join('');
     return _givingCard(
       _givingHead('The Giving Journey','Landas ng Pagtitiwala') +
@@ -11267,6 +11271,8 @@ async function renderGivingJourney(view){
   const host = document.getElementById('givingJourneySection');
   if(!host) return;
   if(!memberRow || !MEMBER || !MEMBER.memberId){ host.innerHTML = ''; return; }
+  // The Giving Journey's formation track begins at L1 — L0 doesn't see the door yet.
+  if((memberRow.pipeline_level||0) < 1){ host.innerHTML = ''; return; }
   // Pure view switches (confirm dialogs) reuse cached state — no refetch.
   if(view && _givingState){ host.innerHTML = _givingRender(view, _givingState); return; }
   host.innerHTML = _givingCard(`<div style="padding:.4rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Loading\u2026</span><span class="tl-text">Naglo-load\u2026</span></div>`);
@@ -11277,16 +11283,20 @@ async function renderGivingJourney(view){
       .eq('member_id', MEMBER.memberId).eq('status','open').limit(1);
     if(covRes.error) throw covRes.error;
     const cov = (covRes.data && covRes.data[0]) || null;
-    let rungs = [], partnerName = '';
+    let rungs = [], partnerName = '', affirmed = new Set();
     if(cov){
-      const rungRes = await db.from('pathway_rungs').select('*').is('church_id', null);
+      const [rungRes, progRes] = await Promise.all([
+        db.from('pathway_rungs').select('*').is('church_id', null),
+        db.from('pathway_progress').select('rung_key').eq('member_id', MEMBER.memberId)
+      ]);
       if(rungRes.error) throw rungRes.error;
       rungs = (rungRes.data||[]).filter(r=>r.meta && r.meta.track === 'giving')
                 .sort((a,b)=> ((a.level||0)-(b.level||0)) || ((a.sort_order||0)-(b.sort_order||0)));
       partnerName = (cov.partner_id && memberRow.discipler_id && cov.partner_id === memberRow.discipler_id)
                       ? (memberRow.discipler_name || '') : '';
+      if(!progRes.error) affirmed = new Set((progRes.data||[]).map(p=>p.rung_key));
     }
-    _givingState = { cov, rungs, partnerName };
+    _givingState = { cov, rungs, partnerName, affirmed };
     host.innerHTML = _givingRender(cov ? 'open' : 'door', _givingState);
   }catch(e){
     console.warn('[giving] load failed:', e);
