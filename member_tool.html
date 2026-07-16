@@ -2061,6 +2061,7 @@ body.lang-tl .tl-text{display:inline;}
            lessons the member has, and opens the full screen on tap.
            Populated by renderJourneyLessonsTeaser() on page-pipeline activation. -->
       <div id="pathwaySection" style="margin-top:1.5rem"></div>
+      <div id="givingJourneySection" style="margin-top:1.5rem"></div>
       <div id="journeyLessonsTeaser" style="margin-top:1.5rem"></div>
 
       <!-- ═══════ USBONG (PRE-PIPELINE) COMPREHENSION QUIZZES ═══════
@@ -3866,6 +3867,7 @@ function renderPipeline(){
   // progress changes flow through together)
   if (typeof renderJourneyLessonsTeaser === 'function') renderJourneyLessonsTeaser();
   if (typeof renderPathway === 'function') renderPathway();
+  if (typeof renderGivingJourney === 'function') renderGivingJourney();
   if (typeof renderLibrary === 'function') renderLibrary();
   if (typeof renderBtliQuizzes === 'function') renderBtliQuizzes();
   if (typeof renderUsbongQuizzes === 'function') renderUsbongQuizzes();
@@ -11156,7 +11158,7 @@ async function renderPathway(level){
     if(progRes.error) throw progRes.error;
     const byKey = {};
     (rungRes.data||[]).forEach(r=>{ const ex=byKey[r.rung_key]; if(!ex || (r.church_id && !ex.church_id)) byKey[r.rung_key]=r; });
-    const rungs = Object.values(byKey).filter(r=>r.published!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const rungs = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving')).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
     if(!rungs.length){ host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">No rungs for this level yet.</span><span class="tl-text">Wala pang rung dito.</span></div>`); return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
@@ -11186,6 +11188,149 @@ async function renderPathway(level){
   }catch(e){
     console.warn('[pathway] load failed:', e);
     host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Could not load. Tap a level to retry.</span><span class="tl-text">Hindi na-load. I-tap ang antas.</span></div>`);
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// THE GIVING JOURNEY — Landas ng Pagtitiwala (MMT, slice 2)
+// The door is ALWAYS visible (the invitation). The six rungs appear
+// ONLY when the member has opened a giving_covenant — and closing it
+// is his alone. No score, no progress bar, no notification. The leader
+// can never open it (RLS #331); absence is not a verdict (#332).
+// See GIVING_JOURNEY.md for the doctrine these UI choices serve.
+// ═══════════════════════════════════════════════════════════════
+let _givingState = null;
+
+function _givingCard(inner){
+  return `<div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem">${inner}</div>`;
+}
+function _givingHead(en, tl){
+  return `<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem"><div style="font-size:20px">\u{1F331}</div><div style="font-size:14.5px;font-weight:700;color:var(--ink)"><span class="en-text">${en}</span><span class="tl-text">${tl}</span></div></div>`;
+}
+const _GIVING_BTN = 'background:var(--gold);color:#fff;border:none;border-radius:10px;padding:.55rem .9rem;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;width:100%';
+const _GIVING_GHOST = 'background:none;color:var(--muted);border:none;border-radius:10px;padding:.5rem;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;margin-top:.35rem';
+
+function _givingRender(view, st){
+  const esc = (s)=> MultiplyShared.escapeHTML(s||'');
+  if(view === 'door'){
+    return _givingCard(
+      _givingHead('The Giving Journey','Ang Landas ng Pagtitiwala') +
+      `<div style="font-size:12.5px;line-height:1.6;color:var(--muted);margin-bottom:.8rem"><span class="en-text">Learning to trust God with what passes through your hands. When you're ready, open it with someone who will walk it with you.</span><span class="tl-text">Pag-aaral na magtiwala sa Diyos sa dumadaan sa iyong mga kamay. Kapag handa ka na, buksan ito kasama ang isang maglalakad kasama mo.</span></div>` +
+      `<button onclick="renderGivingJourney('confirm-begin')" style="${_GIVING_BTN}"><span class="en-text">\uFF0B Begin the Giving Journey</span><span class="tl-text">\uFF0B Simulan ang Landas ng Pagtitiwala</span></button>`
+    );
+  }
+  if(view === 'need-discipler'){
+    return _givingCard(
+      _givingHead('The Giving Journey','Ang Landas ng Pagtitiwala') +
+      `<div style="font-size:12.5px;line-height:1.6;color:var(--muted);margin-bottom:.8rem"><span class="en-text">This journey is opened together with the person discipling you. Talk with your leader first \u2014 they will walk it with you.</span><span class="tl-text">Ang paglalakbay na ito ay binubuksan kasama ng taong nagdi-disciple sa iyo. Kausapin mo muna ang iyong lider \u2014 sila ang maglalakad kasama mo.</span></div>` +
+      `<button onclick="renderGivingJourney('door')" style="${_GIVING_GHOST}"><span class="en-text">Back</span><span class="tl-text">Bumalik</span></button>`
+    );
+  }
+  if(view === 'confirm-begin'){
+    if(!memberRow || !memberRow.discipler_id) return _givingRender('need-discipler', st);
+    const name = esc(memberRow.discipler_name || '');
+    return _givingCard(
+      _givingHead('A step of trust','Isang hakbang ng pagtitiwala') +
+      `<div style="font-size:12.5px;line-height:1.7;color:var(--ink);margin-bottom:.7rem"><span class="en-text">You are giving one yes, in two parts:<br>\u2022 "I am stepping onto this path."<br>\u2022 "I am walking it openly with <b>${name}</b>."</span><span class="tl-text">Isang oo ang ibibigay mo, sa dalawang bahagi:<br>\u2022 "Papasok ako sa landas na ito."<br>\u2022 "Ilalakad ko ito nang bukas kasama si <b>${name}</b>."</span></div>` +
+      `<div style="font-size:11px;line-height:1.55;color:var(--muted);margin-bottom:.8rem"><span class="en-text">This is yours to give freely \u2014 no one asked it of you, and you can close it anytime.</span><span class="tl-text">Kusa mong ibinibigay ito \u2014 walang humiling nito sa iyo, at maisasara mo anumang oras.</span></div>` +
+      `<button onclick="_givingBegin(this)" style="${_GIVING_BTN}"><span class="en-text">Yes \u2014 I am stepping on</span><span class="tl-text">Oo \u2014 papasok ako</span></button>` +
+      `<button onclick="renderGivingJourney('door')" style="${_GIVING_GHOST}"><span class="en-text">Not yet</span><span class="tl-text">Hindi muna</span></button>`
+    );
+  }
+  if(view === 'open'){
+    const name = esc(st.partnerName || '');
+    const withEn = name ? `Walking it openly with <b>${name}</b>` : 'Walking it openly with your companion';
+    const withTl = name ? `Ilinalakad nang bukas kasama si <b>${name}</b>` : 'Ilinalakad nang bukas kasama ang iyong kasama';
+    const rows = (st.rungs||[]).map((r,i)=>{
+      return `<div style="padding:.5rem 0;border-top:1px solid var(--line)"><div style="font-size:12.5px;font-weight:600;color:var(--ink)"><span style="color:var(--muted);font-weight:700">${i+1}. </span><span class="en-text">${esc(r.title_en)}</span><span class="tl-text">${esc(r.title_tl||r.title_en)}</span></div><div style="font-size:11px;color:var(--muted);line-height:1.55;margin-top:2px"><span class="en-text">${esc(r.description_en)}</span><span class="tl-text">${esc(r.description_tl||r.description_en)}</span></div></div>`;
+    }).join('');
+    return _givingCard(
+      _givingHead('The Giving Journey','Landas ng Pagtitiwala') +
+      `<div style="font-size:11.5px;color:var(--muted);margin-bottom:.5rem"><span class="en-text">${withEn}</span><span class="tl-text">${withTl}</span></div>` +
+      `<div>${rows}</div>` +
+      `<button onclick="renderGivingJourney('confirm-close')" style="${_GIVING_GHOST}"><span class="en-text">Close this journey</span><span class="tl-text">Isara ang paglalakbay</span></button>`
+    );
+  }
+  if(view === 'confirm-close'){
+    return _givingCard(
+      _givingHead('Close the journey?','Isara ang paglalakbay?') +
+      `<div style="font-size:12.5px;line-height:1.65;color:var(--muted);margin-bottom:.8rem"><span class="en-text">You can close this anytime \u2014 no penalty, and no one is notified. The door you opened, you can also shut.</span><span class="tl-text">Maisasara mo ito anumang oras \u2014 walang parusa, at walang aabisuhan. Ang pintong binuksan mo, kaya mo ring isara.</span></div>` +
+      `<button onclick="_givingClose(this)" style="background:none;color:#b4462f;border:1px solid var(--line);border-radius:10px;padding:.5rem;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;width:100%"><span class="en-text">Yes, close it</span><span class="tl-text">Oo, isara</span></button>` +
+      `<button onclick="renderGivingJourney('open')" style="${_GIVING_GHOST}"><span class="en-text">Keep it open</span><span class="tl-text">Huwag muna</span></button>`
+    );
+  }
+  return '';
+}
+
+async function renderGivingJourney(view){
+  const host = document.getElementById('givingJourneySection');
+  if(!host) return;
+  if(!memberRow || !MEMBER || !MEMBER.memberId){ host.innerHTML = ''; return; }
+  // Pure view switches (confirm dialogs) reuse cached state — no refetch.
+  if(view && _givingState){ host.innerHTML = _givingRender(view, _givingState); return; }
+  host.innerHTML = _givingCard(`<div style="padding:.4rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Loading\u2026</span><span class="tl-text">Naglo-load\u2026</span></div>`);
+  try{
+    const db = MultiplyShared.getDB();
+    const covRes = await db.from('giving_covenant')
+      .select('id, partner_id, opened_at')
+      .eq('member_id', MEMBER.memberId).eq('status','open').limit(1);
+    if(covRes.error) throw covRes.error;
+    const cov = (covRes.data && covRes.data[0]) || null;
+    let rungs = [], partnerName = '';
+    if(cov){
+      const rungRes = await db.from('pathway_rungs').select('*').is('church_id', null);
+      if(rungRes.error) throw rungRes.error;
+      rungs = (rungRes.data||[]).filter(r=>r.meta && r.meta.track === 'giving')
+                .sort((a,b)=> ((a.level||0)-(b.level||0)) || ((a.sort_order||0)-(b.sort_order||0)));
+      partnerName = (cov.partner_id && memberRow.discipler_id && cov.partner_id === memberRow.discipler_id)
+                      ? (memberRow.discipler_name || '') : '';
+    }
+    _givingState = { cov, rungs, partnerName };
+    host.innerHTML = _givingRender(cov ? 'open' : 'door', _givingState);
+  }catch(e){
+    console.warn('[giving] load failed:', e);
+    host.innerHTML = _givingCard(`<div style="padding:.4rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Could not load. Reopen the Journey tab to retry.</span><span class="tl-text">Hindi na-load. Buksang muli ang Journey.</span></div>`);
+  }
+}
+
+async function _givingBegin(btn){
+  if(!memberRow || !memberRow.discipler_id){ renderGivingJourney('need-discipler'); return; }
+  if(btn) btn.disabled = true;
+  try{
+    const db = MultiplyShared.getDB();
+    const { error } = await db.from('giving_covenant').insert({
+      church_id: memberRow.church_id,
+      member_id: MEMBER.memberId,
+      partner_id: memberRow.discipler_id,
+      status: 'open'
+    });
+    if(error) throw error;
+    _givingState = null;
+    await renderGivingJourney();
+  }catch(e){
+    console.warn('[giving] begin failed:', e);
+    if(btn) btn.disabled = false;
+    _givingState = null;
+    await renderGivingJourney();
+  }
+}
+
+async function _givingClose(btn){
+  if(!_givingState || !_givingState.cov){ await renderGivingJourney(); return; }
+  if(btn) btn.disabled = true;
+  try{
+    const db = MultiplyShared.getDB();
+    const now = new Date().toISOString();
+    const { error } = await db.from('giving_covenant')
+      .update({ status:'closed', closed_at: now, updated_at: now })
+      .eq('id', _givingState.cov.id);
+    if(error) throw error;
+    _givingState = null;
+    await renderGivingJourney();
+  }catch(e){
+    console.warn('[giving] close failed:', e);
+    if(btn) btn.disabled = false;
   }
 }
 
