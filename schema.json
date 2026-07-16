@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 73,
+  "table_count": 74,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -5676,6 +5676,214 @@
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.gifts_diagnostic FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
+    },
+    "giving_covenant": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "partner_id",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "status",
+          "ordinal": 5,
+          "data_type": "text",
+          "nullable": false,
+          "default": "'open'::text",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "opened_at",
+          "ordinal": 6,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "closed_at",
+          "ordinal": 7,
+          "data_type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 8,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 9,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "giving_covenant_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "giving_covenant_member_id_fkey",
+          "columns": [
+            "member_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "giving_covenant_partner_id_fkey",
+          "columns": [
+            "partner_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (partner_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [
+        {
+          "name": "giving_covenant_not_self",
+          "definition": "CHECK ((member_id <> partner_id))"
+        },
+        {
+          "name": "giving_covenant_status_check",
+          "definition": "CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text])))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "giving_covenant_one_open_uk",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "member_id"
+          ],
+          "definition": "CREATE UNIQUE INDEX giving_covenant_one_open_uk ON public.giving_covenant USING btree (member_id) WHERE (status = 'open'::text)"
+        },
+        {
+          "name": "giving_covenant_partner_ix",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "partner_id"
+          ],
+          "definition": "CREATE INDEX giving_covenant_partner_ix ON public.giving_covenant USING btree (partner_id) WHERE (status = 'open'::text)"
+        },
+        {
+          "name": "giving_covenant_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX giving_covenant_pkey ON public.giving_covenant USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "giving_covenant_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((member_id = auth_member_id()) AND (church_id = auth_church_id()) AND (status = 'open'::text))"
+        },
+        {
+          "name": "giving_covenant_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((member_id = auth_member_id()) OR (partner_id = auth_member_id()))",
+          "with_check": null
+        },
+        {
+          "name": "giving_covenant_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "(member_id = auth_member_id())",
+          "with_check": "(member_id = auth_member_id())"
+        }
+      ],
+      "triggers": []
     },
     "gratitude_entries": {
       "kind": "table",
@@ -12013,7 +12221,7 @@
       "check_constraints": [
         {
           "name": "pathway_rungs_category_check",
-          "definition": "CHECK ((category = ANY (ARRAY['book'::text, 'training'::text, 'lesson'::text, 'ministry'::text, 'coaching'::text, 'assessment'::text, 'character'::text, 'competency'::text, 'discipline'::text])))"
+          "definition": "CHECK ((category = ANY (ARRAY['book'::text, 'training'::text, 'lesson'::text, 'ministry'::text, 'coaching'::text, 'assessment'::text, 'character'::text, 'competency'::text, 'discipline'::text, 'formation'::text])))"
         },
         {
           "name": "pathway_rungs_completion_source_check",
