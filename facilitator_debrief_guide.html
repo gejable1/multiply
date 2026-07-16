@@ -732,6 +732,11 @@ body {
   flex-shrink: 0;
   margin-top: 1px;
 }
+/* ── AI-TAILORED GUIDE ── */
+.ask-box.tailored{position:relative;border-left:3px solid #b8882a;background:#fffaf0;}
+.ask-box.tailored::after{content:'🎯 tailored';position:absolute;top:-9px;right:8px;font-size:9px;font-weight:700;letter-spacing:.05em;color:#9b7820;background:#fff3d6;padding:1px 7px;border-radius:8px;text-transform:uppercase;}
+#tailorPill{display:none;position:fixed;bottom:20px;right:20px;z-index:9999;background:#2a5c40;color:#fff;border:none;border-radius:24px;padding:11px 18px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+#tailorPill:hover{filter:brightness(1.08);}
 .ai-disclaimer {
   margin-top: 16px;
   padding: 10px 14px;
@@ -809,6 +814,9 @@ body {
     <p class="ai-no-answers" id="aiIntro">Click "Build AI Prompt" to assemble a copy-ready prompt from this member's open-ended answers. You'll be able to send it to your preferred AI tool with one tap.</p>
   </div>
 </div>
+
+<!-- AI-TAILORED GUIDE TOGGLE (revealed once the AI returns tailored questions) -->
+<button id="tailorPill" onclick="toggleTailoredGuide()">🎯 Tailor to member</button>
 
 <!-- STICKY NAV -->
 <div class="sticky-nav">
@@ -947,7 +955,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"In your written answer about the gospel, you said [quote a phrase from their A1 response]. Can you tell me more about that? If I had never heard of Jesus, how would you explain the good news to me right now, in your own words?"</div>
+        <div class="ask-box" data-ask="a-gospel">"In your written answer about the gospel, you said [quote a phrase from their A1 response]. Can you tell me more about that? If I had never heard of Jesus, how would you explain the good news to me right now, in your own words?"</div>
         <div class="note-text">Listen for the four essential gospel elements:</div>
         <ul class="follow-ups">
           <li>God — who He is, His holiness and love</li>
@@ -975,7 +983,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You wrote about [summarize their A2/A3 response]. Tell me about that moment. What do you remember feeling and thinking? What did you understand you were saying yes to?"</div>
+        <div class="ask-box" data-ask="a-decision">"You wrote about [summarize their A2/A3 response]. Tell me about that moment. What do you remember feeling and thinking? What did you understand you were saying yes to?"</div>
         <div class="note-text">You are not looking for a dramatic conversion story. Many genuine believers came to faith gradually. What you are listening for is:</div>
         <ul class="follow-ups">
           <li>A sense of genuine personal need — they understood they were a sinner</li>
@@ -1066,7 +1074,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You wrote about a moment of doubt [reference their B5 answer]. What did God use to help you through that? Or are you still in the middle of it?"</div>
+        <div class="ask-box" data-ask="b-doubt">"You wrote about a moment of doubt [reference their B5 answer]. What did God use to help you through that? Or are you still in the middle of it?"</div>
         <div class="note-text">Doubt is not the enemy of faith — it is often the companion of genuine faith. The question is not whether they doubt, but <em>what they do with the doubt.</em> Do they bring it to God and His Word, or do they let it drive them away?</div>
         <ul class="follow-ups">
           <li>"What promises from the Bible have anchored you in moments of uncertainty?"</li>
@@ -1126,9 +1134,9 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You wrote that [name the fruit they identified in C10] is most visibly growing. Walk me through the example you gave. How does that compare to who you were 2–3 years ago?"</div>
+        <div class="ask-box" data-ask="c-fruit-growing">"You wrote that [name the fruit they identified in C10] is most visibly growing. Walk me through the example you gave. How does that compare to who you were 2–3 years ago?"</div>
         <div class="note-text">The distance between "then" and "now" is where you see sanctification. Even modest growth over time is powerful evidence of the Spirit's work.</div>
-        <div class="ask-box">"You also identified [their C11 answer] as your greatest struggle. You said the root might be [their answer]. Do you feel that's accurate? Or as you sit here now, do you see something deeper?"</div>
+        <div class="ask-box" data-ask="c-fruit-struggle">"You also identified [their C11 answer] as your greatest struggle. You said the root might be [their answer]. Do you feel that's accurate? Or as you sit here now, do you see something deeper?"</div>
         <div class="note-text">Sometimes the diagnostic surfaces a deeper root than the person initially identified. The debrief conversation — with the safety of pastoral presence — often reveals what the paper could not.</div>
         <span class="notes-label">Notes on their growth trajectory and root issues:</span>
         <textarea class="notes-field" placeholder="What direction are they moving? What root issues emerged in conversation?"></textarea>
@@ -1182,7 +1190,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You mentioned [reference their D7 answer, or ask if they left it blank] a situation involving a broken relationship. Without naming the person — can you tell me a bit more about where things stand? How long have you been carrying this?"</div>
+        <div class="ask-box" data-ask="d-relationship">"You mentioned [reference their D7 answer, or ask if they left it blank] a situation involving a broken relationship. Without naming the person — can you tell me a bit more about where things stand? How long have you been carrying this?"</div>
         <ul class="follow-ups">
           <li>"Have you taken any steps toward reconciliation, or has it felt impossible?"</li>
           <li>"Is this someone in the church? Because Jesus is pretty clear in Matthew 5:23–24 that this matters to Him before worship."</li>
@@ -1349,7 +1357,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You wrote your spiritual story in Section H. I read it carefully. One thing that struck me was [specific phrase or theme from their H1 response]. Can you tell me more about that season?"</div>
+        <div class="ask-box" data-ask="h-story">"You wrote your spiritual story in Section H. I read it carefully. One thing that struck me was [specific phrase or theme from their H1 response]. Can you tell me more about that season?"</div>
         <div class="note-text">The spiritual autobiography is not a section to rush through. It is where the person's whole journey is laid out. Look for:</div>
         <ul class="follow-ups">
           <li>Periods of distance from God — what caused them and what brought them back</li>
@@ -1369,8 +1377,8 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You named [their H2 answer] as your greatest spiritual struggle right now. How long has this been going on? Is this something you've ever talked about with anyone before today?"</div>
-        <div class="ask-box">"And you said that God is calling you to change [their H3 answer], but you've been resisting it. That took honesty to write. What do you think the cost of that resistance has been — to you, to your relationships, to your walk with God?"</div>
+        <div class="ask-box" data-ask="h-struggle">"You named [their H2 answer] as your greatest spiritual struggle right now. How long has this been going on? Is this something you've ever talked about with anyone before today?"</div>
+        <div class="ask-box" data-ask="h-resisting">"And you said that God is calling you to change [their H3 answer], but you've been resisting it. That took honesty to write. What do you think the cost of that resistance has been — to you, to your relationships, to your walk with God?"</div>
         <div class="note-text">Do not offer solutions immediately. Let the weight of their own words sit with them for a moment. Then ask: <em>"What would it look like to take one step of obedience in that area this week?"</em></div>
         <div class="note-text">H3 is particularly powerful because the person has already admitted to knowing what God wants and choosing not to do it. This is not a moment for condemnation — it is a moment for compassionate, clear pastoral truth-telling. Use it wisely.</div>
         <span class="notes-label">Notes on their current struggle and area of resistance:</span>
@@ -1385,7 +1393,7 @@ body {
         <span class="script-chevron">▼</span>
       </div>
       <div class="script-body">
-        <div class="ask-box">"You wrote that if Jesus were sitting with you right now, He would say [their H4 response]. Does that still feel true as you sit here? What do you think He would add, knowing everything we've talked about today?"</div>
+        <div class="ask-box" data-ask="h-jesus">"You wrote that if Jesus were sitting with you right now, He would say [their H4 response]. Does that still feel true as you sit here? What do you think He would add, knowing everything we've talked about today?"</div>
         <div class="note-text">This question often produces the most profound moment of the entire debrief. Whether their answer came from grace or from fear, the conversation now has context — you have spent 60+ minutes together — and their answer may shift. The quality of their answer to this question is one of your best final indicators of their spiritual health.</div>
         <div class="green-light">
           <div class="green-light-title">✅ Healthy answer — grace-rooted</div>
@@ -1939,6 +1947,7 @@ async function _loadPastDebrief(debriefId, mode){
       if (out && typeof renderAIResultsInto === 'function') {
         renderAIResultsInto(data.ai_parsed_json, out);
       }
+      _revealTailorPill();
     }
   } catch(e) {
     alert('Could not load debrief: ' + e.message);
@@ -2073,7 +2082,7 @@ window.buildAIPrompt = function() {
     return;
   }
 
-  var systemPrompt = 'You are assisting a Filipino church pastor or discipler preparing for a pastoral debrief session with a church member who completed a Salvation Assurance Diagnostic. Your role is to analyze the member\'s open-ended written answers and suggest 2–3 gentle, pastoral follow-up questions for each answer.\n\n' +
+  var systemPrompt = 'You are assisting a Filipino church pastor or discipler preparing for a pastoral debrief session with a church member who completed a Salvation Assurance Diagnostic. Your role is to analyze the member\'s open-ended written answers and suggest 2–3 gentle, pastoral follow-up questions for each answer. You will ALSO tailor the debrief questions by resolving their [bracketed placeholders] from these same answers (see TAILORING RULES below).\n\n' +
     'IMPORTANT GUIDELINES:\n' +
     '- Do NOT make a verdict on the person\'s salvation — only God and the shepherd know that\n' +
     '- Do NOT use clinical, cold, or judgmental language\n' +
@@ -2096,12 +2105,32 @@ window.buildAIPrompt = function() {
     '      ]\n' +
     '    }\n' +
     '  ],\n' +
-    '  "overall_note": "One paragraph of overall pastoral observations for the facilitator — what to prioritize in the conversation."\n' +
-    '}';
+    '  "overall_note": "One paragraph of overall pastoral observations for the facilitator — what to prioritize in the conversation.",\n' +
+    '  "tailored": { "ASK_ID": "the full debrief question rewritten with its [bracketed placeholders] resolved from the member\'s actual answers — keep the pastoral wording, the quotation marks, and the tone; change ONLY what is inside the brackets" }\n' +
+    '}\n\n' +
+    'TAILORING RULES (for the "tailored" object):\n' +
+    '- Fill each question\'s [brackets] using ONLY the member\'s written answers above; quote or summarise their real words.\n' +
+    '- Keep every other word of the question exactly as written — do not add, remove, or reorder sentences.\n' +
+    '- If you cannot tell what a bracket should contain from their answers, OMIT that ASK_ID entirely. Never guess, never invent a quote, never fill in a name.\n' +
+    '- Never write a verdict about their salvation, and never put a next step or recommendation into a question.';
 
   var dataBody = 'Member name: ' + (_memberName || 'this member') + '\n\n' +
     'Here are their written answers from the Salvation Assurance Diagnostic:\n\n' +
     questionBlocks.join('\n\n---\n\n');
+
+  // Gather the debrief questions that carry [placeholders] so the AI can
+  // resolve each one from the member's answers — the "tailored" output.
+  var _askEls = document.querySelectorAll('.ask-box[data-ask]');
+  if (_askEls.length) {
+    var _askBlocks = [];
+    _askEls.forEach(function(el){
+      _askBlocks.push('ASK_ID: ' + el.dataset.ask + '\nQuestion (resolve the [brackets]):\n"""\n' + el.textContent.trim() + '\n"""');
+    });
+    dataBody += '\n\n═══════════════════════════════════════════════════════\n' +
+      'DEBRIEF QUESTIONS TO TAILOR — resolve each [bracket] from the answers above\n' +
+      '═══════════════════════════════════════════════════════\n\n' +
+      _askBlocks.join('\n\n');
+  }
 
   // Single-shot prompt — both system instruction and data, since most
   // chat UIs (ChatGPT, Gemini, Grok web UI) have no separate system slot.
@@ -2233,6 +2262,7 @@ window.parseAIResponse = function() {
   // Hand off to the existing renderer, but route output to aiParsedResults
   // (rather than aiBody, which now hosts the prompt-and-paste UI).
   renderAIResultsInto(parsed, out);
+  _revealTailorPill();
 };
 
 // Module-scope buffers so saveDebrief can persist AI work alongside the typed summary
@@ -2297,6 +2327,65 @@ function renderAIResultsInto(parsed, container) {
   }
   container.innerHTML = html;
 };
+
+// ─────────────────────────────────────────────────────────────────
+// AI-TAILORED GUIDE — resolve the [bracketed] questions with the member's
+// own words. Toggle between the standard template and the tailored one.
+// The scaffold (sections, guardrails, note fields) is never touched.
+// ─────────────────────────────────────────────────────────────────
+var _guideMode = 'standard';
+
+function _tailoredCount(){
+  var t = _aiParsedJson && _aiParsedJson.tailored;
+  return (t && typeof t === 'object') ? Object.keys(t).length : 0;
+}
+
+function _revealTailorPill(){
+  var pill = document.getElementById('tailorPill');
+  if (!pill) return;
+  if (_tailoredCount() > 0) {
+    pill.style.display = 'block';
+    if (_guideMode !== 'tailored') {
+      pill.textContent = '🎯 Tailor to ' + ((_memberName || 'member').split(' ')[0]);
+    }
+  } else {
+    pill.style.display = 'none';
+  }
+}
+
+function toggleTailoredGuide(){
+  if (_guideMode === 'tailored') showStandardGuide();
+  else applyTailoredGuide();
+}
+
+function applyTailoredGuide(){
+  var t = _aiParsedJson && _aiParsedJson.tailored;
+  if (!t) return;
+  var n = 0;
+  document.querySelectorAll('.ask-box[data-ask]').forEach(function(el){
+    var key = el.dataset.ask;
+    if (!t[key] || !String(t[key]).trim()) return;
+    if (el.dataset.std === undefined) el.dataset.std = el.textContent;
+    el.textContent = String(t[key]).trim();
+    el.classList.add('tailored');
+    n++;
+  });
+  _guideMode = 'tailored';
+  var pill = document.getElementById('tailorPill');
+  if (pill) { pill.textContent = '↩ Standard guide'; pill.style.display = 'block'; }
+  aiToast('🎯 Guide tailored to ' + ((_memberName || 'member').split(' ')[0]) + ' — ' + n + ' question' + (n===1?'':'s') + ' filled from their answers');
+}
+
+function showStandardGuide(){
+  document.querySelectorAll('.ask-box[data-ask].tailored').forEach(function(el){
+    if (el.dataset.std !== undefined) el.textContent = el.dataset.std;
+    el.classList.remove('tailored');
+  });
+  _guideMode = 'standard';
+  var pill = document.getElementById('tailorPill');
+  if (pill) pill.textContent = '🎯 Tailor to ' + ((_memberName || 'member').split(' ')[0]);
+  aiToast('↩ Standard guide restored');
+}
 
 // Backwards-compat: keep window.runAIAssist as an alias so any stale
 // HTML that still references it doesn't error.
