@@ -3544,4 +3544,64 @@ At session open the tarball read count #326 while `main` was #333 (the #183 doc-
 
 ---
 
+### **342. GitHub Pages runs Jekyll by default — its metadata plugin makes a live GitHub-API call that can 503 and fail the deploy; `.nojekyll` is the cure for a static site**
+
+MULTIPLY is a pure static PWA (no `_config.yml`, no `_layouts`, no `Gemfile`), yet GitHub Pages ran it through **Jekyll** anyway — because there was no `.nojekyll` file. Jekyll's `jekyll-github-metadata` plugin calls `GET https://api.github.com/repos/gejable1/multiply` during every build. During an API 503 storm that call failed, the **"pages build and deployment"** Action went **red**, and Pages kept serving the last *successful* (old) commit — so a correctly-merged fix (`main` had the new file) never reached the browser. The tell: `main`'s file sha was new, but the published `github-pages` deployment sha was an older commit whose file was old.
+
+**RULE:** for a static Pages site, commit an empty **`.nojekyll`** at the publish root — it skips Jekyll entirely (no API call), so deploys are fast and can't 503-fail. If a Pages deploy goes red, read the Actions **build** log: a `GET api.github.com … 503` is transient GitHub infra, not your code — re-running the job works once the storm clears, but `.nojekyll` prevents the whole class.
+
+**Established July 17, 2026 (Session 74). Invariant #342 added - count now 342.**
+
+---
+
+### **343. "Old file still showing" — check the DEPLOYED Pages commit, not just `main`; and hard-reload never clears the service-worker cache**
+
+`main` can carry a merge (new file bytes) while GitHub **Pages still serves an older commit** — deploy lag, or a failed deploy. Chasing browser cache first wastes an hour. Diagnose in order: (1) `git ls-remote … refs/heads/main` for the real HEAD; (2) `api.github.com/repos/.../deployments?environment=github-pages` for the actually-**published** sha; (3) codeload that published sha and check the file bytes. Only once Pages is confirmed current do you look at the client. And on the client: DevTools **"Empty Cache and Hard Reload" clears the HTTP cache but NOT the service-worker Cache Storage** — and a file opened inside a modal **iframe** is SW-intercepted, so it keeps serving the cached copy. The fix (once Pages is current) is **"Clear site data"** (which wipes Cache Storage) or a CACHE_VERSION bump.
+
+**RULE:** before blaming the browser, prove what Pages actually published (deployments API + codeload the deployed sha). To force a client past a stale SW copy: "Clear site data," not hard-reload.
+
+**Established July 17, 2026 (Session 74). Invariant #343 added - count now 343.**
+
+---
+
+### **344. Bump `multiply-sw.js` CACHE_VERSION to force clients to purge stale caches**
+
+The service worker's `activate` handler deletes every cache whose name ≠ `CACHE_VERSION`. Bumping the date-stamped version (`multiply-shell-v2-2026-07-12` → `…-2026-07-17`) makes every client auto-refresh on next load with **no manual "Clear site data."** Bump it whenever a cached HTML file changes and you want guaranteed-fresh delivery to LCLs — `facilitator_debrief_guide.html` isn't precached but is still SW-cached on-demand via `networkFirst`, whose short-timeout race can serve a stale copy. **Caveat:** the *old* SW is still in control on the first post-merge load; it hands off to the new SW, which purges on *its* activate — so the very first client still needs one manual clear, and everyone after is automatic.
+
+**RULE:** a change to any SW-cached HTML that must reach LCLs promptly ships **with** a CACHE_VERSION bump; expect one manual "Clear site data" on the first load after merge, automatic thereafter.
+
+**Established July 17, 2026 (Session 74). Invariant #344 added - count now 344.**
+
+---
+
+### **345. `diagnostic_results` stores only SECTION aggregates — individual scale answers were never persisted**
+
+The salvation diagnostic saves `section_fruit_*` (nine fruit), `section_assurance`, `section_disciplines`, `section_gospel`, etc. — but **never the per-question scale answers** (the B1 confidence rating, per-habit scores). So debrief ask-box brackets like `[their B1 score]` and `[lowest habit]` are structurally **un-fillable by anyone** (AI or client) → reword them away, or repoint to a stored **free-text** `open_answers` field (the B section now references the B2 answer, which IS stored). Fruit **highest/lowest IS computable** from the nine `section_fruit_*` columns. The free-text `open_answers` (A1, A3, A5, B2, B5, C1, C2, D1, F1, H1–H5) are what drive the AI tailoring.
+
+**RULE:** before promising to "fill in" a diagnostic value, confirm it's actually stored — `diagnostic_results` has section aggregates + `open_answers` free-text only, not raw per-question scale scores.
+
+**Established July 17, 2026 (Session 74). Invariant #345 added - count now 345.**
+
+---
+
+### **346. Client-side placeholder fill runs at load, before any tailoring/snapshot, and skips rich-text elements**
+
+`_fillPlaceholder(bracket, value)` substitutes bracket text in `.ask-box` elements guarded by `children.length===0` — so it only touches leaf text nodes and never flattens child markup. It fires in the member fetch `.then()` for `[Name]` and the diagnostic fetch `.then()` for fruit names — **before** the tailored snapshot is taken — so both the standard AND tailored views show real values, and the revert snapshot captures the already-filled baseline. Tagged AI ask-boxes still show their bracket *cues* in standard and are AI-filled (or omitted → left as the cue) in tailored. This is the pattern for any "known fact" fill (name, computed scores) versus AI conversation-tailoring.
+
+**RULE:** fill known facts client-side at load (leaf-only, before snapshot); reserve AI tailoring for free-text-derived conversation prompts. Never string-replace into an element with children.
+
+**Established July 17, 2026 (Session 74). Invariant #346 added - count now 346.**
+
+---
+
+### **347. BASE→patcher→WANT is the default surgical-edit delivery — proven end-to-end through CC this session**
+
+For surgical edits, Claude writes a Python patcher in `/tmp`, runs it against a codeload `origin/main` copy, asserts **each edit matches exactly once**, `node --check`s the result, and computes a **BASE** sha (current file) + **WANT** sha (patched). CC runs the *same* patcher inside one fenced block: fetch + branch off `origin/main` → `git checkout origin/main -- <file>` → **BASE gate** (halt on mismatch) → run patcher → **WANT gate** (halt on mismatch) → CRLF check → `node --check` → commit → `git push -u` → `gh pr create`. Never stop at commit. Claude then back-checks the PR head **byte-for-byte** via codeload against WANT before greenlighting the merge. First full runs = PRs #195 and #196 — clean end-to-end. The BASE/WANT gate is the safety, not vigilance (#338); the patcher is the deliverable.
+
+**RULE:** surgical edits go BASE→patcher→WANT through CC as one block; whole-file **upload** (UP-var proven by WANT sha, #339) is reserved for near-total rewrites. Back-check every PR head vs WANT via codeload before merge (#318/#340).
+
+**Established July 17, 2026 (Session 74). Invariant #347 added - count now 347.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
