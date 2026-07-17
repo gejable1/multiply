@@ -4980,9 +4980,10 @@ async function _refreshGivingCompanions(){
     if(!data || !data.length){ host.innerHTML=''; _gjCoState=null; return; }   // absence is invisible
 
     const memberIds = data.map(c=>c.member_id);
-    const [rungRes, progRes] = await Promise.all([
+    const [rungRes, progRes, lvlRes] = await Promise.all([
       db.from('pathway_rungs').select('*').is('church_id', null),
-      db.from('pathway_progress').select('member_id, rung_key').in('member_id', memberIds)
+      db.from('pathway_progress').select('member_id, rung_key').in('member_id', memberIds),
+      db.from('members').select('id, pipeline_level').in('id', memberIds)
     ]);
     if(rungRes.error) throw rungRes.error;
     const rungs = (rungRes.data||[]).filter(r=>r.meta && r.meta.track==='giving')
@@ -4993,7 +4994,17 @@ async function _refreshGivingCompanions(){
         (affByMember[pr.member_id] = affByMember[pr.member_id] || new Set()).add(pr.rung_key);
       });
     }
-    _gjCoState = { rungs, list: data
+    // The Giving Journey begins at L1 (#341): mirror the MMT door-gate here.
+    // A disciple who opened while ungated (or was later moved to L0) is dormant
+    // — not shown; the covenant persists and reappears at L1. Fail OPEN on a
+    // hard level-fetch error so a transient glitch never blanks a legit view.
+    const lvlById = {};
+    if(lvlRes && !lvlRes.error){ (lvlRes.data||[]).forEach(m=>{ lvlById[m.id] = m.pipeline_level||0; }); }
+    const gated = (lvlRes && !lvlRes.error)
+      ? data.filter(c => (lvlById[c.member_id]||0) >= 1)
+      : data;
+    if(!gated.length){ host.innerHTML=''; _gjCoState=null; return; }
+    _gjCoState = { rungs, list: gated
       .sort((a,b)=> String(a.opened_at||'').localeCompare(String(b.opened_at||'')))
       .map(c=>({
         member_id: c.member_id,
