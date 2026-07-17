@@ -1306,6 +1306,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <button class="checkin-reason" onclick="_submitCheckin('scheduling')">📅 Mahirap mag-schedule</button>
     <button class="checkin-reason" onclick="_submitCheckin('personal')">🙏 May pinagdadaanan ako</button>
     <button class="checkin-reason" onclick="_submitCheckin('okay')">👍 Okay lang ako, tuloy pa rin</button>
+    <button class="checkin-reason" onclick="_submitOther()">✍️ Iba pa</button>
     <textarea id="checkinNote" placeholder="May idadagdag ka pa? (optional)" style="margin-top:6px;width:100%;box-sizing:border-box;min-height:70px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;resize:vertical"></textarea>
   </div>
 </div>
@@ -2470,6 +2471,19 @@ async function _submitCheckin(reasonCode){
     toast('Salamat, kapatid. Nakita na ito ng pastor mo. \u{1F49B}', 'success');
     showScreen('screenHome');
   } catch(e){ toast('Could not send: ' + (e.message || e), 'error'); }
+}
+
+// "Iba pa" (Others): the reason isn't in the list, so require the free-text box
+// before submitting reason_code='other' — an empty "other" tells the pastor nothing.
+function _submitOther(){
+  const noteEl = document.getElementById('checkinNote');
+  const note = noteEl ? noteEl.value.trim() : '';
+  if(!note){
+    if(noteEl) noteEl.focus();
+    if(typeof toast==='function') toast('Pakisulat sa ibaba kung ano ito, kapatid.', 'error');
+    return;
+  }
+  _submitCheckin('other');
 }
 
 async function _loadMyCelebration(){
