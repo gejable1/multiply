@@ -5010,6 +5010,7 @@ async function _refreshGivingCompanions(){
         member_id: c.member_id,
         name:      _findMemberName(c.member_id) || 'a disciple',
         since:     c.opened_at ? String(c.opened_at).slice(0,10) : '',
+        level:     lvlById[c.member_id]||0,
         affirmed:  affByMember[c.member_id] || new Set(),
         expanded:  false
       })) };
@@ -5033,6 +5034,18 @@ function _gjRenderCompanions(){
     if(!d.expanded) return head;
     const rungRows = _gjCoState.rungs.map((r,i)=>{
       const on = d.affirmed.has(r.rung_key);
+      // Cumulative gate: a rung is affirmable only once the disciple has reached
+      // its level (r.level <= d.level). Higher rungs stay visible as the road
+      // ahead, but locked — not checkable, no onclick (#341/#189).
+      const locked = (r.level||0) > (d.level||0);
+      if(locked){
+        return `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0 .4rem 1.2rem;opacity:.5">
+            <span style="width:16px;height:16px;border-radius:50%;border:1.5px dashed var(--muted);flex:none;display:inline-block"></span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12.5px;font-weight:600">${i+1}. ${esc(r.title_en)}</div>
+              <div style="font-size:10.5px;margin-top:1px;color:var(--muted)">\u{1F512} Opens at Level ${r.level||0}</div>
+            </div></div>`;
+      }
       const dot = on
         ? `<span style="width:16px;height:16px;border-radius:50%;background:#34a853;flex:none;display:inline-block"></span>`
         : `<span style="width:16px;height:16px;border-radius:50%;border:1.5px solid var(--muted);flex:none;display:inline-block"></span>`;
@@ -5070,6 +5083,10 @@ async function _gjAffirm(memberId, rungKey, level, turnOn){
   const mem = (typeof myMembers!=='undefined'?myMembers:[]).find(function(m){ return m.id===memberId; });
   const canMark = mem && ((mem.discipler_id === LEADER.leaderId) || (((currentLeader && currentLeader.pipeline_level)||0) >= 5));
   if(!canMark){ if(typeof toast==='function') toast('You can only affirm your own disciples.','error'); return; }
+  // Cumulative gate (defense in depth): never affirm a rung above the disciple's
+  // current level, even if a locked row somehow fired (#341).
+  const _memLevel = ((_gjCoState.list.find(x=>x.member_id===memberId)||{}).level) || ((mem && mem.pipeline_level)||0);
+  if((level||0) > _memLevel){ if(typeof toast==='function') toast('This rung opens at a higher level for this disciple.','error'); return; }
   try{
     if(turnOn){
       const res = await db.from('pathway_progress').insert({ member_id: memberId, level: level, rung_key: rungKey, marked_by: LEADER.leaderId });
