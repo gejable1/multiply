@@ -106,7 +106,7 @@ Six steps, each anchored in the grace texts of 2 Corinthians 8–9 and the wider
 
 ## 🚶 HOW A DISCIPLE MOVES — THE INVITATION, STEP BY STEP
 
-**1. The path is always visible.** The Giving Journey sits openly in the pathway from the beginning — not unlocked later, not hidden until a member is "ready." Like the school gate, it is simply *there* every morning: an open door he walks past until the day he chooses to walk through. **Visibility to all** is settled doctrine; it is the pace and the timing, not the visibility, that the discipler shepherds.
+**1. The path is visible from L1 onward.** The Giving Journey sits openly in the pathway from the start of the walk — from Level 1, the beginning of the pipeline — not unlocked rung-by-rung later, not hidden until a member is "ready." Like the school gate, it is simply *there* every morning for everyone on the path: an open door he walks past until the day he chooses to walk through. **Visibility to all who have entered the pathway** is settled doctrine; it is the pace and the timing, not the visibility, that the discipler shepherds. (A Pre-Pipeline / Level-0 member does not yet see the invitation door — see Invariant #341. An already-open covenant, however, always remains the disciple's to close, at any level.)
 
 **2. The discipler issues the call.** In his own words, by name, in a real conversation: *"This is the path. I've walked it. First Fruits is the first step — let me walk it with you."* The platform carries the rungs; the shepherd carries the summons. The app never sends the invitation on his behalf, because a shepherd's call should not arrive as a notification.
 

@@ -11271,8 +11271,6 @@ async function renderGivingJourney(view){
   const host = document.getElementById('givingJourneySection');
   if(!host) return;
   if(!memberRow || !MEMBER || !MEMBER.memberId){ host.innerHTML = ''; return; }
-  // The Giving Journey's formation track begins at L1 — L0 doesn't see the door yet.
-  if((memberRow.pipeline_level||0) < 1){ host.innerHTML = ''; return; }
   // Pure view switches (confirm dialogs) reuse cached state — no refetch.
   if(view && _givingState){ host.innerHTML = _givingRender(view, _givingState); return; }
   host.innerHTML = _givingCard(`<div style="padding:.4rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Loading\u2026</span><span class="tl-text">Naglo-load\u2026</span></div>`);
@@ -11283,6 +11281,12 @@ async function renderGivingJourney(view){
       .eq('member_id', MEMBER.memberId).eq('status','open').limit(1);
     if(covRes.error) throw covRes.error;
     const cov = (covRes.data && covRes.data[0]) || null;
+    // The formation track begins at L1 (#341): a Pre-Pipeline (L0) member does not
+    // yet see the INVITATION door. But an already-open covenant is always the
+    // disciple's to close (#331) — so if one exists we still render it (the
+    // 'open' view carries the close control), whatever the level. Only the door
+    // (no covenant + L0) is hidden.
+    if(!cov && (memberRow.pipeline_level||0) < 1){ host.innerHTML = ''; _givingState = null; return; }
     let rungs = [], partnerName = '', affirmed = new Set();
     if(cov){
       const [rungRes, progRes] = await Promise.all([
