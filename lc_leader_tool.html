@@ -1185,10 +1185,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
     <div onclick="_mpShowList()" style="cursor:pointer;color:var(--muted);font-size:12.5px;margin-bottom:10px">← My lessons</div>
 
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
-      <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">1 · Pick the lesson</div>
+      <div style="font-weight:700;color:var(--gold);font-size:13px;margin-bottom:8px">1 · Pick the source</div>
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px">Meeting date</label>
-      <input type="date" id="mpDate" onchange="mpLoadDevotional();mpLoadExisting()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:14px">
-      <div id="mpDevoTitle" style="margin-top:10px;font-size:13.5px;color:var(--muted)">Loading…</div>
+      <input type="date" id="mpDate" onchange="mpOnDateChange()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:14px">
+      <div style="display:flex;gap:6px;margin:12px 0 4px">
+        <button id="mpSrcDevo" onclick="mpSetSource('devotional')" style="flex:1;font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:var(--surface2);color:var(--ink);border:1px solid var(--border)">Devotional (by date)</button>
+        <button id="mpSrcCustom" onclick="mpSetSource('custom')" style="flex:1;font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:transparent;color:var(--muted);border:1px solid var(--border)">Bring your own material</button>
+      </div>
+      <div id="mpSrcDevoPanel">
+        <div id="mpDevoTitle" style="margin-top:10px;font-size:13.5px;color:var(--muted)">Loading…</div>
+      </div>
+      <div id="mpSrcCustomPanel" style="display:none">
+        <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Title (optional)</label>
+        <input id="mpCustomTitle" oninput="mpBuildFromCustom()" placeholder="e.g. Loving your neighbor" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:14px">
+        <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Material to study (paste an article, story, or short lesson)</label>
+        <textarea id="mpCustomText" rows="6" oninput="mpBuildFromCustom()" placeholder="Paste the full text here. The AI will build a Scripture-anchored 1-hour study from it." style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
+      </div>
     </div>
 
     <div id="mpStep2" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px">
@@ -1509,6 +1521,7 @@ function _liveLeaderIdName(){
 }
 // ═══════════ Meeting Prep — BYO-AI small-group guides (PR-2) ═══════════
 let _mpDevo = null;
+let _mpSource = 'devotional';   // 'devotional' | 'custom'  (BTLI pre-fill = Slice 2b)
 
 function _mpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
@@ -1648,7 +1661,9 @@ async function _mpNewLesson(){
   _mpShowTl(false);
   const sl=document.getElementById('mpShareLib'); if(sl) sl.checked = false;
   document.getElementById('mpPreview').style.display = 'none';
-  await mpLoadDevotional();
+  const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = '';
+  const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = '';
+  mpSetSource('devotional');
 }
 async function mpLoadMyLessons(){
   const me = _liveLeaderIdName();
@@ -1658,7 +1673,7 @@ async function mpLoadMyLessons(){
   box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('id,meeting_date,status,devotional_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,shared_to_library,source_guide_id')
+      .select('id,meeting_date,status,devotional_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,shared_to_library,source_guide_id,source_kind,source_title')
       .eq('lcl_id', me.id).order('meeting_date',{ ascending:false });
     if(error) throw error;
     const guides = data || [];
@@ -1669,7 +1684,7 @@ async function mpLoadMyLessons(){
       (devos||[]).forEach(d=>{ titles[d.id]=d.title; });
     }
     _mpMyGuides = {};
-    guides.forEach(g=>{ g._title = titles[g.devotional_id] || '(untitled lesson)'; _mpMyGuides[g.id]=g; });
+    guides.forEach(g=>{ g._title = (g.source_kind==='custom' ? (g.source_title || 'Custom lesson') : (titles[g.devotional_id] || '(untitled lesson)')); _mpMyGuides[g.id]=g; });
     if(!guides.length){
       box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--muted)">'
         + '<div style="font-size:30px;margin-bottom:8px">📖</div>'
@@ -1699,7 +1714,7 @@ async function mpLoadLibrary(){
   box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   try{
     let q = db.from('lc_meeting_guides')
-      .select('id,meeting_date,status,devotional_id,lcl_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl')
+      .select('id,meeting_date,status,devotional_id,lcl_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,source_kind,source_title')
       .eq('status','published').eq('shared_to_library', true)
       .order('meeting_date',{ ascending:false });
     // Library shows ALL shared + published guides, including your own shared ones.
@@ -1712,7 +1727,7 @@ async function mpLoadLibrary(){
     if(dids.length){ const { data:dv } = await db.from('devotionals').select('id,title').in('id',dids); (dv||[]).forEach(d=>{ titles[d.id]=d.title; }); }
     if(lids.length){ const { data:ms } = await db.from('members').select('id,name,lc_group').in('id',lids); (ms||[]).forEach(m=>{ authors[m.id]= m.lc_group || (((m.name||'').split(' ')[0])+"'s LCG"); }); }
     _mpLibGuides = {};
-    guides.forEach(g=>{ g._title = titles[g.devotional_id]||'(untitled lesson)'; g._author = authors[g.lcl_id]||'another LC'; g._mine = !!(me && me.id && g.lcl_id === me.id); _mpLibGuides[g.id]=g; });
+    guides.forEach(g=>{ g._title = (g.source_kind==='custom' ? (g.source_title||'Custom lesson') : (titles[g.devotional_id]||'(untitled lesson)')); g._author = authors[g.lcl_id]||'another LC'; g._mine = !!(me && me.id && g.lcl_id === me.id); _mpLibGuides[g.id]=g; });
     if(!guides.length){
       box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--muted)">'
         + '<div style="font-size:30px;margin-bottom:8px">📚</div>'
@@ -1889,6 +1904,90 @@ OUTPUT FORMAT - produce the guides in BOTH English and Tagalog. Use these EXACT 
 ===END===`;
 }
 
+// Slice 2: the same 1-hour skeleton as mpBuildPrompt, but sourced from free
+// material the leader supplied. Because an article/story is NOT itself Scripture,
+// the RULES force the AI to anchor the session in a named Bible passage -- the
+// material illuminates the Word, it never replaces it.
+function mpBuildPromptCustom(m){
+  const title = (m && m.title ? String(m.title) : '').trim();
+  const text  = (m && m.text  ? String(m.text)  : '').trim();
+  const head  = title || 'This Week';
+  return `You are helping a small-group leader prepare a 1-hour Bible study from a short piece of material the leader supplied (an article, a story, a devotional excerpt, or a lesson). Produce TWO guides, following every rule exactly.
+
+RULES
+- Use the supplied material below as the springboard for the study. Draw the discussion out of it faithfully; do not contradict it or invent facts not in it.
+- The material may NOT itself be Scripture. Because this is a Bible study, you MUST anchor the session in God's Word: choose ONE clearly relevant Bible passage that speaks to the material's main theme, name it explicitly, and build the Word segment around reading and discussing that passage, using the material to illuminate the Word and never to replace it. Keep everything Christ-centered and biblically sound.
+- Warm, pastoral, plain language a new believer can follow.
+- Output ONLY the two guides between the EXACT fences shown. Nothing outside them.
+
+SOURCE MATERIAL
+Title: ${title}
+${text}
+
+THE FACILITATOR'S GUIDE MUST FOLLOW THIS TIMED 1-HOUR FLOW
+0:00-0:03  Celebrate (the leader opens by naming the LC's wins from the past week - answered prayers, milestones, a member who reached out, the group meeting its goal - and the group gives thanks to God together)
+0:03-0:08  Welcome & Positive/Negative (snack; each person shares ONE positive - a win or God-story from the week - AND ONE negative - a struggle, challenge, or burden they are carrying)
+0:08-0:15  Connect to God (a song or psalm + opening prayer)
+0:15-0:18  Look Back (last week's "I will" + "who did you reach?")
+0:18-0:38  The Word (read the chosen anchor passage aloud, then discuss it by questions, using the material to illuminate it - the main block)
+0:38-0:48  "I Will" (one obedience step + one person to love/reach this week)
+0:48-0:57  Pray for one another (by name; remember the empty chair). Do NOT ask for a fresh round of prayer requests here; instead the leader folds the NEGATIVES each person shared during Welcome into this closing prayer. If time allows, members briefly reshare their negative and pray for one another in pairs or as a group.
+0:57-1:00  Send-off (next step, end on time)
+
+OUTPUT FORMAT - produce the guides in BOTH English and Tagalog. Use these EXACT fences, markdown inside, nothing outside them:
+===FACILITATOR_EN===
+# Facilitator's Guide - ${head}
+(timed script: for each segment above, what to say/do; name the anchor Scripture passage, and give 4-6 discussion questions for The Word that move from the material into that passage, with facilitation tips and timing cues)
+===PARTICIPANT_EN===
+# Participant's Guide - ${head}
+(the anchor Scripture reference, a 2-3 sentence framing tying the material to the passage, 4-6 reflection questions, and a short closing prayer. Do NOT add "I will" or "who I'll reach" prompts -- the Member Tool provides those as interactive fields.)
+===FACILITATOR_TL===
+# Gabay ng Facilitator - ${head}
+(the SAME facilitator guide above, fully rendered in warm, natural conversational Tagalog a Filipino small-group leader would actually use; keep Scripture references and direct quotes as-is)
+===PARTICIPANT_TL===
+# Gabay ng Kalahok - ${head}
+(the SAME participant guide above, in natural Tagalog)
+===END===`;
+}
+
+// Build the prompt from the custom-material fields; show/hide Step 2 accordingly.
+function mpBuildFromCustom(){
+  const title = ((document.getElementById('mpCustomTitle')||{}).value) || '';
+  const text  = ((document.getElementById('mpCustomText') ||{}).value) || '';
+  const promptEl = document.getElementById('mpPrompt');
+  const step2 = document.getElementById('mpStep2');
+  if(text.trim()){
+    if(promptEl) promptEl.value = mpBuildPromptCustom({ title: title, text: text });
+    if(step2) step2.style.display = '';
+  } else {
+    if(promptEl) promptEl.value = '';
+    if(step2) step2.style.display = 'none';
+  }
+  if(typeof _mpDisarmAiLinks === 'function') _mpDisarmAiLinks();
+}
+
+// Toggle between the devotional source and the bring-your-own-material source.
+function mpSetSource(kind){
+  _mpSource = (kind === 'custom') ? 'custom' : 'devotional';
+  const on ='flex:1;font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:var(--surface2);color:var(--ink);border:1px solid var(--border)';
+  const off='flex:1;font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 0;cursor:pointer;border-radius:8px;background:transparent;color:var(--muted);border:1px solid var(--border)';
+  const bd=document.getElementById('mpSrcDevo'), bc=document.getElementById('mpSrcCustom');
+  if(bd) bd.style.cssText = (_mpSource==='devotional')?on:off;
+  if(bc) bc.style.cssText = (_mpSource==='custom')?on:off;
+  const pd=document.getElementById('mpSrcDevoPanel'), pc=document.getElementById('mpSrcCustomPanel');
+  if(pd) pd.style.display = (_mpSource==='devotional')?'':'none';
+  if(pc) pc.style.display = (_mpSource==='custom')?'':'none';
+  if(_mpSource==='custom'){ mpBuildFromCustom(); }
+  else { mpLoadDevotional(); }
+}
+
+// Date change: always reload any saved guide for that date; reload the devotional
+// only when the devotional source is active (mpLoadExisting may flip us to custom).
+function mpOnDateChange(){
+  mpLoadExisting();
+  if(_mpSource==='devotional') mpLoadDevotional();
+}
+
 async function mpCopyPrompt(){
   const t = document.getElementById('mpPrompt');
   try{ await navigator.clipboard.writeText(t.value); toast('Prompt copied — paste it into your AI','✅'); }
@@ -1982,11 +2081,16 @@ async function mpLoadExisting(){
   const date = document.getElementById('mpDate').value || _mpToday();
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,raw_paste,status,shared_to_library')
+      .select('facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,raw_paste,status,shared_to_library,source_kind,source_title,source_text')
       .eq('lcl_id', me.id).eq('meeting_date', date).maybeSingle();
     if(error) throw error;
     const _sl = document.getElementById('mpShareLib');
     if(data){
+      if(data.source_kind === 'custom'){
+        const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = data.source_title || '';
+        const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = data.source_text  || '';
+        mpSetSource('custom');
+      }
       document.getElementById('mpPaste').value = data.raw_paste || '';
       document.getElementById('mpFacEdit').value = data.facilitator_md || '';
       document.getElementById('mpParEdit').value = data.participant_md || '';
@@ -2002,6 +2106,9 @@ async function mpLoadExisting(){
       document.getElementById('mpParEdit').value = '';
       document.getElementById('mpFacEditTl').value = '';
       document.getElementById('mpParEditTl').value = '';
+      const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = '';
+      const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = '';
+      if(_mpSource==='custom') mpBuildFromCustom();
       _mpShowTl(false);
       if(_sl) _sl.checked = false;
       document.getElementById('mpPreview').style.display = 'none';
@@ -2010,15 +2117,24 @@ async function mpLoadExisting(){
 }
 
 async function mpSave(status){
-  if(!_mpDevo){ toast('Pick a devotional first','⚠️'); return; }
   const me = _liveLeaderIdName();
   if(!me || !me.id){ toast('Session not ready — reopen this screen','⚠️'); return; }
+  const isCustom = (_mpSource === 'custom');
+  const custTitle = (((document.getElementById('mpCustomTitle')||{}).value)||'').trim();
+  const custText  = (((document.getElementById('mpCustomText') ||{}).value)||'').trim();
+  if(!isCustom && !_mpDevo){ toast('Pick a devotional first','⚠️'); return; }
+  if(isCustom && !custText){ toast('Paste your material first','⚠️'); return; }
   const fac = (document.getElementById('mpFacEdit').value||'').trim();
   const par = (document.getElementById('mpParEdit').value||'').trim();
   if(!fac || !par){ toast('Both guides need content before publishing','⚠️'); return; }
   const date = document.getElementById('mpDate').value || _mpToday();
   const payload = {
-    lcl_id: me.id, devotional_id: _mpDevo.id, meeting_date: date,
+    lcl_id: me.id,
+    devotional_id: isCustom ? null : _mpDevo.id,
+    source_kind: isCustom ? 'custom' : 'devotional',
+    source_title: isCustom ? (custTitle || null) : null,
+    source_text: isCustom ? (custText || null) : null,
+    meeting_date: date,
     facilitator_md: fac, participant_md: par,
     facilitator_md_tl: (document.getElementById('mpFacEditTl').value||'').trim() || null,
     participant_md_tl: (document.getElementById('mpParEditTl').value||'').trim() || null,
