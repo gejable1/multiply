@@ -1196,6 +1196,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <div id="mpDevoTitle" style="margin-top:10px;font-size:13.5px;color:var(--muted)">Loading…</div>
       </div>
       <div id="mpSrcCustomPanel" style="display:none">
+        <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Start from a BTLI lesson (optional)</label>
+        <select id="mpBtliPick" onchange="mpPrefillBtli()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:13.5px">
+          <option value="">— None (paste your own below) —</option>
+        </select>
         <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Title (optional)</label>
         <input id="mpCustomTitle" oninput="mpBuildFromCustom()" placeholder="e.g. Loving your neighbor" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:14px">
         <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Material to study (paste an article, story, or short lesson)</label>
@@ -1521,7 +1525,9 @@ function _liveLeaderIdName(){
 }
 // ═══════════ Meeting Prep — BYO-AI small-group guides (PR-2) ═══════════
 let _mpDevo = null;
-let _mpSource = 'devotional';   // 'devotional' | 'custom'  (BTLI pre-fill = Slice 2b)
+let _mpSource = 'devotional';   // 'devotional' | 'custom'
+let _mpCustomOrigin = 'custom';  // 'custom' | 'btli' - provenance of the custom material
+let _mpBtliLessons = null;       // cached published BTLI catalog for the pre-fill dropdown
 
 function _mpToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
@@ -1663,6 +1669,8 @@ async function _mpNewLesson(){
   document.getElementById('mpPreview').style.display = 'none';
   const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = '';
   const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = '';
+  const _bp=document.getElementById('mpBtliPick'); if(_bp) _bp.value = '';
+  _mpCustomOrigin = 'custom';
   mpSetSource('devotional');
 }
 async function mpLoadMyLessons(){
@@ -1684,7 +1692,7 @@ async function mpLoadMyLessons(){
       (devos||[]).forEach(d=>{ titles[d.id]=d.title; });
     }
     _mpMyGuides = {};
-    guides.forEach(g=>{ g._title = (g.source_kind==='custom' ? (g.source_title || 'Custom lesson') : (titles[g.devotional_id] || '(untitled lesson)')); _mpMyGuides[g.id]=g; });
+    guides.forEach(g=>{ g._title = ((g.source_kind && g.source_kind!=='devotional') ? (g.source_title || (g.source_kind==='btli'?'BTLI lesson':'Custom lesson')) : (titles[g.devotional_id] || '(untitled lesson)')); _mpMyGuides[g.id]=g; });
     if(!guides.length){
       box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--muted)">'
         + '<div style="font-size:30px;margin-bottom:8px">📖</div>'
@@ -1727,7 +1735,7 @@ async function mpLoadLibrary(){
     if(dids.length){ const { data:dv } = await db.from('devotionals').select('id,title').in('id',dids); (dv||[]).forEach(d=>{ titles[d.id]=d.title; }); }
     if(lids.length){ const { data:ms } = await db.from('members').select('id,name,lc_group').in('id',lids); (ms||[]).forEach(m=>{ authors[m.id]= m.lc_group || (((m.name||'').split(' ')[0])+"'s LCG"); }); }
     _mpLibGuides = {};
-    guides.forEach(g=>{ g._title = (g.source_kind==='custom' ? (g.source_title||'Custom lesson') : (titles[g.devotional_id]||'(untitled lesson)')); g._author = authors[g.lcl_id]||'another LC'; g._mine = !!(me && me.id && g.lcl_id === me.id); _mpLibGuides[g.id]=g; });
+    guides.forEach(g=>{ g._title = ((g.source_kind && g.source_kind!=='devotional') ? (g.source_title||(g.source_kind==='btli'?'BTLI lesson':'Custom lesson')) : (titles[g.devotional_id]||'(untitled lesson)')); g._author = authors[g.lcl_id]||'another LC'; g._mine = !!(me && me.id && g.lcl_id === me.id); _mpLibGuides[g.id]=g; });
     if(!guides.length){
       box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--muted)">'
         + '<div style="font-size:30px;margin-bottom:8px">📚</div>'
@@ -1977,7 +1985,7 @@ function mpSetSource(kind){
   const pd=document.getElementById('mpSrcDevoPanel'), pc=document.getElementById('mpSrcCustomPanel');
   if(pd) pd.style.display = (_mpSource==='devotional')?'':'none';
   if(pc) pc.style.display = (_mpSource==='custom')?'':'none';
-  if(_mpSource==='custom'){ mpBuildFromCustom(); }
+  if(_mpSource==='custom'){ mpLoadBtliLessons(); mpBuildFromCustom(); }
   else { mpLoadDevotional(); }
 }
 
@@ -1986,6 +1994,57 @@ function mpSetSource(kind){
 function mpOnDateChange(){
   mpLoadExisting();
   if(_mpSource==='devotional') mpLoadDevotional();
+}
+
+// Slice 2b: populate the "Start from a BTLI lesson" dropdown from the published
+// BTLI catalog (pipeline_lessons; RLS allows church_id NULL OR own church). The
+// LCG-weekly text lives only in the lesson HTML, so we seed the material box with
+// what IS in the catalog -- title + aim + scripture -- as a springboard the leader
+// edits. Cached per session; deduped with overlay precedence (a church row beats
+// its global base twin, same as renderMltPathway).
+async function mpLoadBtliLessons(){
+  const sel = document.getElementById('mpBtliPick');
+  if(!sel || _mpBtliLessons !== null) return;
+  try{
+    const { data, error } = await db.from('pipeline_lessons')
+      .select('id,level,lesson_number,title_en,aim,scripture_refs,church_id')
+      .eq('published', true).eq('track', 'BTLI');
+    if(error) throw error;
+    const byKey = {};
+    (data || []).forEach(function(l){
+      const k = (l.level==null?'':l.level) + '|' + (l.lesson_number==null?'':l.lesson_number);
+      const ex = byKey[k];
+      if(!ex || (l.church_id && !ex.church_id)) byKey[k] = l;
+    });
+    _mpBtliLessons = Object.keys(byKey).map(function(k){ return byKey[k]; })
+      .sort(function(a,b){ return ((a.level||0)-(b.level||0)) || ((a.lesson_number||0)-(b.lesson_number||0)); });
+    _mpBtliLessons.forEach(function(l){
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      const n = (l.lesson_number != null) ? ('L' + l.lesson_number + ' - ') : '';
+      opt.textContent = n + (l.title_en || 'BTLI lesson');
+      sel.appendChild(opt);
+    });
+  }catch(e){ console.warn('mpLoadBtliLessons (non-fatal):', e); _mpBtliLessons = []; }
+}
+
+// Seed Title + Material from the chosen BTLI lesson; "- None -" reverts to custom.
+function mpPrefillBtli(){
+  const sel = document.getElementById('mpBtliPick');
+  if(!sel) return;
+  const id = sel.value;
+  if(!id){ _mpCustomOrigin = 'custom'; return; }
+  const l = (_mpBtliLessons || []).find(function(x){ return x.id === id; });
+  if(!l) return;
+  const title = l.title_en || '';
+  const parts = [];
+  if(title) parts.push(title);
+  if(l.aim && String(l.aim).trim()) parts.push('Aim: ' + String(l.aim).trim());
+  if(l.scripture_refs && String(l.scripture_refs).trim()) parts.push('Scripture: ' + String(l.scripture_refs).trim());
+  const ct = document.getElementById('mpCustomTitle'); if(ct) ct.value = title;
+  const cx = document.getElementById('mpCustomText');  if(cx) cx.value = parts.join('\n\n');
+  _mpCustomOrigin = 'btli';
+  mpBuildFromCustom();
 }
 
 async function mpCopyPrompt(){
@@ -2086,7 +2145,8 @@ async function mpLoadExisting(){
     if(error) throw error;
     const _sl = document.getElementById('mpShareLib');
     if(data){
-      if(data.source_kind === 'custom'){
+      if(data.source_kind === 'custom' || data.source_kind === 'btli'){
+        _mpCustomOrigin = data.source_kind;
         const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = data.source_title || '';
         const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = data.source_text  || '';
         mpSetSource('custom');
@@ -2108,6 +2168,8 @@ async function mpLoadExisting(){
       document.getElementById('mpParEditTl').value = '';
       const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = '';
       const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = '';
+      const _bp=document.getElementById('mpBtliPick'); if(_bp) _bp.value = '';
+      _mpCustomOrigin = 'custom';
       if(_mpSource==='custom') mpBuildFromCustom();
       _mpShowTl(false);
       if(_sl) _sl.checked = false;
@@ -2131,7 +2193,7 @@ async function mpSave(status){
   const payload = {
     lcl_id: me.id,
     devotional_id: isCustom ? null : _mpDevo.id,
-    source_kind: isCustom ? 'custom' : 'devotional',
+    source_kind: isCustom ? _mpCustomOrigin : 'devotional',
     source_title: isCustom ? (custTitle || null) : null,
     source_text: isCustom ? (custText || null) : null,
     meeting_date: date,
