@@ -3604,4 +3604,74 @@ For surgical edits, Claude writes a Python patcher in `/tmp`, runs it against a 
 
 ---
 
+### **348. The Giving Journey L1-gate is a lockstep invariant -- MMT and MLT must BOTH gate at `pipeline_level >= 1`**
+
+The formation track begins at L1 (#341). MMT `renderGivingJourney` gates the door; the MLT companion card (`_refreshGivingCompanions`) must MIRROR it -- resolve each covenant member's level (`members.select('id,pipeline_level').in('id', memberIds)`) and filter to `>= 1`, failing OPEN on a hard level-fetch error so a transient glitch never blanks a legit view. A disciple who opened while ungated, or was later moved to L0, is DORMANT on the leader side (hidden, not deleted) and reappears at L1. The gate is client-side only (RLS is member-insert, no level check), so the two views silently diverged until this -- an L0 member showed all 6 rungs on the leader's card while invisible on her own.
+
+**RULE:** the giving door/rungs gate at `pipeline_level >= 1` in BOTH MMT and MLT; a dormant L0 covenant persists (never auto-closed) and reappears at L1.
+
+**Established July 19, 2026 (Session 75). Invariant #348 added - count now 348.**
+
+---
+
+### **349. The L0 door-gate hides only the INVITATION -- an already-open covenant's close control is reachable at any level (theirs to close, #331)**
+
+#331 = the covenant is the disciple's to open AND to close; the leader never can. The L1 door-gate (#341/#348) must therefore hide only the OPEN-invitation for L0, never strand a covenant already opened. MMT `renderGivingJourney` blanks the section only when `!cov && pipeline_level < 1`; if an open covenant exists it always renders (the 'open' view carries the close control), whatever the level. Symptom that forced this: a member who opted in while ungated dropped to L0, the whole section blanked, and she could never reach her own off-switch -- the covenant orphaned (invisible to her, visible to the leader; closed via one human-gated SQL). Deliberate asymmetry: the leader companions ACTIVE journeys (dormant-L0 hidden on MLT, #348), but the member always controls their OWN covenant (close reachable at any level).
+
+**RULE:** gate the invitation door by level, never the close control -- an already-open covenant is always reachable by its owner (#331) regardless of `pipeline_level`.
+
+**Established July 19, 2026 (Session 75). Invariant #349 added - count now 349.**
+
+---
+
+### **350. MLT giving affirmation is cumulative per-member -- an LCL affirms only rungs at/below each disciple's own level; MMT stays full aspiration**
+
+In the MLT giving companion card a rung is affirmable only when `rung.level <= disciple.pipeline_level` (cumulative -- every rung up to and including their level). Higher rungs stay VISIBLE but render LOCKED (dimmed, dashed, "Opens at Level N", no onclick), with a defense-in-depth guard in `_gjAffirm` that refuses an above-level affirmation even if a locked row fires. Per-member: two disciples under one LCL gate independently by their own level (state carries `level` per companion; resolved from the same `lvlById` as #348). The member's own MMT view is UNCHANGED -- the full 6-rung path stays visible as aspiration (doctrine: visible from L1 onward, not unlocked rung-by-rung, GIVING_JOURNEY.md). Only the leader's *affirm* action is level-bounded.
+
+**RULE:** MLT affirmation is cumulative-gated (`rung.level <= member.level`); above-level rungs show locked, never checkable; the member's aspiration view stays full.
+
+**Established July 19, 2026 (Session 75). Invariant #350 added - count now 350.**
+
+---
+
+### **351. A catch-all "Others" reason requires its free-text before submitting -- and every reason-label map must learn the new code**
+
+When a fixed-reason picker gains a catch-all ("Iba pa"/Others) sitting above a Detail free-text box, the catch-all must NOT submit on an empty box -- an empty "other" tells the pastor nothing. `_submitOther()` focuses the box and prompts when empty, submitting `reason_code='other'` only once there's text. Because the reasons fire `_submitCheckin(code)` immediately, the catch-all needs its OWN handler. And any new `reason_code` must be taught to EVERY map that renders it (`CHECKIN_LABELS` in `lcg_pulse_report.html`) or it silently falls back to a generic "Replied" pill.
+
+**RULE:** a catch-all reason requires its detail box before submitting; add the new code to every reason-label map, not just the button.
+
+**Established July 19, 2026 (Session 75). Invariant #351 added - count now 351.**
+
+---
+
+### **352. codeload / raw / `git show` are EOL-blind -- verify line endings via a clone + `git cat-file blob`**
+
+GitHub's archive export (codeload tarball, `raw.githubusercontent`) applies `.gitattributes text eol=lf` normalization, so it shows LF even when the committed blob is CRLF -- a byte-for-byte codeload back-check CANNOT reveal a CRLF blob or verify an eol-only fix (this compounds #340: codeload is unreliable for BOTH staleness AND eol). `git show HEAD:<file>` ALSO applies the smudge filter and lies the same way; only `git cat-file blob <oid>` returns the raw stored bytes. To find/fix eol drift: `git clone` + `git ls-files --eol | grep i/crlf` to locate offenders, renormalize from the raw blob (`git cat-file blob HEAD:<f>` | replace CRLF->LF), prove content-identical via `git diff --cached --ignore-space-at-eol` (empty), and back-check the PR via clone + `git cat-file` (NOT codeload). One offender found + fixed this session: `lessons/btli101_xrw5fg/btli1_l3_participant.html` (561 CRLF lines, #3 restored).
+
+**RULE:** eol-sensitive verification uses `git cat-file blob` (raw) via a clone; codeload and `git show` both normalize and will lie about CRLF.
+
+**Established July 19, 2026 (Session 75). Invariant #352 added - count now 352.**
+
+---
+
+### **353. `pipeline_lessons` is the shared lesson catalog -- leader-readable (global OR own church), BTLI is `track='BTLI'`, dedup by overlay precedence**
+
+The lessons catalog lives in `pipeline_lessons` (level, track, lesson_number, title_en/tl, aim, scripture_refs, outline_md, handout_md, leader_notes_md, published, church_id, ...). RLS `pipeline_lessons_tenant_select` (authenticated) = `church_id IS NULL OR church_id = auth_church_id()` -- a leader reads the GLOBAL catalog (church_id null) PLUS their own church's overlays (no new policy needed; `multiply_shared.js`/MD already query it directly). BTLI lessons carry `track='BTLI'` (capitalized; Pre-Pipeline is `'Usbong'`). A global base row and a church overlay can BOTH match a `level|lesson_number`, so dedup with overlay precedence (a church row beats its base twin) -- the same rule as `renderMltPathway` / the celebrate feed. As of S75 only `aim` + `scripture_refs` are populated for BTLI (11 published); `outline_md`/`leader_notes_md` are empty -- the LCG-weekly guide text lives only in the lesson HTML, not the catalog.
+
+**RULE:** query the lesson catalog from `pipeline_lessons` (RLS-safe), filter `track='BTLI'` + `published`, and dedup catalog-vs-overlay by overlay precedence keyed on `level|lesson_number`.
+
+**Established July 19, 2026 (Session 75). Invariant #353 added - count now 353.**
+
+---
+
+### **354. Meeting Prep source is generalized -- devotional | btli | custom, one source-agnostic prompt skeleton; non-Scripture material MUST be Scripture-anchored**
+
+`lc_meeting_guides` gained `source_kind` ('devotional'|'btli'|'custom', default 'devotional', NOT NULL, CHECK) + `source_title` + `source_text` (migration 078); `devotional_id` is nullable. The BYO-AI two-guide prompt (RULES + timed 1-hour flow + EN/TL fences) is SOURCE-AGNOSTIC -- only the SOURCE block varies (`mpBuildPrompt` for a devotional's structured fields, `mpBuildPromptCustom` for free material). Because an article/story is NOT itself Scripture, the custom prompt MUST anchor the session in a NAMED Bible passage (the material illuminates the Word, never replaces it) -- a non-negotiable pastoral guardrail. BTLI is a convenience pre-fill of the custom path (seeds title+aim+scripture from the catalog #353, stamped `source_kind='btli'`); paste and `.txt`/`.md` upload (client-side FileReader, nothing sent to a server) feed the same custom path. Any "all guides for a leader" title lookup must treat any non-devotional `source_kind` (use `source_title`), not just 'custom'.
+
+**RULE:** Meeting Prep sources share one prompt skeleton with a swappable SOURCE block; non-Scripture material must be Scripture-anchored; stamp `source_kind` and surface `source_title` for every non-devotional guide.
+
+**Established July 19, 2026 (Session 75). Invariant #354 added - count now 354.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
