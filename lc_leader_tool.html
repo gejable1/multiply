@@ -1203,6 +1203,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
         <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Title (optional)</label>
         <input id="mpCustomTitle" oninput="mpBuildFromCustom()" placeholder="e.g. Loving your neighbor" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:14px">
         <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 5px">Material to study (paste an article, story, or short lesson)</label>
+        <div style="margin-bottom:6px;font-size:12px;color:var(--muted)">or upload a text file: <input type="file" id="mpUpload" accept=".txt,.md,.markdown,text/plain,text/markdown" onchange="mpUploadFile(event)" style="font-size:12px;color:var(--muted)"></div>
         <textarea id="mpCustomText" rows="6" oninput="mpBuildFromCustom()" placeholder="Paste the full text here. The AI will build a Scripture-anchored 1-hour study from it." style="width:100%;box-sizing:border-box;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:10px;color:var(--ink);font-family:inherit;font-size:12.5px;line-height:1.5;resize:vertical"></textarea>
       </div>
     </div>
@@ -1670,6 +1671,7 @@ async function _mpNewLesson(){
   const _ct=document.getElementById('mpCustomTitle'); if(_ct) _ct.value = '';
   const _cx=document.getElementById('mpCustomText');  if(_cx) _cx.value = '';
   const _bp=document.getElementById('mpBtliPick'); if(_bp) _bp.value = '';
+  const _up=document.getElementById('mpUpload'); if(_up) _up.value = '';
   _mpCustomOrigin = 'custom';
   mpSetSource('devotional');
 }
@@ -2045,6 +2047,32 @@ function mpPrefillBtli(){
   const cx = document.getElementById('mpCustomText');  if(cx) cx.value = parts.join('\n\n');
   _mpCustomOrigin = 'btli';
   mpBuildFromCustom();
+}
+
+// Slice 3: read a plain-text file (.txt/.md) straight into the material box. Text
+// only, capped, client-side FileReader (nothing is uploaded to a server). An
+// uploaded file is treated as custom material, not a BTLI seed.
+function mpUploadFile(ev){
+  const file = ev && ev.target && ev.target.files && ev.target.files[0];
+  if(!file) return;
+  const nm = (file.name || '').toLowerCase();
+  const okType = nm.endsWith('.txt') || nm.endsWith('.md') || nm.endsWith('.markdown') || (String(file.type||'').indexOf('text')===0);
+  if(!okType){ if(typeof toast==='function') toast('Please upload a .txt or .md text file.','⚠️'); ev.target.value=''; return; }
+  if(file.size > 512*1024){ if(typeof toast==='function') toast('That file is large - please keep it under 500 KB.','⚠️'); ev.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = function(){
+    const cx = document.getElementById('mpCustomText'); if(cx) cx.value = String(reader.result || '');
+    const ct = document.getElementById('mpCustomTitle');
+    if(ct && !ct.value.trim()){
+      const dot = (file.name||'').lastIndexOf('.');
+      ct.value = (dot > 0 ? file.name.slice(0, dot) : (file.name || ''));
+    }
+    const bp = document.getElementById('mpBtliPick'); if(bp) bp.value = '';
+    _mpCustomOrigin = 'custom';
+    mpBuildFromCustom();
+  };
+  reader.onerror = function(){ if(typeof toast==='function') toast('Could not read that file.','⚠️'); };
+  reader.readAsText(file);
 }
 
 async function mpCopyPrompt(){
