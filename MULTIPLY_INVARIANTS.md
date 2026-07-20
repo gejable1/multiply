@@ -3674,4 +3674,54 @@ The lessons catalog lives in `pipeline_lessons` (level, track, lesson_number, ti
 
 ---
 
+### **355. Member delete in LCL hands is empty-only and server-guarded -- catalog-driven, telemetry-blind, and it lives in the database not the client**
+
+`mlt_delete_empty_member(p_member_id uuid)` (migration 079, SECURITY DEFINER, `set search_path=public`) is the ONLY delete path an LCL gets. It does its OWN authorization via `auth_member_id()` (caller must be the target's `discipler_id`, or a platform admin, same church) and refuses anyone with ANY non-telemetry footprint. The guard is CATALOG-DRIVEN: it loops every live FK into `public.members` (via `pg_constraint`) and blocks if the member is referenced by any formation/record row -- so new tables auto-covered, the guard never silently rots, and it errs toward refusing. It IGNORES pure telemetry (fixed denylist: `view_log`, `leader_sessions`, `profile_tokens`, `notifications`, `announcement_acks`, `announcement_retraction_dismissals`, `prayer_list_opens`, `attendance_self_attest_log`) -- critical because merely OPENING the member detail writes a `view_log` row, so counting it would make delete impossible. It pre-clears the NO-ACTION/RESTRICT telemetry rows before deleting (else the DELETE FK-fails). Returns jsonb the client renders as a friendly message (`{ok:true,name}` or `{ok:false,reason:'has_history'|'not_your_member'|'cannot_delete_self'|...,blockers:[...]}`). `members` has 67 inbound FKs, 22 CASCADE -- a raw delete would silently erase pathway progress, assessments, giving covenants, so 49 LCLs never get a raw `members.delete()` (MD/pastor still does). UI: a danger button at the bottom of the member detail (own-LCL/Pastor, mirrors Reset PIN). Typos are fixed by the disciple self-renaming in MMT (`editField('name')` writes `members.name`), not by delete.
+
+**RULE:** Destructive member ops in LCL hands are empty-only and server-guarded; the guard is catalog-driven over live FKs, treats telemetry as disposable (denylist) but every formation row as a hard block. Never hand many low-trust users a raw `members.delete()`.
+
+**Established July 20, 2026 (Session 76). Invariant #355 added - count now 355.**
+
+---
+
+### **356. A feature documented in an invariant can be silently GONE from the code -- the doc is intent, not proof of presence; whole-file uploads drop code without a trace**
+
+The MLT weekly attendance gate (`runWeeklyAttendanceGate`, Inv #100) was described as live in the invariants, yet had been ABSENT from `lc_leader_tool.html` for ~2 months -- silently dropped in a May-28-2026 "Add files via upload" whole-file commit (`d463aaa`) and never re-added. `git log -S` pinpointed the removal; the last-good copy was `10971c8`. This is #97 (handoff notes are hypotheses) applied to invariants themselves: an invariant records intent/design, NOT current code state. Before assuming a documented feature is live, GREP the deployed file for the actual function -- especially for anything predating the surgical-edit era. This is also WHY surgical BASE->WANT edits (#347) exist: whole-file uploads are exactly how code vanishes unnoticed. When restored, the gate was made attendance-ONLY -- the old "merged wall" also surfaced unread announcements, but the announcement inbox now owns that (accumulates as unread + badge), so the coupling was stripped.
+
+**RULE:** An invariant documents a feature; it does not prove the feature is in the code. Grep the deployed file before trusting presence. Whole-file uploads silently drop code -- verify, don't assume.
+
+**Established July 20, 2026 (Session 76). Invariant #356 added - count now 356.**
+
+---
+
+### **357. A new UI enum option must ship with its DB CHECK widen in the SAME change -- else the option renders but the DB rejects its value at submit (silent-until-submit)**
+
+The S75 "Iba pa" check-in shipped the FRONTEND (button + `_submitCheckin('other')`) but never widened `lcg_checkins_reason_chk` (migration 054 allowed only 7 reason codes, not `'other'`) -- so every "Iba pa" submission failed with `violates check constraint`, on every device, for everyone. The user sees a working option that mysteriously "won't send" -- it looks like a bug (and NOT a cache/install issue; the opposite -- the user is on the NEW build). This is #290/#336 recurring: the frontend enum and the DB CHECK are ONE change, not two. Migration 080 widened the constraint (DROP + re-ADD with `'other'`). Diagnostic tell: a submit-time (not load-time) failure naming a `_chk`/`_check` constraint means the value the UI sends isn't in the constraint -- verify the CHECK DDL from the ORIGINATING migration (#290), not schema.json.
+
+**RULE:** Ship a new UI enum option and its DB CHECK widen together. A rendered option whose value the DB rejects is a silent-until-submit failure; when a submit fails on a `_chk` constraint, the fix is the constraint, not the frontend.
+
+**Established July 20, 2026 (Session 76). Invariant #357 added - count now 357.**
+
+---
+
+### **358. Do NOT transmit large payloads as base64 text through a CC prompt -- homoglyph/encoding corruption; deliver large blocks and whole files via sha-verified upload**
+
+A ~20 KB base64 blob embedded in a CC patcher arrived CORRUPTED: 16 characters were Cyrillic homoglyphs of Latin base64 letters (U+0420 for `P`, U+0417 for `Z`/`3`, U+0434 for `g`/`d`) -- a clipboard/font/transmission artifact. base64 is ASCII-only, so `base64.b64decode` raised before any file write; CC correctly HALTED and refused to guess-substitute (the reversal is genuinely ambiguous -- U+0417 look-alikes BOTH `Z` and `3`). The clean path: deliver the finished WHOLE FILE via upload (UP-var proven by WANT sha #339), located BY its WANT sha (loop the uploads dir, match the sha -- impossible to grab the wrong file), with a BASE+WANT gate (#338). No base64 in the prompt = no corruption surface. Reserve base64-in-prompt for small ASCII-safe payloads.
+
+**RULE:** Large payloads (blocks, whole files) go to CC via sha-verified file upload, located by the WANT sha, never as base64 text in the prompt. A corrupt payload must HALT, never be guess-repaired.
+
+**Established July 20, 2026 (Session 76). Invariant #358 added - count now 358.**
+
+---
+
+### **359. `multiply-sw.js` is network-first for HTML/JS -- a CACHE_VERSION bump refreshes the OFFLINE shell and forces a clean purge; it is NOT how online users get fresh code**
+
+The sole active service worker (`multiply-sw.js`, registered only by `index.html`, scope `./`; the per-tool `service-worker.js`/`service-worker-member.js` are retired kill-switch stubs) is NETWORK-FIRST for navigations + HTML + JS, cache-first only for immutable static assets. So an ONLINE user already gets the fresh deploy on next app open -- the cache is only an offline fallback. Bumping `CACHE_VERSION` (`v2-2026-07-17` -> `v3-2026-07-20`) forces the browser to install the new SW, whose `activate` deletes every non-current cache and `install` re-precaches the current SHELL_ASSETS -- refreshing the OFFLINE fallback and purging leftovers, with `skipWaiting()`+`clients.claim()` for prompt activation. Good hygiene after a deploy, but NOT why an online user does or doesn't see new code (if stubbornly stale, a full close+reopen is the sure fix). Corollary: if online users see stale HTML, suspect a networkFirst bug (e.g. a missed `Response.clone()` #310), not the cache version.
+
+**RULE:** HTML/JS is network-first -- online users get fresh code on next open; a `CACHE_VERSION` bump refreshes the offline shell + forces a clean purge, it is not the online-freshness lever. Don't diagnose an online-staleness report by bumping the cache.
+
+**Established July 20, 2026 (Session 76). Invariant #359 added - count now 359.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
