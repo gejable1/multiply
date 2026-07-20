@@ -3564,6 +3564,8 @@ function openMember(id){
   _refreshEnrollBtn(mem);
   // Show Reset PIN on the same "is this my member" rule (Session 22)
   _refreshResetPinBtn(mem);
+  // Delete member (empty-only, duplicate cleanup) - own-LCL/Pastor only
+  _refreshDeleteZone(mem);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -4652,6 +4654,74 @@ function _refreshResetPinBtn(mem){
   const isMyMember = (mem.facilitator_id === LEADER.leaderId) || (mem.discipler_id === LEADER.leaderId);
   const isPastor   = (LEADER.leaderLevel || 0) >= 5;
   btn.style.display = (isMyMember || isPastor) ? '' : 'none';
+}
+
+// -------------------------------------------------------------
+// DELETE MEMBER (empty-only, duplicate cleanup)
+// Rendered INSIDE #detailSections (scrolls with the profile, rebuilt each open).
+// Shown only to this member's own LCL or a Pastor -- same gate as Reset PIN.
+// The real guard is server-side: mlt_delete_empty_member() (migration 079)
+// refuses if the person has ANY non-telemetry history and only deletes a
+// genuinely-empty duplicate.
+// -------------------------------------------------------------
+function _refreshDeleteZone(mem){
+  const host = document.getElementById('detailSections');
+  if(!host || !mem) return;
+  const old = document.getElementById('mltDangerZone');
+  if(old) old.remove();
+  const isMyMember = (mem.facilitator_id === LEADER.leaderId) || (mem.discipler_id === LEADER.leaderId);
+  const isPastor   = (LEADER.leaderLevel || 0) >= 5;
+  if(!(isMyMember || isPastor)) return;
+  const div = document.createElement('div');
+  div.id = 'mltDangerZone';
+  div.style.cssText = 'margin-top:22px;padding-top:14px;border-top:1px solid var(--border)';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.style.cssText = 'width:100%;padding:11px;background:transparent;border:1px solid var(--red);color:var(--red);border-radius:var(--r);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer';
+  btn.textContent = String.fromCodePoint(0x1F5D1) + ' Delete this member';
+  btn.onclick = function(){ deleteMember(mem.id); };
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:10.5px;color:var(--muted);margin-top:6px;text-align:center';
+  note.textContent = 'For duplicate names only. Blocked if this person already has any records.';
+  div.appendChild(btn);
+  div.appendChild(note);
+  host.appendChild(div);
+}
+
+async function deleteMember(id){
+  const mem = myMembers.find(m=>m.id===id) || (currentMember && currentMember.id===id ? currentMember : null);
+  const nm = mem ? mem.name : 'this member';
+  if(!confirm('Delete ' + nm + '?\n\nThis is meant for DUPLICATE names. If this person has any real records, the delete will be safely blocked.\n\nThis cannot be undone.')) return;
+  try{
+    const { data, error } = await db.rpc('mlt_delete_empty_member', { p_member_id: id });
+    if(error) throw error;
+    if(data && data.ok){
+      toast(String.fromCodePoint(0x1F5D1) + ' ' + (data.name || nm) + ' deleted','success');
+      try{ await loadMyMembers(); }catch(_){}
+      currentFilter = 'all'; filterStr = '';
+      if(typeof _activateFilterChip === 'function'){ try{ _activateFilterChip('all'); }catch(_){} }
+      showScreen('screenMembers');
+      renderMemberList();
+      return;
+    }
+    const reason = data ? data.reason : 'unknown';
+    if(reason === 'has_history'){
+      const LBL = { pathway_progress:'pathway rungs', member_profiles:'assessments', gifts_diagnostic:'a gifts assessment', diagnostic_results:'a salvation diagnostic', giving_covenant:'a giving covenant', library_progress:'BTLI lessons', library_quiz_attempts:'BTLI quizzes', svi_snapshots:'SVI history', devotional_reflections:'devotionals', gratitude_entries:'gratitude entries', attendance:'attendance', debrief_records:'debriefs', interventions:'care notes', lc_meeting_responses:'meeting responses', ministry_roster_members:'a ministry role', ministry_intake:'a ministry intake', prayer_requests:'prayer requests', prayer_list_items:'prayer items', prayer_intercessions:'intercessions', prayer_reminders:'prayer reminders', transfers:'a transfer', cohort_members:'a cohort', preachers:'a preacher record', members:'people they disciple' };
+      const items = (data.blockers || []).map(function(b){ return LBL[b.table] || b.table; });
+      const uniq = items.filter(function(v,i){ return items.indexOf(v) === i; });
+      const list = uniq.length ? uniq.join(', ') : 'existing records';
+      alert('Hindi pwede - ' + nm + ' has ' + list + '.\n\nIf this is a duplicate, use Transfer instead, or ask Pastor to merge.');
+    } else if(reason === 'not_your_member'){
+      toast('Not in your group - only the direct LCL (or Pastor) can delete.','error');
+    } else if(reason === 'cannot_delete_self'){
+      toast('You cannot delete your own record.','error');
+    } else {
+      toast('Could not delete (' + reason + ').','error');
+    }
+  }catch(e){
+    console.error('deleteMember failed:', e);
+    toast('Error: ' + (e.message || e),'error');
+  }
 }
 
 async function resetMemberPin(){
