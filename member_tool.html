@@ -2066,7 +2066,7 @@ body.lang-tl .tl-text{display:inline;}
 
       <!-- Family Huddle - static bilingual family-worship card (opens in a new tab) -->
       <div style="margin-top:1.5rem">
-        <button onclick="window.open('family_huddle_card.html','_blank')"
+        <button onclick="_openLessonViewerModal('family_huddle_card.html?embed=1', 'Family Huddle', true)"
           style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem;display:flex;align-items:center;gap:.85rem;cursor:pointer;font-family:inherit;text-align:left;transition:background .15s">
           <div style="font-size:26px;flex-shrink:0">👪</div>
           <div style="flex:1;min-width:0">
@@ -13301,6 +13301,32 @@ async function submitPrayerRequest(){
     btn.disabled = false;
     btn.innerHTML = orig;
   }
+}
+
+// Embedded viewer - full-screen iframe overlay so a standalone in-app page
+// (e.g. the Family Huddle card) opens INSIDE the app, not a new browser tab.
+// Mirrors the MLT/MD _openLessonViewerModal pattern. Close via the back chevron.
+function _openLessonViewerModal(url, label, hideNewTab){
+  let modal = document.getElementById('lessonViewerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'lessonViewerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(28,24,16,.92);display:flex;flex-direction:column;z-index:9500';
+    document.body.appendChild(modal);
+  }
+  const esc = MultiplyShared.escapeHTML;
+  const newTab = hideNewTab ? '' : '<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--gold);padding:5px 10px;background:var(--gold-soft);border-radius:6px;text-decoration:none;white-space:nowrap;flex-shrink:0">\u2197 New tab</a>';
+  modal.innerHTML =
+    '<div style="padding:.65rem .9rem;display:flex;align-items:center;gap:.55rem;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0">' +
+      '<button onclick="_closeLessonViewer()" aria-label="Close" style="background:transparent;border:none;color:var(--ink);font-size:22px;cursor:pointer;padding:2px 8px;line-height:1">\u2039</button>' +
+      '<div style="flex:1;min-width:0;font-size:14px;color:var(--ink);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(label) + '</div>' +
+      newTab +
+    '</div>' +
+    '<iframe src="' + esc(url) + '" style="flex:1;border:none;width:100%;background:#fff" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"></iframe>';
+}
+function _closeLessonViewer(){
+  const m = document.getElementById('lessonViewerModal');
+  if (m) m.remove();
 }
 
 function _esc(s){
