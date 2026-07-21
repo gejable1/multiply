@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="icon_dashboard.svg?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icon_dashboard_192.png?v=2">
+<link rel="shortcut icon" href="icon_dashboard_192.png?v=2">
+<link rel="apple-touch-icon" href="icon_dashboard_192.png?v=2">
+<title>Engagement — MULTIPLY</title>
+<!-- Non-blocking font load — protects against slow PH networks. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"></noscript>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="multiply_shared.js?v=12"></script>
+<script>try{if(new URLSearchParams(location.search).get('embed')==='1')document.documentElement.classList.add('embed');}catch(e){}</script>
+<style id="embedFix">html.embed .btn-back{display:none!important;}</style>
+<style>
+:root{
+  --bg:#f5f0e8;--surface:#ffffff;--surface2:#faf6ef;--surface3:#f0ebe0;
+  --border:#e2d8cc;--border2:#ccc0b0;
+  --ink:#1a1612;--ink2:#2a2218;--muted:#6b5f4f;--lighter:#9a8f80;--text:#3a3028;
+  --gold:#b8882a;--gold2:#d4a84a;--gold-bg:#fdf6e8;--gold-dim:#7a5518;--gold-light:#fef9f0;
+  --navy:#1b2a4a;--navy2:#243560;
+  --green:#2a5c40;--green2:#3d8a5e;--green-bg:#eef6f1;--green-light:#f5fbf7;--green-dim:#1a3a28;
+  --blue:#1a4a6b;--blue-bg:#e8f0f8;
+  --purple:#4a2a6b;--purple-bg:#f0eaf8;
+  --teal:#1a5a60;--teal-bg:#e8f5f5;
+  --red:#7a2020;--red-bg:#fdecea;--red-light:#fff5f5;
+  --orange:#7a4a10;--orange-bg:#fef3e8;
+  /* Zone palette — matches MD's ZONE_COLORS_CSS */
+  --z1:#2a5c40;--z1-bg:#eef6f1;
+  --z2:#d4a010;--z2-bg:#fff8e8;
+  --z3:#7a4a10;--z3-bg:#fef3e8;
+  --z4:#7a2020;--z4-bg:#fdecea;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --shadow2:0 4px 12px rgba(0,0,0,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:13px;}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--surface);border-bottom:2px solid var(--border);padding:0 1.25rem;display:flex;align-items:center;gap:1rem;height:54px;position:sticky;top:0;z-index:200;box-shadow:var(--shadow);}
+.brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.brand-logo{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:700;color:var(--green);white-space:nowrap;}
+.brand-sub{font-size:11px;color:var(--muted);border-left:1px solid var(--border);padding-left:8px;white-space:nowrap;}
+.spacer{flex:1;}
+.btn-back{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:6px 14px;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s;}
+.btn-back:hover{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+
+/* ── PAGE LAYOUT ── */
+.wrap{max-width:1200px;margin:0 auto;padding:1.25rem 1rem 3rem;}
+.page-h{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--ink);margin-bottom:.25rem;letter-spacing:-.01em;}
+.page-sub{font-size:12.5px;color:var(--muted);margin-bottom:1.5rem;}
+
+/* ── HERO STATS ── */
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;margin-bottom:1.5rem;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;}
+.stat-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:.45rem;}
+.stat-val{font-family:'Playfair Display',serif;font-size:1.75rem;font-weight:700;color:var(--ink);line-height:1;}
+.stat-foot{font-size:11px;color:var(--muted);margin-top:.4rem;}
+
+/* ── LEGEND + CAVEAT ── */
+.legend{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;margin-bottom:1.5rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center;font-size:11.5px;color:var(--text);}
+.legend-item{display:inline-flex;align-items:center;gap:5px;}
+.legend-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.caveat-bar{background:var(--gold-bg);border-left:3px solid var(--gold);border-radius:8px;padding:.65rem .9rem;margin-bottom:1.5rem;display:flex;gap:10px;align-items:flex-start;font-size:11.5px;line-height:1.55;color:var(--gold-dim);}
+
+/* ── LCG SECTION ── */
+.lcg-sec{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden;}
+.lcg-head{padding:.85rem 1.15rem;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:.85rem;user-select:none;}
+.lcg-head:hover{background:var(--surface3);}
+.lcg-chev{font-size:13px;color:var(--muted);transition:transform .15s;flex-shrink:0;}
+.lcg-sec.collapsed .lcg-chev{transform:rotate(-90deg);}
+.lcg-sec.collapsed .lcg-body{display:none;}
+.lcg-title{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;color:var(--ink);flex:1;}
+.lcg-title .lcg-count{font-family:'DM Sans',sans-serif;font-size:11px;color:var(--muted);font-weight:400;margin-left:.45rem;}
+.lcg-rollup{display:flex;gap:.85rem;flex-shrink:0;flex-wrap:wrap;}
+.rollup-chip{font-size:10.5px;color:var(--muted);background:white;border:1px solid var(--border);border-radius:6px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;}
+.rollup-chip b{color:var(--ink);font-weight:600;}
+
+/* ── MEMBER CARD ── */
+.lcg-body{padding:.65rem;}
+.mcard{background:white;border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;margin-bottom:.55rem;transition:border-color .15s;}
+.mcard:last-child{margin-bottom:0;}
+.mcard:hover{border-color:var(--border2);}
+.mcard-head{display:flex;align-items:center;gap:.65rem;margin-bottom:.5rem;}
+.mc-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:white;flex-shrink:0;}
+.mc-name-wrap{flex:1;min-width:0;}
+.mc-name{font-size:13.5px;font-weight:600;color:var(--ink);}
+.mc-name .mc-badge{font-size:9px;background:var(--gold-bg);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(184,136,42,.3);margin-left:.35rem;vertical-align:middle;font-weight:600;}
+.mc-name .mc-badge.test{background:rgba(167,139,250,.18);color:#7c3aed;border-color:rgba(167,139,250,.4);}
+.mc-name .mc-badge.guest{background:rgba(74,144,226,.16);color:#3a7bd1;border-color:rgba(74,144,226,.35);}
+.mc-meta{font-size:11px;color:var(--muted);margin-top:1px;display:flex;flex-wrap:wrap;gap:.5rem .85rem;}
+.mc-meta span{display:inline-flex;align-items:center;gap:3px;}
+
+/* ── PILLS ── */
+.pill-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.35rem;}
+.pill{font-size:10.5px;font-weight:500;padding:3px 9px;border-radius:10px;border:1px solid;display:inline-flex;align-items:center;gap:4px;line-height:1.45;}
+.pill b{font-weight:700;}
+.pill .pill-sub{opacity:.78;font-weight:400;margin-left:3px;}
+.pill.none{background:var(--surface2);color:var(--lighter);border-color:var(--border);font-style:italic;}
+/* Salvation pill — composite 3-piece pill */
+.pill-salv{display:inline-flex;align-items:stretch;gap:0;border-radius:10px;overflow:hidden;border:1px solid;font-size:10.5px;font-weight:500;line-height:1.45;}
+.pill-salv .ps-seg{padding:3px 8px;display:inline-flex;align-items:center;gap:3px;}
+.pill-salv .ps-divider{width:1px;background:currentColor;opacity:.18;}
+/* Zone pills */
+.pill.z1{background:var(--z1-bg);color:var(--z1);border-color:rgba(42,92,64,.3);}
+.pill.z2{background:var(--z2-bg);color:#8a6010;border-color:rgba(212,160,16,.45);}
+.pill.z3{background:var(--z3-bg);color:var(--z3);border-color:rgba(122,74,16,.4);}
+.pill.z4{background:var(--z4-bg);color:var(--z4);border-color:rgba(122,32,32,.4);}
+.pill-salv.z1{background:var(--z1-bg);color:var(--z1);border-color:rgba(42,92,64,.3);}
+.pill-salv.z2{background:var(--z2-bg);color:#8a6010;border-color:rgba(212,160,16,.45);}
+.pill-salv.z3{background:var(--z3-bg);color:var(--z3);border-color:rgba(122,74,16,.4);}
+.pill-salv.z4{background:var(--z4-bg);color:var(--z4);border-color:rgba(122,32,32,.4);}
+/* Assessment pills — neutral coloring with subtle differentiation */
+.pill.gifts{background:var(--green-bg);color:var(--green);border-color:rgba(42,92,64,.25);}
+.pill.disc{background:var(--blue-bg);color:var(--blue);border-color:rgba(26,74,107,.25);}
+.pill.enneagram{background:var(--gold-bg);color:var(--gold-dim);border-color:rgba(184,136,42,.3);}
+.pill.love_language{background:#fdebee;color:#8a2040;border-color:rgba(138,32,64,.25);}
+.pill.strengths{background:var(--teal-bg);color:var(--teal);border-color:rgba(26,90,96,.25);}
+.pill.conflict_style{background:var(--purple-bg);color:var(--purple);border-color:rgba(74,42,107,.25);}
+.pill.has-caveat{position:relative;}
+.pill.has-caveat::after{content:'⚠';font-size:9px;margin-left:3px;opacity:.85;}
+
+/* ── EMPTY/LOAD STATES ── */
+.empty-card{background:var(--surface);border:1.5px dashed var(--border);border-radius:12px;padding:2rem 1rem;text-align:center;color:var(--muted);font-size:13px;}
+.empty-card .emoji{font-size:1.75rem;margin-bottom:.4rem;}
+.spin-wrap{display:flex;flex-direction:column;align-items:center;gap:.85rem;padding:3rem 1rem;color:var(--muted);font-size:13px;}
+.spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.9s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PRINT ── */
+@media print{
+  body{background:white;}
+  .topbar,.btn-back,.lcg-head{cursor:default;}
+  .lcg-sec.collapsed .lcg-body{display:block !important;}
+  .lcg-chev{display:none;}
+  .lcg-sec{break-inside:avoid;}
+  .mcard{break-inside:avoid;}
+}
+
+/* ── MOBILE ── */
+@media (max-width:640px){
+  .wrap{padding:1rem .6rem 2rem;}
+  .page-h{font-size:1.35rem;}
+  .lcg-head{flex-wrap:wrap;}
+  .lcg-rollup{width:100%;margin-top:.35rem;}
+  .hero{grid-template-columns:1fr 1fr;}
+  .stat{padding:.85rem .9rem;}
+  .stat-val{font-size:1.4rem;}
+  .mc-meta{font-size:10.5px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═════════════════════════════════════════════════════════════
+     TOPBAR
+═══════════════════════════════════════════════════════════════ -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-logo">MULTIPLY</div>
+    <div class="brand-sub">Engagement</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn-back" onclick="goBack()" title="Close or go back">← Back</button>
+</div>
+
+<!-- ═════════════════════════════════════════════════════════════
+     MAIN CONTENT
+═══════════════════════════════════════════════════════════════ -->
+<div class="wrap">
+  <div class="page-h">Engagement</div>
+  <div class="page-sub" id="pageSub">Loading…</div>
+
+  <div class="care-note" id="careNote" style="display:none">
+    A shepherding view — who to <b>welcome</b>, who to <b>onboard</b>, who to gently <b>reach</b>.
+    This is not a scoreboard.
+  </div>
+
+  <div class="hero" id="hero"></div>
+
+  <div class="seg" id="seg" style="display:none">
+    <button class="seg-btn active" data-lens="week" onclick="switchLens('week')">Active this week</button>
+    <button class="seg-btn" data-lens="last" onclick="switchLens('last')">Last active</button>
+    <button class="seg-btn" data-lens="onboard" onclick="switchLens('onboard')">To onboard</button>
+  </div>
+
+  <div id="content">
+    <div class="spin-wrap">
+      <div class="spinner"></div>
+      <div>Reading the engagement logbook…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════════════════════════════════════════════════════
+     SCRIPT
+═══════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─── Invariant #29: leader-session gate via the published API. ───
+// Do NOT rebuild from memory. gateOrRedirect() sets window.LEADER.
+if (!MultiplyShared.gateOrRedirect('leader_login.html')) {
+  throw new Error('No valid leader session');
+}
+
+const db = MultiplyShared.getDB();
+const LEADER = window.LEADER || {};
+const _esc = MultiplyShared.escapeHTML;
+
+// ─── State ───
+let onboarded = [];      // members WITH a PIN (can log in)
+let unonboarded = [];    // members with NO PIN (cannot log in yet)
+let sessByMember = {};   // member_id → { last: ISO, count: n } within window
+const WINDOW_DAYS = 90;
+const WEEK_MS = 7 * 864e5;
+let currentLens = 'week';
+
+// ─── Back button — standing pattern ───
+function goBack(){
+  let closed = false;
+  try { window.close(); closed = true; } catch(e){}
+  setTimeout(() => {
+    if (!window.closed) {
+      if (document.referrer && document.referrer.indexOf(location.host) !== -1) history.back();
+      else location.href = 'multiply_dashboard.html';
+    }
+  }, 150);
+}
+
+// ─── Relative-time helper ───
+function relTime(iso){
+  if (!iso) return 'never';
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return 'never';
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1)   return 'just now';
+  if (mins < 60)  return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return days + 'd ago';
+  const wks = Math.floor(days / 7);
+  if (wks < 5)    return wks + 'w ago';
+  const mos = Math.floor(days / 30);
+  if (mos < 12)   return mos + 'mo ago';
+  return Math.floor(days / 365) + 'y ago';
+}
+function daysSince(iso){
+  if (!iso) return Infinity;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return Infinity;
+  return Math.floor((Date.now() - t) / 864e5);
+}
+function initials(name){
+  const p = (name || '?').trim().split(/\s+/);
+  return ((p[0]||'')[0]||'?').toUpperCase() + (p.length>1 ? (p[p.length-1][0]||'').toUpperCase() : '');
+}
+function avatarColor(id){
+  const palette = ['#2a5c40','#1a4a6b','#4a2a6b','#7a4a10','#1a5a60','#7a2020','#243560'];
+  let h = 0; const s = String(id||'');
+  for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) & 0xffffffff;
+  return palette[Math.abs(h) % palette.length];
+}
+function levelTag(lv){
+  const n = (lv==null ? 0 : lv);
+  return '<span class="mc-badge">L' + n + '</span>';
+}
+
+// ─── Per-member last-active = in-window session, else member_last_login ───
+function lastActiveOf(m){
+  const s = sessByMember[m.id];
+  const sessLast = s ? s.last : null;
+  const ll = m.member_last_login || null;
+  if (sessLast && ll) return (new Date(sessLast) > new Date(ll)) ? sessLast : ll;
+  return sessLast || ll || null;
+}
+
+// ─── Load ───
+async function loadAll(){
+  try {
+    const winISO = new Date(Date.now() - WINDOW_DAYS * 864e5).toISOString();
+    const memberCols = 'id,name,pipeline_level,discipler_id,discipler_name,member_last_login';
+    const [onRes, offRes, sessRes] = await Promise.all([
+      db.from('members').select(memberCols)
+        .not('member_pin_hash','is',null)
+        .eq('is_test_member', false).eq('is_external_user', false)
+        .order('name', { ascending: true }),
+      db.from('members').select('id,name,pipeline_level,discipler_id,discipler_name,created_at')
+        .is('member_pin_hash', null)
+        .eq('is_test_member', false).eq('is_external_user', false)
+        .order('name', { ascending: true }),
+      db.from('app_sessions').select('member_id,created_at')
+        .gte('created_at', winISO)
+        .order('created_at', { ascending: false })
+    ]);
+    if (onRes.error)  throw onRes.error;
+    if (offRes.error) throw offRes.error;
+    if (sessRes.error) throw sessRes.error;
+
+    onboarded   = onRes.data  || [];
+    unonboarded = offRes.data || [];
+
+    // Fold sessions → per-member { last, count }. Desc order ⇒ first seen = latest.
+    sessByMember = {};
+    (sessRes.data || []).forEach(row => {
+      if (!row.member_id) return;
+      const e = sessByMember[row.member_id];
+      if (e) { e.count++; }
+      else   { sessByMember[row.member_id] = { last: row.created_at, count: 1 }; }
+    });
+
+    render();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('content').innerHTML =
+      '<div class="empty">Could not load engagement data.<br><span class="muted">' +
+      _esc(err.message || String(err)) + '</span></div>';
+    document.getElementById('pageSub').textContent = 'Error';
+  }
+}
+
+// ─── Derived buckets ───
+function activeThisWeek(){
+  return onboarded.filter(m => daysSince(lastActiveOf(m)) < 7);
+}
+function quietCount(minDays){
+  return onboarded.filter(m => { const d = daysSince(lastActiveOf(m)); return d >= minDays; }).length;
+}
+
+// ─── Render ───
+function render(){
+  const total = onboarded.length + unonboarded.length;
+  const week  = activeThisWeek().length;
+  document.getElementById('pageSub').textContent =
+    total + ' members · ' + onboarded.length + ' with a login · ' + unonboarded.length + ' still to onboard';
+  document.getElementById('careNote').style.display = '';
+  document.getElementById('seg').style.display = '';
+
+  const pct = onboarded.length ? Math.round(week / onboarded.length * 100) : 0;
+  document.getElementById('hero').innerHTML =
+    stat('Active this week', week, pct + '% of those who can log in') +
+    stat('Can log in', onboarded.length, 'have set a PIN') +
+    stat('To onboard', unonboarded.length, 'no PIN yet — cannot log in', unonboarded.length ? 'warn' : '') +
+    stat('Quiet 14+ days', quietCount(14), 'a gentle nudge may help');
+
+  switchLens(currentLens);
+}
+function stat(label, val, foot, tone){
+  const t = tone === 'warn' ? ' style="border-color:var(--z3);background:var(--z3-bg)"' : '';
+  return '<div class="stat"' + t + '>' +
+    '<div class="stat-label">' + _esc(label) + '</div>' +
+    '<div class="stat-val">' + val + '</div>' +
+    '<div class="stat-foot">' + _esc(foot) + '</div></div>';
+}
+
+function switchLens(lens){
+  currentLens = lens;
+  document.querySelectorAll('.seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.lens === lens));
+  const c = document.getElementById('content');
+  if (lens === 'week')    c.innerHTML = renderWeek();
+  else if (lens === 'last') c.innerHTML = renderLast();
+  else c.innerHTML = renderOnboard();
+}
+
+function memberRow(m, rightHTML){
+  return '<div class="mc">' +
+    '<div class="mc-av" style="background:' + avatarColor(m.id) + '">' + _esc(initials(m.name)) + '</div>' +
+    '<div class="mc-name-wrap">' +
+      '<div class="mc-name">' + _esc(m.name || 'Unnamed') + levelTag(m.pipeline_level) + '</div>' +
+      '<div class="mc-meta"><span>' + _esc(m.discipler_name || 'no LCL') + '</span></div>' +
+    '</div>' +
+    '<div class="mc-right">' + rightHTML + '</div></div>';
+}
+
+function renderWeek(){
+  const rows = activeThisWeek()
+    .sort((a,b) => new Date(lastActiveOf(b)) - new Date(lastActiveOf(a)));
+  if (!rows.length) return '<div class="empty">No logins in the last 7 days yet.</div>';
+  return '<div class="card list">' + rows.map(m => {
+    const s = sessByMember[m.id];
+    const cnt = s ? s.count : 0;
+    const right = '<span class="when good">' + _esc(relTime(lastActiveOf(m))) + '</span>' +
+      (cnt ? '<span class="sub">' + cnt + ' visit' + (cnt>1?'s':'') + '/90d</span>' : '');
+    return memberRow(m, right);
+  }).join('') + '</div>';
+}
+
+function renderLast(){
+  const rows = onboarded.slice().sort((a,b) => {
+    const da = daysSince(lastActiveOf(a)), dbb = daysSince(lastActiveOf(b));
+    return da - dbb;
+  });
+  if (!rows.length) return '<div class="empty">No onboarded members yet.</div>';
+  return '<div class="card list">' + rows.map(m => {
+    const la = lastActiveOf(m);
+    const d = daysSince(la);
+    let cls = 'good', label = relTime(la);
+    if (la == null) { cls = 'never'; label = 'never opened'; }
+    else if (d >= 30) cls = 'bad';
+    else if (d >= 7)  cls = 'warn';
+    return memberRow(m, '<span class="when ' + cls + '">' + _esc(label) + '</span>');
+  }).join('') + '</div>';
+}
+
+function renderOnboard(){
+  if (!unonboarded.length)
+    return '<div class="empty">🎉 Everyone has a PIN — no one is locked out.</div>';
+  // Group by LCL (discipler) so each leader gets a hand-list.
+  const groups = {};
+  unonboarded.forEach(m => {
+    const key = m.discipler_id || '__none';
+    if (!groups[key]) groups[key] = { name: m.discipler_name || 'No LC leader assigned', members: [] };
+    groups[key].members.push(m);
+  });
+  const keys = Object.keys(groups).sort((a,b) =>
+    groups[a].name.localeCompare(groups[b].name));
+  const intro = '<div class="care-note sub-note">These members have no PIN, so they cannot log in yet. ' +
+    'Grouped by LC leader — hand each leader their list. Onboarding, not a rebuke.</div>';
+  return intro + keys.map(k => {
+    const g = groups[k];
+    return '<div class="card">' +
+      '<div class="lcg-head"><b>' + _esc(g.name) + '</b>' +
+        '<div class="lcg-rollup"><span class="pill">' + g.members.length + ' to onboard</span></div></div>' +
+      '<div class="list">' + g.members.map(m =>
+        memberRow(m, '<span class="when never">no PIN</span>')).join('') + '</div></div>';
+  }).join('');
+}
+
+loadAll();
+</script>
+
+<style>
+/* ── Engagement-specific additions (reuse the report palette + chrome) ── */
+.care-note{background:var(--gold-light);border:1px solid var(--border);border-left:3px solid var(--gold);
+  border-radius:8px;padding:.7rem .95rem;font-size:12.5px;color:var(--text);margin-bottom:1.25rem;line-height:1.5;}
+.care-note.sub-note{margin:.25rem 0 1rem;background:var(--surface2);border-left-color:var(--border2);}
+.seg{display:inline-flex;gap:.3rem;background:var(--surface3);border:1px solid var(--border);
+  border-radius:10px;padding:.28rem;margin-bottom:1.1rem;flex-wrap:wrap;}
+.seg-btn{border:none;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;
+  font-weight:600;padding:.42rem .85rem;border-radius:7px;cursor:pointer;}
+.seg-btn.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+.card.list,.card .list{padding:.25rem 0;}
+.mc{display:flex;align-items:center;gap:.75rem;padding:.6rem 1.1rem;border-bottom:1px solid var(--border);}
+.mc:last-child{border-bottom:none;}
+.mc-right{margin-left:auto;text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:1px;}
+.when{font-size:12px;font-weight:600;}
+.when.good{color:var(--green2);}
+.when.warn{color:var(--z2);}
+.when.bad{color:var(--orange);}
+.when.never{color:var(--lighter);font-weight:500;font-style:italic;}
+.mc-right .sub{font-size:10.5px;color:var(--lighter);font-weight:500;}
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--muted);font-size:13.5px;line-height:1.6;}
+</style>
+</body>
+</html>
