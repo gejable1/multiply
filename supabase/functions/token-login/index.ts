@@ -18,6 +18,7 @@ const CORS = {
 };
 
 const JWT_TTL_SECONDS = 2 * 60 * 60; // +2h (decision #3)
+const LEADER_MIN_LEVEL = 2;          // pipeline_level >= 2 == leader (#322)
 
 function fail(status = 401) {
   return new Response(JSON.stringify({ error: "invalid_token" }), {
@@ -29,6 +30,7 @@ function fail(status = 401) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return fail(405);
+  const ua = req.headers.get("user-agent") || "";
 
   let token: string | null = null;
   try { token = (await req.json())?.token ?? null; } catch { return fail(400); }
@@ -91,6 +93,20 @@ Deno.serve(async (req) => {
       .update({ used_count: (tok.used_count ?? 0) + 1, used_at: new Date().toISOString() })
       .eq("id", tok.id);
   } catch { /* non-fatal */ }
+
+  // 5) Telemetry (S78 #323): record this cold-link login in the unified
+  //    app_sessions logbook + reap expired-open rows. Best-effort - never
+  //    blocks the token exchange. expires_at mirrors the JWT's own 2h TTL.
+  try {
+    await db.from("app_sessions").insert({
+      member_id: m.id,
+      is_leader: (m.pipeline_level ?? 0) >= LEADER_MIN_LEVEL,
+      church_id: m.church_id,
+      expires_at: new Date(exp * 1000).toISOString(),
+      user_agent_hint: ua.slice(0, 180),
+    });
+  } catch { /* non-fatal */ }
+  try { await db.rpc("reap_expired_sessions"); } catch { /* non-fatal */ }
 
   return new Response(JSON.stringify({
     token: jwt,
