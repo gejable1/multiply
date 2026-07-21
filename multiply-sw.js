@@ -25,7 +25,7 @@
 //       .then(() => self.registration.unregister())); });
 // ─────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'multiply-shell-v3-2026-07-20';
+const CACHE_VERSION = 'multiply-shell-v4-2026-07-21';
 const SHELL_ASSETS = [
   './',
   'index.html',
@@ -35,6 +35,7 @@ const SHELL_ASSETS = [
   'member_login.html',
   'leader_login.html',
   'multiply_shared.js',
+  'family_huddle_card.html',
   'shell.webmanifest',
   'favicon.svg',
   'icon_192.png',
