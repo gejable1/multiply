@@ -3774,4 +3774,74 @@ The private giving calculator + one-page budget (S77 #213, on the MMT Giving Jou
 
 ---
 
+### **365. app_sessions is the single session logbook -- every login (member+leader), is_leader server-derived; leader_sessions is DROPPED**
+
+The S78 telemetry rebuild replaced the leader-only `leader_sessions` with one `app_sessions` table (migration 081) that records EVERY login -- member and leader. Both Edge Functions (`auth-login`, `token-login`) insert a row on login; `logoutLeader` (`multiply_shared.js`) and the MD pin-reset close `ended_at` (keyed on `member_id`); `reap_expired_sessions()` closes expired-open rows. `is_leader` is stamped server-side from `pipeline_level >= 2`, never from a client field. Tenant RLS mirrors the old table; the EF writes via service role with an explicit `church_id`. Migration 082 dropped `leader_sessions` after re-backfilling late rows. schema.json: `leader_sessions` gone, `app_sessions` in, still 74 tables.
+
+**RULE:** Session/login telemetry lives in `app_sessions` ONLY. `leader_sessions` no longer exists -- never reference it. A session writer stamps `member_id` + `is_leader` (from level) + explicit `church_id`.
+
+**Established July 22, 2026 (Session 78). Invariant #365 added - count now 365.**
+
+---
+
+### **366. Leader-ness is server-derived (pipeline_level >= 2), never client-declared -- the body.stamp fiction is dead (#322 closed)**
+
+`auth-login` used to trust `body.stamp === "leader"` -- a label the browser sent about itself, spoofable and fragile (it was the root of the phantom S71 "engagement collapse"). S78 removed it: the EF derives `isLeader = pipeline_level >= LEADER_MIN_LEVEL (2)` from the member row it already fetches (matching the `leader_login` picker + MLT's `leaderLevel>=2`). The legacy `stamp` field is now simply ignored, so old login pages keep working. This is the long-deferred #322 fix.
+
+**RULE:** The server decides leader-ness from `pipeline_level`, never from client input. A frontend must never be trusted to declare a member's role or level -- the DB is the authority.
+
+**Established July 22, 2026 (Session 78). Invariant #366 added - count now 366.**
+
+---
+
+### **367. reap_expired_sessions() reaps opportunistically on each login; ALL telemetry writes are best-effort -- login never depends on them**
+
+`reap_expired_sessions()` (SECURITY DEFINER SQL fn, migration 081) sets `ended_at=now(), ended_reason='expired'` on any row past `expires_at` still open. Each login best-effort `rpc`s it -- no cron needed, self-cleaning, reusable by a future pg_cron. Every telemetry step (last-login update, `app_sessions` insert, reap) is wrapped in try/catch in BOTH EFs, so a telemetry failure NEVER blocks the login or token exchange. Expiry-reaping is the scalable close mechanism -- more reliable than depending on a logout event to fire (which historically never reaped, S71 #323).
+
+**RULE:** Telemetry is best-effort and MUST never sit on the critical path of auth. Reap by expiry; don't rely solely on a logout-close firing.
+
+**Established July 22, 2026 (Session 78). Invariant #367 added - count now 367.**
+
+---
+
+### **368. Lossless table replacement: a drop-migration RE-BACKFILLS inside the guard, immediately before DROP -- the live cutover is not atomic with the merge**
+
+When retiring a table superseded by a new one across a STAGGERED deploy, the drop migration must re-run the null-safe backfill (dedup on the natural key, e.g. `member_id` + `created_at`) INSIDE the `to_regclass IS NOT NULL` guard, immediately before `DROP TABLE`. Migration 082 did this: any `leader_sessions` rows written by the OLD live EF between 081's backfill and the drop are carried into `app_sessions` first, so no history is lost even though the EF redeploy is a separate human step. Guarded => rerunnable no-op once gone; self-verifies `to_regclass IS NULL`.
+
+**RULE:** A drop-migration for a replaced table re-backfills at drop time, never assuming the first backfill caught everything. The merge does not deploy the EF, so the cutover window can still write the old table.
+
+**Established July 22, 2026 (Session 78). Invariant #368 added - count now 368.**
+
+---
+
+### **369. .js is network-first, so a ?v= bump ALONE delivers new shared.js code -- no CACHE_VERSION bump for a JS logic change (corollary #359)**
+
+`multiply-sw.js` serves navigations + HTML + JS network-first (#359), so an online user fetches fresh `multiply_shared.js?v=N` on next open; bumping the `?v=` query busts the HTTP-layer cache too. Therefore a shared.js LOGIC change shipped via the `?v` lockstep (S78 #223: `?v=11->12` across 21 consumers) needs NO `CACHE_VERSION` bump. Reserve `CACHE_VERSION` bumps for refreshing the OFFLINE shell / precache list -- e.g. S78 #219 adding `family_huddle_card.html` to `SHELL_ASSETS` (v3->v4), which genuinely changes what is precached.
+
+**RULE:** shared.js logic change => `?v` lockstep bump, no `CACHE_VERSION`. A `SHELL_ASSETS`/precache change => `CACHE_VERSION` bump. Two different levers; don't conflate them.
+
+**Established July 22, 2026 (Session 78). Invariant #369 added - count now 369.**
+
+---
+
+### **370. A multi-file lockstep patcher self-gates on ONE combined sha over the whole change set (sorted name\0bytes\0), not N per-file shas**
+
+For a 22-file change (shared.js logic + a 21-consumer `?v` lockstep, S78 #223) the patcher computes a single `combined_sha()` -- sha256 over each file's `name\0content\0` in sorted order -- and self-asserts `BASE_EXPECT` before writing and `WANT_EXPECT` after, plus per-anchor uniqueness (`count==1`) asserts. One gate covers the whole set; any drift on any file halts before commit. Pure-ASCII patcher, proven against a fresh codeload copy, `node --check` on the touched JS (#105).
+
+**RULE:** Gate a multi-file surgical change with one combined-sha BASE+WANT over the sorted change set + per-anchor uniqueness. Cleaner and stricter than tracking N individual shas.
+
+**Established July 22, 2026 (Session 78). Invariant #370 added - count now 370.**
+
+---
+
+### **371. An EF PR merge records SOURCE ONLY -- verify the LIVE function by watching app_sessions count tick on a login**
+
+Merging an `auth-login`/`token-login` PR only records source in the repo; the LIVE function updates ONLY on a Supabase dashboard redeploy (Verify-JWT OFF). If the old code stays live after `leader_sessions` is dropped, its insert silently fails (best-effort) and telemetry goes inert while login still works -- an easy "merged but not deployed" trap. The definitive smoke test: `select count(*) from app_sessions` before, log in once, count after -- +1 == the new EF is live. S78 verified 3221 -> 3222.
+
+**RULE:** After merging an EF change, redeploy it in the Supabase dashboard, THEN prove it live via the `app_sessions` count tick. Never assume a merge deployed an EF.
+
+**Established July 22, 2026 (Session 78). Invariant #371 added - count now 371.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
