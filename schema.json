@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 74,
+  "table_count": 75,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -1348,6 +1348,220 @@
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.announcements FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
+    },
+    "app_sessions": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "is_leader",
+          "ordinal": 3,
+          "data_type": "boolean",
+          "nullable": false,
+          "default": "false",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "expires_at",
+          "ordinal": 6,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "ended_at",
+          "ordinal": 7,
+          "data_type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "ended_reason",
+          "ordinal": 8,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "user_agent_hint",
+          "ordinal": 9,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "app_sessions_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id)"
+        },
+        {
+          "name": "app_sessions_member_id_fkey",
+          "columns": [
+            "member_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [],
+      "indexes": [
+        {
+          "name": "app_sessions_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX app_sessions_pkey ON public.app_sessions USING btree (id)"
+        },
+        {
+          "name": "idx_app_sessions_active",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "member_id"
+          ],
+          "definition": "CREATE INDEX idx_app_sessions_active ON public.app_sessions USING btree (member_id) WHERE (ended_at IS NULL)"
+        },
+        {
+          "name": "idx_app_sessions_church",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id"
+          ],
+          "definition": "CREATE INDEX idx_app_sessions_church ON public.app_sessions USING btree (church_id)"
+        },
+        {
+          "name": "idx_app_sessions_member_created",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "member_id",
+            "created_at"
+          ],
+          "definition": "CREATE INDEX idx_app_sessions_member_created ON public.app_sessions USING btree (member_id, created_at DESC)"
+        },
+        {
+          "name": "idx_app_sessions_reap",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "expires_at"
+          ],
+          "definition": "CREATE INDEX idx_app_sessions_reap ON public.app_sessions USING btree (expires_at) WHERE (ended_at IS NULL)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "app_sessions_tenant_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "(church_id = auth_church_id())",
+          "with_check": null
+        },
+        {
+          "name": "app_sessions_tenant_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "(church_id = auth_church_id())"
+        },
+        {
+          "name": "app_sessions_tenant_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "(church_id = auth_church_id())",
+          "with_check": null
+        },
+        {
+          "name": "app_sessions_tenant_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "(church_id = auth_church_id())",
+          "with_check": "(church_id = auth_church_id())"
+        }
+      ],
+      "triggers": []
     },
     "attendance": {
       "kind": "table",
@@ -18540,6 +18754,16 @@
       "security_definer": false,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public.promote_pending_lc_transfers()\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n  UPDATE members m\r\n  SET\r\n    facilitator_id         = m.pending_facilitator_id,\r\n    discipler_id           = m.pending_facilitator_id,   -- discipler = LCL (Inv #46)\r\n    facilitator_name       = dest.name,\r\n    discipler_name         = dest.name,\r\n    discipler              = dest.name,                  -- legacy text col, kept in sync\r\n    lc_group               = COALESCE(NULLIF(btrim(dest.lc_group), ''), dest.name),\r\n    pending_facilitator_id = NULL,\r\n    pending_lc_group       = NULL,\r\n    pending_transfer_by    = NULL,\r\n    pending_discipler      = NULL,\r\n    updated_at             = now()\r\n  FROM members dest\r\n  WHERE dest.id = m.pending_facilitator_id\r\n    AND m.pending_facilitator_id IS NOT NULL          -- re-run guard (cleared above)\r\n    AND m.transfer_date IS NOT NULL\r\n    AND m.transfer_date <= CURRENT_DATE;\r\nEND;\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "reap_expired_sessions",
+      "arguments": "",
+      "returns": "integer",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.reap_expired_sessions()\n RETURNS integer\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  with reaped as (\r\n    update public.app_sessions\r\n       set ended_at = now(), ended_reason = 'expired'\r\n     where ended_at is null and expires_at < now()\r\n     returning 1\r\n  )\r\n  select count(*)::int from reaped;\r\n$function$\n"
     },
     {
       "schema": "public",
