@@ -46,12 +46,12 @@
      parse but BEFORE DOMContentLoaded, so boot() (wired to DOMContentLoaded
      below) still finds MultiplyShared ready. -->
 <!-- Supabase SDK must load BEFORE multiply_shared.js: getDB() needs it, and
-     logoutLeader() calls getDB() to stamp leader_sessions.ended_at. Without it
+     logoutLeader() calls getDB() to stamp app_sessions.ended_at. Without it
      the shell logged "Supabase SDK not loaded" and logout silently skipped that
      write. Both tags are `defer`, so they execute in document order (SDK first)
      without blocking first paint. -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="multiply_shared.js?v=11"></script>
+<script defer src="multiply_shared.js?v=12"></script>
 <style>
   :root{
     --forest:#0e3a2c; --forest-2:#1a5547; --forest-3:#2d6e5a;
@@ -312,7 +312,7 @@ window.addEventListener('message', function(ev){
 // A leader may hold a real leader session (possibly alongside a bridged one).
 // Clear the member key FIRST (so its gate can't race the redirect), then if a
 // leader session is present hand off to logoutLeader — which stamps
-// leader_sessions.ended_at server-side (Inv #167), clears the leader key, and
+// app_sessions.ended_at server-side (Inv #167), clears the leader key, and
 // redirects. Member-only users go through logoutMember. Both end at login.
 async function signOut(){
   try { sessionStorage.removeItem('multiply_member_session'); } catch(e){}

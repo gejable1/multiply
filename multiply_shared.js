@@ -119,10 +119,10 @@
     try {
       const db = getDB();
       if (db && L.leaderId) {
-        await db.from('leader_sessions').update({
+        await db.from('app_sessions').update({
           ended_at: new Date().toISOString(),
           ended_reason: 'logout'
-        }).eq('leader_id', L.leaderId).is('ended_at', null);
+        }).eq('member_id', L.leaderId).is('ended_at', null);
       }
     } catch (e) { /* non-fatal */ }
     _clearSessionState();
