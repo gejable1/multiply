@@ -3724,4 +3724,54 @@ The sole active service worker (`multiply-sw.js`, registered only by `index.html
 
 ---
 
+### **360. Non-ASCII CC payloads ship as sha-verified UPLOADS, never inline in the prompt -- `\u` escapes flatten in transit**
+
+The Giving Mirror patcher's modal HTML (em-dashes, the peso sign, the mirror emoji as `\u{1FA9E}`) was proven pure-ASCII AT SOURCE but delivered IN-PROMPT; CC's WANT gate HALTED on a 20-byte divergence (9554 vs 9534). Root cause: a display/paste layer between the message and the shell flattened the literal `\u2014`/`\u{1FA9E}` escape sequences into their glyphs, so the bytes diverged even though the code looked identical. Reshipped as a sha-verified UPLOAD (binary-faithful) -- landed on WANT exactly, first try. This extends #358 (which was base64-specific) to ANY escape-bearing or glyph-bearing payload. Counter-proof same session: the embed-viewer patcher used DOUBLE-backslash JS escapes (`\\u2039`) -- genuinely pure-ASCII -- and shipped IN-PROMPT cleanly.
+
+**RULE:** If a CC payload contains non-ASCII glyphs OR single-backslash `\u`/`\U` escape sequences a paste layer can flatten, deliver it as a sha-verified UPLOAD located by its sha -- never inline. Only genuinely pure-ASCII payloads (incl. `\\u` double-backslash JS escapes) may go in-prompt.
+
+**Established July 21, 2026 (Session 77). Invariant #360 added - count now 360.**
+
+---
+
+### **361. Uploaded files nest under a session subdir -- locate BY SHA with a recursive walk, not a flat glob**
+
+The first Giving Mirror upload block used a flat glob (`/root/.claude/uploads/*.py`) and found nothing -- the environment nests uploads under a per-session subdirectory. CC independently hashed the file, confirmed it matched the expected sha, and only then proceeded; the durable fix is to WALK the tree. Every upload-locate since uses `os.walk('/root/.claude/uploads')` matching the target sha.
+
+**RULE:** Locate an uploaded file by hashing candidates under a RECURSIVE `os.walk('/root/.claude/uploads')` for the target sha -- never a single-level glob. Verify the sha before use; HALT if not found. (Refines #339.)
+
+**Established July 21, 2026 (Session 77). Invariant #361 added - count now 361.**
+
+---
+
+### **362. MMT has the embedded viewer too -- reuse it (?embed=1) for standalone in-app pages instead of window.open**
+
+Ported the minimal `_openLessonViewerModal`/`_closeLessonViewer` (full-screen sandboxed iframe overlay + a back chevron) from MLT/MD into `member_tool.html` (S77 #217). A member-facing standalone page -- e.g. `family_huddle_card.html` -- now opens IN-APP via the viewer instead of `window.open(...,'_blank')`, which spawns a jarring new browser tab (worst in the installed PWA). The page opts in with `?embed=1` (a `body.embed` class it can style against). It is a STATIC-resource opener: no session/JWT needed, so `noopener`-style sessionStorage loss is irrelevant.
+
+**RULE:** To open a standalone page inside MMT, use `_openLessonViewerModal(url?embed=1, label, hideNewTab=true)`, not `window.open`. All three tools (MD/MLT/MMT) now share this embed pattern.
+
+**Established July 21, 2026 (Session 77). Invariant #362 added - count now 362.**
+
+---
+
+### **363. The Giving Mirror is on-device ONLY -- income in, percentage out, localStorage keyed by memberId; it writes NOTHING to the server**
+
+The private giving calculator + one-page budget (S77 #213, on the MMT Giving Journey card, L1+, reachable before any covenant) takes income + giving, shows the real percentage against the 10% tithe milestone -- the ONLY fixed marker, because First Fruits/Proportional/Sacrificial are heart-moves the doctrine forbids enthroning as amounts -- and reveals margin. It persists ONLY to `localStorage` keyed by memberId, with a Clear button. ZERO server footprint: no Supabase write, no `giving_covenant` column, no rung tick, no `?v=` bump. It reports to no one and compares to no one (GIVING_JOURNEY.md Guardrail #5, Sources #2/#6).
+
+**RULE:** The Giving Mirror never touches the network. Never wire it to Supabase, the covenant, or a rung -- a future "just sync the number" instinct is the finance-wall breach the doctrine exists to prevent. Keep it on-device.
+
+**Established July 21, 2026 (Session 77). Invariant #363 added - count now 363.**
+
+---
+
+### **364. Batch attendance pickers + member-count labels filter status==='active' -- cohort_members carries withdrawn/graduated rows for the roster History**
+
+`cohort_members` keeps withdrawn (`status='withdrew'`) and graduated (`'graduated'`) rows so the batch-roster modal can render its History section. The three attendance pickers (Gen. Purpose / BTLI / Usbong) and their dropdown member counts were reading the FULL `_members` list unfiltered, so withdrawn members reappeared in the attendance checklist and inflated the count (S77 #214, six sites). Fixed by adding the `status==='active'` filter the roster view and member-count already use elsewhere. Withdrawal is precisely how an LCL removes someone from attendance without logging absences, so the filter must hold.
+
+**RULE:** Any attendance roster or batch member-count derived from `cohort_members._members` must `.filter(cm => cm.status === 'active')`. Withdrawn/graduated live in History, never in attendance.
+
+**Established July 21, 2026 (Session 77). Invariant #364 added - count now 364.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
