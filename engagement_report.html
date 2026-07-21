@@ -214,6 +214,14 @@ if (!MultiplyShared.gateOrRedirect('leader_login.html')) {
 const db = MultiplyShared.getDB();
 const LEADER = window.LEADER || {};
 const _esc = MultiplyShared.escapeHTML;
+const MINE = (new URLSearchParams(location.search).get('scope') === 'mine');
+const MY_ID = LEADER.leaderId || null;
+if (MINE) {
+  try {
+    var _bs = document.querySelector('.brand-sub'); if (_bs) _bs.textContent = 'My Flock';
+    var _ph = document.querySelector('.page-h');   if (_ph) _ph.textContent = 'My Flock';
+  } catch(e){}
+}
 
 // ─── State ───
 let onboarded = [];      // members WITH a PIN (can log in)
@@ -288,15 +296,16 @@ async function loadAll(){
   try {
     const winISO = new Date(Date.now() - WINDOW_DAYS * 864e5).toISOString();
     const memberCols = 'id,name,pipeline_level,discipler_id,discipler_name,member_last_login';
-    const [onRes, offRes, sessRes] = await Promise.all([
-      db.from('members').select(memberCols)
+    let onQ = db.from('members').select(memberCols)
         .not('member_pin_hash','is',null)
-        .eq('is_test_member', false).eq('is_external_user', false)
-        .order('name', { ascending: true }),
-      db.from('members').select('id,name,pipeline_level,discipler_id,discipler_name,created_at')
+        .eq('is_test_member', false).eq('is_external_user', false);
+    let offQ = db.from('members').select('id,name,pipeline_level,discipler_id,discipler_name,created_at')
         .is('member_pin_hash', null)
-        .eq('is_test_member', false).eq('is_external_user', false)
-        .order('name', { ascending: true }),
+        .eq('is_test_member', false).eq('is_external_user', false);
+    if (MINE && MY_ID) { onQ = onQ.eq('discipler_id', MY_ID); offQ = offQ.eq('discipler_id', MY_ID); }
+    const [onRes, offRes, sessRes] = await Promise.all([
+      onQ.order('name', { ascending: true }),
+      offQ.order('name', { ascending: true }),
       db.from('app_sessions').select('member_id,created_at')
         .gte('created_at', winISO)
         .order('created_at', { ascending: false })
@@ -414,6 +423,13 @@ function renderLast(){
 function renderOnboard(){
   if (!unonboarded.length)
     return '<div class="empty">🎉 Everyone has a PIN — no one is locked out.</div>';
+  const intro = '<div class="care-note sub-note">' + (MINE
+    ? 'These members have not set a PIN yet, so they cannot log in. Reach out and help each one set up their access.'
+    : 'These members have no PIN, so they cannot log in yet. Grouped by LC leader — hand each leader their list. Onboarding, not a rebuke.') + '</div>';
+  if (MINE) {
+    return intro + '<div class="card list">' + unonboarded.map(m =>
+      memberRow(m, '<span class="when never">no PIN</span>')).join('') + '</div>';
+  }
   // Group by LCL (discipler) so each leader gets a hand-list.
   const groups = {};
   unonboarded.forEach(m => {
@@ -423,8 +439,6 @@ function renderOnboard(){
   });
   const keys = Object.keys(groups).sort((a,b) =>
     groups[a].name.localeCompare(groups[b].name));
-  const intro = '<div class="care-note sub-note">These members have no PIN, so they cannot log in yet. ' +
-    'Grouped by LC leader — hand each leader their list. Onboarding, not a rebuke.</div>';
   return intro + keys.map(k => {
     const g = groups[k];
     return '<div class="card">' +
