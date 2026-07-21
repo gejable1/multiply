@@ -6079,7 +6079,7 @@ async function _btliLoadBatchesForCourse(courseCode){
     }
     sel.innerHTML = '<option value="">— Pick the batch —</option>' +
       _btliBatchesForCourse.map(c => {
-        const count = (c._members || []).length;
+        const count = (c._members || []).filter(cm => cm.status === 'active').length;
         const prog = c.cohort_programs || {};
         const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? '' : ' (other)');
         return '<option value="' + c.id + '">' +
@@ -6130,7 +6130,7 @@ async function _gpLoadBatches(){
     }
     sel.innerHTML = '<option value="">— Pick the batch —</option>' +
       _gpBatches.map(c => {
-        const count = (c._members || []).length;
+        const count = (c._members || []).filter(cm => cm.status === 'active').length;
         const prog  = c.cohort_programs || {};
         const progName = prog.name ? (' · ' + prog.name) : '';
         const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? ' (Pastor)' : '');
@@ -6164,6 +6164,7 @@ function onGpBatchChange(){
   }
   selectedGpEventName = batch.name || '';   // event_name = batch name (collision-safe)
   _gpBatchRoster = (batch._members || [])
+    .filter(cm => cm.status === 'active')
     .map(cm => cm.members)
     .filter(m => m && m.id)
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
@@ -6189,6 +6190,7 @@ function onBtliBatchChange(){
   // Map cohort_members → member rows (with name, level, lc_group).
   // Sort alphabetically for stable scan order on mobile.
   _btliBatchRoster = (batch._members || [])
+    .filter(cm => cm.status === 'active')
     .map(cm => cm.members)
     .filter(m => m && m.id)
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
@@ -6311,7 +6313,7 @@ async function _usbongLoadBatchesForCourse(courseCode){
     }
     sel.innerHTML = '<option value="">— Pick the batch —</option>' +
       _usbongBatchesForCourse.map(c => {
-        const count = (c._members || []).length;
+        const count = (c._members || []).filter(cm => cm.status === 'active').length;
         const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? '' : ' (other)');
         return '<option value="' + c.id + '">' +
           MultiplyShared.escapeHTML(c.name || '(unnamed)') + ' · ' +
@@ -6351,6 +6353,7 @@ async function onUsbongBatchChange(){
   }
   // Full enrolled roster (alpha-sorted for stable mobile scan order).
   _usbongBatchRosterAll = (batch._members || [])
+    .filter(cm => cm.status === 'active')
     .map(cm => cm.members)
     .filter(m => m && m.id)
     .sort((a,b) => (a.name || '').localeCompare(b.name || ''));
