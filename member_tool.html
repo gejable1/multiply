@@ -1364,6 +1364,36 @@ body.lang-tl .tl-text{display:inline;}
 .reflection-box textarea::placeholder{
   color:var(--lighter);font-style:italic;
 }
+/* ── Reflection method helper (6P + God·People·Me) — S80 ── */
+.rb-helper{margin-bottom:14px;}
+.rb-helper-toggle{
+  display:inline-flex;align-items:center;gap:6px;
+  background:none;border:none;cursor:pointer;padding:2px 0;
+  font-family:inherit;font-size:13px;font-weight:600;color:var(--forest,#2a5c40);
+}
+.rb-helper-toggle .rb-chev{font-size:10px;transition:transform .15s;}
+.rb-helper.open .rb-helper-toggle .rb-chev{transform:rotate(90deg);}
+.rb-helper-body{
+  display:none;margin-top:10px;padding:12px 14px;
+  background:var(--surface2,#ede5d3);border:1px solid var(--line,#e2d8c6);border-radius:9px;
+}
+.rb-helper.open .rb-helper-body{display:block;}
+.rb-helper-intro{font-size:12.5px;line-height:1.5;color:var(--muted,#6b5f4f);margin-bottom:10px;}
+.rb-methods{display:flex;flex-wrap:wrap;gap:8px;}
+.rb-method{flex:1 1 230px;border:1px solid var(--line,#e2d8c6);border-radius:9px;background:#fff;padding:11px 13px;}
+.rb-method-name{font-weight:700;font-size:14px;color:var(--ink,#1a1612);margin-bottom:2px;}
+.rb-method-desc{font-size:11.5px;color:var(--muted,#6b5f4f);line-height:1.45;margin-bottom:9px;}
+.rb-method-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.rb-mbtn{border:none;border-radius:8px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;padding:7px 13px;}
+.rb-mbtn.use{background:var(--forest,#2a5c40);color:#fff;}
+.rb-mbtn.use:active{transform:scale(.97);}
+.rb-mbtn.see{background:var(--surface2,#ede5d3);color:var(--forest-2,#1a5547);border:1px solid var(--line,#e2d8c6);}
+.rb-sample{display:none;margin-top:10px;padding:10px 12px;background:var(--paper,#fbf7ef);border:1px solid var(--line,#e2d8c6);border-radius:8px;font-size:12px;line-height:1.5;color:var(--ink,#1a1612);}
+.rb-sample.show{display:block;}
+.rb-sample .rs-cap{font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted,#6b5f4f);margin-bottom:7px;}
+.rb-sample .rs-step{margin-bottom:6px;}
+.rb-sample .rs-step:last-child{margin-bottom:0;}
+.rb-sample .rs-k{font-weight:700;color:var(--forest-2,#1a5547);}
 
 .reader-empty{
   padding:60px 20px;text-align:center;
@@ -8408,6 +8438,7 @@ function renderReaderBody(){
   html += `<div class="reflection-box">`;
   html += `<div class="rb-label"><span class="en-text">MY REFLECTION</span><span class="tl-text">AKING TUGON</span></div>`;
   html += `<div class="rb-sub"><span class="en-text">What is the Spirit saying to you, kapatid?</span><span class="tl-text">Ano ang sinasabi ng Espiritu sa iyo, kapatid?</span></div>`;
+  html += _devoMethodHelperHTML();
   html += `<textarea id="reflectionInput" placeholder="${esc('Write what God is teaching you today…')}"></textarea>`;
   html += `<button id="reflectionSaveBtn" class="rb-save" type="button" onclick="saveDevoReflection()"><span class="en-text">Save reflection</span><span class="tl-text">I-save ang tugon</span></button>`;
   html += `<div class="rb-autohint"><span class="en-text">Auto-saves as you write — your words are kept even if you leave this page.</span><span class="tl-text">Awtomatikong sine-save habang nagsusulat — hindi mawawala ang sinulat mo kahit umalis ka.</span></div>`;
@@ -8430,6 +8461,110 @@ function renderReaderBody(){
       _devoAutosaveTimer = setTimeout(() => { _persistDevoReflection({silent:true}); }, 1500);
     });
   }
+}
+
+// ───── Reflection method helper (S80) — 6P + God·People·Me scaffolds ─────
+// Two beginner Bible-reading frames. A collapsed helper above the textarea;
+// tapping "Use this" drops a labeled skeleton into the box (non-destructive —
+// appended if the member already wrote something), "See example" shows a
+// worked bilingual sample. Skilled members never expand it. member_tool inline
+// only — no shared.js, no ?v= bump, no schema change.
+const DEVO_METHODS = {
+  sixp: {
+    name: '6P',
+    descEn: 'Promises to Pocket · Points to Ponder · Plans to Pursue',
+    descTl: 'Pangako · Katotohanan · Hakbang',
+    template: 'Promises to Pocket / Pangakong itatago:\n\n\nPoints to Ponder / Katotohanang pagninilayan:\n\n\nPlans to Pursue / Hakbang na susundin:\n\n',
+    sample: [
+      {k:'Promises to Pocket',
+       en:`God's peace, beyond understanding, will guard my heart and mind — I'm claiming that over my worries this week.`,
+       tl:`Ang kapayapaan ng Diyos na hindi kayang unawain ang magbabantay sa puso't isip ko — inaangkin ko ito ngayong linggo.`},
+      {k:'Points to Ponder',
+       en:`Worry and prayer can't share one seat. The replacement for anxiety isn't a calm feeling — it's prayer with thanksgiving.`,
+       tl:`Hindi magkasama ang pag-aalala at panalangin. Ang kapalit ng pagkabalisa ay hindi damdaming panatag — ito ay panalangin na may pasasalamat.`},
+      {k:'Plans to Pursue',
+       en:`Tonight, instead of scrolling and worrying, I'll write 3 thanks and hand God one worry by name.`,
+       tl:`Ngayong gabi, sa halip na mag-scroll at mag-alala, magsusulat ako ng 3 pasasalamat at ibibigay sa Diyos ang isang alalahanin.`},
+    ]
+  },
+  gpm: {
+    name: 'God · People · Me',
+    descEn: 'The 3 Discovery questions',
+    descTl: 'Ang 3 tanong ng Discovery',
+    template: 'About God / Tungkol sa Diyos:\n\n\nAbout People / Tungkol sa tao:\n\n\nTo Do / Dapat kong gawin:\n\n',
+    sample: [
+      {k:'About God',
+       en:`God is a peace-giver, not just a peace-wisher — He actively guards those who bring Him their fears.`,
+       tl:`Ang Diyos ay nagbibigay ng kapayapaan, hindi lang nagnanais nito — aktibo Niyang binabantayan ang nagdadala ng takot sa Kanya.`},
+      {k:'About People',
+       en:`It's my nature to carry worry silently. God assumes I'll be anxious — so He gives me a way out, not a scolding.`,
+       tl:`Likas sa akin ang tahimik na pagpasan ng alalahanin. Alam ng Diyos na mababalisa ako — kaya binigyan Niya ako ng paraan, hindi pagsaway.`},
+      {k:'To Do',
+       en:`I'll turn one worry into a written prayer today, and thank Him before I see the answer.`,
+       tl:`Gagawin kong nakasulat na panalangin ang isang alalahanin ngayon, at magpapasalamat bago ko makita ang sagot.`},
+    ]
+  }
+};
+
+function _devoMethodCardHTML(key){
+  const m = DEVO_METHODS[key];
+  if(!m) return '';
+  const steps = m.sample.map(s =>
+    `<div class="rs-step"><span class="rs-k">${esc(s.k)}</span> — ` +
+    `<span class="en-text">${esc(s.en)}</span><span class="tl-text">${esc(s.tl)}</span></div>`
+  ).join('');
+  return `<div class="rb-method">` +
+    `<div class="rb-method-name">${esc(m.name)}</div>` +
+    `<div class="rb-method-desc"><span class="en-text">${esc(m.descEn)}</span><span class="tl-text">${esc(m.descTl)}</span></div>` +
+    `<div class="rb-method-actions">` +
+      `<button type="button" class="rb-mbtn use" onclick="_devoApplyMethod('${key}')"><span class="en-text">Use this</span><span class="tl-text">Gamitin ito</span></button>` +
+      `<button type="button" class="rb-mbtn see" onclick="_devoToggleSample('${key}')"><span class="en-text">See example</span><span class="tl-text">Halimbawa</span></button>` +
+    `</div>` +
+    `<div class="rb-sample" id="rbSample-${key}">` +
+      `<div class="rs-cap"><span class="en-text">Example — Philippians 4:6-7</span><span class="tl-text">Halimbawa — Filipos 4:6-7</span></div>` +
+      steps +
+    `</div>` +
+  `</div>`;
+}
+
+function _devoMethodHelperHTML(){
+  return `<div class="rb-helper" id="rbHelper">` +
+    `<button type="button" class="rb-helper-toggle" onclick="_devoToggleMethodHelper()">` +
+      `<span class="rb-chev">▶</span>` +
+      `<span class="en-text">💡 New to this? Try a simple method</span><span class="tl-text">💡 Bago ka pa lang? Subukan ang simpleng paraan</span>` +
+    `</button>` +
+    `<div class="rb-helper-body">` +
+      `<div class="rb-helper-intro">` +
+        `<span class="en-text">Not sure what to write? Pick a guide — we'll drop the steps into your box, and you fill each one. There's no wrong answer, kapatid.</span>` +
+        `<span class="tl-text">Hindi sigurado kung ano ang isusulat? Pumili ng gabay — ilalagay namin ang mga hakbang sa iyong kahon, at punan mo ang bawat isa. Walang maling sagot, kapatid.</span>` +
+      `</div>` +
+      `<div class="rb-methods">` + _devoMethodCardHTML('sixp') + _devoMethodCardHTML('gpm') + `</div>` +
+    `</div>` +
+  `</div>`;
+}
+
+function _devoToggleMethodHelper(){
+  const h = document.getElementById('rbHelper');
+  if(h) h.classList.toggle('open');
+}
+
+function _devoToggleSample(key){
+  const s = document.getElementById('rbSample-' + key);
+  if(s) s.classList.toggle('show');
+}
+
+// Drop the labeled skeleton into the reflection box. Never clobbers existing
+// words — if the member already wrote something, the template is appended
+// after their text. Fires an input event so autosave + currentReflection track.
+function _devoApplyMethod(key){
+  const m = DEVO_METHODS[key];
+  const ref = document.getElementById('reflectionInput');
+  if(!m || !ref) return;
+  const cur = ref.value || '';
+  ref.value = cur.trim() ? (cur.replace(/\s+$/, '') + '\n\n' + m.template) : m.template;
+  ref.dispatchEvent(new Event('input', { bubbles:true }));
+  ref.focus();
+  try{ ref.setSelectionRange(ref.value.length, ref.value.length); }catch(e){}
 }
 
 // ───── Reflection-completion helpers (Inv #62 + 10-word rule) ─────
