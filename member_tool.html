@@ -1345,7 +1345,7 @@ body.lang-tl .tl-text{display:inline;}
   line-height:1.65;color:var(--ink);
   border:1.5px solid var(--line);
   border-radius:8px;background:#fff;
-  outline:none;resize:vertical;
+  outline:none;resize:none;overflow:hidden;
   transition:border-color .15s;
 }
 .reflection-box textarea:focus{border-color:var(--forest);}
@@ -8361,6 +8361,15 @@ async function openDevoReader(which, dateIso){
   if(body) body.scrollTop = 0;
 }
 
+// Grow the reflection textarea to fit its content — works on every screen,
+// unlike the CSS resize handle (which mobile browsers don't render). min-height
+// (180px) is the floor; the reader modal scrolls once the box passes the fold.
+function _devoAutoGrow(el){
+  if(!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 function renderReaderBody(){
   const e = currentReaderEntry;
   if(!e){
@@ -8452,8 +8461,10 @@ function renderReaderBody(){
   const ref = document.getElementById('reflectionInput');
   if(ref){
     ref.value = currentReflection || '';
+    requestAnimationFrame(() => _devoAutoGrow(ref)); // fit existing text once the reader is visible
     ref.addEventListener('input', () => {
       currentReflection = ref.value;
+      _devoAutoGrow(ref); // grow/shrink to fit as they type (or when a method template is inserted)
       // Hide saved indicator while typing
       const st = document.getElementById('readerStatus');
       if(st) st.classList.remove('show');
