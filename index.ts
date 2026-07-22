@@ -182,7 +182,7 @@ async function runComputation(supabase: any, params: any) {
   //    runs (the filtered `members` above may hold just one person).
   const { data: allLite } = await supabase
     .from("members")
-    .select("id,pipeline_level,discipler_id,church_id")
+    .select("id,pipeline_level,discipler_id,church_id,is_external_user")
     .or("is_test_member.is.null,is_test_member.eq.false");
   const liteById = new Map<string, any>((allLite || []).map((m: any) => [m.id, m]));
 
@@ -357,10 +357,49 @@ async function runComputation(supabase: any, params: any) {
     meetingsHeld.get(key)!.add(r.event_date);
   }
 
+  // == Wave 5c: multiplication care-lens. Group active, non-test, non-guest
+  //    members by discipler -> each leader's flock; bulk pathway_progress over
+  //    the widest configured window; a disciple 'advanced' = >=1 rung completed.
+  //    multByLeader: leaderId -> { advanced, total }.
+  const multDays = (() => {
+    let d = 0;
+    for (const mm of metrics) if (mm.compute_type === "disciples_advancing") {
+      const lb = Number(mm.compute_config?.lookback_days) || 90; if (lb > d) d = lb;
+    }
+    return d;
+  })();
+  const multByLeader = new Map<string, { advanced: number; total: number }>();
+  if (multDays > 0) {
+    const disciplesByLeader = new Map<string, string[]>();
+    for (const lm of (allLite || [])) {
+      const lead = (lm as any).discipler_id;
+      if (!lead || lead === (lm as any).id) continue;
+      if ((lm as any).is_external_user === true) continue;
+      (disciplesByLeader.get(lead) || disciplesByLeader.set(lead, []).get(lead))!.push((lm as any).id);
+    }
+    const ppLower = dayStr(weekStart, multDays - 1);
+    const ppWs = new Date(weekStart + "T00:00:00Z");
+    const ppUpper = new Date(ppWs); ppUpper.setUTCDate(ppUpper.getUTCDate() + 1);
+    const ppRows = await fetchAllPaged((f, t) => supabase.from("pathway_progress")
+      .select("member_id,completed_at")
+      .gte("completed_at", ppLower).lt("completed_at", ppUpper.toISOString()).range(f, t));
+    const advancedByMember = new Map<string, number>();
+    for (const r of ppRows) {
+      const id = (r as any).member_id; if (!id || !(r as any).completed_at) continue;
+      advancedByMember.set(id, (advancedByMember.get(id) || 0) + 1);
+    }
+    for (const [lead, ds] of disciplesByLeader) {
+      let adv = 0;
+      for (const d of ds) if ((advancedByMember.get(d) || 0) > 0) adv++;
+      multByLeader.set(lead, { advanced: adv, total: ds.length });
+    }
+  }
+
   const prefetch = {
     attendanceByMember, devotionalByMember, interventionsByMember,
     diagnosticLatestByMember, countByMetric, priorScoreByMember,
     rateByMetric, rhPresentByMetric, rhHeldByMetric,
+    multByLeader,
   };
 
   // Compute per member
@@ -458,6 +497,26 @@ function computeMemberSnapshot(
         const raw = meetingsHeld.get(member.id)?.size || 0;
         const score = applyScoreRules(raw, metric.score_rules);
         metricScores[metric.metric_key] = { raw, score, weight, category: metric.category };
+        metricsWithData++; weightedSum += score * weight; totalWeight += weight;
+        if (!categoryScores[metric.category]) categoryScores[metric.category] = { total: 0, weight: 0 };
+        categoryScores[metric.category].total += score * weight;
+        categoryScores[metric.category].weight += weight;
+      }
+      continue;
+    }
+
+    // MULTIPLICATION (Wave 5c, L2+ only): fraction of THIS leader's disciples
+    // who advanced >=1 pathway rung in the window. No disciples => n/a (not
+    // counted); disciples but none advanced => 0 (a gentle flag, not a penalty).
+    if (metric.compute_type === "disciples_advancing") {
+      const det = prefetch.multByLeader.get(member.id);
+      if (!det || det.total === 0) {
+        metricScores[metric.metric_key] = { raw: null, score: null, weight, category: metric.category, note: "n/a" };
+        metricsTotal--;
+      } else {
+        const rate = det.advanced / det.total;
+        const score = applyScoreRules(rate, metric.score_rules);
+        metricScores[metric.metric_key] = { raw: rate, score, weight, category: metric.category, detail: { advanced: det.advanced, total: det.total } };
         metricsWithData++; weightedSum += score * weight; totalWeight += weight;
         if (!categoryScores[metric.category]) categoryScores[metric.category] = { total: 0, weight: 0 };
         categoryScores[metric.category].total += score * weight;
@@ -572,6 +631,7 @@ function computeMetric(member: any, metric: any, weekStart: string, systemStartD
     case "count_rows":     return computeCountRows(member, metric, prefetch);
     case "rate_rows":      return computeRateRows(member, metric, prefetch);
     case "count_fields":   return computeCountFields(member, metric);
+    case "disciples_advancing": return null; // handled in computeMemberSnapshot special-case
     default:
       throw new Error(`Unknown compute_type: ${metric.compute_type}`);
   }
