@@ -171,7 +171,8 @@ async function runComputation(supabase: any, params: any) {
   let memberQuery = supabase
     .from("members")
     .select("id,name,lc_group,pipeline_level,discipler_id,ministry_role,ministry,ministry2,ministry3,eolo,enrolled_date,is_test_member,church_id")
-    .or("is_test_member.is.null,is_test_member.eq.false");
+    .or("is_test_member.is.null,is_test_member.eq.false")
+    .eq("is_external_user", false);
 
   if (params.member_id) {
     memberQuery = memberQuery.eq("id", params.member_id);
@@ -192,7 +193,8 @@ async function runComputation(supabase: any, params: any) {
   const { data: allLite } = await supabase
     .from("members")
     .select("id,pipeline_level,discipler_id,church_id,is_external_user")
-    .or("is_test_member.is.null,is_test_member.eq.false");
+    .or("is_test_member.is.null,is_test_member.eq.false")
+    .eq("is_external_user", false);
   const liteById = new Map<string, any>((allLite || []).map((m: any) => [m.id, m]));
 
   // ── BULK PREFETCH: every per-member data source fetched ONCE for ALL members,
