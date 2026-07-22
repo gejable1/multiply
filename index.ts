@@ -158,6 +158,15 @@ async function runComputation(supabase: any, params: any) {
     return w;
   };
 
+  // Wave 5c: auto-complete the objective pathway rungs (assessments, finished
+  // courses, devotional streaks) BEFORE reading pathway_progress, so multiplication
+  // sees fresh completions. Only on the real full weekly run (not dry_run / single-
+  // member); best-effort so a failure never blocks SVI compute.
+  if (!params.dry_run && !params.member_id) {
+    const { error: acErr } = await supabase.rpc("auto_complete_pathway_rungs");
+    if (acErr) console.error("auto_complete_pathway_rungs failed:", acErr.message);
+  }
+
   // Load active members
   let memberQuery = supabase
     .from("members")
