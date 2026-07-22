@@ -420,8 +420,12 @@ html,body{
     <!-- Filter controls -->
     <div class="control-bar">
       <div class="cb-group">
-        <span class="cb-label">📅 Date</span>
-        <input type="date" class="cb-input" id="filterDate">
+        <span class="cb-label">📅 From</span>
+        <input type="date" class="cb-input" id="filterStart">
+      </div>
+      <div class="cb-group">
+        <span class="cb-label">📅 To</span>
+        <input type="date" class="cb-input" id="filterEnd">
       </div>
       <div class="cb-group">
         <span class="cb-label">🎯 Event</span>
@@ -521,8 +525,12 @@ function fmtDate(yyyymmdd){
 
 // ── Init ──
 window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('filterDate').value = lastSunday();
-  document.getElementById('filterDate').addEventListener('change', loadReport);
+  const _t = new Date();
+  const _iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  document.getElementById('filterStart').value = _iso(new Date(_t.getFullYear(), _t.getMonth(), 1));
+  document.getElementById('filterEnd').value = _iso(_t);
+  document.getElementById('filterStart').addEventListener('change', loadReport);
+  document.getElementById('filterEnd').addEventListener('change', loadReport);
   document.getElementById('filterEventType').addEventListener('change', loadReport);
   loadReport();
 });
@@ -552,7 +560,8 @@ async function loadReport(){
   document.getElementById('loadingState').style.display = 'block';
   document.getElementById('reportContent').style.display = 'none';
 
-  const date = document.getElementById('filterDate').value || lastSunday();
+  const startDate = document.getElementById('filterStart').value || lastSunday();
+  const endDate = document.getElementById('filterEnd').value || startDate;
   const eventType = document.getElementById('filterEventType').value || 'Sunday Service';
 
   try{
@@ -565,16 +574,23 @@ async function loadReport(){
 
     // ── 2. Pull attendance rows for the selected date + event ──
     const {data:attRows, error:aErr} = await db.from('attendance')
-      .select('member_id,member_name,present,source,logged_by,logged_by_id,created_at,updated_at,attendance_mode')
-      .eq('event_date', date)
+      .select('member_id,member_name,present,source,logged_by,logged_by_id,created_at,updated_at,attendance_mode,event_date')
+      .gte('event_date', startDate)
+      .lte('event_date', endDate)
       .eq('event_type', eventType);
     if(aErr) throw aErr;
 
+    // Fair denominator basis: the number of DISTINCT event dates that actually
+    // had attendance logged (church-wide) across the range. A Sunday nobody
+    // logged (holiday / cancelled) isn't counted, so it can't drag every
+    // group's percentage down. Single-day range => eventCount = 1 (unchanged).
+    const eventCount = new Set((attRows||[]).map(r => r.event_date)).size || 1;
+
     // ── 3. Build the group-by-LC structure ──
-    const report = buildGroups(allMembers||[], attRows||[]);
+    const report = buildGroups(allMembers||[], attRows||[], eventCount);
 
     // ── 4. Render ──
-    renderReport(report, date, eventType);
+    renderReport(report, startDate, endDate, eventType, eventCount);
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('reportContent').style.display = 'block';
@@ -614,7 +630,7 @@ async function loadReport(){
 //   • Awaiting Your Heartbeat — no attendance of any source.
 // Present/absent counts always include EVERY source.
 // ═══════════════════════════════════════════════════════════════
-function buildGroups(allMembers, attRows){
+function buildGroups(allMembers, attRows, eventCount){
   // ─── TEST-MEMBER FILTER (Pastor's call, May 2026) ───
   // Test members count for nobody — they never appear as leaders, never
   // count toward any LCG flock size, and their attendance rows don't
@@ -751,7 +767,7 @@ function buildGroups(allMembers, attRows){
     }
     // Real memberCount is the denominator (the UNIQUE row constraint means
     // att.total never exceeds it).
-    const denominator = memberCount;
+    const denominator = memberCount * (eventCount || 1);   // present-marks possible across the range
     const pct = denominator > 0 ? Math.round((att.present / denominator) * 100) : 0;
     const card = {
       displayName, leaderName,
@@ -785,7 +801,7 @@ function buildGroups(allMembers, attRows){
   const sumChampions = champions.reduce((s,c) => s + (c.total||0), 0);
   const sumRunners   = runners.reduce((s,c) => s + (c.total||0), 0);
   const sumSelfAttested = selfAttested.reduce((s,c) => s + (c.total||0), 0);
-  const sumAwaiting  = awaiting.reduce((s,c) => s + (c.memberCount||0), 0);
+  const sumAwaiting  = awaiting.reduce((s,c) => s + ((c.memberCount||0) * (eventCount||1)), 0);  // ×N so overall % stays consistent
   const totalMembersInLcs = sumChampions + sumRunners + sumSelfAttested + sumAwaiting;
   const totalPresent = Object.values(lcMap).reduce((s,g)=>s+(g.attResolved?.present || 0), 0);
   const totalUnassigned = unassigned.length;
@@ -821,7 +837,7 @@ function buildGroups(allMembers, attRows){
 // ═══════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════
-function renderReport(report, date, eventType){
+function renderReport(report, startDate, endDate, eventType, eventCount){
   const {champions, runners, selfAttested, awaiting, totalMembersInLcs, totalPresent, totalUnassigned, totalAllMembers} = report;
 
   // ── Header ──
@@ -830,7 +846,7 @@ function renderReport(report, date, eventType){
       <div class="rh-eyebrow" data-church-tmpl="{church} · MULTIPLY">MULTIPLY</div>
       <h1 class="rh-title">LC Attendance Compliance Report</h1>
       <div class="rh-subtitle">A snapshot of how our Life Communities are gathering — and where we can lift each other up.</div>
-      <div class="rh-period">📅 ${escapeHtml(fmtDate(date))} · ${escapeHtml(eventType)}</div>
+      <div class="rh-period">📅 ${escapeHtml(startDate===endDate ? fmtDate(startDate) : (fmtDate(startDate)+' – '+fmtDate(endDate)))} · ${escapeHtml(eventType)}${eventCount>1?` · ${eventCount} gatherings`:''}</div>
 
       <div class="rh-stats">
         <div class="rh-stat gold">
@@ -894,6 +910,33 @@ function renderReport(report, date, eventType){
             <div class="champion-stat">
               <div class="champion-pct">100%</div>
               <div class="champion-count">${c.present} / ${c.total}${c.presentOnline ? ` <span style="display:inline-block;background:rgba(94,135,176,.15);color:#1e4d80;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:3px;vertical-align:2px" title="${c.presentOnline} attended online (livestream)">🌐 ${c.presentOnline}</span>` : ''}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if(runners.length){
+    // No group reached 100% this period — celebrate the top 5 by attendance %.
+    const _topFive = runners.slice(0, 5);
+    const _medals = ['🥇','🥈','🥉','🎖️','🎖️'];
+    slot.innerHTML += `
+      <div class="section champions">
+        <div class="section-head">
+          <span class="section-icon">🌟</span>
+          <span class="section-title">Top ${_topFive.length} Group${_topFive.length===1?'':'s'} This Period</span>
+          <span class="section-tagline">No group reached 100% this time — but these gathered most faithfully. Let's celebrate them!</span>
+          <span class="section-count">Top ${_topFive.length}</span>
+        </div>
+        ${_topFive.map((c, i) => `
+          <div class="champion-card">
+            <div class="champion-medal">${_medals[i] || '🎖️'}</div>
+            <div>
+              <div class="champion-name">${escapeHtml(c.displayName)}</div>
+              <div class="champion-meta">Led by <strong>${escapeHtml(c.leaderName)}</strong></div>
+            </div>
+            <div class="champion-stat">
+              <div class="champion-pct">${c.pct}%</div>
+              <div class="champion-count">${c.present} / ${c.total}</div>
             </div>
           </div>
         `).join('')}
