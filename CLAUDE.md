@@ -28,7 +28,7 @@ HTML/JS on GitHub Pages + Supabase.** No framework, no build step — vanilla JS
 ## Non-negotiable rules (the ones that bite — full set in INVARIANTS)
 1. **Read the current/deployed file before editing it. Never edit from memory.** (#56/#126)
 2. **`node --check` all JS before shipping.** No new logic without a truth-table/harness. Fail-closed on every error path. (#105)
-3. **These files are pure LF.** Never introduce CRLF; splice anchors use `\n`.
+3. **These files are pure LF.** Never introduce CRLF; splice anchors use `\n`. Uploaded lessons may arrive CRLF — `.gitattributes` normalizes them to LF on commit (#151), so it's expected, not a problem; only normalize before surgically patching one.
 4. **`?v=` bump-together:** when `multiply_shared.js` changes, bump `?v=N → N+1` across **ALL** HTML that load it, in one commit. Pages/PWA cache hard — always bump + hard-refresh. (#138)
 5. **SQL stays human-gated.** Write idempotent SQL (`WHERE NOT EXISTS` / `ON CONFLICT`); the **Pastor** runs it in the Supabase SQL editor. Do NOT run migrations or use a service-role key. Every `CREATE TABLE` adds `ALTER TABLE … DISABLE ROW LEVEL SECURITY;` until RLS Phase 2. (#10)
 6. **Kind-relative scoping (#164):** `memberKind` = test (wins over guest) / guest / real vs the **viewer's** kind (own `members` row, never the session shim). Operations: real viewer sees all kinds **badged**; test/guest viewers see own kind only. Statistics/counts: `memberKind === viewerKind` only. Report HTMLs keep the strict `is_test_member = false AND is_external_user = false` (#58) until Phase B makes them viewer-aware. Use `_scopedMembers()`/`liveMembers()` helpers, never raw `members`; cross-LCG visibility = `leaderLevel >= 3`.
