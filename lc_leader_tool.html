@@ -1683,7 +1683,7 @@ async function mpLoadMyLessons(){
   box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   try{
     const { data, error } = await db.from('lc_meeting_guides')
-      .select('id,meeting_date,status,devotional_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,shared_to_library,source_guide_id,source_kind,source_title')
+      .select('id,meeting_date,status,devotional_id,lcl_id,facilitator_md,participant_md,facilitator_md_tl,participant_md_tl,shared_to_library,source_guide_id,source_kind,source_title')
       .eq('lcl_id', me.id).order('meeting_date',{ ascending:false });
     if(error) throw error;
     const guides = data || [];
@@ -1760,7 +1760,11 @@ function _mpOpenModal(id, source){
   source = source || 'mine';
   const g = (source==='lib' ? _mpLibGuides[id] : _mpMyGuides[id]); if(!g) return;
   _mpModalCur = g; _mpModalSource = source; _mpModalGuideView = 'fac';
+  // Session 80: reset delegation state, then load it in the background so the
+  // modal paints immediately (never block the guide on the shares query).
+  _mpShares = []; _mpSharesGuideId = null; _mpAssignOpen = false;
   _mpRenderModal();
+  if (_mpGuideIsMine(g)) _mpLoadShares(g.id);
   document.getElementById('mpModalOverlay').classList.add('show');
 }
 function _mpCloseModal(){ document.getElementById('mpModalOverlay').classList.remove('show'); _mpModalCur=null; }
@@ -1796,8 +1800,12 @@ function _mpRenderModal(){
     + '<div style="padding:0 18px 16px">'
     +   (_mpModalSource==='lib' && !_mpModalCur._mine
         ? '<button onclick="_mpShareToLcg(\''+g.id+'\')" style="width:100%;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">📲 Share to my LCG</button>'
-        : '<button onclick="_mpEditGuide(\''+g.meeting_date+'\')" style="width:100%;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">✏️ Edit lesson</button>')
+        : '<div style="display:flex;gap:8px">'
+          + '<button onclick="_mpEditGuide(\''+g.meeting_date+'\')" style="flex:1;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">✏️ Edit lesson</button>'
+          + '<button onclick="_mpToggleAssign()" style="flex:1;background:var(--surface2);color:var(--ink);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer">\uD83D\uDC64 Facilitator</button>'
+          + '</div><div id="mpShareBox" style="margin-top:10px"></div>')
     +   '</div>';
+  if (_mpGuideIsMine(g)) _mpRenderShareBox();
 }
 async function _mpEditGuide(date){
   _mpCloseModal();
@@ -1833,6 +1841,138 @@ async function _mpShareToLcg(srcId){
     _mpTab('mine');
   }catch(e){ console.error('share', e); toast('Could not share: '+(e.message||e),'⚠️'); }
 }
+// ============================================================================
+// Session 80 -- FACILITATOR DELEGATION (migration 088)
+// An LCL may hand ONE published guide to a member of their own flock -- usually
+// an L1 being raised up -- so that member can open the FACILITATOR view in MMT.
+// Deliberately NOT a level change: Inv #33 says L2 certifies teaching
+// qualification churchwide; this is per-guide, revocable, and invisible
+// elsewhere. Enforcement lives in RLS (lcmgs_insert requires the caller to own
+// the guide and to stamp granted_by = self); the own-flock rule below is a
+// pastoral UI convention, not a security boundary.
+// ============================================================================
+let _mpShares = [];
+let _mpSharesGuideId = null;
+let _mpAssignOpen = false;
+
+function _mpGuideIsMine(g){
+  if (!g) return false;
+  if (_mpModalSource === 'lib' && !g._mine) return false;
+  const me = _liveLeaderIdName();
+  if (me && me.id && g.lcl_id) return g.lcl_id === me.id;
+  return _mpModalSource !== 'lib';
+}
+
+// My flock = members whose LCG facilitator is me. Deliberately reads allMembers
+// (not myMembers) so the picker does NOT shift with the scope tabs an L3+ can
+// switch. Test members and guests excluded, same as every report.
+function _mpMyFlock(){
+  const me = _liveLeaderIdName();
+  if (!me || !me.id) return [];
+  return (allMembers || [])
+    .filter(m => m && m.facilitator_id === me.id && m.id !== me.id && !m.is_test_member && !m.is_external_user)
+    .sort((a,b) => String(a.name||'').localeCompare(String(b.name||'')));
+}
+
+async function _mpLoadShares(guideId){
+  try{
+    const { data, error } = await db.from('lc_meeting_guide_shares')
+      .select('id,member_id,created_at')
+      .eq('guide_id', guideId);
+    if (error) throw error;
+    _mpShares = data || [];
+  }catch(e){
+    console.warn('_mpLoadShares (non-fatal):', e);
+    _mpShares = [];
+  }
+  _mpSharesGuideId = guideId;
+  _mpRenderShareBox();
+}
+
+function _mpRenderShareBox(){
+  const box = document.getElementById('mpShareBox');
+  if (!box) return;
+  const g = _mpModalCur; if (!g) return;
+  const nameById = {};
+  (allMembers || []).forEach(m => { if (m && m.id) nameById[m.id] = m.name || 'Someone'; });
+
+  // Decision 1 (S80): published only. The RLS branch requires status='published',
+  // so say why instead of failing mutely.
+  if (g.status !== 'published'){
+    box.innerHTML = _mpAssignOpen
+      ? '<div style="font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;line-height:1.5">Publish this lesson first \u2014 only published lessons can be handed to a facilitator.</div>'
+      : '';
+    return;
+  }
+
+  let html = '';
+  if (_mpShares.length){
+    html += '<div style="font-size:11.5px;color:var(--muted);margin-bottom:5px">Facilitating this meeting</div>';
+    html += _mpShares.map(sh =>
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;margin-bottom:5px">'
+      + '<span style="font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\uD83D\uDC64 ' + _mpEsc(nameById[sh.member_id] || 'Member') + '</span>'
+      + '<button onclick="_mpRevokeShare(\'' + sh.id + '\')" title="Remove" style="background:transparent;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px">\u2715</button>'
+      + '</div>').join('');
+  }
+
+  if (_mpAssignOpen){
+    const flock = _mpMyFlock().filter(m => !_mpShares.some(sh => sh.member_id === m.id));
+    if (!flock.length){
+      html += '<div style="font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;line-height:1.5">No one left in your LCG to assign.</div>';
+    } else {
+      html += '<div style="display:flex;gap:6px;margin-top:6px">'
+        + '<select id="mpAssignSel" style="flex:1;min-width:0;font-family:inherit;font-size:12.5px;padding:8px;border-radius:8px;background:var(--surface2);color:var(--ink);border:1px solid var(--border)">'
+        + flock.map(m => '<option value="' + _mpEsc(m.id) + '">' + _mpEsc(m.name || 'Member') + '</option>').join('')
+        + '</select>'
+        + '<button onclick="_mpGrantShare()" style="background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap">Assign</button>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">They will see the facilitator guide in their member app. You can remove it anytime.</div>';
+    }
+  }
+  box.innerHTML = html;
+}
+
+function _mpToggleAssign(){
+  _mpAssignOpen = !_mpAssignOpen;
+  if (_mpModalCur && _mpSharesGuideId !== _mpModalCur.id) _mpLoadShares(_mpModalCur.id);
+  else _mpRenderShareBox();
+}
+
+async function _mpGrantShare(){
+  const g = _mpModalCur; if (!g) return;
+  const sel = document.getElementById('mpAssignSel'); if (!sel || !sel.value) return;
+  const me = _liveLeaderIdName();
+  if (!me || !me.id){ toast('Session not ready \u2014 reopen this screen','\u26A0\uFE0F'); return; }
+  let churchId = null;
+  try{ if (typeof MultiplyTenancy !== 'undefined' && MultiplyTenancy.churchId) churchId = MultiplyTenancy.churchId(); }catch(_e){}
+  try{
+    const row = { guide_id: g.id, member_id: sel.value, granted_by: me.id };
+    if (churchId) row.church_id = churchId;
+    const { error } = await db.from('lc_meeting_guide_shares').insert(row);
+    if (error) throw error;
+    toast('Facilitator assigned \uD83C\uDF89','\u2705');
+    _mpAssignOpen = false;
+    await _mpLoadShares(g.id);
+  }catch(e){
+    console.error('grant share', e);
+    toast('Could not assign: ' + (e.message || e), '\u26A0\uFE0F');
+  }
+}
+
+async function _mpRevokeShare(shareId){
+  const g = _mpModalCur; if (!g) return;
+  if (!confirm('Remove this facilitator from the lesson?')) return;
+  try{
+    const { error } = await db.from('lc_meeting_guide_shares').delete().eq('id', shareId);
+    if (error) throw error;
+    toast('Removed','\u2705');
+    await _mpLoadShares(g.id);
+  }catch(e){
+    console.error('revoke share', e);
+    toast('Could not remove: ' + (e.message || e), '\u26A0\uFE0F');
+  }
+}
+
 async function _mpMostRecentGuideDate(){
   const me = _liveLeaderIdName(); if(!me || !me.id) return null;
   try{
