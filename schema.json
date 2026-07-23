@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 74,
+  "table_count": 75,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -6619,6 +6619,219 @@
         }
       ]
     },
+    "lc_meeting_guide_shares": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "guide_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "granted_by",
+          "ordinal": 5,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "note",
+          "ordinal": 6,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 7,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "lc_meeting_guide_shares_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_meeting_guide_shares_granted_by_fkey",
+          "columns": [
+            "granted_by"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (granted_by) REFERENCES members(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "lc_meeting_guide_shares_guide_id_fkey",
+          "columns": [
+            "guide_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "lc_meeting_guides",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (guide_id) REFERENCES lc_meeting_guides(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_meeting_guide_shares_member_id_fkey",
+          "columns": [
+            "member_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "lc_meeting_guide_shares_guide_member_key",
+          "columns": [
+            "guide_id",
+            "member_id"
+          ]
+        }
+      ],
+      "check_constraints": [],
+      "indexes": [
+        {
+          "name": "lc_meeting_guide_shares_guide_member_key",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "guide_id",
+            "member_id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lc_meeting_guide_shares_guide_member_key ON public.lc_meeting_guide_shares USING btree (guide_id, member_id)"
+        },
+        {
+          "name": "lc_meeting_guide_shares_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lc_meeting_guide_shares_pkey ON public.lc_meeting_guide_shares USING btree (id)"
+        },
+        {
+          "name": "lcmgs_guide_idx",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "guide_id"
+          ],
+          "definition": "CREATE INDEX lcmgs_guide_idx ON public.lc_meeting_guide_shares USING btree (guide_id)"
+        },
+        {
+          "name": "lcmgs_member_idx",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "member_id"
+          ],
+          "definition": "CREATE INDEX lcmgs_member_idx ON public.lc_meeting_guide_shares USING btree (member_id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "lcmgs_delete",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "DELETE",
+          "using": "((church_id = auth_church_id()) AND (EXISTS ( SELECT 1\n   FROM lc_meeting_guides g\n  WHERE ((g.id = lc_meeting_guide_shares.guide_id) AND (g.lcl_id = auth_member_id())))))",
+          "with_check": null
+        },
+        {
+          "name": "lcmgs_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((church_id = auth_church_id()) AND (granted_by = auth_member_id()) AND (EXISTS ( SELECT 1\n   FROM lc_meeting_guides g\n  WHERE ((g.id = lc_meeting_guide_shares.guide_id) AND (g.lcl_id = auth_member_id())))))"
+        },
+        {
+          "name": "lcmgs_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id = auth_church_id()) AND ((member_id = auth_member_id()) OR (EXISTS ( SELECT 1\n   FROM lc_meeting_guides g\n  WHERE ((g.id = lc_meeting_guide_shares.guide_id) AND (g.lcl_id = auth_member_id()))))))",
+          "with_check": null
+        }
+      ],
+      "triggers": []
+    },
     "lc_meeting_guides": {
       "kind": "table",
       "comment": null,
@@ -6919,7 +7132,7 @@
             "authenticated"
           ],
           "command": "SELECT",
-          "using": "((church_id = auth_church_id()) AND ((lcl_id = auth_member_id()) OR ((status = 'published'::text) AND (lcl_id = auth_discipler_id())) OR ((status = 'published'::text) AND (shared_to_library = true) AND auth_is_leader())))",
+          "using": "((church_id = auth_church_id()) AND ((lcl_id = auth_member_id()) OR ((status = 'published'::text) AND (lcl_id = auth_discipler_id())) OR ((status = 'published'::text) AND (shared_to_library = true) AND auth_is_leader()) OR ((status = 'published'::text) AND auth_can_facilitate_guide(id))))",
           "with_check": null
         },
         {
@@ -18504,6 +18717,16 @@
       "security_definer": false,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public._set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n  NEW.updated_at = now();\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "auth_can_facilitate_guide",
+      "arguments": "p_guide uuid",
+      "returns": "boolean",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.auth_can_facilitate_guide(p_guide uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT EXISTS (\r\n    SELECT 1 FROM lc_meeting_guide_shares\r\n     WHERE guide_id = p_guide AND member_id = auth_member_id()\r\n  )\r\n$function$\n"
     },
     {
       "schema": "public",
