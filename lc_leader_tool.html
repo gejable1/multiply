@@ -474,7 +474,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      dashboard. If no valid session exists, redirect to the central
      login page. This replaces the old open-name-search login.
 ─────────────────────────────────────────────────────────────── -->
-<script src="multiply_shared.js?v=12"></script>
+<script src="multiply_shared.js?v=13"></script>
 <script src="multiply_brand.js?v=1"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
@@ -6084,7 +6084,7 @@ async function _btliLoadBatchesForCourse(courseCode){
       memberId: L.leaderId,
       isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
     };
-    const batches = await MultiplyShared.cohorts.listActiveByCourseCode(actor, courseCode);
+    const batches = await MultiplyShared.cohorts.listActiveByCourseCode(actor, courseCode, 'btli', { includeStaffOf: true });
     _btliBatchesForCourse = batches || [];
     sel.disabled = false;
     if (_btliBatchesForCourse.length === 0) {
@@ -6096,7 +6096,9 @@ async function _btliLoadBatchesForCourse(courseCode){
       _btliBatchesForCourse.map(c => {
         const count = (c._members || []).filter(cm => cm.status === 'active').length;
         const prog = c.cohort_programs || {};
-        const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? '' : ' (other)');
+        const ownerTag = c.owner_id === L.leaderId ? ' (yours)'
+                       : (c._iAmStaff ? ' (co-teaching)'
+                       : (c._ownerIsPastor ? '' : ' (other)'));
         return '<option value="' + c.id + '">' +
           MultiplyShared.escapeHTML(c.name || '(unnamed)') + ' · ' +
           count + ' enrolled' + MultiplyShared.escapeHTML(ownerTag) +
@@ -6129,12 +6131,15 @@ async function _gpLoadBatches(){
       leaderLevel: L.leaderLevel || 0,
       isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
     };
-    const all = await MultiplyShared.cohorts.listVisibleToLeader(actor);
+    const all = await MultiplyShared.cohorts.listVisibleToLeader(actor, { includeStaffOf: true });
     _gpBatches = (all || []).filter(c => {
       const cat = (((c.cohort_programs || {}).category) || '').toLowerCase();
       const lessonDriven = cat === 'btli' || cat === 'pre-discipleship' || cat === 'pre-pipeline';
       const live = c.status === 'active' || c.status === 'forming';
-      const mine = c.owner_id === L.leaderId;   // attendance picker = YOUR batches only (others live in 🎓 My Batches / Settings)
+      // Session 80: the GP picker had a SECOND, tighter gate of its own -- it
+      // kept only owner-matched batches, so widening shared.js alone would not
+      // have opened this path. Active teaching staff now pass too.
+      const mine = c.owner_id === L.leaderId || c._iAmStaff === true;
       return !lessonDriven && live && mine;
     });
     sel.disabled = false;
@@ -6148,7 +6153,9 @@ async function _gpLoadBatches(){
         const count = (c._members || []).filter(cm => cm.status === 'active').length;
         const prog  = c.cohort_programs || {};
         const progName = prog.name ? (' · ' + prog.name) : '';
-        const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? ' (Pastor)' : '');
+        const ownerTag = c.owner_id === L.leaderId ? ' (yours)'
+                       : (c._iAmStaff ? ' (co-teaching)'
+                       : (c._ownerIsPastor ? ' (Pastor)' : ''));
         return '<option value="' + c.id + '">' +
           MultiplyShared.escapeHTML(c.name || '(unnamed)') +
           MultiplyShared.escapeHTML(progName) + ' · ' + count + ' members' +
@@ -6318,7 +6325,7 @@ async function _usbongLoadBatchesForCourse(courseCode){
       isPastor: (L.leaderLevel || 0) >= MultiplyShared.PASTOR_LEVEL
     };
     // 3rd arg = curriculum: 'usbong' selects the usbong_course_code column.
-    const batches = await MultiplyShared.cohorts.listActiveByCourseCode(actor, courseCode, 'usbong');
+    const batches = await MultiplyShared.cohorts.listActiveByCourseCode(actor, courseCode, 'usbong', { includeStaffOf: true });
     _usbongBatchesForCourse = batches || [];
     sel.disabled = false;
     if (_usbongBatchesForCourse.length === 0) {
@@ -6329,7 +6336,9 @@ async function _usbongLoadBatchesForCourse(courseCode){
     sel.innerHTML = '<option value="">— Pick the batch —</option>' +
       _usbongBatchesForCourse.map(c => {
         const count = (c._members || []).filter(cm => cm.status === 'active').length;
-        const ownerTag = c.owner_id === L.leaderId ? ' (yours)' : (c._ownerIsPastor ? '' : ' (other)');
+        const ownerTag = c.owner_id === L.leaderId ? ' (yours)'
+                       : (c._iAmStaff ? ' (co-teaching)'
+                       : (c._ownerIsPastor ? '' : ' (other)'));
         return '<option value="' + c.id + '">' +
           MultiplyShared.escapeHTML(c.name || '(unnamed)') + ' · ' +
           count + ' enrolled' + MultiplyShared.escapeHTML(ownerTag) +
