@@ -3844,4 +3844,93 @@ Merging an `auth-login`/`token-login` PR only records source in the repo; the LI
 
 ---
 
+### **372. Allow-all RLS stubs predating the S46 sweep leak cross-church (or to anon) -- audit pg_policies for qual/with_check = 'true'**
+
+The S46 tenancy sweep tightened tables to `_tenant_*` policies on `church_id = auth_church_id()`, but EARLY-ERA tables kept their original permissive stubs and were MISSED: `svi_snapshots` had `svi_snapshots_read USING(true)` (every authenticated SVI report saw ALL churches -- the "301"), and `interventions` + `ministry_intake` each had ONLY `"Enable all for anon" (ALL, roles={anon}, USING/WITH CHECK true)` -- unauthenticated read+write of every church's rows. RLS was ENABLED on all three; the stub simply defeated it. The tell is the policy NAME (`_read`/`_write` / `Enable all for anon`, not `_tenant_*`). The definitive audit:
+```sql
+select p.tablename, p.policyname, p.cmd, p.roles::text, p.qual, p.with_check
+from pg_policies p join information_schema.columns c
+  on c.table_schema='public' and c.table_name=p.tablename and c.column_name='church_id'
+where p.schemaname='public' and (p.qual='true' or p.with_check='true')
+  and 'service_role' <> all(p.roles)
+order by p.tablename, p.cmd;
+```
+Fix (085/086) = drop the stub, add the 4 church-scoped policies (SELECT / INSERT-with-check / UPDATE / DELETE `TO authenticated USING/WITH CHECK (church_id = public.auth_church_id())`). Service-role (the EF) bypasses RLS so compute is untouched. The whole surface tested clean (empty audit) only AFTER the fix.
+
+**RULE:** RLS-enabled is not RLS-enforced. Periodically audit `pg_policies` for `qual='true' OR with_check='true'` on every `church_id` table (excluding service_role lanes); any hit is a live leak. Fix with the S46 `_tenant_*` pattern.
+
+**Established July 22, 2026 (Session 79). Invariant #372 added - count now 372.**
+
+---
+
+### **373. The SVI compute is church-BLIND and historically excluded test members but NOT guests -- exclude is_external_user in BOTH member loads**
+
+`compute-svi-weekly` scores every active member across ALL tenant churches on one schedule (each snapshot stamped `church_id`); the church scoping happens at READ time via RLS on `svi_snapshots` (#372/085). Both EF member loads filtered only `.or("is_test_member.is.null,is_test_member.eq.false")` -- so GUESTS (`is_external_user=true`) were scored and snapshotted, inflating the church count (Rosehill read 215 = 211 members + 4 guests). Reports elsewhere already exclude BOTH (Standing Rule #16); the SVI EF was the exception. Fix (S79g): add `.eq("is_external_user", false)` to BOTH loads (the scored-members query AND the allLite map).
+
+**RULE:** Anything that scores or counts "members" excludes test AND guests. When a count looks high, check whether guests (`is_external_user`) slipped in -- and remember the SVI compute is platform-wide, scoped only by the read-side RLS.
+
+**Established July 22, 2026 (Session 79). Invariant #373 added - count now 373.**
+
+---
+
+### **374. writeSnapshots UPSERTs on (member_id, week_start) and never deletes orphans -- dropping a member from the compute leaves their old snapshot**
+
+`writeSnapshots` does `.upsert(batch, { onConflict: "member_id,week_start" })`. It only touches members that ARE in the current results; it never deletes rows for members no longer computed. So fixing the EF to exclude guests (#373) stops FUTURE guest snapshots but leaves the EXISTING ones -- the report count wouldn't drop until they age out. A one-time purge is required to drop it immediately: `DELETE FROM svi_snapshots s USING members m WHERE s.member_id=m.id AND (m.is_external_user OR m.is_test_member)` (migration 087, idempotent). The EF fix + the purge are BOTH needed: purge alone reverts on the next weekly compute if the EF isn't also redeployed.
+
+**RULE:** An upsert-only writer never removes rows for entities it stops emitting. To make an exclusion visible NOW, pair the compute fix with a one-time DELETE of the orphaned rows -- and ship both (redeploy + purge) or the next run reverts it.
+
+**Established July 22, 2026 (Session 79). Invariant #374 added - count now 374.**
+
+---
+
+### **375. pathway_progress.marked_by is uuid -- system/auto inserts use marked_by=NULL + note='auto:<key>', and stamp church_id explicitly**
+
+`pathway_progress.marked_by` is a `uuid` (the LCL who affirmed a rung), NOT text -- so an auto-completion row can't stamp a `'auto'` sentinel there. The auto engine (084) writes `marked_by = NULL` and tags provenance in the `note` text column (`'auto:'||auto_source_key`), which cleanly distinguishes system rows from LCL marks (multiplication counts either). It also provides `church_id` EXPLICITLY from the source row (not the base rung, which is `church_id IS NULL`), so the `set_church_id_from_jwt` trigger -- which is NULL-guarded (`if new.church_id is null`) -- no-ops and never calls `auth_church_id()` in the JWT-less SECURITY DEFINER context.
+
+**RULE:** For system-written rows on a church table, provide `church_id` explicitly (the NULL-guarded JWT trigger then no-ops) and carry provenance in a text/note column, never by overloading a typed FK/uuid column.
+
+**Established July 22, 2026 (Session 79). Invariant #375 added - count now 375.**
+
+---
+
+### **376. Auto-completion stamps the REAL milestone date, never now() -- else a backfill floods every recency window**
+
+`auto_complete_pathway_rungs()` derives completion dates from the source of truth: an assessment's earliest `date_taken`, a course's last passing `submitted_at`, the exact day a devotional streak reached N. It must NOT use `now()`: the one-time backfill inserts YEARS of historical completions at once, and stamping them "today" would flood the Multiplication metric's 90-day window and falsely spike every leader's recent movement. Real dates keep recency honest -- an assessment taken 6 months ago backfills dated 6 months ago and correctly does NOT count as recent multiplication.
+
+**RULE:** When backfilling derived events, stamp each with the date it actually happened, never the backfill time -- any downstream "last N days" metric depends on it.
+
+**Established July 22, 2026 (Session 79). Invariant #376 added - count now 376.**
+
+---
+
+### **377. The pathway auto-completion engine (084): 9 objective rungs tick themselves; character/fruit stay manual; runs at the top of the full weekly compute only**
+
+`pathway_progress` was manual-only (LCL toggles), so a flock crushing BTLI + assessments read as almost no movement (multiplication 1/12). Migration 084 adds a SECURITY DEFINER `auto_complete_pathway_rungs()` that derives the 9 rungs tagged `completion_source='auto'` into `pathway_progress`, idempotent via `ON CONFLICT (church_id,member_id,level,rung_key)`: 5 assessments (a row in `gifts_diagnostic` / `diagnostic_results` / `member_profiles` by `profile_type`, where `conflict_style`->rung `conflict`); 2 all-lessons courses (passed EVERY active lesson, course matched by `lower(replace(course_code,' ',''))` = the `auto_source_key` token, BTLI + Usbong in separate quiz tables); 2 devotional streaks (N consecutive >=10-word days via gaps-and-islands). Base rungs only (v1). The 4 character/fruit rungs stay `manual` (human-witnessed -- formation, never auto-certified). The EF hook calls `supabase.rpc("auto_complete_pathway_rungs")` at the TOP of `runComputation` gated `!dry_run && !member_id` (the real full weekly run) so Multiplication always reads fresh completions; best-effort (logs, never blocks compute). Backfill took Gerry's multiplication 1/12 -> 11/12.
+
+**RULE:** Derive objective, system-verifiable rungs (assessments, finished courses, streaks) from their source automatically; leave character/formation rungs to the shepherd. Hook the derivation ahead of any metric that reads the derived table.
+
+**Established July 22, 2026 (Session 79). Invariant #377 added - count now 377.**
+
+---
+
+### **378. The Multiplication metric (Wave 5c, disciples_advancing) is a care-lens, special-cased like service_lc_led -- and only as honest as the marking beneath it**
+
+`multiplication_disciples_advancing` (compute_type `disciples_advancing`, category `multiplication`, weight 0 until the pastor opts in per level L2+) is NOT a computeMetric dispatch case -- it's special-cased in `computeMemberSnapshot` (the `service_lc_led` precedent): for a leader, the fraction of THEIR disciples (grouped by `discipler_id`, guests excluded) who completed >=1 pathway rung in the 90d window. No disciples => `null` (n/a, `metricsTotal--`, never a penalty); disciples but none advancing => rate 0 => a gentle low score (a flag to notice, not punish). Stores `detail:{advanced,total}` so care-detail renders "N of M disciples advanced a rung" (a `rawMeaning` case in MD + MLT, lockstep). CRITICAL: it reads `pathway_progress`, so it only reflects what's MARKED -- which is exactly why the auto-completion engine (#377/084) is its prerequisite (it moved a real flock from a false 1/12 to a true 11/12).
+
+**RULE:** A multiplication/advancement metric measures logged movement, not actual movement -- pair it with automatic rung derivation, and frame it as a care-lens (n/a for no-disciples, gentle flag for none-moving), never a KPI.
+
+**Established July 22, 2026 (Session 79). Invariant #378 added - count now 378.**
+
+---
+
+### **379. Prove data-writing SQL (functions, DELETEs, policy DDL) on an ephemeral Postgres 16 before shipping**
+
+For migrations that WRITE or DELETE data or add RLS policies (084 function, 085/086 policy DDL, 087 purge), spin up a throwaway PG16 in the sandbox and prove behavior + idempotency before the human runs it live. `initdb`/`pg_ctl` refuse to run as root -> run them as the `postgres` system user (uid 101) under a postgres-owned dir (`chown postgres:postgres /tmp/pgt`; `su postgres -c '...'`; socket `-k /tmp/pgt -c listen_addresses=""`). Recreate the minimal schema + boundary data (partial-course must NOT complete, 6-day streak must NOT hit devo-7, mixed-case course code must match, retake uses earliest date, allow-all stub -> scoped), run the migration, assert every boundary + a rerun == idempotent. 084 passed 10/10 asserts; 085/086/087 each proved the before/after policy or row state. Extends the S76 PG-proving habit (#355) to the whole data-writing surface.
+
+**RULE:** Never hand a human a data-writing or policy migration you haven't executed against a real Postgres first. Ephemeral PG16 as the `postgres` user is cheap; assert boundaries + idempotency.
+
+**Established July 22, 2026 (Session 79). Invariant #379 added - count now 379.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
