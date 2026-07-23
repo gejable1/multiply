@@ -2554,10 +2554,38 @@
   // (embed resolution failed silently, leaving roster screens empty).
   // Instead we fetch each table separately and stitch client-side. Three
   // queries total — small data, fast, robust. (May 17, 2026 fix.)
-  async function _cohortsListVisibleToLeader(actor) {
+  async function _cohortsListVisibleToLeader(actor, opts) {
     if (!actor || !actor.memberId) return [];
     const db = getDB();
     if (!db) return [];
+
+    // Step 0 (Session 80) -- OPT-IN staff-of set.
+    // When the caller passes { includeStaffOf: true }, a leader also "sees" any
+    // cohort where they are ACTIVE teaching staff (teacher / co-teacher), not
+    // just ones they own. Apprentices are deliberately EXCLUDED -- they are
+    // learning to teach, and attendance is a record of truth about someone's
+    // discipleship, so it stays with whoever owns the class (S80 decision 1).
+    // This ignores visible_to_others on purpose: staff are already inside the
+    // batch (S80 decision 3). Default OFF, so every management caller
+    // (enroll-eligibility, enroll re-check, My Batches, post-enroll refresh)
+    // is behaviourally byte-identical to before. Used ONLY by the three
+    // attendance pickers in MLT. Attendance only -- enroll/edit/graduate stay
+    // owner-gated (S80 decision 4). Fail-soft: a failed lookup degrades to
+    // today's owner-only visibility rather than throwing.
+    const _staffIds = new Set();
+    if (opts && opts.includeStaffOf === true) {
+      const stRes = await db
+        .from('cohort_members')
+        .select('cohort_id')
+        .eq('member_id', actor.memberId)
+        .eq('status', 'active')
+        .in('role', ['teacher', 'co-teacher']);
+      if (stRes.error) {
+        console.warn('_cohortsListVisibleToLeader: staff-of lookup failed (falling back to owner-only visibility)', stRes.error);
+      } else {
+        (stRes.data || []).forEach(r => { if (r.cohort_id) _staffIds.add(r.cohort_id); });
+      }
+    }
 
     // ─── Step 1: Fetch cohorts (no embed) ───
     const cohRes = await db
@@ -2604,6 +2632,9 @@
       }
     }
     cohorts.forEach(c => { c._ownerIsPastor = pastorOwnerSet.has(c.owner_id); });
+    // Session 80: stamp staff-of so pickers can LABEL it without re-querying.
+    // Always stamped (false when the opt-in is off) so callers can read it safely.
+    cohorts.forEach(c => { c._iAmStaff = _staffIds.has(c.id); });
 
     // ─── Step 4: Trim by visibility rule ───
     // Visibility rule (Session 22 — visible_to_others):
@@ -2615,6 +2646,7 @@
     if (!actor.isPastor) {
       cohorts = cohorts.filter(c =>
         c.owner_id === actor.memberId ||
+        c._iAmStaff === true ||
         (c._ownerIsPastor === true && c.visible_to_others !== false)
       );
     }
@@ -2717,7 +2749,7 @@
   //
   // Returns array of cohorts, each with _members (active only) and
   // _ownerIsPastor populated. Empty array if nothing matches.
-  async function _cohortsListActiveByCourseCode(actor, courseCode, curriculum) {
+  async function _cohortsListActiveByCourseCode(actor, courseCode, curriculum, opts) {
     if (!actor || !actor.memberId || !courseCode) return [];
     // Default curriculum: 'btli' (backwards-compatible with pre-Session-5 callers)
     const _curriculum = (curriculum || 'btli').toLowerCase();
@@ -2731,7 +2763,7 @@
     // We reuse listVisibleToLeader and filter to matching course_code.
     // It returns more than we need (all visible cohorts), but the table
     // is small and this avoids drift between the two helpers' logic.
-    const all = await _cohortsListVisibleToLeader(actor);
+    const all = await _cohortsListVisibleToLeader(actor, opts);
     return (all || [])
       .filter(c => c.cohort_programs &&
                    c.cohort_programs[_columnName] === courseCode &&
