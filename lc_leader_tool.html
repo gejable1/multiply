@@ -6838,8 +6838,60 @@ async function saveAttendance(){
 
     if (toInsert.length) {
       const { error } = await db.from('attendance').insert(toInsert);
-      if (error) { failCount += toInsert.length; lastErr = error; }
-      else okCount += toInsert.length;
+      if (!error) okCount += toInsert.length;
+      else {
+        // Session 80 -- CONFLICT-SAFE RETRY.
+        // The DB unique index is (member_id, event_type, event_date). It does
+        // NOT include event_name, so it is NARROWER than keyOf() above. A bulk
+        // insert is all-or-nothing, so ONE colliding row used to fail the WHOLE
+        // roster with a cryptic duplicate-key toast. Two causes:
+        //   (a) concurrent logging -- owner and co-teacher saving the same
+        //       session; our SELECT ran before their INSERT landed. Heal it:
+        //       convert to an update (last write wins for that session).
+        //   (b) a DIFFERENT lesson already logged for this member on this date
+        //       (e.g. BTLI L4 this morning, L5 tonight). Overwriting would
+        //       destroy a real record, so refuse and name the member.
+        const isDup = (error.code === '23505') ||
+                      /duplicate key|already exists/i.test(error.message || '');
+        if (!isDup) { failCount += toInsert.length; lastErr = error; }
+        else {
+          const retryIds = toInsert.map(r => r.member_id);
+          const { data: nowRows, error: reErr } = await db
+            .from('attendance')
+            .select('id, member_id, event_name')
+            .eq('event_date', date)
+            .eq('event_type', selectedAttType)
+            .in('member_id', retryIds);
+          if (reErr) { failCount += toInsert.length; lastErr = reErr; }
+          else {
+            // At most ONE row per member can exist for this (type, date) --
+            // that is exactly what the unique index guarantees -- so keying
+            // this map by member_id alone is correct here.
+            const nowMap = new Map();
+            (nowRows || []).forEach(r => nowMap.set(String(r.member_id), r));
+            const retryInsert = [];
+            const blocked = [];
+            for (const row of toInsert) {
+              const hit = nowMap.get(String(row.member_id));
+              if (!hit) { retryInsert.push(row); continue; }
+              const sameSession = !hit.event_name ||
+                                  String(hit.event_name) === String(row.event_name || '');
+              if (sameSession) toUpdate.push({ id: hit.id, row });
+              else blocked.push((row.member_name || 'A member') +
+                                ' (already logged: ' + hit.event_name + ')');
+            }
+            if (retryInsert.length) {
+              const { error: e2 } = await db.from('attendance').insert(retryInsert);
+              if (e2) { failCount += retryInsert.length; lastErr = e2; }
+              else okCount += retryInsert.length;
+            }
+            if (blocked.length) {
+              failCount += blocked.length;
+              lastErr = { message: blocked.join('; ') };
+            }
+          }
+        }
+      }
     }
     if (toUpdate.length) {
       const errs = await Promise.all(toUpdate.map(u =>
