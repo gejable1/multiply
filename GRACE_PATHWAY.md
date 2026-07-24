@@ -269,6 +269,52 @@ When designing any new lesson, retreat, devotional, or training, ask:
 5. **What is the next step it points to?** (Every lesson moves the disciple forward)
 6. **How will completion be celebrated?**
 
+## 🎯 TWO VIEWS OF THE PATHWAY: TRACKABLE STEPS vs REFERENCE RUNGS
+
+**This is the single most confusing thing about the pathway, even for its own designers. Read this before editing rungs.**
+
+The pipeline is shown in two different places that answer two different questions. They are NOT two views of the same list.
+
+| | **Leadership Pipeline poster** (`leadership_pipeline.html`, in MD) | **My pathway** (MMT, and the marking view in MLT) |
+|---|---|---|
+| Question it answers | *What does the whole journey look like?* | *What are the next steps for THIS person?* |
+| Shows | **Every** rung, all categories, all levels | Only the **trackable** rungs at the disciple's level |
+| Role | The vision on the wall | The checklist in the hand |
+| Reads the `trackable` flag? | **No -- it shows everything** | **Yes -- trackable rungs only** |
+
+So when a rung appears on the poster but NOT in a disciple's MMT pathway, nothing was deleted and nothing moved. That rung is simply marked `trackable = false`: it belongs to the vision, but it is not ticked off one-by-one for each person.
+
+### The two kinds of rung
+
+- **Trackable rungs** are discrete and completable -- they have a moment of "done." *Finish BTLI 1. Take the gifts assessment. Attend Glorious Hope.* These appear on the disciple's checklist in MMT and count toward the progress bar.
+- **Reference rungs** (`trackable = false`) are formational, continuous, or aspirational -- they have no finish line. *Basic prayer disciplines. Monthly discipler 1-on-1. Sharing your testimony. The fruit of the Spirit.* These live on the poster as the fuller picture of what we are becoming, but they are never reduced to a checkbox.
+
+This is a Luke 6:40 design decision, not a technical accident. The goal is to become like Christ, not to finish a list. Putting "prayer disciplines" on a checklist with a circle to tick would teach a lie -- that prayer is a box you complete and move past. The checklist moves a person forward; the poster reminds everyone what the whole thing is *for*.
+
+### How a leader "checks on" reference rungs
+
+Not with a checkbox -- on purpose. Reference rungs are the shepherd's **conversation agenda**, not the app's scoreboard. When an LCL sits with a disciple, the poster is what they talk *around*: "You have finished BTLI -- how is your prayer life actually going? Are you still meeting your discipler monthly? Tell me about the last time you shared your testimony." None of that earns a green tick, because none of it has a finish line. **The app tracks what is completable; the leader shepherds what is not.** That division is the whole philosophy: the platform teaches the journey, the person walks it, and the LCL watches the parts a machine should not grade.
+
+### What happens when the Pastor adds a rung
+
+In the poster's EDIT mode, a newly added rung defaults to **`trackable = true`**. So unless you say otherwise, a new rung appears on every relevant disciple's MMT checklist AND enlarges their denominator. Two consequences to hold:
+
+1. **Adding a trackable rung shifts live progress bars.** Add one trackable rung to Level 1 and every L1 disciple who was at `7 / 8` reads `7 / 9` on the next reload. Nothing broke -- the goalposts moved because you moved them. Do it deliberately, not mid-orientation.
+2. **If the thing you are adding has no finish line, untick "Trackable" when you add it.** It then joins the poster as a reference rung, exactly like prayer disciplines and coaching, and never touches anyone's checklist.
+
+The rule of thumb:
+
+> **Completable?** Leave it trackable -- it becomes a step.
+> **Lifelong or formational?** Untick trackable -- it becomes part of the vision.
+
+### Editing rungs is safe -- history is never harmed
+
+`pathway_progress` has no foreign key to `pathway_rungs` (the catalog is interpretation; the ledger is history). So toggling a rung's `trackable` flag, renaming it, or tombstoning it (`published = false`) never touches anyone's completions. Prefer **tombstone over delete** while the pipeline is still being validated -- a tombstoned rung is invisible, costs nothing in the denominator, preserves every completion, and comes back with one click. Moving a rung between *levels* is the one exception: that is a data migration (catalog and ledger must move together), never a poster edit -- ask for a proven migration.
+
+*(Denominator note: MMT and MLT count only `published AND trackable AND not giving` rungs. The giving rungs are excluded per the giving doctrine -- see `GIVING_JOURNEY.md` and Invariant #334. The reference-poster rungs seeded from the static wall chart are `trackable = false` by design, which is why the progress bar divides by the small real number, not by every published rung.)*
+
+---
+
 ---
 
 ## 🔗 RELATED CANONICAL FILES
