@@ -7385,6 +7385,9 @@ function _mtgWireResponse(){
   const sh = document.getElementById('mtgShare'); if(sh) sh.addEventListener('change', ()=>_mtgPersistResponse({silent:false}));
   _mtgRespWired = true;
 }
+// Session 80: 'par' (default) or 'fac'. Only ever leaves 'par' for a guide the
+// member has actually been delegated (g._canFacilitate).
+let _mtgView = 'par';
 async function loadMeetingGuide(){
   const wrap = document.getElementById('mtgGuideWrap'); if(!wrap) return;
   _mmtGuide = null; _mmtGuides = [];
@@ -7403,6 +7406,24 @@ async function loadMeetingGuide(){
         _mmtGuides.forEach(g=>{ g._title = tmap[g.devotional_id] || ''; });
       }catch(_e){ /* labels fall back to date-only (fail-soft) */ }
     }
+    // Session 80: which of these am I delegated to facilitate? RLS on
+    // lc_meeting_guide_shares already restricts this to my own rows, so an
+    // unfiltered select returns only mine.
+    try{
+      const { data: shares } = await db.from('lc_meeting_guide_shares').select('guide_id');
+      const shareIds = [...new Set((shares||[]).map(x=>x.guide_id).filter(Boolean))];
+      const mineIds = _mmtGuides.filter(g=>shareIds.includes(g.id)).map(g=>g.id);
+      if(mineIds.length){
+        const { data: facs } = await db.from('lc_meeting_guides')
+          .select('id,facilitator_md,facilitator_md_tl')
+          .in('id', mineIds);
+        const fmap = {}; (facs||[]).forEach(f=>{ fmap[f.id] = f; });
+        _mmtGuides.forEach(g=>{
+          const f = fmap[g.id];
+          if(f){ g._canFacilitate = true; g.facilitator_md = f.facilitator_md; g.facilitator_md_tl = f.facilitator_md_tl; }
+        });
+      }
+    }catch(_e){ /* fail-soft: no facilitator view; participant guide unaffected */ }
     _mmtGuide = _mmtGuides[0] || null;
   }catch(e){ console.error('meeting guide load', e); }
   const _meta = document.getElementById('mtgGuideMeta');
@@ -7435,8 +7456,35 @@ function _mtgPopulateSelect(){
 function _mtgGuideBodyHtml(g){
   if(!g) return '';
   const tl = document.body.classList.contains('lang-tl');
-  const md = (tl && g.participant_md_tl && g.participant_md_tl.trim()) ? g.participant_md_tl : (g.participant_md || '');
-  return mmtMd(md);
+  // Session 80: a delegated facilitator gets a banner and a two-way toggle.
+  // Everyone else sees exactly what they saw before -- head stays empty.
+  let head = '';
+  const canFac = g._canFacilitate === true;
+  const facOn = canFac && _mtgView === 'fac';
+  if(canFac){
+    const on  = 'flex:1;padding:8px;border-radius:8px;border:none;background:var(--gold);color:#0f0f13;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer';
+    const off = 'flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--ink);font-family:inherit;font-weight:600;font-size:12.5px;cursor:pointer';
+    const when = _mtgEsc(_mtgFmtDate(g.meeting_date));
+    head = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px;line-height:1.5;color:var(--ink)">'
+         +   '<span class="en-text">You are facilitating this meeting on ' + when + '.</span>'
+         +   '<span class="tl-text">Ikaw ang mangunguna sa pagpupulong na ito sa ' + when + '.</span>'
+         + '</div>'
+         + '<div style="display:flex;gap:6px;margin-bottom:12px">'
+         +   '<button onclick="_mtgSetView(\'par\')" style="' + (facOn ? off : on) + '">'
+         +     '<span class="en-text">Participant</span><span class="tl-text">Kalahok</span></button>'
+         +   '<button onclick="_mtgSetView(\'fac\')" style="' + (facOn ? on : off) + '">'
+         +     '<span class="en-text">Facilitator</span><span class="tl-text">Tagapangasiwa</span></button>'
+         + '</div>';
+  }
+  const md = facOn
+    ? ((tl && g.facilitator_md_tl && g.facilitator_md_tl.trim()) ? g.facilitator_md_tl : (g.facilitator_md || ''))
+    : ((tl && g.participant_md_tl && g.participant_md_tl.trim()) ? g.participant_md_tl : (g.participant_md || ''));
+  return head + mmtMd(md);
+}
+function _mtgSetView(v){
+  _mtgView = (v === 'fac') ? 'fac' : 'par';
+  const el = document.getElementById('mtgGuideBody');
+  if(el && _mmtGuide) el.innerHTML = _mtgGuideBodyHtml(_mmtGuide);
 }
 function _mtgRenderGuideBody(){
   const el = document.getElementById('mtgGuideBody');
@@ -7446,6 +7494,7 @@ function _mtgSelectGuide(id){
   const g = _mmtGuides.find(x=>x.id===id); if(!g) return;
   clearTimeout(_mtgRespTimer);
   _mmtGuide = g;
+  _mtgView = 'par';   // Session 80: never carry a facilitator view across guides
   document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
   document.getElementById('mtgGuideBody').innerHTML = _mtgGuideBodyHtml(_mmtGuide);
   mtgLoadResponse();
@@ -7463,6 +7512,7 @@ function openMeetingGuideSheet(){
   }
   if(_sb) _sb.style.display = '';
   if(_rb) _rb.style.display = '';
+  _mtgView = 'par';   // Session 80: open on the participant guide by default
   _mtgPopulateSelect();
   document.getElementById('mtgGuideSheetMeta').textContent = 'Meeting \u00b7 ' + (_mmtGuide.meeting_date || '');
   document.getElementById('mtgGuideBody').innerHTML = _mtgGuideBodyHtml(_mmtGuide);
