@@ -1869,8 +1869,12 @@ function _mpGuideIsMine(g){
 function _mpMyFlock(){
   const me = _liveLeaderIdName();
   if (!me || !me.id) return [];
+  // Session 80 hotfix: use MLT's OPERATIONAL kind rule (_kindVisible) -- a real
+  // viewer sees every kind (badged), a test viewer sees test members, a guest
+  // viewer sees guests. The previous filter hard-excluded test and guest, which
+  // is the REPORTS rule, and left a test LCL staring at an empty dropdown.
   return (allMembers || [])
-    .filter(m => m && m.facilitator_id === me.id && m.id !== me.id && !m.is_test_member && !m.is_external_user)
+    .filter(m => m && m.facilitator_id === me.id && m.id !== me.id && _kindVisible(m))
     .sort((a,b) => String(a.name||'').localeCompare(String(b.name||'')));
 }
 
@@ -1922,7 +1926,7 @@ function _mpRenderShareBox(){
     } else {
       html += '<div style="display:flex;gap:6px;margin-top:6px">'
         + '<select id="mpAssignSel" style="flex:1;min-width:0;font-family:inherit;font-size:12.5px;padding:8px;border-radius:8px;background:var(--surface2);color:var(--ink);border:1px solid var(--border)">'
-        + flock.map(m => '<option value="' + _mpEsc(m.id) + '">' + _mpEsc(m.name || 'Member') + '</option>').join('')
+        + flock.map(m => '<option value="' + _mpEsc(m.id) + '">' + _mpEsc((m.name || 'Member') + _kindOptTag(m)) + '</option>').join('')
         + '</select>'
         + '<button onclick="_mpGrantShare()" style="background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap">Assign</button>'
         + '</div>'
@@ -1943,11 +1947,13 @@ async function _mpGrantShare(){
   const sel = document.getElementById('mpAssignSel'); if (!sel || !sel.value) return;
   const me = _liveLeaderIdName();
   if (!me || !me.id){ toast('Session not ready \u2014 reopen this screen','\u26A0\uFE0F'); return; }
-  let churchId = null;
-  try{ if (typeof MultiplyTenancy !== 'undefined' && MultiplyTenancy.churchId) churchId = MultiplyTenancy.churchId(); }catch(_e){}
   try{
+    // Session 80 hotfix: church_id is OMITTED on purpose. trg_set_church_id
+    // (migration 089) stamps it from the JWT, which is the house pattern for
+    // every per-church insert. MLT does not load multiply_tenancy.js, so the
+    // old client-side lookup silently yielded null and every Assign died on
+    // WITH CHECK (church_id = auth_church_id()) with 42501.
     const row = { guide_id: g.id, member_id: sel.value, granted_by: me.id };
-    if (churchId) row.church_id = churchId;
     const { error } = await db.from('lc_meeting_guide_shares').insert(row);
     if (error) throw error;
     toast('Facilitator assigned \uD83C\uDF89','\u2705');
