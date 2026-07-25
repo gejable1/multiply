@@ -3933,4 +3933,134 @@ For migrations that WRITE or DELETE data or add RLS policies (084 function, 085/
 
 ---
 
+### **380. The two quiz subsystems are now WIRED: quiz visibility flows through the single lesson access-grant resolver**
+
+The BTLI + Usbong quiz journeys (keyed `course_code+lesson_number`) were a SEPARATE subsystem from the lesson library and NEVER read `pipeline_lesson_grants` -- both MMT renderers fetched every `is_active` quiz and drew a card for each, gating only LOCKED/OPEN state, never SEE. So the "Who can see this?" access setting never touched quiz cards (recurring "the quiz keeps coming back" symptom). PR-J wired them together: reuse the ONE grant resolver `MultiplyShared.lessons.fetchVisibleLessons({memberId,isPastor,isLeader})` (already called at MMT ~11756/11824), build a Set of accessible `lesson.id`, filter `quizzes` to those; fail-CLOSED on resolver error (empty set -> no cards). Unlock-sync preserved: `cohort_lesson_unlocks` (Model X, #84) untouched -- granted+unlocked still opens.
+
+**RULE:** Quiz visibility == lesson access-grant. When two subsystems key off the same concept (a lesson), resolve visibility through ONE resolver, don't reimplement it. Fail closed.
+
+**Established July 25, 2026 (Session 80). Invariant #380 added - count now 380.**
+
+---
+
+### **381. An active quiz MUST have a lesson_id -- the CHECK that makes grant-based visibility safe (090)**
+
+Once quiz visibility keys on the quiz's `lesson_id` (#380), a NULL `lesson_id` on an active quiz would fail OPEN (no lesson to gate against). Migration 090 adds `CHECK (is_active=false OR lesson_id IS NOT NULL)` on BOTH `btli_quizzes` + `usbong_quizzes` (flat DROP-then-ADD; PG has no `ADD CONSTRAINT IF NOT EXISTS`). This closes #127's latent BTLI fail-open hole: a draft may be null, but the moment it goes active it must point at a lesson. PG16-proven 5/5 (block active-null, allow inactive draft, allow active-with-lesson, block flip-to-active-while-null, idempotent).
+
+**RULE:** When visibility derives from a FK, constrain that FK non-null on the active state so the gate can never be bypassed by a null.
+
+**Established July 25, 2026 (Session 80). Invariant #381 added - count now 381.**
+
+---
+
+### **382. The empty quiz panel must hide the SECTION, not just the list -- a blanked inner list leaves a ghost header**
+
+Each MMT quiz renderer writes its section header into `wrap` (the section div carrying `margin-top:1.5rem`), then the empty branch blanked only the inner list (`btli/usbongQuizzesList`), leaving the dark header floating (a ghost). Once grant-visibility (#380) can legitimately yield zero quizzes, this shows constantly. Fix (PR-L): in the empty branch set `wrap.style.display='none'` AND `wrap.innerHTML=''` (display:none so the section's own top-margin doesn't leave a phantom gap); add a `wrap.style.display=''` re-show reset immediately before each header write so a re-render un-hides. Both curricula lockstep (#127).
+
+**RULE:** To hide a section, hide the SECTION element (display:none), not just its contents -- and pair every hide with a re-show reset at the render entry point.
+
+**Established July 25, 2026 (Session 80). Invariant #382 added - count now 382.**
+
+---
+
+### **383. Two views of the pathway: the poster shows ALL rungs; the member/leader tools show only trackable. Reference rungs are conversation, not checkbox.**
+
+The Leadership Pipeline poster (`leadership_pipeline.html`, MD) shows EVERY published rung (ignores `trackable`). "My pathway" in MMT/MLT shows only `trackable!==false` rungs -- because those are completable steps. A `trackable=false` rung (the 167 reference rungs from #265) is lifelong/formational: a shepherd's conversation agenda, not a checkbox. PR-F was the bug this exposed: both progress bars (`renderPathway` MMT, `renderMltPathway` MLT) counted `published!==false` only, ignoring `trackable`, so of 210 published base rungs only ~37 trackable -> every bar divided ~5x too many (an L2 disciple showed 7/39, should be 7/7) since July 6. Fix: both filter `published!==false && trackable!==false && !(meta&&meta.track==='giving')` (giving already excluded #334). PR-K then surfaced the removed reference rungs as a COLLAPSED "Coaching notes" `<details>` panel per level (MLT + MMT), display-only, no onclick, with `description_en` as talking points.
+
+**RULE:** Progress denominators count trackable rungs only. Reference rungs are pastoral conversation, surfaced (collapsed) but never counted. New poster rungs default trackable=true -> they shift live bars; know that when editing.
+
+**Established July 25, 2026 (Session 80). Invariant #383 added - count now 383.**
+
+---
+
+### **384. Embed-mode `position:absolute` on .modal-overlay parks modals off-screen when scrolled**
+
+The pipeline poster opens embedded in MD (`?embed=1`). Base `.modal-overlay` is `position:fixed;inset:0` (viewport-centered, works standalone), but the embed override (added to stop Samsung Internet iframe blanking) flips it to `position:absolute` -- which anchors the overlay to the TOP of the long scrolling poster document. Scroll down, click +Add/Customize, and `openRungForm` runs correctly and adds `.open`, but the form renders far above the scroll while `body overflow:hidden` freezes the page. Symptom: "buttons do nothing," console CLEAN, buttons render fine -- because the modal opened off-screen. Hits BOTH modals (edit form + read-only detail, same class). Fix (PR-M): `_pwPinOverlay(id)`/`_pwUnpinOverlay(id)` -- in embed mode, on open set `top=scrollY, height=100vh`; on close clear. No-op standalone (guarded on `<html class="embed">`), so the standalone page is byte-behavior unchanged and the Samsung fix stays intact.
+
+**RULE:** "Dead buttons + clean console + embedded iframe" = a visibility failure, not a broken handler. Check whether a `position:absolute` overlay opened off-screen before touching the handler.
+
+**Established July 25, 2026 (Session 80). Invariant #384 added - count now 384.**
+
+---
+
+### **385. auth_is_leader() reads EXACTLY is_facilitator -- so is_facilitator gates the meeting-guide library (069)**
+
+`auth_is_leader()` (migration 069 line 15) is `SELECT COALESCE((SELECT is_facilitator FROM members WHERE id=auth_member_id()), false)`. It gates the `lcmg_select` church-library read branch. So a discipler with a flock but `is_facilitator=false` is not only badge-less/"unassigned" in MD (the discipler picker, announcement audience, roster-candidate set all key on `is_facilitator OR facilitator_role`) -- they are SERVER-SIDE locked out of the shared meeting-guide library. This is an access gate, not cosmetics.
+
+**RULE:** is_facilitator is the single source of leader-ness that `auth_is_leader()` reads. Any change to who is/isn't a facilitator changes library access. Treat it as a security-relevant field.
+
+**Established July 25, 2026 (Session 80). Invariant #385 added - count now 385.**
+
+---
+
+### **386. is_facilitator is DERIVED from pipeline_level (>=2), enforced by a trigger; L5 role=Pastor, L2-4=LC Leader (091)**
+
+Doctrine (Pastor): advancing L1->L2 now requires disciples, so L2+ and "is a facilitator/leader" are the same thing -- couple them for good, in BOTH directions (fully derived). Migration 091: a `BEFORE INSERT OR UPDATE` trigger `members_derive_facilitator()` sets `is_facilitator := (pipeline_level>=2)`; when flagging on and role is empty, a level-aware default `facilitator_role` (`L5+`->'Pastor', `L2-4`->'LC Leader'); an existing non-empty role is NEVER overwritten. Enforced at the DB so every write path obeys it and it can't drift. Composes with the 050 privilege-guard (only L5 can change pipeline_level, so the coupling only fires on a pastor's edit -- no conflict). Backfill aligned all rows; PG16-proven 10/10. The diagnostic (below, #387) revealed 9 tenant PASTORS unflagged -> silently locked out of their own library (#385), all fixed. MD frontend (PR-N) hid the now-derived checkbox + stopped the save sending is_facilitator/facilitator_role; CAUGHT a regression -- `_canEditLc=_canManage && isFac` depended on the dead checkbox, so `isFac` was repointed to derive from the level field `#fl>=2` (mirrors the trigger) or the pastor would lose LC-Group-Name editing.
+
+**RULE:** When two fields must stay coupled, enforce with a DB trigger (every write path), not per-form JS. When you hide a derived input, repoint anything that READ it to the same derivation.
+
+**Established July 25, 2026 (Session 80). Invariant #386 added - count now 386.**
+
+---
+
+### **387. A cross-tenant backfill you can't behaviorally test -> prove it with a read-only diagnostic SELECT first**
+
+You cannot log in as another church's member, so you cannot behaviorally test a data change on a tenant. The safe pattern (used for the is_facilitator derivation across all churches): run a READ-ONLY diagnostic SELECT that lists BOTH directions of the change -- "WILL FLAG ON" (L2+ gaining the flag) and "WILL UN-FLAG" (the sensitive reverse set) -- with church name and a fixture column, in the SQL editor (which runs as owner and sees all tenants). Review both lists with the Pastor BEFORE any write. The un-flag/removal side is the one to eyeball: empty or only fixtures = safe; a real person = a conversation, not a silent strip. Then the migration's self-verify SELECT proves the data criterion, and the already-proven code path (#385) gives the behavioral outcome by construction -- no login needed. (Here: WILL-FLAG-ON = 9 pastors + 2 real L2 + 1 fixture; WILL-UN-FLAG = empty. Clean.)
+
+**RULE:** For a cross-tenant data change you can't test as the affected user, diagnostic-SELECT both directions first, review, then rely on structural proof (self-verify + a verified code path), not behavioral testing.
+
+**Established July 25, 2026 (Session 80). Invariant #387 added - count now 387.**
+
+---
+
+### **388. MD is now on pathway_rungs: the member modal, the members-table Progress column, and the distribution tiles all read ONE church-wide cache**
+
+The MD member-modal PIPELINE tab, the members-table Progress column, and the Pipeline-Distribution tiles all ran the LEGACY `checks` system (a hardcoded `PC[]` per-level list + an `m.checks` JSON blob keyed by literal checklist text) -- a SEPARATE ledger from `pathway_progress`. So the pastor's dashboard never saw LCL marks (the "0/24" blindness); MLT/MMT wrote pathway_progress, MD read checks. PR-O migrated all three onto `pathway_rungs`+`pathway_progress` via ONE church-wide cache (`_PW_RUNGS[level]={rung_key:resolved_row}` overlay-precedence; `_PW_PROG[member_id]=Set('level|rung_key')`) loaded once in `loadMembers` before `renderAll()` (so the synchronous table/tiles have data). Modal = full L0->L5, every trackable rung tappable (pastor marks any -- pathway_progress RLS 057 already allows `auth_level()>=5` to write any member), reference rungs in a collapsed panel. `_mdPwToggle` writes, updates the cache, re-renders all three so nothing drifts. Legacy `PC`/`rPCL`/`tCheck` now dead (left in place); `checks` column untouched.
+
+**RULE:** When several surfaces show the same computed value, feed them from ONE cache/source, not parallel reimplementations -- and load the cache before the first synchronous render that needs it.
+
+**Established July 25, 2026 (Session 80). Invariant #388 added - count now 388.**
+
+---
+
+### **389. Astral emoji as \\ud83d\\udcda surrogate pairs crash a Python UTF-8 write -- emit via String.fromCodePoint or full \\U escapes**
+
+A pure-ASCII patcher that emits emoji by writing `\ud83d\udcda` (surrogate-pair escapes) in a Python string literal produces LONE SURROGATES -- Python does NOT auto-combine them, and `io.open(...,encoding='utf-8').write(s)` raises `UnicodeEncodeError: surrogates not allowed`. Two clean fixes: (a) emit the emoji in the OUTPUT JS via `String.fromCodePoint(0x1F4DA)` (keeps the patcher AND the output pure-ASCII; JS decodes at runtime); (b) if a literal is needed, use a single full codepoint escape `\U0001F4DA`. BMP escapes (`\u00b7`, `\u2500`) are fine either way -- only astral (>U+FFFF) pairs bite.
+
+**RULE:** Never write astral emoji as `\udXXX\udXXX` pairs in a Python patcher. Emit them via `String.fromCodePoint()` in the output JS (best: keeps everything ASCII) or a full `\U` escape.
+
+**Established July 25, 2026 (Session 80). Invariant #389 added - count now 389.**
+
+---
+
+### **390. Emit unicode as literal \\uXXXX text in the OUTPUT JS so the file stays pure-ASCII (JS decodes at runtime)**
+
+To keep a generated .html/.js file pure-ASCII (transit-safe, #360/#361), emit non-ASCII as literal backslash-u TEXT in the output: a JS string `'\u00b7'` renders as the middot at runtime but the file bytes are pure ASCII. In a Python patcher this means the source must contain a DOUBLED backslash (`'\\u00b7'`) so Python writes the 6 characters `\u00b7`, not the decoded `\u00b7` char. This is the exact seam that caused PR-O's mismatches (#391): a patcher where Python DECODES the escape (real char in output) vs one that emits literal `\u` text (ASCII output) are DIFFERENT patchers with different output shas.
+
+**RULE:** For pure-ASCII output, emit `\uXXXX` as literal text (doubled backslash in the Python source). Verify the OUTPUT file's added-non-ASCII delta is 0 against BASE, not just that the patcher parses.
+
+**Established July 25, 2026 (Session 80). Invariant #390 added - count now 390.**
+
+---
+
+### **391. Hand-editing a patcher anchor at paste-time makes it a DIFFERENT patcher -- two clean-execution WANT mismatches = switch to upload, don't nudge**
+
+PR-O mismatched WANT twice with ZERO anchor HALTs and a confirmed-identical BASE. Root cause: the canonical patcher's `CACHE_ANCHOR` was `"// -- PIPELINE CHECKLIST --\nfunction rPCL(m){\n"`, but when pasting the block inline I hand-simplified it to `"function rPCL(m){\n"` to avoid the box-drawing chars. Since the inserted block is placed BEFORE the anchor, dropping that comment line from the anchor shifted where the block landed relative to it -> different output bytes, same logic. Two clean-execution mismatches (Python is deterministic + BASE identical) is the signal the INLINE PAYLOAD differs from the canonical one in transit -- switch to a sha-verified UPLOAD located by a recursive sha walk (#339/#361), which CC verifies BEFORE running so corruption halts at the sha gate. CC held the line correctly (HALT, revert, don't nudge #338).
+
+**RULE:** Any hand-edit to a proven patcher -- even a "cosmetic" anchor simplification -- invalidates its WANT. Two clean-execution WANT mismatches on a large inline payload = deliver as an upload located by sha, never keep re-pasting.
+
+**Established July 25, 2026 (Session 80). Invariant #391 added - count now 391.**
+
+---
+
+### **392. A variable rename in a patcher must be grepped across the WHOLE enclosing function; a render-edit harness must EXECUTE the template, not just the helpers**
+
+PR-O swapped `renderTable`'s compute line from `lc=PC[l]...` to `_pp=_pwProgress(...)` but a SECOND consumer 16 lines down (the Progress cell, `${done}/${lc.length}`) still read the old `lc` -> `ReferenceError: lc is not defined` on every row -> `renderTable`->`renderAll` threw -> EMPTY members table + all counts 0, with "Synced" GREEN because `sync('ok')` runs before `renderAll`. It sailed through the WANT gate + `node --check` + marker checks because it was a RUNTIME error, not a syntax error, and the harness tested the pure functions (`_pwProgress` etc.) 9/9 in ISOLATION -- it never rendered the `renderTable` template string, so the orphaned `lc` in the HTML was invisible. Caught in production; PR-P hotfix `${lc.length}`->`${_pp.total}` (one cell). The other `lc` refs were safe (dead `rPCL` self-defines its own `lc`; an unrelated notification `lc`).
+
+**RULE:** When a patcher RENAMES a variable in a compute line, grep the ENTIRE enclosing function body for the OLD name before proving -- a second consumer downstream is invisible to the WANT/node/marker gates. For any edit to a render function, the harness must EXECUTE the template against a fake row and catch throws, not just unit-test the helper functions. Byte-exactness + valid syntax != it renders.
+
+**Established July 25, 2026 (Session 80). Invariant #392 added - count now 392.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
