@@ -10336,6 +10336,10 @@
       ],
       "triggers": [
         {
+          "name": "trg_members_derive_facilitator",
+          "definition": "CREATE TRIGGER trg_members_derive_facilitator BEFORE INSERT OR UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION members_derive_facilitator()"
+        },
+        {
           "name": "trg_members_guard_privilege",
           "definition": "CREATE TRIGGER trg_members_guard_privilege BEFORE UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION members_guard_privilege_cols()"
         },
@@ -18812,6 +18816,16 @@
       "security_definer": true,
       "kind": "function",
       "definition": "CREATE OR REPLACE FUNCTION public.discipler_of(p_member uuid)\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  SELECT discipler_id FROM members WHERE id = p_member\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "members_derive_facilitator",
+      "arguments": "",
+      "returns": "trigger",
+      "language": "plpgsql",
+      "security_definer": false,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.members_derive_facilitator()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n  IF COALESCE(NEW.pipeline_level, 0) >= 2 THEN\r\n    NEW.is_facilitator := true;\r\n    IF NULLIF(NEW.facilitator_role, '') IS NULL THEN\r\n      NEW.facilitator_role := CASE WHEN NEW.pipeline_level >= 5 THEN 'Pastor' ELSE 'LC Leader' END;\r\n    END IF;\r\n  ELSE\r\n    NEW.is_facilitator := false;\r\n  END IF;\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
     },
     {
       "schema": "public",
