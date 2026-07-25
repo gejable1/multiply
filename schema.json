@@ -10297,7 +10297,7 @@
           "name": "members_delete_own_church",
           "permissive": "PERMISSIVE",
           "roles": [
-            "public"
+            "authenticated"
           ],
           "command": "DELETE",
           "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
@@ -10311,7 +10311,7 @@
           ],
           "command": "INSERT",
           "using": null,
-          "with_check": "(church_id = auth_church_id())"
+          "with_check": "((church_id = auth_church_id()) AND (COALESCE(is_platform_admin, false) = false))"
         },
         {
           "name": "members_select_own_church",
@@ -10341,7 +10341,7 @@
         },
         {
           "name": "trg_members_guard_privilege",
-          "definition": "CREATE TRIGGER trg_members_guard_privilege BEFORE UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION members_guard_privilege_cols()"
+          "definition": "CREATE TRIGGER trg_members_guard_privilege BEFORE INSERT OR UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION members_guard_privilege_cols()"
         },
         {
           "name": "trg_set_church_id",
@@ -18825,7 +18825,7 @@
       "language": "plpgsql",
       "security_definer": false,
       "kind": "function",
-      "definition": "CREATE OR REPLACE FUNCTION public.members_derive_facilitator()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n  IF COALESCE(NEW.pipeline_level, 0) >= 2 THEN\r\n    NEW.is_facilitator := true;\r\n    IF NULLIF(NEW.facilitator_role, '') IS NULL THEN\r\n      NEW.facilitator_role := CASE WHEN NEW.pipeline_level >= 5 THEN 'Pastor' ELSE 'LC Leader' END;\r\n    END IF;\r\n  ELSE\r\n    NEW.is_facilitator := false;\r\n  END IF;\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+      "definition": "CREATE OR REPLACE FUNCTION public.members_derive_facilitator()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public', 'pg_temp'\nAS $function$\r\nBEGIN\r\n  IF COALESCE(NEW.pipeline_level, 0) >= 2 THEN\r\n    NEW.is_facilitator := true;\r\n    IF NULLIF(NEW.facilitator_role, '') IS NULL THEN\r\n      NEW.facilitator_role := CASE WHEN NEW.pipeline_level >= 5 THEN 'Pastor' ELSE 'LC Leader' END;\r\n    END IF;\r\n  ELSE\r\n    NEW.is_facilitator := false;\r\n  END IF;\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
     },
     {
       "schema": "public",
@@ -18835,7 +18835,7 @@
       "language": "plpgsql",
       "security_definer": false,
       "kind": "function",
-      "definition": "CREATE OR REPLACE FUNCTION public.members_guard_privilege_cols()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nbegin\r\n  if auth_church_id() is null or auth_level() >= 5 then\r\n    return new;  -- service-role/EF (no JWT) or pastor: unrestricted\r\n  end if;\r\n  if (new.is_platform_admin is distinct from old.is_platform_admin)\r\n     or (new.pipeline_level   is distinct from old.pipeline_level)\r\n     or (new.is_facilitator   is distinct from old.is_facilitator)\r\n     or (new.facilitator_role is distinct from old.facilitator_role) then\r\n    raise exception 'members: only the pastor can change level/role/admin fields';\r\n  end if;\r\n  return new;\r\nend;\r\n$function$\n"
+      "definition": "CREATE OR REPLACE FUNCTION public.members_guard_privilege_cols()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public', 'pg_temp'\nAS $function$\r\nbegin\r\n  -- service-role / EF / SQL editor (no JWT): unrestricted, as before.\r\n  if auth_church_id() is null then\r\n    return new;\r\n  end if;\r\n\r\n  if tg_op = 'INSERT' then\r\n    -- An upsert's proposed row reaches BEFORE INSERT even when ON CONFLICT\r\n    -- resolves to UPDATE. If the id already exists this is really an edit, so\r\n    -- let the UPDATE branch below govern it.\r\n    if new.id is not null and exists (select 1 from public.members m where m.id = new.id) then\r\n      return new;\r\n    end if;\r\n    if coalesce(new.is_platform_admin, false) then\r\n      raise exception 'members: is_platform_admin is not settable from the app';\r\n    end if;\r\n    if auth_level() < 5 and coalesce(new.pipeline_level, 0) >= auth_level() then\r\n      raise exception 'members: you may only add members below your own level (yours: %, requested: %)',\r\n        auth_level(), coalesce(new.pipeline_level, 0);\r\n    end if;\r\n    return new;\r\n  end if;\r\n\r\n  -- UPDATE. Platform admin is a PLATFORM capability, not a church one: no JWT\r\n  -- may change it, pastors included.\r\n  if new.is_platform_admin is distinct from old.is_platform_admin then\r\n    raise exception 'members: is_platform_admin is not settable from the app';\r\n  end if;\r\n\r\n  if auth_level() >= 5 then\r\n    return new;\r\n  end if;\r\n\r\n  if (new.pipeline_level     is distinct from old.pipeline_level)\r\n     or (new.is_facilitator   is distinct from old.is_facilitator)\r\n     or (new.facilitator_role is distinct from old.facilitator_role) then\r\n    raise exception 'members: only the pastor can change level/role/admin fields';\r\n  end if;\r\n  return new;\r\nend;\r\n$function$\n"
     },
     {
       "schema": "public",
