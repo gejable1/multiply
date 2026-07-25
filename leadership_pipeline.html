@@ -706,6 +706,23 @@ let editMode = false, RAW_ROWS = [];
 let SECTION_ORDER = {}, SECTION_ORDER_ROW = null;   // 3b: order_map {"level|category":[rung_key,...]}
 const isEditor = (window.LEADER?.leaderLevel || 0) >= (MultiplyShared.PASTOR_LEVEL || 5);
 
+// S80 (PR-M): in embed mode the .modal-overlay is position:absolute (to stop
+// Samsung iframe blanking), which anchors it to the top of this long scrolling
+// document -- so a modal opened deep in the poster renders off-screen above the
+// user. Pin it to the current scroll position on open; clear on close. No-op
+// unless embedded, so the standalone page is untouched.
+function _pwPinOverlay(id){
+  if(!document.documentElement.classList.contains('embed')) return;
+  const o = document.getElementById(id); if(!o) return;
+  o.style.top = (window.scrollY || window.pageYOffset || 0) + 'px';
+  o.style.height = '100vh';
+}
+function _pwUnpinOverlay(id){
+  const o = document.getElementById(id); if(!o) return;
+  o.style.top = '';
+  o.style.height = '';
+}
+
 // ═══════════════════ L5 OVERLAY-CRUD WRITE CONTRACTS ═══════════════════════
 // Client NEVER sends church_id — the server BEFORE INSERT trigger (061,
 // set_church_id_from_jwt) stamps it; RLS enforces church_id = auth_church_id()
@@ -934,11 +951,13 @@ function openModal(id){
       : '<p style="color:var(--muted)">Wala pang detalye para sa item na ito. Sa edit mode, magagamit ang ✨ Research para punan ito mula sa kahit anong AI.</p>';
   document.getElementById('modalBody').innerHTML = body;
   document.getElementById('modalFooter').textContent = meta.footer || '';
+  _pwPinOverlay('modalOverlay');
   document.getElementById('modalOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
 function closeModal(){
   document.getElementById('modalOverlay').classList.remove('open');
+  _pwUnpinOverlay('modalOverlay');
   document.body.style.overflow = '';
 }
 function closeModalOnOverlay(e){
@@ -1005,11 +1024,13 @@ function openRungForm(mode, target){
   document.getElementById('rfAuthor').value    = (target.meta && target.meta.author) || '';
   document.getElementById('rfErr').textContent = '';
   rsSetup(mode, target);   // ✨ Research this — edit-mode + L5 only, customize/edit only
+  _pwPinOverlay('rungFormOverlay');
   document.getElementById('rungFormOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
 function closeRungForm(){
   document.getElementById('rungFormOverlay').classList.remove('open');
+  _pwUnpinOverlay('rungFormOverlay');
   document.body.style.overflow = '';
 }
 function closeRungFormOnOverlay(e){ if (e.target === document.getElementById('rungFormOverlay')) closeRungForm(); }
