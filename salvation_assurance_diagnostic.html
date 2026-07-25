@@ -2023,6 +2023,44 @@ function calcScore() {
   var sections = { A:0, B:0, C:0, D:0, E:0, F:0, G:0 };
   var maxes    = { A:10, B:10, C:45, D:30, E:40, F:15, G:20 };
 
+// -- SECTION WEIGHTS -----------------------------------------------------------
+// The weight of a section is a PASTORAL JUDGEMENT, declared here on purpose.
+// Before this, a section's influence was an accident of how many questions
+// happened to be written in it (9 fruit = 45 pts, 6 gospel questions = 10 pts),
+// so the gospel itself carried 5.9% of a salvation diagnostic while habits and
+// church integration carried 35%. Every respondent has already had 10-16 weeks
+// of one-on-one Usbong plus a weekly huddle, so the habit and community
+// sections barely separate anyone -- they were adding points, not information,
+// and diluting the sections that actually distinguish.
+//
+// Set with Pastor Gerry, Session 81. Internals over externals.
+var SALV_WEIGHTS = { A:0.18, B:0.12, C:0.22, D:0.18, E:0.12, F:0.09, G:0.09 };
+
+// Guard: if a future edit changes the weights so they no longer total 100%,
+// fail loudly here rather than silently re-weighting the instrument again.
+(function(){
+  var s = 0; for (var k in SALV_WEIGHTS) s += SALV_WEIGHTS[k];
+  if (Math.abs(s - 1) > 0.0001) {
+    console.error('SALV_WEIGHTS must total 1.00 - got ' + s.toFixed(4));
+  }
+})();
+
+// Weighted percentage. Each section contributes its OWN percentage scaled by
+// its weight, so adding or removing questions never shifts the balance again.
+function SALV_WEIGHTED_PCT(sections, maxes) {
+  var acc = 0, wsum = 0;
+  for (var k in SALV_WEIGHTS) {
+    var m = maxes[k];
+    if (!m) continue;
+    var v = sections[k] || 0;
+    if (v > m) v = m;
+    acc  += (v / m) * SALV_WEIGHTS[k];
+    wsum += SALV_WEIGHTS[k];
+  }
+  if (!wsum) return 0;
+  return Math.round((acc / wsum) * 100);
+}
+
   document.querySelectorAll('input[type="radio"][data-scorable="scale"]:checked').forEach(function(r){
     var sec = r.dataset.section;
     if (sections[sec] !== undefined) sections[sec] += parseInt(r.value);
@@ -2037,7 +2075,7 @@ function calcScore() {
 
   var total    = Object.values(sections).reduce(function(a,b){return a+b;},0);
   var maxTotal = Object.values(maxes).reduce(function(a,b){return a+b;},0);
-  var pct      = Math.round(total/maxTotal*100);
+  var pct      = SALV_WEIGHTED_PCT(sections, maxes);
 
   // Render score grid
   var labels = { A:'Gospel Knowledge', B:'Assurance Basis', C:'Fruit of Spirit',
@@ -2275,7 +2313,7 @@ function collectScores() {
   sections.A += Math.min(openAFilled * 2, 5);
   const total = Object.values(sections).reduce((a,b)=>a+b,0);
   const maxTotal = Object.values(maxes).reduce((a,b)=>a+b,0);
-  const pct = Math.round(total/maxTotal*100);
+  const pct = SALV_WEIGHTED_PCT(sections, maxes);
   let zone = 1;
   if (pct < 50) zone = 4;
   else if (pct < 65) zone = 3;
