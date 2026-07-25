@@ -1286,7 +1286,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
     <button class="mtb active" onclick="showMT('info',this)">Info</button>
     <button class="mtb" onclick="showMT('diag',this)">Diagnostics</button>
     <button class="mtb" onclick="showMT('profile',this)">Profile</button>
-    <button class="mtb" onclick="showMT('pipe',this)">Pipeline</button>
+    <button class="mtb" onclick="showMT('pipe',this)">Pathway</button>
     <button class="mtb" onclick="showMT('eolo',this)">EOLO</button>
     <button class="mtb" onclick="showMT('gifts',this)">Gifts</button>
     <button class="mtb" onclick="showMT('notes',this)">Notes</button>
@@ -1882,6 +1882,7 @@ async function loadMembers(){
   const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at,photo_url').order('updated_at',{ascending:false});
   if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  await _loadPathwayCache();  // S80 (PR-O): church-wide pathway_rungs+progress for table/tiles/modal
   sync('ok');
   document.getElementById('dbs').textContent='✅ Connected to Supabase';
   document.getElementById('dbc').textContent = (function(){
@@ -2153,7 +2154,7 @@ function renderTable(){
     return;
   }
   tb.innerHTML=fl.map(m=>{
-    const l=m.level||0,lc=PC[l]||[],done=lc.filter(c=>m.checks&&m.checks[c]).length,pct=lc.length?Math.round(done/lc.length*100):0;
+    const l=m.level||0,_pp=_pwProgress(m.id,l),done=_pp.done,pct=_pp.pct;  // S80 (PR-O): from pathway cache
     const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const ea=m.eolo&&m.eolo.some(e=>e.name);const en=m.eolo&&m.eolo[0]&&m.eolo[0].name?m.eolo[0].name:'';
     const upd=m.updated?new Date(m.updated).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—';
@@ -2192,7 +2193,7 @@ function rPipe(){
   document.getElementById('pv').innerHTML=[0,1,2,3,4,5].map(l=>{
     const g=bl[l]||[];if(!g.length)return'';
     const tiles=g.map(m=>{
-      const lc=PC[l]||[],done=lc.filter(c=>m.checks&&m.checks[c]).length,pct=lc.length?Math.round(done/lc.length*100):0;
+      const _pp=_pwProgress(m.id,l),done=_pp.done,pct=_pp.pct;  // S80 (PR-O): from pathway cache
       const ini=(m.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
       return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer;min-width:150px;box-shadow:var(--shadow)" onclick="openEdit('${m.id}')">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -3048,7 +3049,7 @@ function openAdd(){
     .find(b => /Disciples/.test(b.textContent));
   if(tabBtn) tabBtn.innerHTML = '🌳 Disciples';
   showMT('info',document.querySelector('.mtb'));
-  rPCL(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
+  rPathway(null);rET(null);rNT(null);rDiagTab(null);buildFamilySlots([]);buildMinistrySelect();populateDisciplerSelect('');
   document.getElementById('mo').classList.add('open');
 }
 // ═══════════════════════════════════════════════════════════════
@@ -3151,7 +3152,7 @@ function openEdit(id){
   // the value fillF() had just set. fillF() now calls it itself before
   // setting values, so we only need populateDisciplerSelect() here.
   populateDisciplerSelect(m.discipler_name||m.discipler||'');
-  rPCL(m);rET(m);rNT(m);rDiagTab(m);
+  rPathway(m);rET(m);rNT(m);rDiagTab(m);
   // Gifts tab loads on demand when clicked (async Supabase call)
   document.getElementById('mo').classList.add('open');
   // If in self-edit mode, apply visual lock to Pastor-managed fields
@@ -3433,6 +3434,119 @@ async function updateIntStatus(id,status){
   m.intervention_status=status;
   try{await upsert(m);const i=members.findIndex(x=>x.id===id);if(i>=0)members[i]=m;toast('Status updated');}
   catch(e){toast('Error: '+e.message,'❌');}
+}
+
+// == S80 (PR-O): PATHWAY (pathway_rungs + pathway_progress) ==
+// Church-wide cache so the members table, the distribution tiles, and the
+// member-modal Pathway tab all read ONE source of truth. Loaded once in
+// loadMembers before renderAll(). Mirrors MLT's overlay/trackable/giving logic.
+let _PW_RUNGS = {};   // level -> { rung_key: resolved_row }
+let _PW_PROG  = {};   // member_id -> Set('level|rung_key')
+async function _loadPathwayCache(){
+  try{
+    const [rungRes, progRes] = await Promise.all([
+      db.from('pathway_rungs').select('*'),
+      db.from('pathway_progress').select('member_id, level, rung_key')
+    ]);
+    if(rungRes.error) throw rungRes.error;
+    if(progRes.error) throw progRes.error;
+    // overlay precedence: a church row beats its base twin (same key+level)
+    const byLvl = {};
+    (rungRes.data||[]).forEach(function(r){
+      const L = r.level||0; (byLvl[L] = byLvl[L] || {});
+      const ex = byLvl[L][r.rung_key];
+      if(!ex || (r.church_id && !ex.church_id)) byLvl[L][r.rung_key] = r;
+    });
+    _PW_RUNGS = byLvl;
+    const prog = {};
+    (progRes.data||[]).forEach(function(p){
+      (prog[p.member_id] = prog[p.member_id] || new Set()).add(p.level + '|' + p.rung_key);
+    });
+    _PW_PROG = prog;
+  }catch(e){ console.warn('[md-pathway] cache load failed:', e); _PW_RUNGS = {}; _PW_PROG = {}; }
+}
+// Trackable, published, non-giving rungs for a level (the denominator set).
+function _pwTrackable(level){
+  const byKey = _PW_RUNGS[level] || {};
+  return Object.values(byKey)
+    .filter(function(r){ return r.published!==false && r.trackable!==false && !(r.meta && r.meta.track==='giving'); })
+    .sort(function(a,b){ return (a.sort_order||0)-(b.sort_order||0); });
+}
+function _pwReference(level){
+  const byKey = _PW_RUNGS[level] || {};
+  return Object.values(byKey)
+    .filter(function(r){ return r.published!==false && r.trackable===false && !(r.meta && r.meta.track==='giving'); })
+    .sort(function(a,b){ return (a.sort_order||0)-(b.sort_order||0); });
+}
+// {done,total,pct} for a member at a level, from the cache.
+function _pwProgress(memberId, level){
+  const rungs = _pwTrackable(level);
+  const set = _PW_PROG[memberId] || new Set();
+  const done = rungs.filter(function(r){ return set.has(level + '|' + r.rung_key); }).length;
+  const total = rungs.length;
+  return { done: done, total: total, pct: total ? Math.round(done/total*100) : 0 };
+}
+function _pwIcon(cat){
+  const cp = { book:0x1F4DA, training:0x1F3AF, lesson:0x1F393, assessment:0x1F4CB, coaching:0x1F9ED, ministry:0x26EA, formation:0x1F331, character:0x1F331 };
+  return cp[cat] ? String.fromCodePoint(cp[cat]) : String.fromCodePoint(0x2022);
+}
+// The member-modal Pathway tab: ALL levels L0->L5, every trackable rung
+// tappable (pastor full control), reference rungs in a collapsed panel.
+function rPathway(m){
+  const w = document.getElementById('pcl');
+  if(!w) return;
+  if(!m){ w.innerHTML=''; return; }
+  const set = _PW_PROG[m.id] || new Set();
+  let h = '';
+  for(let lvl=0; lvl<=5; lvl++){
+    const rungs = _pwTrackable(lvl);
+    const refs  = _pwReference(lvl);
+    if(!rungs.length && !refs.length) continue;
+    const nDone = rungs.filter(function(r){ return set.has(lvl + '|' + r.rung_key); }).length;
+    const pct = rungs.length ? Math.round(nDone/rungs.length*100) : 0;
+    h += '<div style="margin-top:'+(lvl===0?'0':'1.1rem')+'">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">'
+      + '<div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700">'
+      + 'Level '+lvl+' \u00b7 '+MultiplyShared.escapeHTML(LN[lvl]||'')+'</div>'
+      + '<div style="font-size:12px;font-weight:700;color:var(--green)">'+pct+'% \u00b7 '+nDone+'/'+rungs.length+'</div></div>'
+      + '<div class="pt" style="height:7px;margin-bottom:8px"><div class="pf" style="width:'+pct+'%;background:'+(LC_COLORS[lvl]||'var(--green)')+'"></div></div>';
+    rungs.forEach(function(r){
+      const isDone = set.has(lvl + '|' + r.rung_key);
+      h += '<label class="ci '+(isDone?'done':'')+'" style="cursor:pointer">'
+        + '<input type="checkbox" '+(isDone?'checked':'')+' onchange="_mdPwToggle(\''+m.id+'\','+lvl+',\''+r.rung_key+'\','+isDone+')">'
+        + _pwIcon(r.category)+' '+MultiplyShared.escapeHTML(r.title_en||'')+'</label>';
+    });
+    if(refs.length){
+      h += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:11.5px;color:var(--muted);font-weight:700;list-style:none">'
+        + String.fromCodePoint(0x1F4AC) + ' Coaching notes \u00b7 '+refs.length+'</summary>'
+        + '<div style="font-size:10.5px;color:var(--muted);margin:5px 0 6px">Not a checklist \u2014 character formed over time.</div>';
+      refs.forEach(function(r){
+        const desc = r.description_en ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.4">'+MultiplyShared.escapeHTML(r.description_en)+'</div>' : '';
+        h += '<div style="padding:5px 0;border-top:1px solid var(--border)"><div style="font-size:12px;color:var(--ink)">'
+          + _pwIcon(r.category)+' '+MultiplyShared.escapeHTML(r.title_en||'')+'</div>'+desc+'</div>';
+      });
+      h += '</details>';
+    }
+  }
+  w.innerHTML = h || '<div style="color:var(--muted);font-size:12px">No pathway rungs defined yet.</div>';
+}
+// Pastor marks/unmarks any rung. RLS (057) allows auth_level()>=5 to write any
+// member. Optimistic cache update + re-render of all three surfaces.
+async function _mdPwToggle(memberId, level, rungKey, isDone){
+  const set = _PW_PROG[memberId] || (_PW_PROG[memberId] = new Set());
+  const key = level + '|' + rungKey;
+  try{
+    if(isDone){
+      const res = await db.from('pathway_progress').delete().eq('member_id',memberId).eq('level',level).eq('rung_key',rungKey);
+      if(res.error) throw res.error; set.delete(key);
+    } else {
+      const res = await db.from('pathway_progress').insert({ member_id:memberId, level:level, rung_key:rungKey, marked_by:(LEADER&&LEADER.leaderId)||null });
+      if(res.error) throw res.error; set.add(key);
+    }
+    const m = members.find(function(x){ return x.id===memberId; });
+    if(m) rPathway(m);
+    renderTable(); rPipe();
+  }catch(e){ toast('Could not save: '+(e.message||e),'\u26a0'); const m=members.find(function(x){return x.id===memberId;}); if(m) rPathway(m); }
 }
 
 // ── PIPELINE CHECKLIST ──
