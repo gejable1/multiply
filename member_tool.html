@@ -12097,6 +12097,7 @@ async function renderBtliQuizzes(){
   // match no rows. May 16 2026 fix.
   if (!MEMBER || !MEMBER.memberId) return;
 
+  wrap.style.display = '';  // S80 (PR-L): un-hide if a prior render hid it
   wrap.innerHTML = `
     <div style="background:linear-gradient(135deg,#1e3a5f,#2d5380);color:#fff;border-radius:12px;padding:1rem 1.1rem;margin-bottom:.8rem;">
       <div style="font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#d4a93f;font-weight:700;margin-bottom:.3rem;">
@@ -12149,12 +12150,10 @@ async function renderBtliQuizzes(){
       quizzes = [];
     }
     if (!quizzes || quizzes.length === 0) {
-      document.getElementById('btliQuizzesList').innerHTML = `
-        <div style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:1.2rem;text-align:center;color:var(--muted,#5a6655);font-size:13px;line-height:1.55;">
-          <span class="en-text">No quizzes published yet. Your facilitator will share quizzes as you progress through BTLI lessons.</span>
-          <span class="tl-text">Wala pang naka-publish na quiz. Ipapaalam ng facilitator mo habang lumalago ka sa BTLI.</span>
-        </div>
-      `;
+      // S80 (PR-L): no visible quizzes -> hide the whole panel (header + box),
+      // not just blank the list. display:none collapses the section's top margin.
+      wrap.style.display = 'none';
+      wrap.innerHTML = '';
       return;
     }
 
@@ -12357,6 +12356,7 @@ async function renderUsbongQuizzes(){
   // for staff regardless of level (S30 fix). So: show if L0 OR Usbong staff.
   const lvl = (memberRow && memberRow.pipeline_level) || 0;
   if (lvl !== 0 && !(await _isUsbongStaff(MEMBER.memberId))) {
+    wrap.style.display = '';   // S80 (PR-L): un-hide if a prior render hid it
     wrap.innerHTML = '';   // clear in case the member was promoted/demoted mid-session
     return;
   }
@@ -12413,12 +12413,10 @@ async function renderUsbongQuizzes(){
       quizzes = [];
     }
     if (!quizzes || quizzes.length === 0) {
-      document.getElementById('usbongQuizzesList').innerHTML = `
-        <div style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:1.2rem;text-align:center;color:var(--muted,#5a6655);font-size:13px;line-height:1.55;">
-          <span class="en-text">No quizzes published yet. Your discipler will share quizzes as you progress through your Pre-Pipeline lessons.</span>
-          <span class="tl-text">Wala pang naka-publish na quiz. Ipapaalam ng discipler mo habang lumalago ka sa Pre-Pipeline lessons.</span>
-        </div>
-      `;
+      // S80 (PR-L): no visible quizzes -> hide the whole panel (header + box),
+      // not just blank the list. display:none collapses the section's top margin.
+      wrap.style.display = 'none';
+      wrap.innerHTML = '';
       return;
     }
 
