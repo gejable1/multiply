@@ -1362,11 +1362,13 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <!-- FACILITATOR STATUS -->
       <div class="fi full" style="padding:.65rem;background:var(--gold-light);border:1px solid rgba(184,136,42,.2);border-radius:7px;">
         <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:.35rem">Facilitator Status</div>
-        <div class="fac-toggle">
+        <!-- S80 (PR-N): is_facilitator is derived from level (>=2) by a DB trigger; the manual toggle is hidden. -->
+        <div class="fac-toggle" style="display:none">
           <label class="toggle-sw"><input type="checkbox" id="fIsFac" onchange="toggleFacRole()"><div class="toggle-track"></div></label>
           <span style="font-size:13px;color:var(--ink)">Qualified as Facilitator / LC Leader</span>
         </div>
-        <div class="fi" style="margin-top:.5rem;display:none" id="facRoleRow">
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.45">A member becomes a Facilitator automatically at Level 2 and above. Set the level below.</div>
+        <div class="fi" style="margin-top:.5rem;display:none" id="facRoleRow" data-derived="1">
           <label>Facilitator Role</label>
           <select id="fFacRole"><option value="">Select...</option><option>LC Leader</option><option>Pastoral Staff</option><option>Intern Facilitator</option></select>
         </div>
@@ -3514,7 +3516,7 @@ async function addNote(){
 // ── SAVE MEMBER ──
 async function saveMember(){
   const name=document.getElementById('fn').value.trim();if(!name){toast('Enter a name','⚠');return;}
-  const isFac=document.getElementById('fIsFac').checked;
+  const isFac=(parseInt(document.getElementById('fl').value,10)||0)>=2;  // S80 (PR-N): derived from level, mirrors the DB trigger (091)
   const fdSel=document.getElementById('fd');
   const discName=fdSel.value||'';
   const discId=document.getElementById('fd_id').value||
@@ -3596,8 +3598,9 @@ async function saveMember(){
     contact:document.getElementById('fco').value,
     address:document.getElementById('faddr').value||null,
     family_members:famData,
-    is_facilitator:isFac,
-    facilitator_role:isFac?document.getElementById('fFacRole').value:null,
+    // S80 (PR-N): is_facilitator + facilitator_role are DERIVED from pipeline_level
+    // by the members_derive_facilitator trigger (migration 091). Not sent here --
+    // sending them would be overwritten anyway and could trip the 050 guard.
     lc_group:effLcGroup,
     is_test_member:effIsTest,
     is_external_user:effIsExternal,
