@@ -4140,7 +4140,9 @@ async function renderMltPathway(mem){
     // celebration notification without re-querying (and without re-deriving the
     // base-vs-church-overlay precedence resolved just above).
     _mltRungCache[lvl] = byKey;
-    const rungs = Object.values(byKey).filter(r=>r.published!==false && r.trackable!==false && !(r.meta && r.meta.track==='giving')).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const _allPublished = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
+    const rungs = _allPublished.filter(r=>r.trackable!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const _refRungs = _allPublished.filter(r=>r.trackable===false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
     if(!rungs.length){ host.innerHTML = `<div style="color:var(--muted);font-size:12px">No rungs defined for this level yet.</div>`; return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
@@ -4160,6 +4162,25 @@ async function renderMltPathway(mem){
         h += inner;
       }
     });
+    // ----- Reference rungs: the coaching-conversation panel (S80, PR-K) -----
+    // NON-trackable rungs for this level, shown collapsed and un-counted. These
+    // are talking points, not tasks -- no dot, no checkbox, no onclick.
+    if(_refRungs.length){
+      let ref = '<details style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">'
+        + '<summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);list-style:none">'
+        + '&#128172; Coaching notes &middot; ' + _refRungs.length + ' for conversation</summary>'
+        + '<div style="font-size:10.5px;color:var(--muted);margin:6px 0 8px">Not a checklist &mdash; character formed over time. Use these to guide the conversation.</div>';
+      _refRungs.forEach(function(r){
+        const desc = r.description_en ? '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45">'+MultiplyShared.escapeHTML(r.description_en)+'</div>' : '';
+        ref += '<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-top:1px solid var(--border)">'
+          + '<div style="font-size:17px;flex:none;opacity:.75">'+_mltPwIcon(r.category)+'</div>'
+          + '<div style="flex:1;min-width:0"><div style="font-size:12.5px;color:var(--text)">'+MultiplyShared.escapeHTML(r.title_en||'')+'</div>'
+          + '<div style="font-size:10px;color:var(--muted);text-transform:capitalize">'+MultiplyShared.escapeHTML(r.category||'')+'</div>'
+          + desc + '</div></div>';
+      });
+      ref += '</details>';
+      h += ref;
+    }
     host.innerHTML = h;
   }catch(e){
     console.warn('[mlt-pathway] load failed:', e);

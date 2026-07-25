@@ -11457,7 +11457,9 @@ async function renderPathway(level){
     if(progRes.error) throw progRes.error;
     const byKey = {};
     (rungRes.data||[]).forEach(r=>{ const ex=byKey[r.rung_key]; if(!ex || (r.church_id && !ex.church_id)) byKey[r.rung_key]=r; });
-    const rungs = Object.values(byKey).filter(r=>r.published!==false && r.trackable!==false && !(r.meta && r.meta.track==='giving')).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const _allPublished = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
+    const rungs = _allPublished.filter(r=>r.trackable!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const _refRungs = _allPublished.filter(r=>r.trackable===false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
     if(!rungs.length){ host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">No rungs for this level yet.</span><span class="tl-text">Wala pang rung dito.</span></div>`); return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
@@ -11483,7 +11485,29 @@ async function renderPathway(level){
           </div>
         </div>`;
     }).join('');
-    host.innerHTML = wrap(bar + `<div>${items}</div>`);
+    // ----- Reference rungs: formation/conversation panel (S80, PR-K) --------
+    // NON-trackable rungs, collapsed and un-counted. Talking points for the
+    // disciple and their leader -- no checkbox, no completion. Bilingual.
+    let refPanel = '';
+    if(_refRungs.length){
+      const refItems = _refRungs.map(function(r){
+        const dEn = r.description_en ? '<div class="en-text" style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45">'+MultiplyShared.escapeHTML(r.description_en)+'</div>' : '';
+        const dTl = (r.description_tl||r.description_en) ? '<div class="tl-text" style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45">'+MultiplyShared.escapeHTML(r.description_tl||r.description_en)+'</div>' : '';
+        return '<div style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--line)">'
+          + '<div style="font-size:17px;flex:none;opacity:.75">'+_pathwayCatIcon(r.category)+'</div>'
+          + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:12.5px;color:var(--ink)"><span class="en-text">'+MultiplyShared.escapeHTML(r.title_en||'')+'</span><span class="tl-text">'+MultiplyShared.escapeHTML(r.title_tl||r.title_en||'')+'</span></div>'
+          + '<div style="font-size:10px;color:var(--muted);margin-top:1px">'+_pathwayCatChip(r.category)+'</div>'
+          + dEn + dTl + '</div></div>';
+      }).join('');
+      refPanel = '<details style="margin-top:.7rem;border-top:1px solid var(--line);padding-top:.6rem">'
+        + '<summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);list-style:none">'
+        + '<span class="en-text">&#127793; Growing in these &middot; '+_refRungs.length+'</span>'
+        + '<span class="tl-text">&#127793; Pinaghuhusayan natin &middot; '+_refRungs.length+'</span></summary>'
+        + '<div style="font-size:10.5px;color:var(--muted);margin:.4rem 0 .5rem"><span class="en-text">Not a checklist &mdash; character formed over time, walked with your leader.</span><span class="tl-text">Hindi checklist &mdash; hinuhubog sa paglipas ng panahon, kasama ang lider mo.</span></div>'
+        + refItems + '</details>';
+    }
+    host.innerHTML = wrap(bar + `<div>${items}</div>` + refPanel);
   }catch(e){
     console.warn('[pathway] load failed:', e);
     host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Could not load. Tap a level to retry.</span><span class="tl-text">Hindi na-load. I-tap ang antas.</span></div>`);
