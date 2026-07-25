@@ -12098,7 +12098,7 @@ async function renderBtliQuizzes(){
 
   try {
     // Fetch all active BTLI quizzes
-    const { data: quizzes, error: qErr } = await db
+    let { data: quizzes, error: qErr } = await db
       .from('btli_quizzes')
       .select('id,course_code,lesson_number,lesson_title,passing_score,attendance_event_name_pattern,lesson_id')
       .eq('is_active', true)
@@ -12106,6 +12106,24 @@ async function renderBtliQuizzes(){
       .order('lesson_number', { ascending: true });
 
     if (qErr) throw qErr;
+    // ----- Quiz visibility wired to the lesson access-grant (S80, PR-J) -----
+    // Reuse the single grant resolver so a card appears only for a lesson the
+    // member may actually see. Filtering `quizzes` here leaves lock/render
+    // downstream untouched -- Model X unlock behavior is preserved. Fail CLOSED
+    // (#127): on resolver error the accessible set is empty => no cards.
+    try {
+      const _M = MEMBER || {};
+      const _isPastor = (_M.memberLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+      const _isLeader = (_M.memberLevel || 0) >= 2;
+      const _visRows = await MultiplyShared.lessons.fetchVisibleLessons({
+        memberId: _M.memberId, isPastor: _isPastor, isLeader: _isLeader
+      });
+      const _accessibleLessonIds = new Set((_visRows || []).map(function(r){ return r.lesson && r.lesson.id; }).filter(Boolean));
+      quizzes = (quizzes || []).filter(function(q){ return q.lesson_id && _accessibleLessonIds.has(q.lesson_id); });
+    } catch (eVis) {
+      console.warn('[btli-quiz-visibility] fetchVisibleLessons failed, hiding all quiz cards (fail-closed):', eVis);
+      quizzes = [];
+    }
     if (!quizzes || quizzes.length === 0) {
       document.getElementById('btliQuizzesList').innerHTML = `
         <div style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:1.2rem;text-align:center;color:var(--muted,#5a6655);font-size:13px;line-height:1.55;">
@@ -12344,7 +12362,7 @@ async function renderUsbongQuizzes(){
 
   try {
     // Fetch all active Usbong quizzes
-    const { data: quizzes, error: qErr } = await db
+    let { data: quizzes, error: qErr } = await db
       .from('usbong_quizzes')
       .select('id,course_code,lesson_number,lesson_title,passing_score,attendance_event_name_pattern,lesson_id')
       .eq('is_active', true)
@@ -12352,6 +12370,24 @@ async function renderUsbongQuizzes(){
       .order('lesson_number', { ascending: true });
 
     if (qErr) throw qErr;
+    // ----- Quiz visibility wired to the lesson access-grant (S80, PR-J) -----
+    // Reuse the single grant resolver so a card appears only for a lesson the
+    // member may actually see. Filtering `quizzes` here leaves lock/render
+    // downstream untouched -- Model X unlock behavior is preserved. Fail CLOSED
+    // (#127): on resolver error the accessible set is empty => no cards.
+    try {
+      const _M = MEMBER || {};
+      const _isPastor = (_M.memberLevel || 0) >= MultiplyShared.PASTOR_LEVEL;
+      const _isLeader = (_M.memberLevel || 0) >= 2;
+      const _visRows = await MultiplyShared.lessons.fetchVisibleLessons({
+        memberId: _M.memberId, isPastor: _isPastor, isLeader: _isLeader
+      });
+      const _accessibleLessonIds = new Set((_visRows || []).map(function(r){ return r.lesson && r.lesson.id; }).filter(Boolean));
+      quizzes = (quizzes || []).filter(function(q){ return q.lesson_id && _accessibleLessonIds.has(q.lesson_id); });
+    } catch (eVis) {
+      console.warn('[usbong-quiz-visibility] fetchVisibleLessons failed, hiding all quiz cards (fail-closed):', eVis);
+      quizzes = [];
+    }
     if (!quizzes || quizzes.length === 0) {
       document.getElementById('usbongQuizzesList').innerHTML = `
         <div style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:1.2rem;text-align:center;color:var(--muted,#5a6655);font-size:13px;line-height:1.55;">
