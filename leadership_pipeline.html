@@ -7,7 +7,7 @@
 <title>MULTIPLY Leadership Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="multiply_shared.js?v=13"></script>
+<script src="multiply_shared.js?v=14"></script>
 
 <style>
 /* Embed mode (?embed=1): neutralize position:fixed so Samsung Internet iframes do not blank out. Shell owns the frame. */
@@ -774,23 +774,14 @@ async function toggleTrackable(r){ return db.from('pathway_rungs').update({ trac
 // record is flat too. The poster still DISPLAYS rungs grouped by category; it
 // just sorts each group by its members' positions in the flat level list.
 function _isGiving(r){ return !!(r && r.meta && r.meta.track === 'giving'); }
-function _sectionComparator(level){
-  const ord = SECTION_ORDER[String(level)] || [];
-  return (a,b)=>{
-    const ia=ord.indexOf(a.rung_key), ib=ord.indexOf(b.rung_key);
-    if(ia!==-1 && ib!==-1) return ia-ib;        // both ordered → by order_map
-    if(ia!==-1) return -1;                        // ordered before unordered
-    if(ib!==-1) return 1;
-    return (a.sort_order||0)-(b.sort_order||0);   // both unordered → sort_order fallback
-  };
-}
 // Every active, non-giving rung at this level, across ALL categories, in the
 // effective flat order. Giving rungs ride a separate ladder and are excluded
 // explicitly rather than relying on CAT_SECTIONS omitting 'formation'.
 function levelRungs(level){
-  return Object.values(RUNG_BY_ID)
-    .filter(r => r.level===level && r.published !== false && !_isGiving(r))
-    .sort(_sectionComparator(level));
+  return MultiplyShared.pathwayOrder.sort(
+    Object.values(RUNG_BY_ID)
+      .filter(r => r.level===level && r.published !== false && !_isGiving(r)),
+    level, SECTION_ORDER);
 }
 async function saveSectionOrder(newMap){
   if (SECTION_ORDER_ROW && SECTION_ORDER_ROW.id)
@@ -864,7 +855,7 @@ function renderPipeline(rungs){
       let html = '';
       CAT_SECTIONS[col].forEach(function(pair){
         const cat = pair[0], label = pair[1];
-        const items = ((byLC[level]||{})[cat]||[]).slice().sort(_sectionComparator(level));
+        const items = MultiplyShared.pathwayOrder.sort((byLC[level]||{})[cat]||[], level, SECTION_ORDER);
         if (!items.length && !editMode) return;   // read-only path: unchanged (skip empty)
         html += '<span class="sec-label">'+label+'</span>';
         const actives = items.filter(r => r.published !== false);   // arrows/positions among active chips

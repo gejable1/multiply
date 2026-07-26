@@ -428,7 +428,7 @@ tbody tr:hover{background:var(--green-light);}
 // when neither CommonJS nor AMD is available.
 window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 </script>
-<script src="multiply_shared.js?v=13"></script>
+<script src="multiply_shared.js?v=14"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -3446,7 +3446,8 @@ async function _loadPathwayCache(){
   try{
     const [rungRes, progRes] = await Promise.all([
       db.from('pathway_rungs').select('*'),
-      db.from('pathway_progress').select('member_id, level, rung_key')
+      db.from('pathway_progress').select('member_id, level, rung_key'),
+      MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
     if(progRes.error) throw progRes.error;
@@ -3468,15 +3469,17 @@ async function _loadPathwayCache(){
 // Trackable, published, non-giving rungs for a level (the denominator set).
 function _pwTrackable(level){
   const byKey = _PW_RUNGS[level] || {};
-  return Object.values(byKey)
-    .filter(function(r){ return r.published!==false && r.trackable!==false && !(r.meta && r.meta.track==='giving'); })
-    .sort(function(a,b){ return (a.sort_order||0)-(b.sort_order||0); });
+  return MultiplyShared.pathwayOrder.sort(
+    Object.values(byKey)
+      .filter(function(r){ return r.published!==false && r.trackable!==false && !(r.meta && r.meta.track==='giving'); }),
+    level);
 }
 function _pwReference(level){
   const byKey = _PW_RUNGS[level] || {};
-  return Object.values(byKey)
-    .filter(function(r){ return r.published!==false && r.trackable===false && !(r.meta && r.meta.track==='giving'); })
-    .sort(function(a,b){ return (a.sort_order||0)-(b.sort_order||0); });
+  return MultiplyShared.pathwayOrder.sort(
+    Object.values(byKey)
+      .filter(function(r){ return r.published!==false && r.trackable===false && !(r.meta && r.meta.track==='giving'); }),
+    level);
 }
 // {done,total,pct} for a member at a level, from the cache.
 function _pwProgress(memberId, level){
