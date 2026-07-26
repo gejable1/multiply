@@ -474,7 +474,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      dashboard. If no valid session exists, redirect to the central
      login page. This replaces the old open-name-search login.
 ─────────────────────────────────────────────────────────────── -->
-<script src="multiply_shared.js?v=13"></script>
+<script src="multiply_shared.js?v=14"></script>
 <script src="multiply_brand.js?v=1"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
@@ -4130,7 +4130,8 @@ async function renderMltPathway(mem){
   try{
     const [rungRes, progRes] = await Promise.all([
       db.from('pathway_rungs').select('*').eq('level', lvl),
-      db.from('pathway_progress').select('rung_key, marked_by, completed_at').eq('member_id', mem.id).eq('level', lvl)
+      db.from('pathway_progress').select('rung_key, marked_by, completed_at').eq('member_id', mem.id).eq('level', lvl),
+      MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
     if(progRes.error) throw progRes.error;
@@ -4141,8 +4142,8 @@ async function renderMltPathway(mem){
     // base-vs-church-overlay precedence resolved just above).
     _mltRungCache[lvl] = byKey;
     const _allPublished = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
-    const rungs = _allPublished.filter(r=>r.trackable!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-    const _refRungs = _allPublished.filter(r=>r.trackable===false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const rungs = MultiplyShared.pathwayOrder.sort(_allPublished.filter(r=>r.trackable!==false), lvl);
+    const _refRungs = MultiplyShared.pathwayOrder.sort(_allPublished.filter(r=>r.trackable===false), lvl);
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
     if(!rungs.length){ host.innerHTML = `<div style="color:var(--muted);font-size:12px">No rungs defined for this level yet.</div>`; return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;

@@ -3357,10 +3357,58 @@
     }
   }
 
+  // ----- Pathway rung ordering (#400) -----
+  // pathway_section_order.order_map is ONE flat array of rung_key per level,
+  // keyed by the level as a string. The poster (leadership_pipeline.html)
+  // writes it; MMT/MLT/MD read it. It is the order of record for the member
+  // Journey. RLS scopes the row to the caller's church, so no explicit
+  // church filter is needed here.
+  //
+  // Semantics: keys listed in the map rank first, in map order; anything not
+  // listed falls in after them by sort_order. That fallback is what makes a
+  // missing, empty or partial map behave exactly like the pre-#400 sort, so
+  // every consumer is safe to ship before the map is ever populated.
+  let _pwOrderMap = null;
+  async function pathwayOrderLoad(force){
+    if (_pwOrderMap && !force) return _pwOrderMap;
+    const db = getDB();
+    if (!db) { _pwOrderMap = {}; return _pwOrderMap; }
+    try {
+      const { data, error } = await db.from('pathway_section_order')
+        .select('order_map').maybeSingle();
+      _pwOrderMap = (!error && data && data.order_map) || {};
+    } catch (e) {
+      console.warn('[pathway-order] load failed:', e);
+      _pwOrderMap = {};
+    }
+    return _pwOrderMap;
+  }
+  function pathwayOrderForLevel(level, map) {
+    const m = map || _pwOrderMap || {};
+    const a = m[String(level)];
+    return Array.isArray(a) ? a : [];
+  }
+  function pathwayOrderSort(rungs, level, map) {
+    const ord = pathwayOrderForLevel(level, map);
+    return (rungs || []).slice().sort(function (a, b) {
+      const ia = ord.indexOf(a.rung_key), ib = ord.indexOf(b.rung_key);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+  }
+
   global.MultiplyShared = {
     SB_URL, SB_KEY, SESSION_KEY, MEMBER_SESSION_KEY, LEVEL_NAMES, PASTOR_LEVEL,
     getDB,
     catalogWrite,
+    // Flat per-level rung ordering (#400) - written by the poster, read here
+    pathwayOrder: {
+      load:     pathwayOrderLoad,
+      forLevel: pathwayOrderForLevel,
+      sort:     pathwayOrderSort
+    },
     // Leader-session API (for MD, MLT, lc_attendance_report, etc.)
     getValidSession,
     gateOrRedirect,
