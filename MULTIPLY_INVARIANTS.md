@@ -4063,4 +4063,84 @@ PR-O swapped `renderTable`'s compute line from `lc=PC[l]...` to `_pp=_pwProgress
 
 ---
 
+### **393. An INSERT policy's WITH CHECK is applied to the PROPOSED row even when ON CONFLICT resolves to an UPDATE -- a rule that must tell "create" from "edit" belongs in a trigger that tests id-existence, not in the policy**
+
+Hardening `members` INSERT (092), the level rule went into `members_insert_own_church` first: a non-pastor may create a member strictly below their own level. It rejected an L3 coach SAVING the L5 pastor's profile. MD saves members with `.upsert(l2r(m),{onConflict:'id'})`, and PostgreSQL evaluates the INSERT policy's WITH CHECK against the row PROPOSED for insertion even when the conflict path turns it into an UPDATE. Verified empirically on PG16: an L3 upserting an L2 row passed, the same L3 upserting the L5 row raised `new row violates row-level security policy`. Moving the rule into the BEFORE INSERT OR UPDATE trigger fixed it -- the trigger can ask `if new.id is not null and exists (select 1 from members m where m.id = new.id) then return new` and let the UPDATE branch govern a real edit; it also raises a readable message instead of the opaque RLS error.
+
+**RULE:** Value rules with no false-positive risk (a column that must be false) can live in the policy. Any rule that depends on whether the write is a CREATE or an EDIT must live in a BEFORE trigger that tests whether the id already exists -- an INSERT policy cannot distinguish them, and every upsert call site will trip it. Prove the upsert path explicitly on PG16; a plain-INSERT test will not surface this.
+
+**Established July 26, 2026 (Session 81). Invariant #393 added - count now 393.**
+
+---
+
+### **394. A column that grants a PLATFORM-wide capability must not be writable by any church-scoped role -- including the pastor**
+
+Migration 050's guard returned early for `auth_level() >= 5`, so `is_platform_admin` was writable by any of the 12 tenant pastors. That flag is the ONLY gate on the `catalog-publish` Edge Function, which writes the BASE (`church_id IS NULL`) curriculum lane shared by every church -- so a per-church role held a platform-wide key, and a tenant pastor could have rewritten the shared catalog for everyone. Repo-wide grep confirmed no client ever WRITES the column (the only occurrences are `catalog-publish` READING it); migration 036 seeded it by direct SQL. 092 now blocks it in both walls: the INSERT policy requires `coalesce(is_platform_admin,false)=false`, and the trigger raises on any change while `auth_church_id()` is non-null, pastors included. Settable only with no JWT -- service-role or the SQL editor.
+
+**RULE:** Before trusting a level check on a privilege column, ask what SCOPE the capability has. If the capability crosses tenants, no tenant-scoped JWT may set it at any level; gate it to the no-JWT path and grant it by human-run SQL. Audit the write paths by grep first -- if no client writes it, the lockdown costs nothing.
+
+**Established July 26, 2026 (Session 81). Invariant #394 added - count now 394.**
+
+---
+
+### **395. A form that writes an OVERLAY row must carry every column of the base row it overrides -- not only the fields it displays**
+
+`leadership_pipeline.html`'s `customizeBase()` built its overlay payload from the four fields the edit form shows: `{title_en, description_en, trackable, published, meta}`. The strings `completion_source`, `auto_source_key`, `title_tl` and `description_tl` appear ZERO times in that file. So the DB defaults applied -- `completion_source` became `'manual'`, `auto_source_key` became NULL -- and a pastor who merely RETITLED a rung silently disconnected it from the auto-completion engine. Two Rosehill rungs were damaged this way (L2 `conflict`, L2 `disc`); migration 093 restored them from their base rows and PR #253 made `customizeBase` carry the auto-wiring. The Tagalog columns had been silently lost too and were repaired, unknowingly, by migration 075's backfill in S70 -- exactly 5 Rosehill overlay rows, which is why nobody noticed the cause.
+
+**RULE:** An overlay write is a COPY plus an edit, not an edit alone. Enumerate the base row's columns and carry every one the form does not explicitly change; a column the UI cannot see is exactly the column that will be lost. When adding a column to a catalog table, grep every overlay-write path before shipping.
+
+**Established July 26, 2026 (Session 81). Invariant #395 added - count now 395.**
+
+---
+
+### **396. One bug can MASK another -- before fixing a defect, ask what is currently hiding its symptom**
+
+Auto-completion v1 (084) joined base rungs only (`r.church_id IS NULL`) and never consulted a church's overlay. That was the known gap. But it was also the reason nobody noticed #395: because the engine ticked from the BASE definition, the two un-wired Rosehill rungs kept getting their checkmarks and members saw nothing wrong. Shipping the v2 resolver alone -- which honours the overlay -- would have turned the hidden defect into a visible REGRESSION: 131 existing completions would have kept a tick that new members could no longer earn. The correct order was editor fix -> data repair (093) -> resolver (094). Reading the editor before writing the cleanup also stopped a proposal to DELETE those 131 rows, which are legitimate completions -- those members really did take the assessments.
+
+**RULE:** When a defect has been live for weeks and nobody reported it, find out WHY it was invisible before fixing it. The masking mechanism is usually a second defect, and removing the mask first turns a silent bug into a user-visible regression. Sequence: fix the source, repair the data, then unmask.
+
+**Established July 26, 2026 (Session 81). Invariant #396 added - count now 396.**
+
+---
+
+### **397. A weight that is a BY-PRODUCT of how many items were written is not a decision -- declare it explicitly and guard the total**
+
+The salvation assurance diagnostic summed raw section points, and its section maxima were simply the question counts times five: nine fruit of the Spirit made section C worth 45, six gospel questions made section A worth 10. So the GOSPEL carried 5.9% of a salvation diagnostic while spiritual habits and church integration carried 35.3%. Nobody chose that. It mattered because of how the instrument is administered: every respondent has already completed 10-16 weeks of one-on-one Usbong plus a weekly huddle, so the habit and community sections are high for nearly everyone -- they contributed points without contributing information and diluted the two sections that genuinely distinguish. Modelled effect of declared weights (A18/B12/C22/D18/E12/F9/G9, set with the Pastor): a genuine new believer moves Zone 2 -> Zone 1; a disciplined long-time member trusting his own goodness moves Zone 1 -> Zone 2, into the Assurance Formation track. Three other profiles unchanged.
+
+**RULE:** If a score's balance falls out of item counts, it is an accident wearing the costume of a judgement. Declare the weights as data, normalise each section to its own percentage so adding questions cannot shift the balance, and add a guard that fails loudly when the weights stop totalling 100%. Then have the domain expert -- not the engineer -- approve the numbers.
+
+**Established July 26, 2026 (Session 81). Invariant #397 added - count now 397.**
+
+---
+
+### **398. After changing a CALCULATION, inspect what the human READS -- add a render gate, not just a maths gate**
+
+The reweighting (#397) passed BASE/WANT, `node --check`, a non-ASCII delta of 0, and a behavioural gate that executed the real scorer against five profiles and three edge cases: 6/6. It was still wrong on screen. The Overall Score card still printed the RAW fraction beside the newly weighted percentage, so it read `136/170` next to `71%` -- and 136/170 is 79%. Two counting systems side by side with no way to tell which was true. The Pastor caught it on his phone, not any gate. Fixed in PR #256: the card leads with the weighted percentage and labels the raw figure as raw points, plus a line explaining that only the 1-5 rating questions score at all (a respondent answering the first Section A items sees 0% because A1-A4 are open text and checkboxes).
+
+**RULE:** Changing how a number is computed changes every label, denominator and fraction printed near it. After a scoring change, BUILD the rendered output for a real profile and assert on the text a human will read -- that the units are labelled, that no stale denominator survives, that a blank input reads sensibly. Byte-exact + syntactically valid + mathematically correct still is not "it reads correctly".
+
+**Established July 26, 2026 (Session 81). Invariant #398 added - count now 398.**
+
+---
+
+### **399. At session open, cross-check `migrations/` in the repo against `schema_migrations` in the database**
+
+Migration 093 was written, proven on PG16, run by the Pastor in Supabase with an 8/8 self-verify -- and then never committed. It sat applied-but-unrecorded for three turns while three other PRs went by, and CC compounded it by reporting "pairs with the already-merged migration 093" because the delivery block had been NAMED `CC_093_editor_fix.sh` (it carried the editor fix, not the migration). The database's ledger said 093; the repo's `migrations/` ended at 092. Anyone rebuilding from the repo would have got a different database from production. This is exactly the drift the S46 ledger (#212) exists to surface, and nothing was looking at it.
+
+**RULE:** Add to the session-open ritual: list `migrations/` on `origin/main` and compare it against `SELECT version FROM schema_migrations ORDER BY version`. A version in the ledger with no file is an applied-but-uncommitted migration; a file with no ledger row is an unrun one. Also: name a delivery block after WHAT IT CARRIES, never after the migration it happens to accompany.
+
+**Established July 26, 2026 (Session 81). Invariant #399 added - count now 399.**
+
+---
+
+### **400. A write path with no reader is a silent no-op -- when shipping an editor control, verify at least one consumer READS what it saves**
+
+The pipeline poster has working reorder arrows: `actMove` -> `moveRung` -> `saveSectionOrder` writes `pathway_section_order.order_map`. But `member_tool.html`, `lc_leader_tool.html` and `multiply_dashboard.html` contain ZERO references to `pathway_section_order` -- all three sort by `sort_order` alone, and `moveRung` never touches `sort_order`. So reordering a rung changes the poster and NOTHING else; the disciple's Journey keeps the original order forever. One real instance exists (Rosehill, `0|book`, saved 2026-07-25). The original design was not careless -- `sort_order` lives on the row and base rungs are shared by all 12 churches, so writing it directly would reorder every church at once; `order_map` correctly solved tenancy and was simply wired to one consumer. A second limit surfaced with it: `order_map` is keyed `level|category` and the member's Journey is a FLAT list, so a per-category order cannot even express the intended sequence.
+
+**RULE:** Shipping an editor control is not done when the write succeeds. Grep every consumer for the table or column it writes and confirm at least one READS it; if none do, the feature is a no-op that will accumulate silent divergence between what the author sees and what the user sees. Check the SHAPE too -- a grouped-by-category order cannot drive a flat list.
+
+**Established July 26, 2026 (Session 81). Invariant #400 added - count now 400.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
