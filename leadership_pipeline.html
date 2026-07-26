@@ -703,7 +703,7 @@ const LEVEL_NAME = {0:'New Believer',1:'Team Member',2:'Leader',3:'Coach',4:'Dir
 let RUNG_BY_ID = {};
 let OVERLAY_BY_KEY = {}, BASE_KEYS = new Set();
 let editMode = false, RAW_ROWS = [];
-let SECTION_ORDER = {}, SECTION_ORDER_ROW = null;   // 3b: order_map {"level|category":[rung_key,...]}
+let SECTION_ORDER = {}, SECTION_ORDER_ROW = null;   // order_map {"<level>":[rung_key,...]} FLAT per level (#400)
 const isEditor = (window.LEADER?.leaderLevel || 0) >= (MultiplyShared.PASTOR_LEVEL || 5);
 
 // S80 (PR-M): in embed mode the .modal-overlay is position:absolute (to stop
@@ -769,9 +769,13 @@ async function togglePublish(r){ return db.from('pathway_rungs').update({ publis
 async function toggleTrackable(r){ return db.from('pathway_rungs').update({ trackable:!r.trackable }).eq('id', r.id); }
 
 
-// ─── 3b: full-interleave reorder via order_map (pathway_section_order) ───
-function _sectionComparator(level, cat){
-  const ord = SECTION_ORDER[level+'|'+cat] || [];
+// ─── reorder via order_map (pathway_section_order) FLAT per level (#400) ───
+// The member Journey in MMT/MLT/MD is ONE flat list per level, so the order of
+// record is flat too. The poster still DISPLAYS rungs grouped by category; it
+// just sorts each group by its members' positions in the flat level list.
+function _isGiving(r){ return !!(r && r.meta && r.meta.track === 'giving'); }
+function _sectionComparator(level){
+  const ord = SECTION_ORDER[String(level)] || [];
   return (a,b)=>{
     const ia=ord.indexOf(a.rung_key), ib=ord.indexOf(b.rung_key);
     if(ia!==-1 && ib!==-1) return ia-ib;        // both ordered → by order_map
@@ -780,11 +784,13 @@ function _sectionComparator(level, cat){
     return (a.sort_order||0)-(b.sort_order||0);   // both unordered → sort_order fallback
   };
 }
-function sectionRungs(level, cat){
-  // resolved + published (active, reorderable) rungs for this section, in display order
+// Every active, non-giving rung at this level, across ALL categories, in the
+// effective flat order. Giving rungs ride a separate ladder and are excluded
+// explicitly rather than relying on CAT_SECTIONS omitting 'formation'.
+function levelRungs(level){
   return Object.values(RUNG_BY_ID)
-    .filter(r => r.level===level && r.category===cat && r.published !== false)
-    .sort(_sectionComparator(level, cat));
+    .filter(r => r.level===level && r.published !== false && !_isGiving(r))
+    .sort(_sectionComparator(level));
 }
 async function saveSectionOrder(newMap){
   if (SECTION_ORDER_ROW && SECTION_ORDER_ROW.id)
@@ -792,12 +798,25 @@ async function saveSectionOrder(newMap){
   return db.from('pathway_section_order').insert({ order_map:newMap });   // NO church_id (server-stamped)
 }
 async function moveRung(rung, dir){   // dir: -1 up, +1 down
-  const okey = rung.level+'|'+rung.category;
-  const keys = sectionRungs(rung.level, rung.category).map(r=>r.rung_key);
-  const i = keys.indexOf(rung.rung_key), j = i+dir;
-  if (i<0 || j<0 || j>=keys.length) return;             // at edge → no-op
-  const t=keys[i]; keys[i]=keys[j]; keys[j]=t;          // swap
-  return saveSectionOrder(Object.assign({}, SECTION_ORDER, { [okey]: keys }));
+  // The arrow still moves a rung within its own category group (unchanged for
+  // the pastor), but the move is written into the FLAT level list, which is
+  // what MMT/MLT/MD read. Materializing the whole level first means the list
+  // starts as exactly what is on screen right now. RELOCATE, never swap: a
+  // swap would also fling the neighbour across the flat list, moving a second
+  // rung on the member's phone that the pastor never touched and cannot see.
+  const level = rung.level;
+  const flat  = levelRungs(level);
+  const i = flat.findIndex(r => r.rung_key === rung.rung_key);
+  if (i < 0) return;
+  let j = -1;
+  for (let k = i + dir; k >= 0 && k < flat.length; k += dir){
+    if (flat[k].category === rung.category){ j = k; break; }
+  }
+  if (j < 0) return;                                    // at edge → no-op
+  const keys = flat.map(r => r.rung_key);
+  const [moved] = keys.splice(i, 1);                    // lift the rung out...
+  keys.splice(j, 0, moved);                             // ...drop it beside its neighbour
+  return saveSectionOrder(Object.assign({}, SECTION_ORDER, { [String(level)]: keys }));
 }
 async function loadSectionOrder(){
   const { data, error } = await db.from('pathway_section_order').select('id, order_map').maybeSingle();
@@ -845,7 +864,7 @@ function renderPipeline(rungs){
       let html = '';
       CAT_SECTIONS[col].forEach(function(pair){
         const cat = pair[0], label = pair[1];
-        const items = ((byLC[level]||{})[cat]||[]).slice().sort(_sectionComparator(level, cat));
+        const items = ((byLC[level]||{})[cat]||[]).slice().sort(_sectionComparator(level));
         if (!items.length && !editMode) return;   // read-only path: unchanged (skip empty)
         html += '<span class="sec-label">'+label+'</span>';
         const actives = items.filter(r => r.published !== false);   // arrows/positions among active chips
