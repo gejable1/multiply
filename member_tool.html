@@ -11450,21 +11450,26 @@ async function renderPathway(level){
   try{
     const db = MultiplyShared.getDB();
     const [rungRes, progRes] = await Promise.all([
-      db.from('pathway_rungs').select('*').eq('level', shown),
+      db.from('pathway_rungs').select('*').eq('level', shown).not('church_id','is',null),
       db.from('pathway_progress').select('rung_key, completed_at').eq('member_id', MEMBER.memberId).eq('level', shown),
       MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
     if(progRes.error) throw progRes.error;
-    const byKey = {};
-    (rungRes.data||[]).forEach(r=>{ const ex=byKey[r.rung_key]; if(!ex || (r.church_id && !ex.church_id)) byKey[r.rung_key]=r; });
-    const _allPublished = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
-    const rungs = MultiplyShared.pathwayOrder.sort(_allPublished.filter(r=>r.trackable!==false), shown);
-    const _refRungs = MultiplyShared.pathwayOrder.sort(_allPublished.filter(r=>r.trackable===false), shown);
+    // Own lane only -- no precedence left to resolve (#405).
+    const _own = (rungRes.data||[]).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
-    if(!rungs.length){ host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">No rungs for this level yet.</span><span class="tl-text">Wala pang rung dito.</span></div>`); return; }
+    // Retired leaves the count, not the record. A rung you finished stays visible even
+    // after it leaves the pathway, sitting outside nDone AND outside the denominator,
+    // so the arithmetic can never read 7/6. A retired rung you never did is invisible.
+    const _live = _own.filter(r=>!r.retired_at);
+    const rungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable!==false), shown);
+    const _refRungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable===false), shown);
+    const _retiredDone = MultiplyShared.pathwayOrder.sort(
+      _own.filter(r=>r.retired_at && r.trackable!==false && done.has(r.rung_key)), shown);
+    if(!rungs.length && !_retiredDone.length){ host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">No rungs for this level yet.</span><span class="tl-text">Wala pang rung dito.</span></div>`); return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
-    const pct = Math.round(nDone/rungs.length*100);
+    const pct = rungs.length ? Math.round(nDone/rungs.length*100) : 0;
     const bar = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem">
         <div style="font-size:11px;color:var(--muted)"><span class="en-text">Progress</span><span class="tl-text">Progreso</span></div>
@@ -11508,7 +11513,16 @@ async function renderPathway(level){
         + '<div style="font-size:10.5px;color:var(--muted);margin:.4rem 0 .5rem"><span class="en-text">Not a checklist &mdash; character formed over time, walked with your leader.</span><span class="tl-text">Hindi checklist &mdash; hinuhubog sa paglipas ng panahon, kasama ang lider mo.</span></div>'
         + refItems + '</details>';
     }
-    host.innerHTML = wrap(bar + `<div>${items}</div>` + refPanel);
+    const retiredItems = _retiredDone.map(r=>`
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-top:1px solid var(--line);opacity:.72">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--forest-3);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none">&#10003;</div>
+          <div style="font-size:17px;flex:none">${_pathwayCatIcon(r.category)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--ink)"><span class="en-text">${MultiplyShared.escapeHTML(r.title_en||'')}</span><span class="tl-text">${MultiplyShared.escapeHTML(r.title_tl||r.title_en||'')}</span></div>
+            <div style="font-size:10.5px;color:var(--muted);margin-top:1px">${_pathwayCatChip(r.category)} <span style="background:var(--surface2);border-radius:999px;padding:1px 7px;margin-left:4px"><span class="en-text">retired</span><span class="tl-text">hindi na kasama</span></span></div>
+          </div>
+        </div>`).join('');
+    host.innerHTML = wrap(bar + `<div>${items}${retiredItems}</div>` + refPanel);
   }catch(e){
     console.warn('[pathway] load failed:', e);
     host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">Could not load. Tap a level to retry.</span><span class="tl-text">Hindi na-load. I-tap ang antas.</span></div>`);
