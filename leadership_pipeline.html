@@ -379,6 +379,16 @@ body.edit-on #editToggle{ background:var(--l3); color:#fff; border-color:var(--l
 .edit-hint{ display:none; font-family:'DM Sans',sans-serif; font-size:11px; color:var(--muted);
   background:var(--parchment2); border-bottom:1px solid var(--border); padding:6px 1.5rem; text-align:center; }
 body.edit-on .edit-hint{ display:block; }
+/* Review notice shown while the template is being refined (read-only period) */
+.pw-notice{ display:none; font-family:'DM Sans',sans-serif; background:var(--parchment2);
+  border-bottom:1px solid var(--border); padding:14px 1.5rem; text-align:center; }
+.pw-notice h4{ margin:0 0 .35rem; font-size:13.5px; font-weight:700; color:var(--ink); }
+.pw-notice p{ margin:0 auto; max-width:60ch; font-size:12px; line-height:1.55; color:var(--muted); }
+.pw-notice p + p{ margin-top:.4rem; }
+.pw-notice-preview{ display:none; margin:0 0 .5rem; }
+.pw-notice-preview span{ display:inline-block; font-size:10px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; background:var(--gold-soft); color:var(--gold);
+  padding:2px 9px; border-radius:999px; }
 .rung-wrap{ display:inline-flex; flex-direction:column; gap:3px; vertical-align:top; margin:0 4px 4px 0; }
 .rung-wrap.tomb .tag-link{ opacity:.45; }
 .rung-actions{ display:flex; flex-wrap:wrap; gap:3px; }
@@ -440,6 +450,13 @@ body.edit-on .edit-hint{ display:block; }
   <h1 class="header-title">MULTIPLY Leadership Pipeline</h1>
   <p class="header-sub">Luke 6:40 &nbsp;·&nbsp; Gal 5:22–23 &nbsp;·&nbsp; 2 Tim 2:2 &nbsp;·&nbsp; FATS: Faithful · Available · Teachable · Selfless</p>
 </header>
+
+<div class="pw-notice" id="pwNotice">
+  <div class="pw-notice-preview" id="pwNoticePreview"><span>Preview &middot; what other churches see</span></div>
+  <h4>This pipeline is being refined.</h4>
+  <p>What you see here is the current MULTIPLY pipeline. We are reviewing and improving it so it can serve your church better &mdash; including letting you shape your own copy of it.</p>
+  <p>While that work is underway, this view is read-only. Please explore it freely. If something should be added, removed, or worded differently for your church, tell us &mdash; your feedback shapes what comes next.</p>
+</div>
 
 <div class="filter-bar">
   <button class="fbtn active" onclick="filter('all',this)">All</button>
@@ -1239,8 +1256,30 @@ function toast(msg, kind){
   clearTimeout(t._h); t._h = setTimeout(() => { t.className = 'pw-toast'; }, 2600);
 }
 
-// ── Boot: reveal the Edit toggle only for L5 editors ──
-if (isEditor){ const _et = document.getElementById('editToggle'); if (_et) _et.style.display = ''; }
+// ── Boot: review-period gate ──
+// The template is under review, so editing is restricted to the platform admin.
+// Level >= 5 is necessary but no longer sufficient. The toggle STARTS hidden and
+// is revealed only after the check passes, so a failed or slow query leaves the
+// pipeline read-only rather than editable -- the safe default during a freeze.
+// This is a UX gate; RLS remains the real boundary (a church can never write to
+// the shared template rows regardless of what this button does).
+(async function _pwReviewGate(){
+  const notice = document.getElementById('pwNotice');
+  if (notice) notice.style.display = 'block';
+  if (!isEditor) return;
+  if (!db || !L.leaderId) return;
+  let admin = false;
+  try{
+    const { data, error } = await db.from('members')
+      .select('is_platform_admin').eq('id', L.leaderId).maybeSingle();
+    admin = !error && !!data && data.is_platform_admin === true;
+  }catch(e){ console.warn('[pw-review-gate] admin check failed, staying read-only:', e); return; }
+  if (!admin) return;
+  const et = document.getElementById('editToggle');
+  if (et) et.style.display = '';
+  const pv = document.getElementById('pwNoticePreview');
+  if (pv) pv.style.display = 'block';
+}());
 
 loadPipeline().catch(e => {
   console.error('Pipeline load failed:', e);
