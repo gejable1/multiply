@@ -1,6 +1,6 @@
 # Pathway Fork Model — Design Shape
 
-**Status:** Phase 1 shipped in Session 83 (migration 098). Phases 2-5 pending.
+**Status:** Phases 1 and 2 shipped in Session 83 (migrations 098, 099). Phases 3-5 pending.
 **Decided:** retire never delete · notification + opt-in adoption · pastor-edited · all six added recommendations approved · one published pipeline per church · draft is the pastor's desk alone · retired rungs stay visible to members who completed them.
 
 ---
@@ -190,12 +190,44 @@ Five phases. Phases 1-3 are invisible plumbing; the pastor sees nothing change u
   (own pastor, same-church LCL, other-church pastor, no JWT at all).
 - Nothing reads any of it. Zero user-visible change.
 
-### Phase 2 - quiet fork (invisible)
-- Migration proven on PG16 against a copy of production shape: for each of the 12 churches, compute the **effective** pipeline exactly as its members see it today (base rows + that church's overlays, existing precedence), write it as published `v1`, and materialise the church's own rung rows.
-- Read-only both-directions diagnostic first (#387): for every church and level, the effective rung list before and after must be **identical**. That diff is the gate.
+### Phase 2 - quiet fork (invisible) -- SHIPPED, Session 83, migration 099
+- All 12 churches now own their pipeline: **2,451 church rows** (2,447 materialised + 4 pre-existing
+  tombstones) alongside the 210 template rows, and one published `v1` each in `pathway_versions`.
+- **Order is now baked into `sort_order`**, densified 1..N per level in the order members already saw,
+  and `pathway_section_order.order_map` was cleared. ONE order of record per church, not two (#405).
+  Safe because `pathwayOrder.sort` falls back to `sort_order` on an empty map
+  (`multiply_shared.js:3391`), so every reader shipped in S82 is untouched. Rosehill's fully authored
+  28-key L0 map was consumed into `sort_order`, preserving its exact sequence.
+- **The gate runs INSIDE the transaction.** Before-signatures (deployed resolver: template + overlay
+  precedence, order_map then sort_order) are captured to a TEMP table, the writes happen, the same
+  signatures are recomputed from OWNED ROWS ONLY, and any difference RAISEs so nothing commits.
+  `sort_order` is excluded from the content signature on purpose -- the migration renumbers it, and
+  what must be preserved is the ORDER, which the aggregate's sort captures.
+- Proven on PG16 against a fixture reproducing production exactly (448 trackable / 1999 reference /
+  10 identical churches / 4 tombstones / the 28-key L0 map): forward, three reruns, and **with the
+  fork deliberately broken** -- one rung withheld produced 12 differing pairs, RAISEd, and rolled back
+  2,435 inserted rows, 12 versions and the cleared order map. Mid-flight safety measured separately:
+  the deployed resolver returns **72/72 church-level pairs byte-identical** after the fork.
+
+### Two things Phase 2 deliberately did NOT touch -- Phase 3 depends on both
+
+**The giving lane must not be switched.** `member_tool.html:11619` and `lc_leader_tool.html:5852`
+read the TEMPLATE lane explicitly (`.is('church_id', null)`) and filter `meta.track='giving'`. The
+Giving Journey is deliberately church-agnostic: the same 6 rungs for every church. Those 6 rows were
+NOT forked and those two readers must NOT be moved to own-rows-only, or the Giving Journey goes blank
+for all twelve churches.
+
+**Tombstones stay as rows.** A church row with `published=false` masking a base rung is how the poster
+hides an item. All four in production sit on `trackable=false` bases, so no member's progress
+denominator is affected -- they trim the level profile only. They were neither copied nor modified,
+and they keep working unchanged after Phase 3, because own-rows-only still drops `published=false`.
 
 ### Phase 3 - switch the readers (invisible if phase 2 was right)
-- MMT / MLT / MD / poster read own-church rows only; overlay precedence retires.
+- MMT / MLT / MD / poster read own-church rows only; overlay precedence retires. The
+  overlay-wins-by-key reducer currently exists in **five** copies -- `member_tool.html:11460`,
+  `lc_leader_tool.html:1585` and `:4139`, `multiply_dashboard.html:3459`,
+  `leadership_pipeline.html:851` -- and all five are deleted, not edited (#405).
+- **Do not touch the two giving readers** (see the Phase 2 note above).
 - The flat-order resolver shipped this session is unchanged.
 - Retired-rung arm added to the member pathway query, with the counting rule above.
 - Verification: rendered pathway identical per church, per level, before and after.
