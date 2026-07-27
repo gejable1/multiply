@@ -3388,6 +3388,11 @@
     const a = m[String(level)];
     return Array.isArray(a) ? a : [];
   }
+  // A rung is live until it is retired. Retirement removes it from the pathway and
+  // from every count, while leaving the row -- and therefore anyone's completion of
+  // it -- intact. One home for the rule that MMT, MLT and MD must all agree on.
+  function pathwayRungIsLive(r){ return !!r && !r.retired_at; }
+
   function pathwayOrderSort(rungs, level, map) {
     const ord = pathwayOrderForLevel(level, map);
     return (rungs || []).slice().sort(function (a, b) {
@@ -3407,7 +3412,8 @@
     pathwayOrder: {
       load:     pathwayOrderLoad,
       forLevel: pathwayOrderForLevel,
-      sort:     pathwayOrderSort
+      sort:     pathwayOrderSort,
+      isLive:   pathwayRungIsLive
     },
     // Leader-session API (for MD, MLT, lc_attendance_report, etc.)
     getValidSession,

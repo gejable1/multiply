@@ -1572,17 +1572,17 @@ async function _mpLoadCelebrations(){
         .in('member_id', ids)
         .gte('completed_at', cutoff)
         .order('completed_at', { ascending: false }),
-      db.from('pathway_rungs').select('*')
+      db.from('pathway_rungs').select('*').not('church_id','is',null)
     ]);
     if(progRes.error) throw progRes.error;
     if(rungRes.error) throw rungRes.error;
 
-    // Overlay precedence, same rule as renderMltPathway: a church row beats its base twin.
+    // Own lane only -- no precedence left to resolve (#405). RETIRED RUNGS ARE KEPT:
+    // this maps a completion that already happened to its title, and retiring a rung
+    // does not un-happen someone's win. Filtering here would silently drop it.
     const byKey = {};
     (rungRes.data || []).forEach(function(r){
-      const k = r.level + '|' + r.rung_key;
-      const ex = byKey[k];
-      if(!ex || (r.church_id && !ex.church_id)) byKey[k] = r;
+      byKey[r.level + '|' + r.rung_key] = r;
     });
 
     const EMOJI = { book:'📚', lesson:'📖', training:'🎓', ministry:'🙌', character:'💧' };
@@ -4129,25 +4129,30 @@ async function renderMltPathway(mem){
   host.innerHTML = `<div style="color:var(--muted);font-size:12px">Loading…</div>`;
   try{
     const [rungRes, progRes] = await Promise.all([
-      db.from('pathway_rungs').select('*').eq('level', lvl),
+      db.from('pathway_rungs').select('*').eq('level', lvl).not('church_id','is',null),
       db.from('pathway_progress').select('rung_key, marked_by, completed_at').eq('member_id', mem.id).eq('level', lvl),
       MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
     if(progRes.error) throw progRes.error;
+    // Own lane only -- no precedence left to resolve (#405).
     const byKey = {};
-    (rungRes.data||[]).forEach(r=>{ const ex=byKey[r.rung_key]; if(!ex || (r.church_id && !ex.church_id)) byKey[r.rung_key]=r; });
-    // Cache the overlay-resolved rung map so _mltPwToggle can name the rung in the
-    // celebration notification without re-querying (and without re-deriving the
-    // base-vs-church-overlay precedence resolved just above).
+    (rungRes.data||[]).forEach(r=>{ byKey[r.rung_key]=r; });
+    // Cache every owned rung INCLUDING RETIRED ones, so _mltPwToggle can still name a
+    // rung an LCL needs to untick after it has left the pathway.
     _mltRungCache[lvl] = byKey;
-    const _allPublished = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
-    const rungs = MultiplyShared.pathwayOrder.sort(_allPublished.filter(r=>r.trackable!==false), lvl);
-    const _refRungs = MultiplyShared.pathwayOrder.sort(_allPublished.filter(r=>r.trackable===false), lvl);
+    const _own = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
-    if(!rungs.length){ host.innerHTML = `<div style="color:var(--muted);font-size:12px">No rungs defined for this level yet.</div>`; return; }
+    // Retired leaves the count, not the record: outside nDone AND outside the
+    // denominator, so this can never read 7/6.
+    const _live = _own.filter(r=>MultiplyShared.pathwayOrder.isLive(r));
+    const rungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable!==false), lvl);
+    const _refRungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable===false), lvl);
+    const _retiredDone = MultiplyShared.pathwayOrder.sort(
+      _own.filter(r=>!MultiplyShared.pathwayOrder.isLive(r) && r.trackable!==false && done.has(r.rung_key)), lvl);
+    if(!rungs.length && !_retiredDone.length){ host.innerHTML = `<div style="color:var(--muted);font-size:12px">No rungs defined for this level yet.</div>`; return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
-    const pct = Math.round(nDone/rungs.length*100);
+    const pct = rungs.length ? Math.round(nDone/rungs.length*100) : 0;
     const nextTxt = lvl>=5 ? 'Level 5 · ongoing' : `Level ${lvl} → Level ${lvl+1}`;
     let h = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><div style="font-size:12px;color:var(--muted)">${nextTxt}</div><div style="font-size:12px;font-weight:700;color:var(--text)">${nDone} / ${rungs.length}</div></div><div style="height:6px;background:var(--surface3);border-radius:999px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:var(--green);border-radius:999px"></div></div>`;
     if(!canMark){ h += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">👁 View only — the disciple’s LCL marks these.</div>`; }
@@ -4181,6 +4186,18 @@ async function renderMltPathway(mem){
       });
       ref += '</details>';
       h += ref;
+    }
+    if(_retiredDone.length){
+      h += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">'
+        + '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px">Completed, no longer part of the pathway &mdash; kept on the record.</div>';
+      _retiredDone.forEach(function(r){
+        h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;opacity:.72">'
+          + '<div style="width:22px;height:22px;border-radius:50%;background:var(--green);color:#0e3a2c;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none;font-weight:700">&#10003;</div>'
+          + '<div style="font-size:17px;flex:none">'+_mltPwIcon(r.category)+'</div>'
+          + '<div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text)">'+MultiplyShared.escapeHTML(r.title_en||'')+'</div>'
+          + '<div style="font-size:10px;color:var(--muted);text-transform:capitalize">'+MultiplyShared.escapeHTML(r.category||'')+' &middot; retired</div></div></div>';
+      });
+      h += '</div>';
     }
     host.innerHTML = h;
   }catch(e){

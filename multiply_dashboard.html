@@ -3445,18 +3445,19 @@ let _PW_PROG  = {};   // member_id -> Set('level|rung_key')
 async function _loadPathwayCache(){
   try{
     const [rungRes, progRes] = await Promise.all([
-      db.from('pathway_rungs').select('*'),
+      db.from('pathway_rungs').select('*').not('church_id','is',null),
       db.from('pathway_progress').select('member_id, level, rung_key'),
       MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
     if(progRes.error) throw progRes.error;
     // overlay precedence: a church row beats its base twin (same key+level)
+    // Own lane only -- no precedence left to resolve (#405). Retired rungs are kept
+    // in the cache and filtered at the counting step, not here.
     const byLvl = {};
     (rungRes.data||[]).forEach(function(r){
       const L = r.level||0; (byLvl[L] = byLvl[L] || {});
-      const ex = byLvl[L][r.rung_key];
-      if(!ex || (r.church_id && !ex.church_id)) byLvl[L][r.rung_key] = r;
+      byLvl[L][r.rung_key] = r;
     });
     _PW_RUNGS = byLvl;
     const prog = {};
@@ -3471,14 +3472,14 @@ function _pwTrackable(level){
   const byKey = _PW_RUNGS[level] || {};
   return MultiplyShared.pathwayOrder.sort(
     Object.values(byKey)
-      .filter(function(r){ return r.published!==false && r.trackable!==false && !(r.meta && r.meta.track==='giving'); }),
+      .filter(function(r){ return r.published!==false && r.trackable!==false && !r.retired_at && !(r.meta && r.meta.track==='giving'); }),
     level);
 }
 function _pwReference(level){
   const byKey = _PW_RUNGS[level] || {};
   return MultiplyShared.pathwayOrder.sort(
     Object.values(byKey)
-      .filter(function(r){ return r.published!==false && r.trackable===false && !(r.meta && r.meta.track==='giving'); }),
+      .filter(function(r){ return r.published!==false && r.trackable===false && !r.retired_at && !(r.meta && r.meta.track==='giving'); }),
     level);
 }
 // {done,total,pct} for a member at a level, from the cache.
