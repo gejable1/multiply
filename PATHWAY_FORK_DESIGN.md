@@ -1,6 +1,6 @@
 # Pathway Fork Model — Design Shape
 
-**Status:** draft for Pastor Gerry's approval. No code written yet.
+**Status:** Phase 1 shipped in Session 83 (migration 098). Phases 2-5 pending.
 **Decided:** retire never delete · notification + opt-in adoption · pastor-edited · all six added recommendations approved · one published pipeline per church · draft is the pastor's desk alone · retired rungs stay visible to members who completed them.
 
 ---
@@ -99,9 +99,36 @@ Template edits to rungs a church already owns are **never** pushed. Once it's yo
 
 ---
 
-## 7. One schema gap to close
+## 7. The schema gap that turned out not to exist
 
-`pathway_rungs` has **no unique constraint** on `(church_id, level, rung_key)`. Under the current overlay model that was survivable. Under forking, a publish that runs twice could duplicate a church's whole pipeline. This gets added before any fork code ships.
+**Corrected in Session 83.** This section previously claimed `pathway_rungs` has no unique
+constraint on `(church_id, level, rung_key)`, and that a double publish could duplicate a
+church's whole pipeline. That was wrong. The table carries no unique *constraints*, but it
+carries two partial unique *indexes* that already cover both lanes completely:
+
+| Index | Covers |
+|---|---|
+| `pathway_rungs_overlay_uk` | `UNIQUE (church_id, level, rung_key) WHERE church_id IS NOT NULL` |
+| `pathway_rungs_base_uk` | `UNIQUE (level, rung_key) WHERE church_id IS NULL` |
+
+Both confirmed live against production, not from a snapshot. A double publish therefore
+**cannot** duplicate a pipeline; the second insert raises. The original analysis read the
+`unique_constraints` array in `schema.json` and stopped before `indexes` -- the same class
+of lapse recorded in #223 / #407.
+
+No constraint is added. Adding a plain table `UNIQUE (church_id, level, rung_key)` would be
+worse than useless: `UNIQUE` treats NULLs as distinct, so it would leave the template lane
+unprotected while duplicating a rule that already exists, which is #405.
+
+**Carry this into Phase 4.** Because the covering index is PARTIAL, the publish upsert must
+spell the predicate out for inference to work:
+
+```sql
+INSERT ... ON CONFLICT (church_id, level, rung_key) WHERE church_id IS NOT NULL
+```
+
+Omitting the `WHERE` raises `there is no unique or exclusion constraint matching the ON
+CONFLICT specification`. Both forms were executed on PG16 before this was written down.
 
 ---
 
@@ -146,10 +173,21 @@ So progress answers "where are you against the pipeline as it stands," while the
 
 Five phases. Phases 1-3 are invisible plumbing; the pastor sees nothing change until phase 4.
 
-### Phase 1 - foundations (invisible)
-- Migration: `pathway_versions` table + RLS (own church, pastor write).
-- Migration: unique constraint on `pathway_rungs (church_id, level, rung_key)`; `retired_at` column.
-- Migration: `template_generation` counter so a fork can record what it forked from.
+### Phase 1 - foundations (invisible) -- SHIPPED, Session 83, migration 098
+- `pathway_versions` table + RLS. SELECT is pastor-only too, not just write: the draft is
+  the pastor's desk (section 9.2), and a gate with no reason to be open fails closed (#406).
+- `retired_at` column on `pathway_rungs` (retire-never-delete, section 9a).
+- One draft and one published version per church, enforced by partial unique indexes;
+  archived versions unlimited, since they are the snapshot history.
+- NOT DONE, deliberately: the unique constraint (already exists -- see section 7) and the
+  `template_generation` counter. The counter's only job is answering "which template rungs
+  are new since this church forked", and `pathway_rungs.created_at` already answers that.
+  A counter would need a per-rung generation stamp, i.e. a second source of truth for a
+  fact the row already carries. `pathway_versions.template_synced_at` holds the fork/sync
+  moment instead: new items are template rungs created after it. Three migrations became one.
+- Proven on ephemeral PG16 as `postgres` (#379): forward plus two reruns, every structural
+  constraint exercised in both directions, and RLS executed under four simulated JWTs
+  (own pastor, same-church LCL, other-church pastor, no JWT at all).
 - Nothing reads any of it. Zero user-visible change.
 
 ### Phase 2 - quiet fork (invisible)
