@@ -4143,4 +4143,74 @@ The pipeline poster has working reorder arrows: `actMove` -> `moveRung` -> `save
 
 ---
 
+### **401. `lpad` truncates -- a diagnostic that normalizes values for readability can destroy the evidence it was written to find**
+
+The S82 pre-flight ledger check (#399) ran `string_agg(lpad(version,3,'0'))` so the text-sorted `version` column would sort numerically. The list came back clean: `001..077,083..094`. It was not clean. PostgreSQL's `lpad(string, length, fill)` does not only pad -- **if the string is already longer than `length` it TRUNCATES on the right.** Five rows stamped in S52-S56 stored the full migration NAME as the version (`052_devotionals_composite_unique`), and `lpad(...,3,'0')` rendered every one of them as a tidy three-digit number. The normalizer written to expose drift was the thing hiding it. A first repair (095) was then written against the normalized view and its Part A silently matched nothing, because the rows were not the shape the diagnostic had shown.
+
+**RULE:** A drift diagnostic reads RAW first. Normalize only after the raw values are on the screen -- and when a check returns an unexpected count, suspect the lens before the data. For version-like text columns, dump `version`, `length(version)` and `encode(convert_to(version,'UTF8'),'hex')` together: hex renders invisible characters and unexpected lengths as numbers you cannot misread. This is #396 (ask what is MASKING it) turned back on our own tooling.
+
+**Established July 27, 2026 (Session 82). Invariant #401 added - count now 401.**
+
+---
+
+### **402. A migration is finished when the LEDGER ROW exists, not when the DDL runs -- the stamp belongs in the migration body**
+
+The same pre-flight found five migrations -- 078, 079, 080, 081, 082 -- present as files, applied in production (verified against `schema.json`: the `source_*` columns, `mlt_delete_empty_member`, `'other'` in `lcg_checkins_reason_chk`, `app_sessions` present, `leader_sessions` absent), and **absent from `schema_migrations` entirely.** Not a commit lag like #399 -- grep found ZERO mentions of `schema_migrations` in all five bodies. The stamp was never written. Every migration before and after them stamps correctly, so this was a stretch of sessions where the habit lapsed unnoticed for weeks.
+
+**RULE:** Every migration body ends with its own `INSERT INTO public.schema_migrations ... ON CONFLICT (version) DO UPDATE`. A migration that runs without stamping is invisible to the #399 reconcile and will read as "never applied" forever. When backfilling a missed stamp, verify the effect is live in `schema.json` FIRST, and do not touch `applied_at` on conflict -- those rows ran weeks ago and the honest timestamp is unknown, not now.
+
+**Established July 27, 2026 (Session 82). Invariant #402 added - count now 402.**
+
+---
+
+### **403. A self-verifying migration asserts only ITS OWN effects -- never a global total**
+
+Both S82 ledger-repair migrations were first written with `CASE WHEN (SELECT count(*) FROM schema_migrations) = 94 ... THEN 'PASS'`. Correct on the day. Permanently wrong afterwards: every subsequent migration changes that total, so re-running 095 after 097 ships reports FAIL while nothing is broken. A migration that cries wolf on rerun destroys the value of the rerun-until-true habit (#210) -- the next person learns to ignore the verify block.
+
+**RULE:** The self-verify block asserts the postconditions THIS migration is responsible for -- these rows now exist, this shape is now gone, this migration stamped itself -- and nothing else. Any assertion whose truth depends on work done by a later migration is a landmine. Corollary: if the committed file differs from what was executed ONLY in its verify block, say so in the header comment; the DML must still be byte-identical.
+
+**Established July 27, 2026 (Session 82). Invariant #403 added - count now 403.**
+
+---
+
+### **404. RELOCATE, never swap -- a swap moves two items, and the second one is invisible to the person who clicked**
+
+The poster's reorder arrows move a rung within its category group. When `order_map` was re-keyed flat per level (#400), the original swap logic was kept: exchange the two rung_keys' positions in the flat list. On the poster it looked perfect. An execution harness against a realistic L0 printed the flat list a MEMBER would see: moving `baptism` up one slot inside Ministry also flung `join-lc` from first to LAST, because a swap exchanges two flat positions and the two same-category neighbours can be far apart in the flat order. The pastor sees one rung move one notch; two rungs move on every member's phone. Changed to splice: lift the rung out, drop it beside its neighbour -- identical on the poster, and only the rung that was touched moves.
+
+**RULE:** When an editor moves an item within a SUBSET of a larger ordered list, relocate it (`splice` out, `splice` in) rather than swapping with its neighbour. A swap is only safe when the visible list and the list of record are the same list. Corollary for review: whenever a control edits a projection of a bigger structure, render the BIGGER structure in the harness and assert on that -- the projection will look right either way.
+
+**Established July 27, 2026 (Session 82). Invariant #404 added - count now 404.**
+
+---
+
+### **405. ONE resolver -- a ranking or precedence rule duplicated across surfaces will diverge, and that is what #400 already was**
+
+Closing #400 put a flat-order resolver in `multiply_shared.js` and taught MMT/MLT/MD to call it -- but the first PR left `leadership_pipeline.html` carrying its own `_sectionComparator`, a second copy of the same rule. Two copies of a ranking rule is precisely the condition that produced #400 in the first place: the poster ordered one way, the tools another, for weeks. The duplicate was removed in the same arc and the poster now calls the shared resolver, passing its own already-loaded `SECTION_ORDER` so it does not re-query. Same shape as #380 (quiz visibility wired to ONE access-grant resolver) and #254 (`v_effective_auto_rungs`).
+
+**RULE:** Precedence, ranking and visibility rules live in exactly one function. If a surface needs the rule with different inputs, pass the inputs -- never re-implement. When closing a divergence bug, grep for the rule you are centralising and confirm the count of implementations goes to one; leaving the original in place fixes the symptom and preserves the cause.
+
+**Established July 27, 2026 (Session 82). Invariant #405 added - count now 405.**
+
+---
+
+### **406. A permission gate FAILS CLOSED -- reveal the control after the check passes, never hide it after the check fails**
+
+The poster's Edit toggle was revealed by `if (isEditor){ ... display = '' }`, a synchronous level check. Restricting it to the platform admin during the template-review freeze required an async lookup of `is_platform_admin`. Written the obvious way -- show it, then hide it if the check fails -- a slow, failed or throwing query leaves the button live. Written the other way round, the button starts hidden in markup and is revealed ONLY after `is_platform_admin === true` comes back; every failure path (error, throw, no row, no session, no client) leaves the pipeline read-only. Strict equality matters too: `'true'` and `1` are truthy and must not unlock.
+
+**RULE:** The default state of a gated control is DENIED, expressed in the markup, not in a branch that has to run. An async permission check may only ever ADD capability. Test the failure paths explicitly -- error, throw, null row, missing session, missing client, and truthy-but-not-true. And say in the comment whether the gate is UX or security: this one is UX, and RLS remains the real boundary.
+
+**Established July 27, 2026 (Session 82). Invariant #406 added - count now 406.**
+
+---
+
+### **407. The throwaway diagnostic is where source-reading discipline slips -- three times in one session**
+
+S82 produced three assertions from memory instead of from the source, all in checks that felt too small to verify. (1) The distribution of `sort_order` was explained from the poster's `nextSort()` formula -- correct for rungs added through the form, wrong for the hand-seeded spine, and the Pastor's data showed an explicitly authored 1-6 sequence with no ties at all. (2) "Gentleness appears nowhere in the pipeline" was asserted from a template dump that had been truncated mid-L3; gentleness is at L4. (3) A verification query used `members.full_name`, a column that does not exist -- `schema.json` says `name` -- breaking #223 in a one-off SELECT. None of the three was a hard problem; all three were skipped checks.
+
+**RULE:** #223 has no size exemption. A column name, a function's edge-case behaviour, or a claim about "every level" gets read from `schema.json`, from the docs, or from the full dataset -- especially in a throwaway diagnostic, because that is exactly where the check feels disproportionate to the effort. When a dataset arrives in pieces, state the boundary of what has been seen before generalising across it, and compute distributions in code rather than eyeballing them.
+
+**Established July 27, 2026 (Session 82). Invariant #407 added - count now 407.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
