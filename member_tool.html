@@ -11462,11 +11462,11 @@ async function renderPathway(level){
     // Retired leaves the count, not the record. A rung you finished stays visible even
     // after it leaves the pathway, sitting outside nDone AND outside the denominator,
     // so the arithmetic can never read 7/6. A retired rung you never did is invisible.
-    const _live = _own.filter(r=>MultiplyShared.pathwayOrder.isLive(r));
+    const _live = _own.filter(r=>!r.retired_at);
     const rungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable!==false), shown);
     const _refRungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable===false), shown);
     const _retiredDone = MultiplyShared.pathwayOrder.sort(
-      _own.filter(r=>!MultiplyShared.pathwayOrder.isLive(r) && r.trackable!==false && done.has(r.rung_key)), shown);
+      _own.filter(r=>r.retired_at && r.trackable!==false && done.has(r.rung_key)), shown);
     if(!rungs.length && !_retiredDone.length){ host.innerHTML = wrap(`<div style="padding:.6rem;text-align:center;color:var(--muted);font-size:12px"><span class="en-text">No rungs for this level yet.</span><span class="tl-text">Wala pang rung dito.</span></div>`); return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
     const pct = rungs.length ? Math.round(nDone/rungs.length*100) : 0;

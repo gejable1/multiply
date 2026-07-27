@@ -4145,11 +4145,11 @@ async function renderMltPathway(mem){
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
     // Retired leaves the count, not the record: outside nDone AND outside the
     // denominator, so this can never read 7/6.
-    const _live = _own.filter(r=>MultiplyShared.pathwayOrder.isLive(r));
+    const _live = _own.filter(r=>!r.retired_at);
     const rungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable!==false), lvl);
     const _refRungs = MultiplyShared.pathwayOrder.sort(_live.filter(r=>r.trackable===false), lvl);
     const _retiredDone = MultiplyShared.pathwayOrder.sort(
-      _own.filter(r=>!MultiplyShared.pathwayOrder.isLive(r) && r.trackable!==false && done.has(r.rung_key)), lvl);
+      _own.filter(r=>r.retired_at && r.trackable!==false && done.has(r.rung_key)), lvl);
     if(!rungs.length && !_retiredDone.length){ host.innerHTML = `<div style="color:var(--muted);font-size:12px">No rungs defined for this level yet.</div>`; return; }
     const nDone = rungs.filter(r=>done.has(r.rung_key)).length;
     const pct = rungs.length ? Math.round(nDone/rungs.length*100) : 0;
