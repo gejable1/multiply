@@ -1,6 +1,15 @@
 # Pathway Fork Model — Design Shape
 
-**Status:** Phases 1 and 2 shipped in Session 83 (migrations 098, 099). Phases 3-5 pending.
+**Status:** Phases 1 and 2 shipped in Session 83 (migrations 098, 099), plus the database half of Phase 3 (migration 101). The Phase 3 frontend and Phases 4-5 are pending.
+**Retirement arithmetic, settled Session 83.** The denominator is live trackable rungs ONLY,
+identical for every member at that level in that church -- otherwise two members have different
+denominators and progress stops being comparable, which quietly breaks the dashboard roll-up.
+A completed-retired rung therefore counts in NEITHER numerator nor denominator: it shows in the
+list marked completed-and-retired, as a record rather than a score. Counting it in the numerator
+alone produces the `7/6` this section exists to prevent. A retired rung nobody completed is
+invisible in member and leader views, surviving only in the pastor's editor and version history.
+One denominator definition across MMT, MLT, the metro strip and MD -- not one per surface.
+
 **Decided:** retire never delete · notification + opt-in adoption · pastor-edited · all six added recommendations approved · one published pipeline per church · draft is the pastor's desk alone · retired rungs stay visible to members who completed them.
 
 ---
@@ -224,9 +233,20 @@ and they keep working unchanged after Phase 3, because own-rows-only still drops
 
 ### Phase 3 - switch the readers (invisible if phase 2 was right)
 - MMT / MLT / MD / poster read own-church rows only; overlay precedence retires. The
-  overlay-wins-by-key reducer currently exists in **five** copies -- `member_tool.html:11460`,
-  `lc_leader_tool.html:1585` and `:4139`, `multiply_dashboard.html:3459`,
-  `leadership_pipeline.html:851` -- and all five are deleted, not edited (#405).
+  overlay-wins-by-key reducer exists in **six** copies -- five in JS
+  (`member_tool.html:11460`, `lc_leader_tool.html:1585` and `:4139`,
+  `multiply_dashboard.html:3459`, `leadership_pipeline.html:851`) and a sixth in SQL,
+  `v_effective_auto_rungs`, built by migration 094. All are deleted, not edited (#405).
+- **The SQL copy is the only one that WRITES.** `auto_complete_pathway_rungs()` joins that
+  view to insert `pathway_progress` rows. Retired at migration 101, which also gave it the
+  `retired_at IS NULL` filter retirement needs on the write path: without it a retired auto
+  rung keeps minting fresh completions every time the auto-completer runs, so retirement
+  would leak the moment Phase 4 ships a retire button. Post-fork the view's precedence logic
+  was already dead -- the template arm cannot win and `pathway_rungs_overlay_uk` forbids two
+  candidates per key -- so the collapse was gated on set-equality of its full output
+  (108 tuples before, 108 after) and proved an equivalence, not a behaviour change.
+- `leadership_pipeline.html:752` (`loadOverlays`) already filters `.not('church_id','is',null)`;
+  the poster's editor side was own-lane all along. Only its render path at `:837` reads both.
 - **Do not touch the two giving readers** (see the Phase 2 note above).
 - The flat-order resolver shipped this session is unchanged.
 - Retired-rung arm added to the member pathway query, with the counting rule above.
