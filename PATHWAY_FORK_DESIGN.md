@@ -1,6 +1,6 @@
 # Pathway Fork Model — Design Shape
 
-**Status:** Phases 1 and 2 shipped in Session 83 (migrations 098, 099), plus the database half of Phase 3 (migration 101). The Phase 3 frontend and Phases 4-5 are pending.
+**Status:** Phases 1, 2 and 3 shipped in Session 83 (migrations 098, 099, 101 + PRs #266/#267). The Phase 4 BACKEND shipped in Session 84 -- validation and vocabulary (102), the `Usbong 1` -> `Usbong` rename (103), and `publish_pathway_version()` (104). What remains of Phase 4 is the EDITOR FRONTEND; Phase 5 is pending.
 **Retirement arithmetic, settled Session 83.** The denominator is live trackable rungs ONLY,
 identical for every member at that level in that church -- otherwise two members have different
 denominators and progress stops being comparable, which quietly breaks the dashboard roll-up.
@@ -54,7 +54,7 @@ pathway_versions                 <-- NEW: the authoring surface
          v
 
 pathway_rungs (church rows)      <-- unchanged shape, regenerated on publish
-pathway_section_order            <-- unchanged, flat order written from the doc
+pathway_section_order            <-- CLEARED on publish; see the correction in s7a
 ```
 
 **Why a document rather than editing live rows.**
@@ -140,6 +140,32 @@ Omitting the `WHERE` raises `there is no unique or exclusion constraint matching
 CONFLICT specification`. Both forms were executed on PG16 before this was written down.
 
 ---
+
+---
+
+## 7a. Two corrections applied in Session 84
+
+**The order of record is `sort_order`, and publish CLEARS `order_map`.** Section 6 above
+originally read "`pathway_section_order` <-- unchanged, flat order written from the doc".
+That predates migration 099, which cleared the map and baked order into `sort_order` as
+ONE order of record (#405). It also understates the hazard: `pathwayOrder.sort`
+(`multiply_shared.js:3391`) sorts by `order_map` FIRST and falls through to `sort_order`
+only for keys the map omits -- so a stale non-empty map would silently outrank anything
+publish writes, and a pastor's newly published order would simply not appear.
+`publish_pathway_version()` therefore writes `sort_order` and clears any map it finds.
+
+**The four tombstones are harmless, but not for the reason section 10 gives.** That
+section says they "sit on `trackable=false` bases, so no member's progress denominator is
+affected". Checked in Session 84: all four church rows are `trackable=TRUE`. The
+conclusion survives for a different reason -- all three readers build their working set as
+`filter(r => r.published !== false && ...)` BEFORE any `trackable` test
+(`member_tool.html:11460`, `lc_leader_tool.html:4144`, `multiply_dashboard.html:3475`), so
+a `published=false` row never reaches a denominator whatever its `trackable` value. The
+real protection is the `published` filter, and anyone reasoning from the `trackable`
+premise would reach a correct conclusion by luck. Publish does not retire tombstones: a
+tombstone is a MASK, not a pathway item, and retiring it would write rows on a publish
+that must change nothing.
+
 
 ## 8. Migration: quiet first, keys after
 

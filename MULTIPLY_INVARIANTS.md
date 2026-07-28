@@ -26,6 +26,8 @@ The `btli_quizzes` table uses `course_code` (text) and `intro_text` (text) — n
 ### **30. Curriculum identifier conventions**
 Curriculum identifiers use natural names with a space and a number — `BTLI 1`, `BTLI 2`, `Usbong 1`, `Usad 1`, `Unlad 1`. Do NOT use hyphens (`BTLI-1`), do NOT remap one curriculum's identifier into another's numbering scheme (no `BTLI 0` for `Usbong 1`). Each curriculum keeps its own pastoral identity in its name.
 
+**Addendum (Session 84 — the `Usbong 1` -> `Usbong` rename).** A number belongs in a curriculum identifier only when the curriculum is part of a **series**. A curriculum with no sibling volume -- none shipped and none planned -- carries no number: `Usbong`, not `Usbong 1`. `BTLI` keeps its number because `BTLI 2` is anticipated and the cohort-slug convention (`btli201_xxxxxx`) already reserves it; renaming `BTLI 1` today would only have to be undone. The test is whether a second volume exists **or is planned**, not how many exist right now. `Usad 1` and `Unlad 1` are struck from the list above: per the Session 10 clarification they are not curricula at all but the source materials for BTLI 1's two halves (USAD = L1-L10, UNLAD = L11-L20), and they never appear as a `course_code`. Renaming a curriculum is never a data-only change -- the code is embedded in `attendance_event_name_pattern` and in every historical `attendance.event_name`, and the eligibility helpers substring-match those against each other, so the code, the pattern and the event names must move in ONE transaction or historical attendance silently stops matching (migration 103, #418, #421).
+
 ### **35. Hybrid BTLI gate is the canonical pattern**
 BTLI Quiz eligibility uses a hybrid gate:
 ```
@@ -4310,6 +4312,56 @@ Phase 3 added `pathwayOrder.isLive(r)` to `multiply_shared.js`, which 22 consume
 **RULE:** touching a lockstep-versioned shared module obligates the full `?v=` bump across every consumer. Before accepting that cost, ask whether the shared home is earning it -- a single field test is not a rule that can drift, and duplicating it in three files is cheaper and safer than versioning the whole platform to deliver it.
 
 **Established July 28, 2026 (Session 83). Invariant #417 added - count now 417.**
+
+---
+
+### **418. A rename survey scans every text and JSON column, not the ones you can name**
+
+The `Usbong 1` -> `Usbong` rename was scoped from curriculum knowledge as four surfaces: `usbong_quizzes.course_code`, the rung keys, the progress rows and the published docs. The real answer was **fifteen columns across ten tables**. Grepping the frontend found the attendance coupling; reading the eligibility helper found `cohort_programs.usbong_course_code`, compared with strict equality and named nothing like `course_code`; and a scan of every text and jsonb column in the database found `pathway_rungs.title_tl`, `pathway_progress.note`, `cohorts.name`, `pipeline_lessons.aim`, `usbong_quizzes.intro_text` and `outro_pass_text`. Four of the fifteen were invisible to any amount of code-reading. Had the four-item scope shipped, 233 attendance rows would have stopped matching their patterns and every member would have silently lost the attendance path to Usbong eligibility -- no error, no log line.
+
+**RULE:** before renaming any identifier that lives in data, enumerate the surfaces by scanning **every** `text`/`varchar`/`json`/`jsonb` column of every base table for the old value, and read the actual VALUES before classifying any of them. Reasoning about which columns "would" hold it is how four of fifteen get missed.
+
+**Established July 28, 2026 (Session 84). Invariant #418 added - count now 418.**
+
+---
+
+### **419. A patcher asserts post-conditions on its OUTPUT, not merely that its edit matched once**
+
+While adding a tombstone guard to `publish_pathway_version`, a patcher replaced a `WHERE` block that ended in the retire arm's `NOT EXISTS (... pathway_version_items ...)` predicate and did not put the predicate back. The edit matched **exactly once**, applied cleanly, produced valid SQL, and passed every static check. The resulting function retired every live rung in the church on any publish -- across twelve churches, one transaction. The migration's own self-verify still read `PASS`. It was caught only by executing publish against a fixture and reading `retired = 4` where `0` was predicted.
+
+**RULE:** "matched exactly once" proves the edit was unambiguous, never that the result is correct. A patcher ends by asserting the SHAPE of what it produced -- the clauses that must still be present, and their counts -- and any patch to executable logic is then RUN, with a value predicted in advance and compared.
+
+**Established July 28, 2026 (Session 84). Invariant #419 added - count now 419.**
+
+---
+
+### **420. A gate that recomputes a predicate does not verify the code that uses it**
+
+Migration 104's self-verify computes `would_retire` by writing the retire arm's predicate out a second time in plain SQL. When the function's own retire arm lost its predicate (#419), the self-verify still reported `PASS`, because it was measuring its own copy of the rule against the data -- never the function. The two agreed about the world and disagreed about the code, which is exactly the blind spot the gate existed to cover.
+
+**RULE:** a verification that re-derives a rule tests the DATA, not the CODE. Where a gate must restate a rule independently (which is right -- a check that calls the thing it checks proves nothing, #415), pair it with at least one gate that INVOKES the real code path and compares against a predicted value. Independent restatement and live invocation catch different failures and neither substitutes for the other.
+
+**Established July 28, 2026 (Session 84). Invariant #420 added - count now 420.**
+
+---
+
+### **421. Rename keys and live labels; never rewrite delivered messages or audit logs**
+
+The Usbong scan surfaced eighteen columns holding the old name. Fifteen were renamed and three deliberately were not: `notifications.body` and `notifications.payload` (messages already delivered and read -- rewriting them makes the record disagree with what the member actually received) and `attendance_self_attest_log.meta` (an append-only audit log; `member_tool.html` only ever INSERTs to it and nothing matches on it, so a stale string breaks nothing while an edited audit trail defeats the purpose of having one). The line is not "historical vs current": `attendance.event_name` is historical and WAS renamed, because eligibility matching reads it -- it is a functional key. `pathway_progress.note` looked like a leader's prose and was nearly left alone until its values were read: all four were the machine-written provenance `auto:lesson:usbong1:all`.
+
+**RULE:** rename a string where it is USED -- keys, matching patterns, live labels. Leave it where it is REMEMBERED -- delivered messages, audit logs, anyone's record of a past moment. Decide by reading the values, not the column name, and have the migration PIN the leave-behinds at their exact counts so what was left is provable rather than merely claimed.
+
+**Established July 28, 2026 (Session 84). Invariant #421 added - count now 421.**
+
+---
+
+### **422. An exact-count pre-gate needs a three-state form to stay rerun-safe**
+
+Migration 103 gated on the surveyed row counts of fifteen surfaces, which is the right strength -- a drift means the survey is stale and the migration must not run. But it also made the migration one-shot: a second run found zeroes everywhere and aborted, violating rerun-until-true (#242 and the standing rerun discipline). Loosening the gate to tolerate zero would have destroyed it, since a HALF-applied state also shows zeroes on some surfaces.
+
+**RULE:** an exact-count pre-gate over N surfaces resolves three ways, not two. All N at the surveyed count = pending, proceed. All N at zero = already applied; say so, let the statements no-op, and let the post-gates re-verify. Anything MIXED = abort loudly and name the offenders, because mixed is the state a half-applied run or a genuine drift produces and it is the only one that must never be papered over.
+
+**Established July 28, 2026 (Session 84). Invariant #422 added - count now 422.**
 
 ---
 
