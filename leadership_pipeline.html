@@ -379,6 +379,10 @@ body.edit-on #editToggle{ background:var(--l3); color:#fff; border-color:var(--l
 .edit-hint{ display:none; font-family:'DM Sans',sans-serif; font-size:11px; color:var(--muted);
   background:var(--parchment2); border-bottom:1px solid var(--border); padding:6px 1.5rem; text-align:center; }
 body.edit-on .edit-hint{ display:block; }
+#pwDraftBar{ display:none; font-family:'DM Sans',sans-serif; font-size:12px;
+  background:#FFF8E1; border:1px solid var(--gold); border-radius:8px;
+  padding:.55rem .8rem; margin:.5rem 0 0; color:var(--ink); }
+#pwDraftBar .pw-draft-sub{ color:var(--muted); }
 /* Review notice shown while the template is being refined (read-only period) */
 .pw-notice{ display:none; font-family:'DM Sans',sans-serif; background:var(--parchment2);
   border-bottom:1px solid var(--border); padding:14px 1.5rem; text-align:center; }
@@ -468,6 +472,7 @@ body.edit-on .edit-hint{ display:block; }
   <button class="fbtn" id="editToggle" style="display:none" onclick="toggleEdit()">✏️ Edit</button>
 </div>
 <div class="edit-hint">🔒 Levels are the fixed MULTIPLY frame — you customize the rungs within them.</div>
+<div id="pwDraftBar"></div>
 
 <div class="pipeline" style="padding-top:1.5rem">
   <div class="col-headers">
@@ -720,6 +725,7 @@ const LEVEL_NAME = {0:'New Believer',1:'Team Member',2:'Leader',3:'Coach',4:'Dir
 let RUNG_BY_ID = {};
 let OVERLAY_BY_KEY = {}, BASE_KEYS = new Set();
 let editMode = false, RAW_ROWS = [], TEMPLATE_ROWS = [];
+let DRAFT = null, DOC = null;   // the church's one open draft + its working document
 let SECTION_ORDER = {}, SECTION_ORDER_ROW = null;   // order_map {"<level>":[rung_key,...]} FLAT per level (#400)
 const isEditor = (window.LEADER?.leaderLevel || 0) >= (MultiplyShared.PASTOR_LEVEL || 5);
 
@@ -828,6 +834,84 @@ async function loadSectionOrder(){
   return error;
 }
 
+// ==================== DRAFT DOCUMENT (Phase 4) ==================
+// The church edits a DOCUMENT; publish_pathway_version() turns it back into rows.
+// One draft per church is enforced by a partial unique index (098), so
+// load-or-create is safe to call more than once.
+
+// Seed from what is ON THE WALL right now. Order comes from the resolver members
+// actually see -- order_map outranks sort_order (multiply_shared.js:3391) -- and
+// NOT from sort_order directly, so a stale map or a gap left by the legacy editor
+// still round-trips; publish then bakes pos+1 back into sort_order, dense.
+// Excluded: retired rungs (not part of the pathway), tombstones (published:false
+// are masks publish leaves alone), and the Giving Journey lane (the validator
+// blocks it from any church document).
+function _docFromLiveRows(){
+  const levels = {};
+  Object.keys(LEVEL_NAME).forEach(function(lvKey){
+    const lv = Number(lvKey);
+    const rows = MultiplyShared.pathwayOrder.sort(
+      RAW_ROWS.filter(r => r.level === lv && !r.retired_at
+                        && r.published !== false && !_isGiving(r)),
+      lv, SECTION_ORDER);
+    levels[String(lv)] = rows.map(function(r){
+      return {
+        rung_key:          r.rung_key,
+        title_en:          r.title_en,
+        title_tl:          r.title_tl || null,
+        description_en:    r.description_en || null,
+        description_tl:    r.description_tl || null,
+        category:          r.category,
+        completion_source: r.completion_source || 'manual',
+        auto_source_key:   r.auto_source_key || null,
+        trackable:         r.trackable !== false,
+        meta:              (r.meta && typeof r.meta === 'object') ? r.meta : {}
+      };
+    });
+  });
+  return { levels: levels };
+}
+function _docItemCount(doc){
+  const lv = (doc && doc.levels) || {};
+  return Object.keys(lv).reduce((n,k) => n + ((lv[k] || []).length), 0);
+}
+async function loadDraft(){
+  const { data, error } = await db.from('pathway_versions')
+    .select('id,version_no,status,doc,note,updated_at')
+    .eq('status','draft').maybeSingle();
+  if (error) throw error;
+  DRAFT = data || null;
+  DOC   = DRAFT ? (DRAFT.doc || null) : null;
+  return DRAFT;
+}
+async function _nextVersionNo(){
+  const { data, error } = await db.from('pathway_versions')
+    .select('version_no').order('version_no', { ascending:false }).limit(1);
+  if (error) throw error;
+  return (((data || [])[0] || {}).version_no || 0) + 1;
+}
+// church_id is stamped server-side by trg_set_church_id (098). The client must not
+// send it -- same contract as every other write on this page.
+async function createDraftFromWall(){
+  const no = await _nextVersionNo();
+  const { data, error } = await db.from('pathway_versions')
+    .insert({ version_no:no, status:'draft', doc:_docFromLiveRows(),
+              note:'Started from the published pathway',
+              created_by:(L.leaderId || null) })
+    .select('id,version_no,status,doc,note,updated_at').single();
+  if (error) throw error;
+  DRAFT = data; DOC = data.doc;
+  return DRAFT;
+}
+function renderDraftBar(){
+  const bar = document.getElementById('pwDraftBar');
+  if (!bar) return;
+  if (!editMode || !DRAFT){ bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  bar.innerHTML = '<b>Editing draft v' + DRAFT.version_no + '</b> \u00b7 '
+    + _docItemCount(DOC) + ' rungs \u00b7 nothing here is live until you publish. '
+    + '<span class="pw-draft-sub">The wall below still shows what is published.</span>';
+}
 async function loadPipeline(){
   // Post-fork (099/101) every church OWNS its pipeline, and the template lane is a
   // LIBRARY to copy from -- not a base to resolve against. The two lanes load
@@ -1010,11 +1094,21 @@ function filter(type, btn){
 }
 
 // ═══════════════════════ L5 EDIT-MODE UI ═══════════════════════════════════
-function toggleEdit(){
+async function toggleEdit(){
   editMode = !editMode;
   document.body.classList.toggle('edit-on', editMode);
   const b = document.getElementById('editToggle');
   if (b) b.textContent = editMode ? '✓ Done' : '✏️ Edit';
+  if (editMode && !DRAFT){
+    try {
+      await loadDraft();
+      if (!DRAFT) await createDraftFromWall();
+    } catch(e){
+      console.error('[draft] load/create failed:', e);
+      toast('Could not open a draft: ' + (e.message || e), 'err');
+    }
+  }
+  renderDraftBar();
   _resolveAndRender();
 }
 function _rung(id){ return RUNG_BY_ID[id]; }
