@@ -719,7 +719,7 @@ const LEVEL_NAME = {0:'New Believer',1:'Team Member',2:'Leader',3:'Coach',4:'Dir
 
 let RUNG_BY_ID = {};
 let OVERLAY_BY_KEY = {}, BASE_KEYS = new Set();
-let editMode = false, RAW_ROWS = [];
+let editMode = false, RAW_ROWS = [], TEMPLATE_ROWS = [];
 let SECTION_ORDER = {}, SECTION_ORDER_ROW = null;   // order_map {"<level>":[rung_key,...]} FLAT per level (#400)
 const isEditor = (window.LEADER?.leaderLevel || 0) >= (MultiplyShared.PASTOR_LEVEL || 5);
 
@@ -748,11 +748,6 @@ function _pwUnpinOverlay(id){
 const slug = s => ('x-'+String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Math.random().toString(36).slice(2,6)).slice(0,44);
 function nextSort(level,category){ return 100 + Object.values(RUNG_BY_ID).filter(r=>r.level===level&&r.category===category).length; }
 
-async function loadOverlays(){
-  const { data, error } = await db.from('pathway_rungs').select('*').not('church_id','is',null);
-  OVERLAY_BY_KEY = {}; (data||[]).forEach(r => OVERLAY_BY_KEY[r.level+'|'+r.rung_key] = r);
-  return error;
-}
 async function addRung(level, category, f){
   return db.from('pathway_rungs').insert({ level, category, rung_key: slug(f.title_en),
     title_en:f.title_en, description_en:f.description_en||null, trackable:f.trackable!==false,
@@ -834,26 +829,32 @@ async function loadSectionOrder(){
 }
 
 async function loadPipeline(){
-  const { data, error } = await db.from('pathway_rungs').select('*');
-  if (error) throw error;
-  RAW_ROWS = data || [];
-  await loadOverlays();
+  // Post-fork (099/101) every church OWNS its pipeline, and the template lane is a
+  // LIBRARY to copy from -- not a base to resolve against. The two lanes load
+  // separately and are never merged by precedence: the overlay-wins reducer that
+  // used to sit here is DELETED, not edited (#405). It was the sixth copy, and the
+  // only one Phase 3 left standing.
+  const own = await db.from('pathway_rungs').select('*').not('church_id','is',null);
+  if (own.error) throw own.error;
+  const tpl = await db.from('pathway_rungs').select('*').is('church_id', null);
+  if (tpl.error) throw tpl.error;
+  RAW_ROWS      = own.data || [];
+  TEMPLATE_ROWS = tpl.data || [];
   await loadSectionOrder();
   _resolveAndRender();
 }
 function _resolveAndRender(){
+  // BASE_KEYS answers one question -- does the template still carry this key? --
+  // which decides Restore vs Delete on a hidden chip. It reads the TEMPLATE lane.
   BASE_KEYS = new Set();
-  RAW_ROWS.forEach(r => { if (r.church_id == null) BASE_KEYS.add(r.level+'|'+r.rung_key); });
-  const byKey = {};
-  RAW_ROWS.forEach(r => {
-    const k = r.level + '|' + r.rung_key;
-    const ex = byKey[k];
-    if (!ex || (r.church_id && !ex.church_id)) byKey[k] = r;   // overlay wins by key
-  });
-  // Read-only: hide published:false. Edit mode: keep ALL own overlays (hidden new
-  // overlays + tombstoned bases) so they render greyed + Show/Restore (3b Item 1).
-  const rungs = Object.values(byKey).filter(r =>
-    r.published !== false || (editMode && r.church_id != null));
+  TEMPLATE_ROWS.forEach(r => BASE_KEYS.add(r.level+'|'+r.rung_key));
+  OVERLAY_BY_KEY = {};
+  RAW_ROWS.forEach(r => { OVERLAY_BY_KEY[r.level+'|'+r.rung_key] = r; });
+  // Read-only: hide published:false. Edit mode: keep hidden own rows so they render
+  // greyed + Show/Restore (3b Item 1). A RETIRED rung is not part of the pathway in
+  // either mode -- it survives in the member's history, not on the wall (098/101).
+  const rungs = RAW_ROWS.filter(r =>
+    !r.retired_at && (r.published !== false || editMode));
   RUNG_BY_ID = {};
   rungs.forEach(r => { RUNG_BY_ID[r.id] = r; });
   renderPipeline(rungs);
@@ -1240,7 +1241,7 @@ async function rsSaveResearch(){
     if (res && res.error) throw res.error;
     closeRungForm();
     toast('Research saved to chip', 'ok');
-    await loadPipeline();   // refreshes overlays + base keys + re-renders (loadPipeline calls loadOverlays)
+    await loadPipeline();   // re-reads both lanes + re-renders
   } catch(e){
     msg.style.color = 'var(--l1)';
     msg.textContent = 'Error: ' + (e.message || e);
