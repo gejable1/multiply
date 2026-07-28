@@ -9,7 +9,9 @@
   curriculum tooling. To customize for your church: search this file for "MULTIPLY · Disciple-Making
   Pipeline" and replace with your church name.
 
-  Launched from MMT via:  usbong_quiz_player.html?course=Usbong1&lesson=1
+  Launched from MMT via:  usbong_quiz_player.html?lesson=1
+  (a legacy ?course= parameter is still accepted and ignored -- the course code
+   is resolved from the data, never named in this file)
   Uses member session via multiply_shared.js (Invariant #9).
 -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231e3a5f'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='54' font-weight='700' text-anchor='middle' fill='%23d4a93f'%3EQ%3C/text%3E%3C/svg%3E">
@@ -218,7 +220,7 @@ body.lang-tl .tl-text{display:inline;}
     <div class="intro-card">
       <div class="ic-icon">📝</div>
       <div class="ic-title" id="introTitle">Lesson Title</div>
-      <div class="ic-lesson" id="introLesson">Usbong 1 · Lesson 1</div>
+      <div class="ic-lesson" id="introLesson">Usbong · Lesson 1</div>
       <div id="dropInBadge" style="display:none;margin:.4rem auto .2rem;padding:4px 11px;background:rgba(184,136,42,.15);border:1px solid rgba(184,136,42,.45);color:#b8882a;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;width:fit-content;">
         <span class="en-text">Drop-in Mode</span>
         <span class="tl-text">Drop-in Mode</span>
@@ -372,16 +374,15 @@ let db = null;
     showError('Supabase client not available. Please refresh the page.');
     return;
   }
-  // Read course + lesson from URL
-  // Per Invariant #30: Usbong course codes use single-space form (e.g. "Usbong 1").
-  // Defensive: if a stale bookmark passes "Usbong1" (no space), repair it.
+  // Read the lesson from the URL. The course code is deliberately NOT read from
+  // the URL and NOT named in this file -- loadQuiz resolves it from the data.
+  // Per Invariant #30 (Session 84 addendum) a single-volume curriculum carries no
+  // number, so the stored code moved from "Usbong 1" to "Usbong" in migration 103.
+  // Hard-coding either spelling is what made that rename a breaking change, so a
+  // legacy ?course= parameter is now accepted and ignored.
   const params = new URLSearchParams(window.location.search);
-  let course = params.get('course') || 'Usbong 1';
-  if (/^Usbong\d+$/i.test(course)) {
-    course = course.replace(/^(Usbong)(\d+)$/i, '$1 $2');
-  }
   const lesson = parseInt(params.get('lesson') || '1', 10);
-  loadQuiz(course, lesson);
+  loadQuiz(lesson);
 })();
 
 // ═══════════════════════════════════════════════════════════════════
@@ -458,22 +459,31 @@ function showError(msg){
 // ═══════════════════════════════════════════════════════════════════
 // LOAD QUIZ + PRIOR ATTEMPTS + ATTENDANCE CHECK
 // ═══════════════════════════════════════════════════════════════════
-async function loadQuiz(course, lesson){
+async function loadQuiz(lesson){
   try {
+    // Resolve the single active Usbong course for this lesson instead of naming
+    // it. ilike 'usbong%' matches both the historical "Usbong 1" and the renamed
+    // "Usbong", so this file is correct on either side of migration 103. If Usbong
+    // ever gains a second volume, #30 restores the numbers and maybeSingle() raises
+    // on the two matches -- a loud failure at exactly the moment the one-volume
+    // assumption breaks, rather than a silently wrong quiz.
     const { data: quiz, error: qErr } = await db
       .from('usbong_quizzes')
       .select('*')
-      .eq('course_code', course)
+      .ilike('course_code', 'usbong%')
       .eq('lesson_number', lesson)
       .eq('is_active', true)
       .maybeSingle();
 
     if (qErr) throw qErr;
     if (!quiz) {
-      showError('Quiz not found for ' + course + ' Lesson ' + lesson);
+      showError('Quiz not found for Usbong Lesson ' + lesson);
       return;
     }
     QUIZ = quiz;
+    // Display the code the DATA carries, so every header follows the rename for
+    // free. Every 'course' reference below this point reads from the row.
+    const course = quiz.course_code;
 
     // Update header
     document.getElementById('qHeaderTitle').textContent = quiz.lesson_title;
