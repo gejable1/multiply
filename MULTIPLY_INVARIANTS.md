@@ -4213,4 +4213,104 @@ S82 produced three assertions from memory instead of from the source, all in che
 
 ---
 
+### **408. A constraint check that reads `unique_constraints` and stops has not checked**
+
+`PATHWAY_FORK_DESIGN.md` section 7 claimed `pathway_rungs` had no unique constraint on `(church_id, level, rung_key)`, and that a double publish could duplicate a church's whole pipeline. It was wrong, and a migration was nearly written to close a gap that did not exist. The table carries no unique *constraints*, but two partial unique *indexes* -- `pathway_rungs_overlay_uk` and `pathway_rungs_base_uk` -- already covered both lanes completely. Worse, the proposed fix would have been actively harmful: a plain table `UNIQUE` treats NULLs as distinct, so it would have left the template lane unprotected while duplicating a rule that already existed, which is #405.
+
+**RULE:** uniqueness in Postgres lives in `indexes` as often as in `unique_constraints`, and partial unique indexes never appear as constraints at all. Any claim that a uniqueness guarantee is missing must be checked against BOTH arrays of the table's `schema.json` entry, and confirmed live before a migration is written to add one.
+
+**Established July 28, 2026 (Session 83). Invariant #408 added - count now 408.**
+
+---
+
+### **409. A check whose passing state is an empty result cannot be distinguished from a check that never ran**
+
+The first 098 pre-flight put the duplicate-rung check in its own statement returning zero rows on success. The Pastor ran it and reported "success, no rows" -- which was indistinguishable from the block not having executed, and cost two round trips to resolve. The same shape recurred in a PG16 fixture whose error was redirected to `/dev/null`, silently dropping a test church and nearly being read as a diagnostic bug.
+
+**RULE:** a diagnostic asserts counts, never absence. Every check emits a labelled row in every outcome -- `duplicate_count_expect_0 | 0` rather than an empty result set -- and multi-check pre-flights return ONE result set, because an editor that shows only the last statement turns a silent skip into a false all-clear.
+
+**Established July 28, 2026 (Session 83). Invariant #409 added - count now 409.**
+
+---
+
+### **410. Reconcile a ledger by set difference, never by counting**
+
+The S82 handoff recorded the ledger and `migrations/` agreeing at 97/97. Both numbers were wrong and agreed anyway: `001`-`097` reads as 97 slots, but `006` never existed on either side, so the true figure is 96/96. A set diff -- zero ledger rows without a file, zero files without a ledger row -- settled in one query what a matching pair of totals had hidden for a whole session. Counting also requires knowing WHAT to count: `migrations/` holds 113 `.sql` files, 17 of them `_rollback` / `_verify` / `_diagnostic` companions.
+
+**RULE:** #399's reconcile is a `comm`-style set diff in both directions, printed. Two matching totals are not agreement; they are two numbers that happen to be equal.
+
+**Established July 28, 2026 (Session 83). Invariant #410 added - count now 410.**
+
+---
+
+### **411. In a set-difference gate, the parentheses are load-bearing**
+
+Migration 101's gate compared the auto-rung view before and after as `A EXCEPT ALL B UNION ALL B EXCEPT ALL A`. `EXCEPT` and `UNION` share precedence and associate left, so it parsed as `((A EXCEPT B) UNION B) EXCEPT A` -- which reconstructs A and subtracts it, returning 0 however much the sets differ. The gate passed on data where one tuple was genuinely missing. Isolated on a 3-row vs 2-row case: 0 unparenthesised, 1 parenthesised.
+
+**RULE:** both arms of a symmetric difference are parenthesised explicitly, and the gate is proved by feeding it data it MUST reject before it is trusted on data it should accept.
+
+**Established July 28, 2026 (Session 83). Invariant #411 added - count now 411.**
+
+---
+
+### **412. Never assert on `pg_views.definition` text without first reading how Postgres normalised it**
+
+Migration 101's self-verify tested `definition LIKE '%IS NULL OR%'` to prove the old template arm was gone. Postgres stores the normalised form `((x.church_id IS NULL) OR (x.church_id = c.id))`, so that pattern matched NEITHER the old view nor the new one and the check was hardcoded to pass. `%LATERAL%` discriminates correctly: 1 for the old shape, 0 for the new.
+
+**RULE:** catalog text is rewritten by the server. Any `LIKE` against `pg_views.definition`, `pg_get_functiondef` or a CHECK expression is first run against BOTH the shape it should match and the shape it should not, and only used once it has been seen to discriminate.
+
+**Established July 28, 2026 (Session 83). Invariant #412 added - count now 412.**
+
+---
+
+### **413. A data migration's gate belongs inside its transaction**
+
+Migration 099 forked 2,447 rows across twelve live churches. Its gate captured before-state to a TEMP table, performed the writes, recomputed from the new state and RAISEd on any difference -- all inside one `BEGIN`/`COMMIT`. Proved by breaking it on purpose: withholding one rung produced 12 differing pairs, raised, and rolled back 2,435 inserted rows, 12 versions and a cleared order map. A gate that reports afterwards can only name what has already been lost.
+
+**RULE:** a migration that writes rows carries its own before/after comparison in-transaction and RAISEs, so a wrong result commits nothing. A follow-up verification query is a receipt, not a gate -- and the gate is proved by deliberately failing it before it is trusted.
+
+**Established July 28, 2026 (Session 83). Invariant #413 added - count now 413.**
+
+---
+
+### **414. CC delivery blocks state the goal, never the tool**
+
+Three blocks this session ended with a hard-coded `gh pr create` in an environment with no `gh`. Each exited 127 after the push -- harmless, because it landed after the commit and was not a gate, and CC correctly completed the PR through the GitHub MCP tool each time. But a delivery block should not contain a line guaranteed to fail.
+
+**RULE:** the block pushes; the instruction says "then open the PR by whatever mechanism you have." Any step whose availability depends on the executing environment is expressed as an objective, not a command.
+
+**Established July 28, 2026 (Session 83). Invariant #414 added - count now 414.**
+
+---
+
+### **415. A harness must lift from the file under test, by a path proved in the same run**
+
+The Phase 3 follow-up was verified by a harness whose `patched` slice was lifted from `/tmp/p3run/member_tool.html` -- the PREVIOUS pass's output -- while the file actually being patched sat in a different directory. It reported 5/5 against code that no longer existed. What exposed it was removing `isLive` from the stub, which should have been a no-op and failed 4/5 instead; a `Proxy` on the stub proved something really was reading `.isLive`, and `patched.includes('isLive')` proved the lifted text disagreed with the file on disk.
+
+**RULE:** a harness lifts from the file it is verifying, by a relative path resolved in the same working directory as the patch, and asserts that the lifted text contains the change it expects. A stub omits any capability the patched code must not depend on, so a surviving dependency throws rather than passing quietly.
+
+**Established July 28, 2026 (Session 83). Invariant #415 added - count now 415.**
+
+---
+
+### **416. Enumerating a vocabulary by regex over one call site under-reports it**
+
+Migration 102's validator was built on an `auto_source_key` vocabulary extracted by regex from `auto_complete_pathway_rungs()`. Two separate lesson arms -- one over `btli_quizzes`, one over `usbong_quizzes` -- share a single `LIKE 'lesson:%:all'` literal, so the pattern appeared once and was read as one arm. The validator therefore reported 13 legitimate Usbong rungs across all twelve churches as unrecognised, with total confidence, and a migration was drafted to set them all to manual -- which would have disabled auto-completion that had been working correctly. Only the Pastor's curriculum knowledge ("there is no Usbong 1") prompted the second look that surfaced `usbong_quizzes` and `usbong_quiz_attempts`.
+
+**RULE:** a vocabulary is enumerated from the CONSUMERS of each pattern, not from the pattern literals. Before a validator is trusted to report something as invalid, it is run against every known-good value in production and required to return zero findings; a non-zero count is treated as a defect in the validator until the data is proved guilty.
+
+**Established July 28, 2026 (Session 83). Invariant #416 added - count now 416.**
+
+---
+
+### **417. Do not add an API to a lockstep-versioned shared module to deliver a one-line predicate**
+
+Phase 3 added `pathwayOrder.isLive(r)` to `multiply_shared.js`, which 22 consumers pin as `?v=14`, without bumping it (#138). A client holding the old module while running the new HTML would have hit `isLive is not a function` and the pathway would not have rendered; the service worker `CACHE_VERSION` bump covers the installed PWA but not a plain tab or a slow-to-activate worker. CC caught it before merge. The fix was not the 22-file `?v=` bump but removing the dependency: `!r.retired_at` inline, which one of the three files was already doing.
+
+**RULE:** touching a lockstep-versioned shared module obligates the full `?v=` bump across every consumer. Before accepting that cost, ask whether the shared home is earning it -- a single field test is not a rule that can drift, and duplicating it in three files is cheaper and safer than versioning the whole platform to deliver it.
+
+**Established July 28, 2026 (Session 83). Invariant #417 added - count now 417.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
