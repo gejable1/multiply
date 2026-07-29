@@ -220,6 +220,23 @@ header::after {
 /* col visibility */
 .col-formation, .col-character, .col-competence, .col-ministry, .col-output { transition: opacity .2s; }
 .hide { display: none !important; }
+/* Flat draft surface: the ONLY place the draft document is visible. The wall
+   keeps rendering published rows, so the two never masquerade as each other. */
+.flat-cell{ display:none; }
+body.flat-on .level-row{ grid-template-columns:180px 1fr; }
+body.flat-on .col-headers{ display:none; }
+body.flat-on .cell.col-formation,
+body.flat-on .cell.col-character,
+body.flat-on .cell.col-competence,
+body.flat-on .cell.col-ministry{ display:none; }
+body.flat-on .badge-cell{ grid-column:1; }
+body.flat-on .flat-cell{ display:block; grid-column:2; }
+.flat-row{ display:flex; align-items:center; gap:8px; padding:4px 0;
+  border-bottom:1px solid var(--border); font-size:12px; }
+.flat-row:last-child{ border-bottom:none; }
+.flat-pos{ min-width:22px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.flat-cat{ color:var(--muted); font-size:11px; }
+.flat-empty{ color:var(--muted); font-style:italic; font-size:12px; }
 
 /* ── COLUMN HEADERS ── */
 .col-headers {
@@ -469,6 +486,7 @@ body.edit-on .edit-hint{ display:block; }
   <button class="fbtn" onclick="filter('competence',this)">⚡ Competence</button>
   <button class="fbtn" onclick="filter('ministry',this)">⛪ Ministry</button>
   <button class="fbtn" onclick="filter('output',this)">🏆 Output</button>
+  <button class="fbtn" id="flatToggle" style="display:none" onclick="toggleFlat()">&#8645; Draft order</button>
   <button class="fbtn" id="editToggle" style="display:none" onclick="toggleEdit()">✏️ Edit</button>
 </div>
 <div class="edit-hint">🔒 Levels are the fixed MULTIPLY frame — you customize the rungs within them.</div>
@@ -508,6 +526,7 @@ body.edit-on .edit-hint{ display:block; }
     <div class="cell col-competence" id="pw-L5-competence"></div>
 
     <div class="cell col-ministry" id="pw-L5-ministry"></div>
+    <div class="cell flat-cell" id="pw-flat-5"></div>
   </div>
 
   <!-- ─────────── LEVEL 4: DIRECTOR ─────────── -->
@@ -525,6 +544,7 @@ body.edit-on .edit-hint{ display:block; }
     <div class="cell col-competence" id="pw-L4-competence"></div>
 
     <div class="cell col-ministry" id="pw-L4-ministry"></div>
+    <div class="cell flat-cell" id="pw-flat-4"></div>
   </div>
 
   <!-- ─────────── LEVEL 3: COACH ─────────── -->
@@ -542,6 +562,7 @@ body.edit-on .edit-hint{ display:block; }
     <div class="cell col-competence" id="pw-L3-competence"></div>
 
     <div class="cell col-ministry" id="pw-L3-ministry"></div>
+    <div class="cell flat-cell" id="pw-flat-3"></div>
   </div>
 
   <!-- ─────────── LEVEL 2: LEADER ─────────── -->
@@ -559,6 +580,7 @@ body.edit-on .edit-hint{ display:block; }
     <div class="cell col-competence" id="pw-L2-competence"></div>
 
     <div class="cell col-ministry" id="pw-L2-ministry"></div>
+    <div class="cell flat-cell" id="pw-flat-2"></div>
   </div>
 
   <!-- ─────────── LEVEL 1: TEAM MEMBER ─────────── -->
@@ -576,6 +598,7 @@ body.edit-on .edit-hint{ display:block; }
     <div class="cell col-competence" id="pw-L1-competence"></div>
 
     <div class="cell col-ministry" id="pw-L1-ministry"></div>
+    <div class="cell flat-cell" id="pw-flat-1"></div>
   </div>
 
   <!-- ─────────── LEVEL 0: NEW BELIEVER (PRE-PIPELINE / USBONG) ─────────── -->
@@ -593,6 +616,7 @@ body.edit-on .edit-hint{ display:block; }
     <div class="cell col-competence" id="pw-L0-competence"></div>
 
     <div class="cell col-ministry" id="pw-L0-ministry"></div>
+    <div class="cell flat-cell" id="pw-flat-0"></div>
   </div>
 
 </div><!-- /pipeline -->
@@ -903,10 +927,81 @@ async function createDraftFromWall(){
   DRAFT = data; DOC = data.doc;
   return DRAFT;
 }
+// -------- flat draft surface (slice C) --------------------------------------
+// Reorder RELOCATES: lift the item out, drop it at the target index. A swap
+// would fling the neighbour as well, moving a second rung on a member's phone
+// that the pastor never touched and cannot see (same rule as the wall arrows).
+// Returns a NEW array; the caller decides whether to keep it.
+function _docMove(items, i, dir){
+  const j = i + dir;
+  if (!Array.isArray(items)) return items;
+  if (i < 0 || i >= items.length) return items;
+  if (j < 0 || j >= items.length) return items;      // at an edge -> no-op
+  const out = items.slice();
+  const [moved] = out.splice(i, 1);
+  out.splice(j, 0, moved);
+  return out;
+}
+async function saveDraft(){
+  if (!DRAFT || !DOC) return;
+  const { error } = await db.from('pathway_versions')
+    .update({ doc:DOC }).eq('id', DRAFT.id);
+  if (error) throw error;
+  DRAFT.doc = DOC;
+}
+async function flatMove(level, i, dir){
+  if (!DOC || !DOC.levels) return;
+  const key   = String(level);
+  const items = DOC.levels[key] || [];
+  const moved = _docMove(items, i, dir);
+  if (moved === items) return;                       // edge -> nothing to save
+  DOC.levels[key] = moved;
+  renderFlat();
+  try { await saveDraft(); }
+  catch(e){ console.error('[draft] save failed:', e);
+            toast('Could not save the new order: ' + (e.message || e), 'err'); }
+}
+function renderFlat(){
+  if (!DOC || !DOC.levels) return;
+  Object.keys(LEVEL_NAME).forEach(function(lvKey){
+    const host = document.getElementById('pw-flat-' + lvKey);
+    if (!host) return;
+    const items = DOC.levels[lvKey] || [];
+    if (!items.length){
+      host.innerHTML = '<div class="flat-empty">No rungs at this level in the draft.</div>';
+      return;
+    }
+    host.innerHTML = items.map(function(it, i){
+      const up   = i > 0
+        ? '<button class="rarrow" title="Move up" onclick="flatMove(' + lvKey + ',' + i + ',-1)">&#9650;</button>' : '';
+      const down = i < items.length - 1
+        ? '<button class="rarrow" title="Move down" onclick="flatMove(' + lvKey + ',' + i + ',1)">&#9660;</button>' : '';
+      return '<div class="flat-row"><span class="flat-pos">' + (i + 1) + '.</span>'
+           + '<span class="flat-ttl">' + escapeHTML(it.title_en || it.rung_key) + '</span>'
+           + '<span class="flat-cat">' + escapeHTML(it.category || '') + '</span>'
+           + '<span style="margin-left:auto">' + up + down + '</span></div>';
+    }).join('');
+  });
+}
+function toggleFlat(){
+  const on = !document.body.classList.contains('flat-on');
+  document.body.classList.toggle('flat-on', on);
+  const b = document.getElementById('flatToggle');
+  if (b) b.innerHTML   = on ? '&#8645; Wall' : '&#8645; Draft order';
+  if (on) renderFlat();
+}
 function renderDraftBar(){
   const bar = document.getElementById('pwDraftBar');
   if (!bar) return;
-  if (!editMode || !DRAFT){ bar.style.display = 'none'; return; }
+  const ft = document.getElementById('flatToggle');
+  if (!editMode || !DRAFT){
+    bar.style.display = 'none';
+    document.body.classList.remove('flat-on');
+    if (ft) ft.style.display = 'none';
+    return;
+  }
+  if (ft) ft.style.display = '';
+  renderFlat();
   bar.style.display = 'block';
   bar.innerHTML = '<b>Editing draft v' + DRAFT.version_no + '</b> \u00b7 '
     + _docItemCount(DOC) + ' rungs \u00b7 nothing here is live until you publish. '
@@ -988,9 +1083,13 @@ function _chipHtml(r, cat, idx, count){
       + escapeHTML(r.title_en) + '</button><div class="rung-actions">'+btn+'</div></div>';
   }
   // active chip → reorder arrows (omitted at section edges) + CRUD actions
+  // While a draft is open the order of record is the DOCUMENT. The wall arrows
+  // write order_map, which publish clears -- they would look correct and then be
+  // silently reverted. Reordering lives in the flat draft surface instead.
+  const _canArrow = !DRAFT;
   let arrows = '';
-  if (idx > 0)                    arrows += '<button class="rarrow" title="Move up" onclick="actMove(\''+r.id+'\',-1)">▲</button>';
-  if (idx >= 0 && idx < count-1)  arrows += '<button class="rarrow" title="Move down" onclick="actMove(\''+r.id+'\',1)">▼</button>';
+  if (_canArrow && idx > 0)       arrows += '<button class="rarrow" title="Move up" onclick="actMove(\''+r.id+'\',-1)">▲</button>';
+  if (_canArrow && idx >= 0 && idx < count-1) arrows += '<button class="rarrow" title="Move down" onclick="actMove(\''+r.id+'\',1)">▼</button>';
   let actions;
   if (isBase){
     actions = '<button class="rbtn" onclick="actCustomize(\''+r.id+'\')">✎ Customize</button>'
