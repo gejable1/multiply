@@ -1289,6 +1289,16 @@ function _publishSummary(r){
     return 'Published v' + r.version + '. Nothing changed -- the pathway was already exactly this.';
   return 'Published v' + r.version + '. ' + parts.join(', ') + '.';
 }
+// The publish result is the most consequential sentence this tool produces, and
+// it shipped on a three-second toast -- Gerry published and could not read it in
+// time. It now stays until dismissed. Pure so the wording is testable.
+function _publishDoneView(row){
+  return {
+    html:  '<div class="flat-empty">' + escapeHTML(_publishSummary(row)) + '</div>',
+    ctx:   'Published',
+    label: 'Close'
+  };
+}
 async function openPublish(){
   if (!DRAFT) return;
   document.getElementById('pubCtx').textContent = 'Draft v' + DRAFT.version_no;
@@ -1298,6 +1308,9 @@ async function openPublish(){
   msg.textContent = ''; msg.style.color = '';
   host.innerHTML = '<div class="flat-empty">Checking...</div>';
   go.style.display = 'none';
+  go.disabled = false;
+  go.onclick = doPublish;   // publish repurposes this button as Close
+  document.getElementById('pubCtx').textContent = 'Draft v' + DRAFT.version_no;
   _pwPinOverlay('pubOverlay');
   document.getElementById('pubOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -1341,14 +1354,21 @@ async function doPublish(){
     const { data, error } = await db.rpc('publish_pathway_version', { p_version_id: DRAFT.id });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
-    closePublish();
     // The draft is now the published version -- there is no open draft any more.
     // Clearing it is what returns the wall to its normal editable state (D3).
     DRAFT = null; DOC = null;
     document.body.classList.remove('flat-on');
     renderDraftBar();
     await loadPipeline();
-    toast(_publishSummary(row), 'ok');
+    // Stay open. The pastor reads this, then dismisses it himself.
+    const view = _publishDoneView(row);
+    document.getElementById('pubList').innerHTML = view.html;
+    document.getElementById('pubCtx').textContent = view.ctx;
+    msg.textContent = '';
+    go.disabled = false;
+    go.textContent = view.label;
+    go.onclick = closePublish;
+    go.style.display = '';
   } catch(e){
     go.disabled = false;
     msg.style.color = 'var(--l1)';
