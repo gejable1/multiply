@@ -637,6 +637,19 @@ body.edit-on .edit-hint{ display:block; }
 </div>
 
 <!-- L5 EDIT: add / customize / edit rung form -->
+<div class="modal-overlay" id="libOverlay" onclick="closeLibraryOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-type" id="libCtx"></div>
+        <div class="modal-title">Add a rung</div>
+      </div>
+      <button class="modal-close" onclick="closeLibrary()">&#10005;</button>
+    </div>
+    <div class="modal-body"><div id="libList"></div></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="rungFormOverlay" onclick="closeRungFormOnOverlay(event)">
   <div class="modal">
     <div class="modal-header">
@@ -980,8 +993,12 @@ function renderFlat(){
     const host = document.getElementById('pw-flat-' + lvKey);
     if (!host) return;
     const items = DOC.levels[lvKey] || [];
+    const foot = '<div class="flat-row" style="border-bottom:none">'
+      + '<button class="rbtn rbtn-gold" onclick="openLibrary(' + lvKey + ')">+ Add rung</button>'
+      + (items.length ? '<button class="rbtn rbtn-warn" onclick="clearLevel(' + lvKey + ')">Clear level</button>' : '')
+      + '</div>';
     if (!items.length){
-      host.innerHTML = '<div class="flat-empty">No rungs at this level in the draft.</div>';
+      host.innerHTML = '<div class="flat-empty">No rungs at this level in the draft.</div>' + foot;
       return;
     }
     host.innerHTML = items.map(function(it, i){
@@ -998,7 +1015,7 @@ function renderFlat(){
            + '<span class="flat-ttl">' + escapeHTML(it.title_en || it.rung_key) + '</span>'
            + '<span class="flat-cat">' + escapeHTML(it.category || '') + '</span>' + st
            + '<span style="margin-left:auto">' + ed + rm + up + down + '</span></div>';
-    }).join('');
+    }).join('') + foot;
   });
 }
 // The label names where a click TAKES you, matching Edit/Done beside it. It is
@@ -1135,6 +1152,99 @@ async function removeDocRung(level, i){
   try { await saveDraft(); toast('Removed from draft', 'ok'); }
   catch(e){ console.error('[draft] save failed:', e);
             toast('Could not save the removal: ' + (e.message || e), 'err'); }
+}
+// -------- library (slice E1) -------------------------------------------------
+// Everything NOT currently in the draft is offerable: this church's own rows --
+// including ones it hid or retired -- and the template. Own rows are considered
+// first, so a church that reworded a rung gets ITS wording back, not the
+// template's. Sourcing from the template alone would strand any rung a church
+// invented and later removed, which Rosehill and True North both already have.
+// The Giving Journey lane is never offered: the validator blocks it from any
+// church document, so putting it in the picker would only sell a failure.
+function _libraryFor(level, docItems, ownRows, templateRows){
+  const have = new Set((docItems || []).map(function(i){ return i.rung_key; }));
+  const seen = new Set();
+  const out  = [];
+  function consider(r, source){
+    if (!r || r.level !== level) return;
+    if (_isGiving(r)) return;
+    if (have.has(r.rung_key)) return;
+    if (seen.has(r.rung_key)) return;
+    seen.add(r.rung_key);
+    out.push({ rung_key:r.rung_key, title_en:r.title_en, title_tl:r.title_tl || null,
+               description_en:r.description_en || null, description_tl:r.description_tl || null,
+               category:r.category, completion_source:r.completion_source || 'manual',
+               auto_source_key:r.auto_source_key || null,
+               trackable:r.trackable !== false, meta:{}, source:source });
+  }
+  (ownRows || []).forEach(function(r){ consider(r, 'yours'); });
+  (templateRows || []).forEach(function(r){ consider(r, 'template'); });
+  return out.sort(function(a, b){
+    return (a.title_en || '').localeCompare(b.title_en || '');
+  });
+}
+let LIB_LEVEL = null;
+function openLibrary(level){
+  LIB_LEVEL = level;
+  const items = (DOC && DOC.levels && DOC.levels[String(level)]) || [];
+  const cands = _libraryFor(level, items, RAW_ROWS, TEMPLATE_ROWS);
+  document.getElementById('libCtx').textContent =
+    'Level ' + level + ' ' + String.fromCharCode(0x2014) + ' ' + (LEVEL_NAME[level] || '');
+  const host = document.getElementById('libList');
+  host.innerHTML = cands.length
+    ? cands.map(function(c, i){
+        const tag = (c.source === 'yours') ? 'yours' : 'template';
+        return '<div class="flat-row"><span class="flat-ttl">' + escapeHTML(c.title_en || c.rung_key) + '</span>'
+             + '<span class="flat-cat">' + escapeHTML(c.category || '') + ' &middot; ' + tag + '</span>'
+             + '<span style="margin-left:auto"><button class="rbtn rbtn-gold" onclick="addFromLibrary(' + i + ')">+ Add</button></span></div>';
+      }).join('')
+    : '<div class="flat-empty">Everything available is already in this level.</div>';
+  LIB_CANDS = cands;
+  _pwPinOverlay('libOverlay');
+  document.getElementById('libOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+let LIB_CANDS = [];
+function closeLibrary(){
+  document.getElementById('libOverlay').classList.remove('open');
+  _pwUnpinOverlay('libOverlay');
+  document.body.style.overflow = '';
+}
+function closeLibraryOnOverlay(e){ if (e.target === document.getElementById('libOverlay')) closeLibrary(); }
+async function addFromLibrary(i){
+  const c = LIB_CANDS[i];
+  if (!c || LIB_LEVEL === null) return;
+  const key = String(LIB_LEVEL);
+  const add = Object.assign({}, c); delete add.source;
+  DOC.levels[key] = (DOC.levels[key] || []).concat([add]);
+  closeLibrary();
+  renderFlat();
+  try { await saveDraft(); toast('Added to draft', 'ok'); }
+  catch(e){ console.error('[draft] save failed:', e);
+            toast('Could not save: ' + (e.message || e), 'err'); }
+}
+// Emptying a level is how a church starts lean instead of inheriting 200+ rungs.
+// One aggregate count for the whole level -- per-rung counts would be N queries
+// to answer a question the pastor is asking once.
+async function clearLevel(level){
+  if (!DOC || !DOC.levels) return;
+  const key = String(level);
+  const n = (DOC.levels[key] || []).length;
+  if (!n) return;
+  const { count, error } = await db.from('pathway_progress')
+    .select('id', { count:'exact', head:true }).eq('level', level);
+  const done = error ? null : (count || 0);
+  const msg = 'Take all ' + n + ' rungs off Level ' + level + '?\n\n'
+    + (done === null ? 'Could not check completions.'
+                     : done + ' completion' + (done === 1 ? '' : 's')
+                       + ' at this level stay as history.')
+    + '\n\nThey come off the pathway when you publish, and any of them can be added back from the library.';
+  if (!window.confirm(msg)) return;
+  DOC.levels[key] = [];
+  renderFlat();
+  try { await saveDraft(); toast('Level cleared in draft', 'ok'); }
+  catch(e){ console.error('[draft] save failed:', e);
+            toast('Could not save: ' + (e.message || e), 'err'); }
 }
 function renderDraftBar(){
   const bar = document.getElementById('pwDraftBar');
