@@ -991,9 +991,12 @@ function renderFlat(){
         ? '<button class="rarrow" title="Move down" onclick="flatMove(' + lvKey + ',' + i + ',1)">&#9660;</button>' : '';
       const ed = '<button class="rbtn" onclick="openDocRung(' + lvKey + ',' + i + ')">&#9998; Edit</button>';
       const rm = '<button class="rbtn rbtn-warn" onclick="removeDocRung(' + lvKey + ',' + i + ')">&#10005; Remove</button>';
+      const _live = OVERLAY_BY_KEY[lvKey + '|' + it.rung_key];
+      const st = (_live && _hasDetail(_live)) ? ''
+        : '<span class="rung-star" title="No detail yet -- Edit, then Research">&#10024;</span>';
       return '<div class="flat-row"><span class="flat-pos">' + (i + 1) + '.</span>'
            + '<span class="flat-ttl">' + escapeHTML(it.title_en || it.rung_key) + '</span>'
-           + '<span class="flat-cat">' + escapeHTML(it.category || '') + '</span>'
+           + '<span class="flat-cat">' + escapeHTML(it.category || '') + '</span>' + st
            + '<span style="margin-left:auto">' + ed + rm + up + down + '</span></div>';
     }).join('');
   });
@@ -1053,8 +1056,14 @@ async function openDocRung(level, i){
   const srcEl = document.getElementById('rfSrc');
   if (srcEl) srcEl.value = (it.completion_source === 'auto') ? 'auto' : 'manual';
   _rfToggleAuto();
+  // Carry the live row's id and meta: the DOCUMENT owns text and structure, the
+  // LIVE ROW owns meta -- the one field publish neither reads nor writes. A rung
+  // that exists only in the draft has no row yet, so id stays undefined and the
+  // meta write is skipped until it has been published once.
+  const live = OVERLAY_BY_KEY[String(level) + '|' + it.rung_key] || null;
   openRungForm('doc', { level:level, category:it.category, title_en:it.title_en,
-                        trackable:it.trackable, description_en:it.description_en, meta:{} });
+                        trackable:it.trackable, description_en:it.description_en,
+                        id:(live && live.id), meta:(live && live.meta) || {} });
 }
 // Write the form back into the DOCUMENT. Nothing touches a live row here -- the
 // wall keeps showing what is published until publish runs.
@@ -1211,6 +1220,12 @@ function _chipHtml(r, cat, idx, count){
   const chip = '<button class="tag-link '+cls+'"'+trk+' onclick="openModal(\''+r.id+'\')">'
              + escapeHTML(r.title_en) + '</button>';
   if (!editMode) return chip;                    // edit OFF → byte-identical read-only chip
+  // A draft is open: the wall is a READ-ONLY picture of what is PUBLISHED. Every
+  // editing affordance lives in the flat draft surface, so a change has one place
+  // it can come from and one store it lands in. Leaving these buttons live meant
+  // a wall edit wrote a row the next publish would overwrite from the document --
+  // the same shape as the order_map trap closed in slice C.
+  if (DRAFT) return chip;
   const key = r.level+'|'+r.rung_key;
   const isBase = (r.church_id == null);
   // hidden own overlay (published:false) → greyed + Restore (base returns) or Show (unhide) — no arrows
@@ -1496,6 +1511,20 @@ function researchToMeta(parsed, aiSource){
 async function saveResearch(chip, parsed, aiSource){
   const meta = Object.assign({}, chip.meta||{}, researchToMeta(parsed, aiSource));
   const desc = (parsed && parsed.summary_en) || chip.description_en || null;
+  if (_rfMode === 'doc'){
+    // Split by owner. description_en goes to the DOCUMENT -- writing it to the row
+    // here would be reverted by the next publish, which upserts description from
+    // the document. meta goes to the row, because publish never touches meta.
+    const items = (DOC && DOC.levels && DOC.levels[String(_rfDocLevel)]) || [];
+    const it = items[_rfDocIndex];
+    if (it) it.description_en = desc;
+    await saveDraft();
+    renderFlat();
+    if (!chip.id) return { error:null };   // draft-only rung: no row to hold meta yet
+    return db.from('pathway_rungs')
+             .update({ meta:meta, updated_at:new Date().toISOString() })
+             .eq('id', chip.id);
+  }
   if (chip.church_id == null)   // base chip → create/refresh overlay (NO church_id, server-stamped)
     return customizeBase(chip, { title_en: chip.title_en, description_en: desc, trackable: chip.trackable, meta });
   return editOverlay(chip, { description_en: desc, meta });   // own overlay → patch
