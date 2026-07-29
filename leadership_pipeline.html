@@ -991,6 +991,10 @@ async function saveDraft(){
     .update({ doc:DOC }).eq('id', DRAFT.id);
   if (error) throw error;
   DRAFT.doc = DOC;
+  // Every document mutation funnels through here, so the bar is refreshed here
+  // rather than at five call sites that would each have to remember. The count
+  // is the pastor's only confirmation the change landed (#405).
+  renderDraftBar();
 }
 async function flatMove(level, i, dir){
   if (!DOC || !DOC.levels) return;
