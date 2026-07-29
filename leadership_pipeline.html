@@ -637,6 +637,23 @@ body.edit-on .edit-hint{ display:block; }
 </div>
 
 <!-- L5 EDIT: add / customize / edit rung form -->
+<div class="modal-overlay" id="pubOverlay" onclick="closePublishOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-type" id="pubCtx"></div>
+        <div class="modal-title">Publish this pathway</div>
+      </div>
+      <button class="modal-close" onclick="closePublish()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div id="pubList"></div>
+      <button class="rbtn rbtn-gold" id="pubGo" onclick="doPublish()" style="margin-top:14px;display:none">Publish now</button>
+      <div id="pubMsg" class="rs-msg"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="libOverlay" onclick="closeLibraryOnOverlay(event)">
   <div class="modal">
     <div class="modal-header">
@@ -1246,6 +1263,98 @@ async function clearLevel(level){
   catch(e){ console.error('[draft] save failed:', e);
             toast('Could not save: ' + (e.message || e), 'err'); }
 }
+// -------- pre-publish check + publish (slice F) ------------------------------
+// The validator is the SAME function publish gates on inside its own transaction
+// (104), so what this panel shows and what publish enforces cannot drift. A stale
+// tab that renders a clean panel still cannot push a bad document through.
+function _validSummary(rows){
+  const list = rows || [];
+  let blocks = 0, warns = 0;
+  list.forEach(function(r){
+    if (r.severity === 'block') blocks++; else warns++;
+  });
+  return { blocks:blocks, warns:warns, canPublish:(blocks === 0) };
+}
+// What actually happened, in words a pastor can check against his wall. The
+// all-zero case is worth saying out loud: republishing an unchanged document is
+// a true no-op, and silence would read as failure.
+function _publishSummary(r){
+  if (!r) return 'Published.';
+  const parts = [];
+  if (r.upserted)  parts.push(r.upserted + ' rung' + (r.upserted === 1 ? '' : 's') + ' written');
+  if (r.retired)   parts.push(r.retired + ' retired');
+  if (r.restored)  parts.push(r.restored + ' brought back');
+  if (r.order_map_cleared) parts.push('order reset to the published order');
+  if (!parts.length)
+    return 'Published v' + r.version + '. Nothing changed -- the pathway was already exactly this.';
+  return 'Published v' + r.version + '. ' + parts.join(', ') + '.';
+}
+async function openPublish(){
+  if (!DRAFT) return;
+  document.getElementById('pubCtx').textContent = 'Draft v' + DRAFT.version_no;
+  const host = document.getElementById('pubList');
+  const go   = document.getElementById('pubGo');
+  const msg  = document.getElementById('pubMsg');
+  msg.textContent = ''; msg.style.color = '';
+  host.innerHTML = '<div class="flat-empty">Checking...</div>';
+  go.style.display = 'none';
+  _pwPinOverlay('pubOverlay');
+  document.getElementById('pubOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  const { data, error } = await db.rpc('pathway_version_validate', { p_version_id: DRAFT.id });
+  if (error){
+    host.innerHTML = '<div class="flat-empty">Could not run the check: ' + escapeHTML(error.message || String(error)) + '</div>';
+    return;
+  }
+  const s = _validSummary(data);
+  host.innerHTML = (data && data.length)
+    ? data.map(function(r){
+        const tone = (r.severity === 'block') ? 'var(--l1)' : 'var(--muted)';
+        return '<div class="flat-row"><span class="flat-pos" style="color:' + tone + '">'
+             + (r.severity === 'block' ? '&#10005;' : '!') + '</span>'
+             + '<span class="flat-ttl">' + escapeHTML(r.message || r.code || '') + '</span>'
+             + '<span class="flat-cat">L' + (r.lvl == null ? '-' : r.lvl)
+             + (r.rung_key ? ' &middot; ' + escapeHTML(r.rung_key) : '') + '</span></div>';
+      }).join('')
+    : '<div class="flat-empty">Everything checks out. Nothing is blocking this publish.</div>';
+  if (s.canPublish){
+    go.style.display = '';
+    go.textContent = s.warns ? 'Publish anyway (' + s.warns + ' warning' + (s.warns === 1 ? '' : 's') + ')'
+                             : 'Publish now';
+  }
+}
+function closePublish(){
+  document.getElementById('pubOverlay').classList.remove('open');
+  _pwUnpinOverlay('pubOverlay');
+  document.body.style.overflow = '';
+}
+function closePublishOnOverlay(e){ if (e.target === document.getElementById('pubOverlay')) closePublish(); }
+async function doPublish(){
+  if (!DRAFT) return;
+  const msg = document.getElementById('pubMsg');
+  const go  = document.getElementById('pubGo');
+  if (!window.confirm('Publish this pathway to your church?\n\n'
+      + 'Members see the change immediately. The version you are replacing is kept as your undo.')) return;
+  go.disabled = true;
+  msg.style.color = ''; msg.textContent = 'Publishing...';
+  try {
+    const { data, error } = await db.rpc('publish_pathway_version', { p_version_id: DRAFT.id });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    closePublish();
+    // The draft is now the published version -- there is no open draft any more.
+    // Clearing it is what returns the wall to its normal editable state (D3).
+    DRAFT = null; DOC = null;
+    document.body.classList.remove('flat-on');
+    renderDraftBar();
+    await loadPipeline();
+    toast(_publishSummary(row), 'ok');
+  } catch(e){
+    go.disabled = false;
+    msg.style.color = 'var(--l1)';
+    msg.textContent = 'Publish failed: ' + (e.message || e);
+  }
+}
 function renderDraftBar(){
   const bar = document.getElementById('pwDraftBar');
   if (!bar) return;
@@ -1261,7 +1370,8 @@ function renderDraftBar(){
   _syncFlatLabel();
   renderFlat();
   bar.style.display = 'block';
-  bar.innerHTML = '<b>Editing draft v' + DRAFT.version_no + '</b> \u00b7 '
+  bar.innerHTML = '<button class="rbtn rbtn-gold" style="float:right" onclick="openPublish()">Check &amp; publish</button>'
+    + '<b>Editing draft v' + DRAFT.version_no + '</b> \u00b7 '
     + _docItemCount(DOC) + ' rungs \u00b7 nothing here is live until you publish. '
     + '<span class="pw-draft-sub">The wall below still shows what is published.</span>';
 }
