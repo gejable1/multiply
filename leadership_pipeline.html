@@ -990,18 +990,28 @@ function renderFlat(){
       const down = i < items.length - 1
         ? '<button class="rarrow" title="Move down" onclick="flatMove(' + lvKey + ',' + i + ',1)">&#9660;</button>' : '';
       const ed = '<button class="rbtn" onclick="openDocRung(' + lvKey + ',' + i + ')">&#9998; Edit</button>';
+      const rm = '<button class="rbtn rbtn-warn" onclick="removeDocRung(' + lvKey + ',' + i + ')">&#10005; Remove</button>';
       return '<div class="flat-row"><span class="flat-pos">' + (i + 1) + '.</span>'
            + '<span class="flat-ttl">' + escapeHTML(it.title_en || it.rung_key) + '</span>'
            + '<span class="flat-cat">' + escapeHTML(it.category || '') + '</span>'
-           + '<span style="margin-left:auto">' + ed + up + down + '</span></div>';
+           + '<span style="margin-left:auto">' + ed + rm + up + down + '</span></div>';
     }).join('');
   });
+}
+// The label names where a click TAKES you, matching Edit/Done beside it. It is
+// derived from the class every time rather than written at the two places that
+// change state -- which is exactly how it drifted: the exit path dropped
+// flat-on and left the label reading 'Wall' while the wall was showing (#405).
+function _syncFlatLabel(){
+  const b = document.getElementById('flatToggle');
+  if (!b) return;
+  b.innerHTML = document.body.classList.contains('flat-on')
+    ? '&#8645; Wall' : '&#8645; Draft order';
 }
 function toggleFlat(){
   const on = !document.body.classList.contains('flat-on');
   document.body.classList.toggle('flat-on', on);
-  const b = document.getElementById('flatToggle');
-  if (b) b.innerHTML   = on ? '&#8645; Wall' : '&#8645; Draft order';
+  _syncFlatLabel();
   if (on) renderFlat();
 }
 // -------- document rung form (slice D1) -------------------------------------
@@ -1064,6 +1074,59 @@ async function saveDocRung(){
   renderFlat();
   await saveDraft();
 }
+// -------- remove from draft (slice D2) --------------------------------------
+// Pure: lift item i out, return a NEW array. Out of range returns the SAME array
+// so the caller can tell "nothing happened" by identity, not by comparing length.
+function _docRemove(items, i){
+  if (!Array.isArray(items)) return items;
+  if (i < 0 || i >= items.length) return items;
+  const out = items.slice();
+  out.splice(i, 1);
+  return out;
+}
+// The sentence a pastor reads before taking something off the pathway. It has to
+// say the true thing: the record survives, the rung leaves. Nothing is deleted.
+function _retireMsg(title, count){
+  const t = title || 'this rung';
+  if (count > 0){
+    return count + (count === 1 ? ' member has' : ' members have') + ' completed "' + t + '".\n\n'
+         + 'Removing it keeps their record and takes it off the pathway when you publish.\n\n'
+         + 'Remove it from the draft?';
+  }
+  return 'Remove "' + t + '" from the draft?\n\n'
+       + 'It comes off the pathway when you publish. Nobody has completed it.';
+}
+// Counted for ONE rung at the moment it matters, with head:true so no rows travel.
+// A bulk pre-load would have to page past PostgREST's row cap, and a silently
+// truncated count is worse than no count -- it would under-report the very thing
+// the warning exists to surface. RLS scopes this to the pastor's own church.
+async function countCompletions(level, rung_key){
+  const { count, error } = await db.from('pathway_progress')
+    .select('id', { count:'exact', head:true })
+    .eq('level', level).eq('rung_key', rung_key);
+  if (error){ console.warn('[draft] completion count failed:', error); return null; }
+  return count || 0;
+}
+async function removeDocRung(level, i){
+  if (!DOC || !DOC.levels) return;
+  const key   = String(level);
+  const items = DOC.levels[key] || [];
+  const it    = items[i];
+  if (!it) return;
+  const n = await countCompletions(level, it.rung_key);
+  const msg = (n === null)
+    ? 'Could not check how many members have completed "' + (it.title_en || it.rung_key)
+      + '".\n\nRemove it from the draft anyway?'
+    : _retireMsg(it.title_en, n);
+  if (!window.confirm(msg)) return;
+  const next = _docRemove(items, i);
+  if (next === items) return;
+  DOC.levels[key] = next;
+  renderFlat();
+  try { await saveDraft(); toast('Removed from draft', 'ok'); }
+  catch(e){ console.error('[draft] save failed:', e);
+            toast('Could not save the removal: ' + (e.message || e), 'err'); }
+}
 function renderDraftBar(){
   const bar = document.getElementById('pwDraftBar');
   if (!bar) return;
@@ -1071,10 +1134,12 @@ function renderDraftBar(){
   if (!editMode || !DRAFT){
     bar.style.display = 'none';
     document.body.classList.remove('flat-on');
+    _syncFlatLabel();
     if (ft) ft.style.display = 'none';
     return;
   }
   if (ft) ft.style.display = '';
+  _syncFlatLabel();
   renderFlat();
   bar.style.display = 'block';
   bar.innerHTML = '<b>Editing draft v' + DRAFT.version_no + '</b> \u00b7 '
