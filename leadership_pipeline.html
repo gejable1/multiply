@@ -654,6 +654,19 @@ body.edit-on .edit-hint{ display:block; }
       </label>
       <label class="rf-l">Description</label>
       <textarea id="rfDesc" class="rf-in" rows="3" placeholder="Optional — shown in the rung's detail card"></textarea>
+      <div id="rfDocOnly" style="display:none">
+        <label class="rf-l">Column</label>
+        <select id="rfCat" class="rf-in"></select>
+        <label class="rf-l">How does this get completed?</label>
+        <select id="rfSrc" class="rf-in">
+          <option value="manual">A leader ticks it off</option>
+          <option value="auto">Automatically, when something else is finished</option>
+        </select>
+        <div id="rfAutoWrap" style="display:none">
+          <label class="rf-l">Completed by</label>
+          <select id="rfAuto" class="rf-in"></select>
+        </div>
+      </div>
       <label class="rf-l">Author / Source <span style="color:var(--muted);font-weight:400">(optional)</span></label>
       <input id="rfAuthor" class="rf-in" type="text" maxlength="80" placeholder="e.g. Jim Putman">
 
@@ -976,10 +989,11 @@ function renderFlat(){
         ? '<button class="rarrow" title="Move up" onclick="flatMove(' + lvKey + ',' + i + ',-1)">&#9650;</button>' : '';
       const down = i < items.length - 1
         ? '<button class="rarrow" title="Move down" onclick="flatMove(' + lvKey + ',' + i + ',1)">&#9660;</button>' : '';
+      const ed = '<button class="rbtn" onclick="openDocRung(' + lvKey + ',' + i + ')">&#9998; Edit</button>';
       return '<div class="flat-row"><span class="flat-pos">' + (i + 1) + '.</span>'
            + '<span class="flat-ttl">' + escapeHTML(it.title_en || it.rung_key) + '</span>'
            + '<span class="flat-cat">' + escapeHTML(it.category || '') + '</span>'
-           + '<span style="margin-left:auto">' + up + down + '</span></div>';
+           + '<span style="margin-left:auto">' + ed + up + down + '</span></div>';
     }).join('');
   });
 }
@@ -989,6 +1003,66 @@ function toggleFlat(){
   const b = document.getElementById('flatToggle');
   if (b) b.innerHTML   = on ? '&#8645; Wall' : '&#8645; Draft order';
   if (on) renderFlat();
+}
+// -------- document rung form (slice D1) -------------------------------------
+// The auto-complete vocabulary has ONE home: pathway_auto_source_options() feeds
+// this picklist AND pathway_auto_source_ok(), which the validator and publish
+// both call. The editor never invents a key (#405).
+let AUTO_OPTS = [];
+let _rfDocLevel = null, _rfDocIndex = -1;
+async function loadAutoOptions(){
+  if (AUTO_OPTS.length) return AUTO_OPTS;
+  const { data, error } = await db.rpc('pathway_auto_source_options');
+  if (error){ console.warn('[draft] auto-source options failed:', error); return AUTO_OPTS; }
+  AUTO_OPTS = data || [];
+  return AUTO_OPTS;
+}
+function _fillSelect(el, pairs, current){
+  if (!el) return;
+  el.innerHTML = pairs.map(function(p){
+    return '<option value="' + escapeHTML(p[0]) + '">' + escapeHTML(p[1]) + '</option>';
+  }).join('');
+  if (current != null) el.value = current;
+}
+function _rfToggleAuto(){
+  const wrap = document.getElementById('rfAutoWrap');
+  const src  = document.getElementById('rfSrc');
+  if (wrap && src) wrap.style.display = (src.value === 'auto') ? 'block' : 'none';
+}
+async function openDocRung(level, i){
+  if (!DOC || !DOC.levels) return;
+  const items = DOC.levels[String(level)] || [];
+  const it = items[i];
+  if (!it) return;
+  _rfDocLevel = level; _rfDocIndex = i;
+  await loadAutoOptions();
+  _fillSelect(document.getElementById('rfCat'),
+    Object.keys(CAT_LABEL).map(function(k){ return [k, CAT_LABEL[k]]; }), it.category);
+  _fillSelect(document.getElementById('rfAuto'),
+    AUTO_OPTS.map(function(o){ return [o.key, o.label_en]; }), it.auto_source_key);
+  const srcEl = document.getElementById('rfSrc');
+  if (srcEl) srcEl.value = (it.completion_source === 'auto') ? 'auto' : 'manual';
+  _rfToggleAuto();
+  openRungForm('doc', { level:level, category:it.category, title_en:it.title_en,
+                        trackable:it.trackable, description_en:it.description_en, meta:{} });
+}
+// Write the form back into the DOCUMENT. Nothing touches a live row here -- the
+// wall keeps showing what is published until publish runs.
+async function saveDocRung(){
+  const items = (DOC && DOC.levels && DOC.levels[String(_rfDocLevel)]) || [];
+  const it = items[_rfDocIndex];
+  if (!it) return;
+  const srcEl = document.getElementById('rfSrc');
+  const mode  = (srcEl && srcEl.value === 'auto') ? 'auto' : 'manual';
+  it.title_en          = document.getElementById('rfTitleIn').value.trim();
+  it.description_en    = document.getElementById('rfDesc').value.trim() || null;
+  it.trackable         = document.getElementById('rfTrack').checked;
+  it.category          = document.getElementById('rfCat').value;
+  it.completion_source = mode;
+  it.auto_source_key   = (mode === 'auto')
+    ? (document.getElementById('rfAuto').value || null) : null;
+  renderFlat();
+  await saveDraft();
 }
 function renderDraftBar(){
   const bar = document.getElementById('pwDraftBar');
@@ -1245,6 +1319,10 @@ function openRungForm(mode, target){
   document.getElementById('rfDesc').value      = isAdd ? '' : (target.description_en || '');
   document.getElementById('rfAuthor').value    = (target.meta && target.meta.author) || '';
   document.getElementById('rfErr').textContent = '';
+  const docOnly = document.getElementById('rfDocOnly');
+  if (docOnly) docOnly.style.display = (mode === 'doc') ? 'block' : 'none';
+  const srcSel = document.getElementById('rfSrc');
+  if (srcSel) srcSel.onchange = _rfToggleAuto;
   rsSetup(mode, target);   // ✨ Research this — edit-mode + L5 only, customize/edit only
   _pwPinOverlay('rungFormOverlay');
   document.getElementById('rungFormOverlay').classList.add('open');
@@ -1262,6 +1340,11 @@ async function saveRungForm(){
   const trackable = document.getElementById('rfTrack').checked;
   const description_en = document.getElementById('rfDesc').value.trim() || null;
   const author = document.getElementById('rfAuthor').value.trim();
+  if (_rfMode === 'doc'){
+    try { await saveDocRung(); closeRungForm(); toast('Saved to draft', 'ok'); }
+    catch(e){ document.getElementById('rfErr').textContent = 'Could not save: ' + (e.message || e); }
+    return;
+  }
   let promise, ok;
   if (_rfMode === 'add'){
     const f = { title_en:title, trackable:trackable, description_en:description_en };
