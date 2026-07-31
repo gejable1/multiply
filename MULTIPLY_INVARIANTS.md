@@ -4365,4 +4365,94 @@ Migration 103 gated on the surveyed row counts of fifteen surfaces, which is the
 
 ---
 
+### **423. One order of record per mode, or the interface lies twice**
+
+Slice C put the pathway editor into draft mode while the wall kept rendering published rows. The wall's reorder arrows write `order_map`; publish CLEARS `order_map` because `sort_order` is the order of record. So while a draft was open, every arrow press looked correct -- `pathwayOrder.sort` reads the map first -- and would be silently discarded at publish. The same shape appeared twice more the same day: a flat-view toggle label written in two places drifted out of step with the class it described, and a draft rung count written once at open never moved again while the document changed underneath it.
+
+**RULE:** when a surface has two modes, each mode has exactly ONE store that owns a given fact, and every affordance in that mode writes to that store or is removed. Derived display -- labels, counts, positions -- is re-derived from state on every render, never written at the sites that change state. A control that writes to the store the current mode does not own must be disabled, not left hopeful.
+
+**Established July 31, 2026 (Session 85). Invariant #423 added - count now 423.**
+
+---
+
+### **424. The document owns structure and text; the live row owns `meta`**
+
+`publish_pathway_version()` upserts title, description, category, `completion_source`, `auto_source_key` and `trackable` from the version document, and deliberately never reads or writes `meta` -- which carries system flags like the giving-track marker. Relocating the AI research feature into the draft editor unchanged would have written its summary to `description_en` on the live row, where the next publish reverts it. The feature would have appeared to work and quietly lost every summary.
+
+**RULE:** where two writers touch one row, name the owner of each field and split the write accordingly. `meta` is the one field publish does not own, which is precisely why a direct write to it is safe and a direct write to anything else is not. Prove the split with a harness that asserts neither field crosses.
+
+**Established July 31, 2026 (Session 85). Invariant #424 added - count now 424.**
+
+---
+
+### **425. A post-condition asserts a DELTA from BASE, never a magic count**
+
+Eight times in one session a patcher post-condition failed on a number I had guessed rather than measured: `BASE_KEYS` was 6 not 4, `flat-cell` 8 not 3, `AUTO_OPTS` 7 not 5, `db.from('pathway_rungs')` 12 not 4. Each failure cost a round trip and none indicated a defect in the patch. One assertion counted the substring `foot`, which matched inside unrelated words. The worst carried the comment "see note" -- a guess wearing an explanation.
+
+**RULE:** a post-condition either counts a token distinctive enough to mean one thing, or -- far better -- captures the count at BASE and asserts the DELTA: `eq(src.count(X), BASE_X + 1, 'exactly one new call site')`. The delta form states the invariant the edit is actually claiming, survives unrelated growth in the file, and cannot rot.
+
+**Established July 31, 2026 (Session 85). Invariant #425 added - count now 425.**
+
+---
+
+### **426. A commit may describe what it defers; it must not name the slice that will close it**
+
+Slice D1 shipped a disclosed gap and its commit message said "D2 closes it." D2 was rescoped mid-session for a good reason -- closing the gap would have taken the research path down with it -- and the gap closed in D3. The code was right at every step; the permanent record was wrong, and the conversation that justified the rescope does not survive into the repo. CC flagged it from the repo alone, which is exactly who gets misled.
+
+**RULE:** a commit may state what it defers and why. It may not name the future slice, PR or session that will close it, because the deferral outlives the plan and a commit cannot be corrected once merged. Describe the debt, not the repayment date.
+
+**Established July 31, 2026 (Session 85). Invariant #426 added - count now 426.**
+
+---
+
+### **427. A gate measures the change it gates, not everything around it**
+
+Migration 105's effect gate ran `auto_complete_pathway_rungs()` and demanded 0. It failed in production -- correctly, on data that was fine. The engine runs seven arms; six predate 105 and had a genuine backlog waiting, so one legitimate completion was written that had nothing to do with the new arm. The migration rolled back cleanly and nothing was harmed, but the gate had asserted a claim that was never 105's to make.
+
+**RULE:** a gate isolates its own effect. Count the thing the change produces -- here, rows whose `note` carries the new arm's prefix -- before and after, and assert on that difference. Report the surrounding activity rather than suppressing it or forbidding it. "My change did nothing" and "nothing happened" are different claims, and only the first belongs to the change.
+
+**Established July 31, 2026 (Session 85). Invariant #427 added - count now 427.**
+
+---
+
+### **428. A proving environment cleaner than production proves less than it appears to**
+
+Migration 105 ran green on a scratch PostgreSQL built from a minimal schema, then failed its own gate on the live database. The scratch DB had no backlog, so the flawed assumption held there. The gate was correct; the proving ground was too tidy to refute it.
+
+**RULE:** a scratch database proves syntax, structure and logic. It does not prove assumptions about ACCUMULATED STATE -- backlogs, partially-applied history, rows nobody has looked at in months. Where a check depends on what production has been doing while nobody watched, seed the scratch environment with that condition deliberately, or accept that the gate inside the transaction is the real proof and design it to fail safely.
+
+**Established July 31, 2026 (Session 85). Invariant #428 added - count now 428.**
+
+---
+
+### **429. A defect uniform across everything you measured indicts the measurement first**
+
+Reviewing PR #283 I audited a 21-slide deck and reported 19 slides misordered. Every original slide was shifted by exactly the number of inserted slides -- a pattern too uniform to be authoring error. PowerPoint stores running order in `presentation.xml`'s `<p:sldIdLst>`, not in slide part filenames; a slide inserted third is still `slide17.xml` on disk. The deck was entirely correct and I had nearly sent it back.
+
+**RULE:** when a check condemns nearly everything it looked at, and the failures share one shape, suspect the instrument before the subject. Re-derive the measurement from the format's own source of truth and re-run before reporting. A reviewer's false alarm costs trust in every real finding that follows.
+
+**Established July 31, 2026 (Session 85). Invariant #429 added - count now 429.**
+
+---
+
+### **430. A harness proves the logic you wrote; only the schema proves the contract you assumed**
+
+Slice F is a thin client over two server RPCs. Its harness passed 8/8 on the summary and gate logic while proving nothing about whether `p_version_id` was the real parameter name or whether `version`/`upserted`/`retired` were real return columns. A named-parameter mismatch would have thrown at runtime with every gate green.
+
+**RULE:** where code calls something it does not own -- an RPC, a table, a view, a library -- the harness is necessary and not sufficient. Read the declaration and check the call against it: parameter names, return columns, single-row vs set, and whether the client unwraps correctly. The harness covers what you wrote; the schema covers what you assumed.
+
+**Established July 31, 2026 (Session 85). Invariant #430 added - count now 430.**
+
+---
+
+### **431. A lesson deck's running order is `sldIdLst`, and every build asserts printed number == deck position**
+
+Facilitators run BTLI classes from the slides alone, so each slide carries a printed "N / total". When questions are inserted into an existing deck those two can drift, and the facilitator discovers it in front of the class. The audit that checks this must read `ppt/presentation.xml`'s `<p:sldIdLst>` resolved through `ppt/_rels/presentation.xml.rels` -- never the slide part filenames (#429). Run canonically across all eleven decks, it passed eight and found three (L5, L6, L11) carrying no running number at all, so their order cannot be verified by any means.
+
+**RULE:** every deck build ends by walking slides in `sldIdLst` order and asserting each printed running number equals its position, via `tools/check_slide_order.py`. A deck with no running numbers FAILS as unverifiable rather than passing silently. This applies to decks already in the repo and to L12-L20 as they are written.
+
+**Established July 31, 2026 (Session 85). Invariant #431 added - count now 431.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*

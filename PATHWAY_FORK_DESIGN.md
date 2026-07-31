@@ -78,7 +78,7 @@ pathway_section_order            <-- CLEARED on publish; see the correction in s
 | 4 | Delete the copy, start over | "Start over" archives the current version and opens a fresh draft — from template, or empty. Nothing is destroyed; history intact. |
 | 5 | Trackable items: manual tick or autocomplete | `completion_source` and `auto_source_key` **already exist** on the table. This is a form change — expose them — not an architecture change. |
 | 6 | Build from scratch, add from repository | Empty draft = levels only. An "Add from library" picker pulls any template rung in. Same picker serves both paths. |
-| 7 | Flat view for reordering | The flat order is already the order of record as of this session. The flat view is a draft-mode editing surface writing `doc.order[level]`. |
+| 7 | Flat view for reordering | The flat order is already the order of record as of this session. The flat view is a draft-mode editing surface; a rung’s order is its array position in `doc.levels["<n>"]`, which publish turns into `sort_order = pos+1` (there is no `doc.order` key). |
 
 ---
 

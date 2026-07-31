@@ -128,3 +128,63 @@ Content-slide header format: **`<emoji> <MOVEMENT> · <SECTION>`**, gold, bold, 
 ---
 
 *Standard born from L2 "Bible Meditation." Every BTLI deck: questions on their own slides, time on every slide, the whole guide in the notes — so the shepherd can look up from the paper and into the faces.* ✦
+
+## Running order — the check every deck build must pass
+
+A facilitator runs the class from the slides alone. That is the whole point of
+putting the participant-guide questions into the deck, and it is why every slide
+carries a printed running number: **"7 / 21"**. The number tells the facilitator
+where they are and how much of the lesson remains.
+
+When questions are inserted into an existing deck, the printed number and the
+slide's real position can drift apart. The facilitator finds out in front of the
+class.
+
+### The rule
+
+Every deck build finishes by running:
+
+```bash
+python3 tools/check_slide_order.py lessons/btli101_xrw5fg/*.pptx
+```
+
+It walks the slides in **deck order** and asserts that each slide's printed
+running number equals its position. Exit 0 = clean. Exit 1 = at least one deck
+has a real problem.
+
+A deck in which **no slide carries a running number FAILS** as *unverifiable*,
+rather than passing silently. Three decks are in that state today — **L5, L6 and
+L11** — so their order cannot be checked by any means. That is a real gap for the
+facilitator, not a tooling nicety.
+
+### The trap the tool exists to avoid
+
+**PowerPoint does not store running order in the slide part filenames.** It stores
+it in `ppt/presentation.xml` under `<p:sldIdLst>`, resolved through
+`ppt/_rels/presentation.xml.rels`. A slide inserted third is still `slide17.xml`
+on disk, and that is entirely normal.
+
+Auditing by filename reports every slide after the insertion point as misordered.
+This produced a false alarm on PR #283, where 19 of 21 slides were declared broken
+and all 21 were in fact correct — the questions had been inserted properly and only
+the measurement was wrong.
+
+> A defect uniform across everything you measured is more likely a fault in the
+> measurement than in the thing measured. (Invariant #429)
+
+The tell was there: every original slide was shifted by exactly the number of
+slides inserted before it. A pattern that uniform is an instrument error, not
+authoring error.
+
+### When adding questions to an existing deck
+
+1. Insert the question slides at their pedagogical position, not at the end. A
+   "why did you rate yourself that way?" follow-up belongs immediately after the
+   rating, while the answer is still live — not fourteen slides later.
+2. Renumber every slide's printed `N / total` for the new total.
+3. Run the check. It should report `PASS` with the new slide count.
+4. Notes pages should match the slide count; media should be unchanged.
+
+A drop in on-disk file size is not by itself a problem — a rebuilt deck is often
+smaller because it is deflated rather than stored. Compare **uncompressed** part
+sizes before concluding anything was lost.
