@@ -4130,7 +4130,7 @@ async function renderMltPathway(mem){
   try{
     const [rungRes, progRes] = await Promise.all([
       db.from('pathway_rungs').select('*').eq('level', lvl).not('church_id','is',null),
-      db.from('pathway_progress').select('rung_key, marked_by, completed_at').eq('member_id', mem.id).eq('level', lvl),
+      db.from('pathway_progress').select('rung_key, marked_by, completed_at, note').eq('member_id', mem.id).eq('level', lvl),
       MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
@@ -4143,6 +4143,10 @@ async function renderMltPathway(mem){
     _mltRungCache[lvl] = byKey;
     const _own = Object.values(byKey).filter(r=>r.published!==false && !(r.meta && r.meta.track==='giving'));
     const done = new Set((progRes.data||[]).map(p=>p.rung_key));
+    // Who wrote each completion, keyed the same way as `done`. Read by
+    // _mltPwToggle so an un-tick can warn before the engine undoes it.
+    _mltPwNote[lvl] = {};
+    (progRes.data||[]).forEach(function(p){ _mltPwNote[lvl][p.rung_key] = p.note || null; });
     // Retired leaves the count, not the record: outside nDone AND outside the
     // denominator, so this can never read 7/6.
     const _live = _own.filter(r=>!r.retired_at);
@@ -4208,6 +4212,36 @@ async function renderMltPathway(mem){
 
 // Overlay-resolved rung map, filled by renderMltPathway (level -> {rung_key: row}).
 const _mltRungCache = {};
+const _mltPwNote = {};   // level -> { rung_key: note }  (null = hand-marked)
+
+// ---- Auto-completed rungs: warn before an un-tick the engine will undo ----
+// auto_complete_pathway_rungs() (migrations 084 / 094 / 105) stamps every row it
+// writes with note='auto:<source>'. A hand mark leaves note null. So the row that
+// is about to be deleted already says who wrote it -- no need to re-derive the
+// engine's seven-arm predicate out here, where it would immediately drift.
+//
+// Un-ticking an engine-written row succeeds, and then reverts. The engine is
+// hooked on the WEEKLY SVI compute (index.ts, Wave 5c), not a nightly job, so the
+// tick can reappear up to seven days later -- far enough from the click that
+// nobody connects the two. That silence is the bug; this is the warning.
+//
+// DELIBERATE TWIN: a byte-identical copy lives in the other marking surface
+// (lc_leader_tool.html and multiply_dashboard.html are the only two writers).
+// Move this into multiply_shared.js the moment a THIRD surface needs it -- not
+// before, because a ?v= bump costs 22 consumers a cache round for two lines.
+function _pwConfirmUntick(note, memberName){
+  const src = String(note || '');
+  if(src.indexOf('auto:') !== 0) return true;   // hand-marked -- the un-tick sticks
+  return confirm(
+    'This rung was marked by the system, not by hand.\n\n' +
+    'Source: ' + src.slice(5) + '\n\n' +
+    'Un-ticking removes it now, but the weekly run will put it back, because ' +
+    (memberName || 'this member') + ' still meets that condition.\n\n' +
+    'To stop it returning, change this rung\'s completion source in the ' +
+    'Leadership Pipeline editor, or correct the record underneath it.\n\n' +
+    'Un-tick anyway?'
+  );
+}
 
 // The nine fruit of the Spirit (Gal 5:22-23). These are NOT tasks. A rung named
 // "Joy" is not something a disciple "completes" -- it is character being formed,
@@ -4343,8 +4377,10 @@ async function _mltPwToggle(memberId, level, rungKey, isDone){
   if(!canMark){ toast('You can only mark your own disciples.','error'); return; }
   try{
     if(isDone){
+      if(!_pwConfirmUntick((_mltPwNote[level]||{})[rungKey], mem.name)) return;
       const res = await db.from('pathway_progress').delete().eq('member_id', memberId).eq('level', level).eq('rung_key', rungKey);
       if(res.error) throw res.error;
+      if(_mltPwNote[level]) delete _mltPwNote[level][rungKey];
       toast('Unmarked','');
     } else {
       const res = await db.from('pathway_progress').insert({ member_id: memberId, level: level, rung_key: rungKey, marked_by: LEADER.leaderId });
