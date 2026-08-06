@@ -2975,8 +2975,12 @@ async function _ackCelebration(){
 //   • LC meeting→ event_type 'LC Meeting',       rolling last 7 days
 //
 // LC meeting is WAIVABLE ("No LC meeting this week") — suppresses that
-// one line for 7 days, expiring at the next Sunday 00:00 Manila. Sunday
-// and Wednesday have NO waiver. Each line is independent (clearing one
+// one line for 7 days, expiring at the next Sunday 00:00 Manila. The
+// WEDNESDAY prayer meeting is ALSO waivable ("No prayer meeting this
+// week") -- but by a DIFFERENT mechanism; see _wagWedWaived for why a
+// timed expiry is wrong for a dated service. SUNDAY is never waivable:
+// the Sunday service does not get cancelled, so there is nothing to
+// waive. Each line is independent (clearing one
 // does not clear the others — Pastor's Q2). The modal is forceful (it
 // reappears each MLT open while items are missing) but has an "I'll do
 // this later" escape so a data-read bug can't lock out all 48 leaders
@@ -3115,6 +3119,40 @@ function _wagSetLcgWaiver(leaderId) {
   } catch (e) { /* non-fatal */ }
 }
 
+// ---- Wednesday prayer-meeting waiver ---------------------------------------
+// Stores the SERVICE DATE that was waived, not an expiry instant, and this is
+// deliberately NOT how the LC waiver above works.
+//
+// The LC line is a rolling last-7-days window with no canonical date, so a
+// timed expiry is the only handle it has. The Wednesday line is a DATED
+// service whose nag window runs Wed 22:00 through the FOLLOWING Wed 18:00 --
+// longer than a calendar week. Copying the LC rule (expire next Sunday 00:00)
+// un-waives a service that is still inside its own window: simulated against
+// _wagActiveServiceDate, a Wednesday cancelled on Aug 5 and waived on Aug 6
+// starts nagging again on Sun Aug 9 and keeps nagging Mon, Tue and Wed -- four
+// days of chasing a meeting the leader already said did not happen.
+//
+// Keying to the service date is self-clearing instead: when the window rolls
+// to the next Wednesday, wedDate changes and the stored date simply stops
+// matching, so the following week nags normally with nothing to expire.
+//
+// Per-device, like the LC waiver -- localStorage, not a row. A leader who
+// opens MLT on a second phone will be asked again. Same limitation as the LC
+// waiver has always had; fixing it is a table, not a flag.
+const WAG_WED_WAIVER_PREFIX = 'mlt_wed_waiver_';  // + leaderId -> waived YYYY-MM-DD
+
+function _wagWedWaived(leaderId, dateISO) {
+  if (!dateISO) return false;
+  try { return localStorage.getItem(WAG_WED_WAIVER_PREFIX + leaderId) === dateISO; }
+  catch (e) { return false; }
+}
+
+function _wagSetWedWaiver(leaderId, dateISO) {
+  if (!dateISO) return;   // no active service date -- nothing to waive
+  try { localStorage.setItem(WAG_WED_WAIVER_PREFIX + leaderId, dateISO); }
+  catch (e) { /* non-fatal */ }
+}
+
 // Query: did THIS leader personally log a present row of event_type on a
 // given Manila-local date (Sunday/Wednesday checks)? Date is matched on the
 // stored event_date (which is a plain YYYY-MM-DD), so we compare strings.
@@ -3173,11 +3211,11 @@ async function _wagComputeMissing(leaderId) {
   if (sun === false) {
     missing.push({ key: 'Sunday Service', label: `Sunday service — ${_wagPrettyDate(sundayDate)}`, date: sundayDate, waivable: false });
   }
-  if (wed === false) {
-    missing.push({ key: 'Prayer Meeting', label: `Wednesday service — ${_wagPrettyDate(wedDate)}`, date: wedDate, waivable: false });
+  if (wed === false && !_wagWedWaived(leaderId, wedDate)) {
+    missing.push({ key: 'Prayer Meeting', label: `Wednesday service — ${_wagPrettyDate(wedDate)}`, date: wedDate, waivable: true, waiveLabel: 'No prayer meeting this week' });
   }
   if (lcg === false && !_wagLcgWaived(leaderId)) {
-    missing.push({ key: 'LC Meeting', label: 'LC meeting (this week)', date: null, waivable: true });
+    missing.push({ key: 'LC Meeting', label: 'LC meeting (this week)', date: null, waivable: true, waiveLabel: 'No LC meeting this week' });
   }
   return { missing, errored };
 }
@@ -3192,10 +3230,16 @@ function _wagGoLog(eventType) {
   } catch (e) { console.warn('_wagGoLog nav failed:', e); }
 }
 
-function _wagWaiveLcg() {
+// One entry point for both waivers. The two mechanisms differ (see
+// _wagWedWaived) but the affordance is identical, so the modal keeps one
+// button shape. Anything not listed here is simply not waivable -- Sunday
+// falls through and returns without writing anything.
+function _wagWaive(key, dateISO) {
   if (!LEADER || !LEADER.leaderId) return;
-  _wagSetLcgWaiver(LEADER.leaderId);
-  // Re-run the gate so the LCG line drops off; if nothing left, modal closes.
+  if (key === 'LC Meeting')            _wagSetLcgWaiver(LEADER.leaderId);
+  else if (key === 'Prayer Meeting')   _wagSetWedWaiver(LEADER.leaderId, dateISO);
+  else return;
+  // Re-run the gate so that line drops off; if nothing is left, modal closes.
   runWeeklyAttendanceGate();
 }
 
@@ -3215,8 +3259,8 @@ function _wagRenderModal(missing) {
 
   // ── Attendance section ──
   const attLines = missing.map(item => {
-    const waiveBtn = item.waivable
-      ? `<button onclick="_wagWaiveLcg()" style="margin-left:8px;padding:7px 12px;background:transparent;color:#9a9ab4;border:1px solid #3a3a4a;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">No LC meeting this week</button>`
+    const waiveBtn = (item.waivable && item.waiveLabel)
+      ? `<button onclick="_wagWaive('${item.key}','${item.date || ''}')" style="margin-left:8px;padding:7px 12px;background:transparent;color:#9a9ab4;border:1px solid #3a3a4a;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">${item.waiveLabel}</button>`
       : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#22222c;border:1px solid #2e2e3c;border-left:3px solid #f87171;border-radius:10px;padding:12px 14px;margin-bottom:8px;flex-wrap:wrap;">
       <div style="flex:1;min-width:150px;">
