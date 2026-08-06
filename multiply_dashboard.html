@@ -3442,11 +3442,12 @@ async function updateIntStatus(id,status){
 // loadMembers before renderAll(). Mirrors MLT's overlay/trackable/giving logic.
 let _PW_RUNGS = {};   // level -> { rung_key: resolved_row }
 let _PW_PROG  = {};   // member_id -> Set('level|rung_key')
+let _PW_NOTE  = {};   // member_id -> { 'level|rung_key': note }  (null = hand-marked)
 async function _loadPathwayCache(){
   try{
     const [rungRes, progRes] = await Promise.all([
       db.from('pathway_rungs').select('*').not('church_id','is',null),
-      db.from('pathway_progress').select('member_id, level, rung_key'),
+      db.from('pathway_progress').select('member_id, level, rung_key, note'),
       MultiplyShared.pathwayOrder.load(true)
     ]);
     if(rungRes.error) throw rungRes.error;
@@ -3461,11 +3462,14 @@ async function _loadPathwayCache(){
     });
     _PW_RUNGS = byLvl;
     const prog = {};
+    const notes = {};
     (progRes.data||[]).forEach(function(p){
       (prog[p.member_id] = prog[p.member_id] || new Set()).add(p.level + '|' + p.rung_key);
+      (notes[p.member_id] = notes[p.member_id] || {})[p.level + '|' + p.rung_key] = p.note || null;
     });
     _PW_PROG = prog;
-  }catch(e){ console.warn('[md-pathway] cache load failed:', e); _PW_RUNGS = {}; _PW_PROG = {}; }
+    _PW_NOTE = notes;
+  }catch(e){ console.warn('[md-pathway] cache load failed:', e); _PW_RUNGS = {}; _PW_PROG = {}; _PW_NOTE = {}; }
 }
 // Trackable, published, non-giving rungs for a level (the denominator set).
 function _pwTrackable(level){
@@ -3534,18 +3538,50 @@ function rPathway(m){
   }
   w.innerHTML = h || '<div style="color:var(--muted);font-size:12px">No pathway rungs defined yet.</div>';
 }
+// ---- Auto-completed rungs: warn before an un-tick the engine will undo ----
+// auto_complete_pathway_rungs() (migrations 084 / 094 / 105) stamps every row it
+// writes with note='auto:<source>'. A hand mark leaves note null. So the row that
+// is about to be deleted already says who wrote it -- no need to re-derive the
+// engine's seven-arm predicate out here, where it would immediately drift.
+//
+// Un-ticking an engine-written row succeeds, and then reverts. The engine is
+// hooked on the WEEKLY SVI compute (index.ts, Wave 5c), not a nightly job, so the
+// tick can reappear up to seven days later -- far enough from the click that
+// nobody connects the two. That silence is the bug; this is the warning.
+//
+// DELIBERATE TWIN: a byte-identical copy lives in the other marking surface
+// (lc_leader_tool.html and multiply_dashboard.html are the only two writers).
+// Move this into multiply_shared.js the moment a THIRD surface needs it -- not
+// before, because a ?v= bump costs 22 consumers a cache round for two lines.
+function _pwConfirmUntick(note, memberName){
+  const src = String(note || '');
+  if(src.indexOf('auto:') !== 0) return true;   // hand-marked -- the un-tick sticks
+  return confirm(
+    'This rung was marked by the system, not by hand.\n\n' +
+    'Source: ' + src.slice(5) + '\n\n' +
+    'Un-ticking removes it now, but the weekly run will put it back, because ' +
+    (memberName || 'this member') + ' still meets that condition.\n\n' +
+    'To stop it returning, change this rung\'s completion source in the ' +
+    'Leadership Pipeline editor, or correct the record underneath it.\n\n' +
+    'Un-tick anyway?'
+  );
+}
+
 // Pastor marks/unmarks any rung. RLS (057) allows auth_level()>=5 to write any
 // member. Optimistic cache update + re-render of all three surfaces.
 async function _mdPwToggle(memberId, level, rungKey, isDone){
   const set = _PW_PROG[memberId] || (_PW_PROG[memberId] = new Set());
+  const notes = _PW_NOTE[memberId] || (_PW_NOTE[memberId] = {});
   const key = level + '|' + rungKey;
   try{
     if(isDone){
+      const _m = members.find(function(x){ return x.id===memberId; });
+      if(!_pwConfirmUntick(notes[key], _m && _m.name)) return;
       const res = await db.from('pathway_progress').delete().eq('member_id',memberId).eq('level',level).eq('rung_key',rungKey);
-      if(res.error) throw res.error; set.delete(key);
+      if(res.error) throw res.error; set.delete(key); delete notes[key];
     } else {
       const res = await db.from('pathway_progress').insert({ member_id:memberId, level:level, rung_key:rungKey, marked_by:(LEADER&&LEADER.leaderId)||null });
-      if(res.error) throw res.error; set.add(key);
+      if(res.error) throw res.error; set.add(key); notes[key] = null;   // hand-marked
     }
     const m = members.find(function(x){ return x.id===memberId; });
     if(m) rPathway(m);
