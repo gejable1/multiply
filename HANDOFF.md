@@ -11,58 +11,112 @@
 
 ## 🎯 Jumpstart prompt for next session
 
-Hi Claude, kapatid -- fresh session. LEAN READ-IN: clone the repo, but do NOT read
-`HANDOFF.md` or `MULTIPLY_INVARIANTS.md` in full. Pull the rest on demand.
-
 ```
+Kapatid -- fresh session. LEAN READ-IN: clone the repo, but do NOT read
+HANDOFF.md or MULTIPLY_INVARIANTS.md in full. Pull the rest on demand.
 git clone --quiet https://github.com/gejable1/multiply.git && cd multiply
 git ls-remote https://github.com/gejable1/multiply.git refs/heads/main   # cross-check HEAD
-```
-
 Then read ONLY:
 1) Invariant count, WITHOUT reading the file:
-   `git cat-file blob origin/main:MULTIPLY_INVARIANTS.md > /tmp/i.md`
-   `grep -oE '^### \*\*[0-9]{3}\.' /tmp/i.md | grep -oE '[0-9]{3}' | sort -n | tail -1`
-   `grep -c 'count now 422' /tmp/i.md`
-   Land on **422** (through Session 84). If behind, re-pull.
-2) HANDOFF Jumpstart + the Session 84 section only:
-   `git cat-file blob origin/main:HANDOFF.md > /tmp/h.md` then `grep -n 'SESSION 84' /tmp/h.md`
-3) `PATHWAY_FORK_DESIGN.md` -- in full. **Phase 4 BACKEND is shipped** (102 validator +
-   vocabulary, 103 rename, 104 publish). What remains is the EDITOR FRONTEND.
+   git cat-file blob origin/main:MULTIPLY_INVARIANTS.md > /tmp/i.md
+   grep -oE '^### \*\*[0-9]{3}\.' /tmp/i.md | grep -oE '[0-9]{3}' | sort -n | tail -1
+   grep -c 'count now 442' /tmp/i.md
+   Land on 442 (through Session 86). If behind, re-pull.
+2) HANDOFF Jumpstart + the Session 86 section only:
+   git cat-file blob origin/main:HANDOFF.md > /tmp/h.md   then   grep -n 'SESSION 86' /tmp/h.md
+FETCH ON DEMAND, never up front: schema.json (query with python per table, never
+print whole, NEVER guess a column -- #223/#407/#418); invariants (grep the
+specific '### **NNN.' block); deployed files (git cat-file blob, only what you
+will edit); migrations (only the ones you are extending, and lift function bodies
+VERBATIM rather than retyping them).
+LEDGER STATE, declared so you do not chase it: forward files 109, ledger 109 rows,
+`006` never existed. Reconcile by SET DIFF not counting (#410); read RAW versions,
+never lpad (#401).
 
-FETCH ON DEMAND, never up front: `schema.json` (query with python per table, never print
-whole, NEVER guess a column -- #223/#407/#418); invariants (grep the specific
-`### **NNN.` block); deployed files (`git cat-file blob`, only what you will edit).
+STATE AT CLOSE. SVI is no longer dark: all twelve churches hold the same seven
+weight profiles, and seed_svi_weight_profiles(church_id) is the one home for the
+defaults, so no future tenant can be onboarded without them. The pipeline now
+carries all five columns of the Pastor's original design -- Ministry Placement
+(31 reference rungs, L0 inherits L1) and Output (15 trackable, under competency)
+were added to the TEMPLATE lane only and surface to each pastor as
+template_synced_at opt-ins. The template is clean: ten shadow/duplicate coaching
+notes gone, EGR named as the progression it always was. ROSEHILL AND TRUE NORTH
+STILL CARRY THE TEN DUPLICATES ON PURPOSE -- the Pastor cleans them in the editor.
 
-LEDGER STATE, declared so you do not chase it: forward files **104**, ledger **104
-rows**, `006` never existed. Reconcile by SET DIFF not counting (#410); read RAW
-versions, never lpad (#401).
+FIRST JOB, pick one:
+(a) The freeze lift. `_pwReviewGate` requires is_platform_admin on top of L5;
+    dropping that gives every pastor the editor for his own lane. GATED on one
+    thing only: the Pastor must write the notice-banner sentence, because
+    "this view is read-only" becomes false. Pilot picks itself -- Agape (68
+    members), Montalban (17), GGCF (13). Eight of the other churches hold one
+    member, the pastor. True North is a TEST church; Timothy is a test pastor.
+    Note `const isEditor = ...` is a parse-time boolean: the #169 Object.assign
+    re-sync CANNOT repair it, so it must become a function BEFORE any embed
+    hardening is attempted. Latent not live -- the editor has exactly one entry
+    point (MD line ~1019), which guarantees the session is already in
+    sessionStorage.
+(b) Rosehill + True North cleanup, by hand in the editor, as the worked example
+    the other pastors get shown. Rosehill has 9 hand-marked completions on
+    non-trackable coaching notes; deleting those rungs orphans the marks.
+(c) MD's dark-church surface: "No active weight profiles found" in grey text
+    under a live Save button that will happily write an empty profile. Moot for
+    all twelve now, but the next church onboarded before someone seeds it sees
+    it again.
+(d) E2 -- create a rung from scratch and move a rung between levels
+    (pathway_progress is keyed on level+rung_key, so a move ORPHANS completions).
 
-FIRST JOB: the **pathway editor frontend** in `leadership_pipeline.html` -- draft mode,
-flat view, library picker, retire warnings with the completion count, and wiring the two
-RPCs that now exist: `pathway_version_validate(uuid)` for display and
-`publish_pathway_version(uuid)` for the publish button. The backend contract is settled
-and proved; do not redesign it. Design s8 lists the six approved comforts.
+DISCIPLINE (short list). BASE->patcher->WANT as ONE CC block (#347), back-checked
+byte-for-byte (#318/#215) and diffed against origin/main reading the DELETION
+column first (#435). Assert the expected origin/main sha after fetching -- a
+successful fetch is not a current ref (#434). Post-conditions assert a DELTA from
+BASE, never a magic count (#425). Any patch to executable logic gets RUN with a
+value predicted in advance (#420); harnesses lift from the file under test by a
+path proved in the same run (#415). A harness proves the logic you wrote -- only
+the schema proves the contract you assumed (#430). A gate measures its own effect
+(#427) and must be scoped to exactly the lanes its change edits (#432), must be
+the SAME STATEMENT as the action it guards (#433), and when one gate is found
+over-broad every sibling gate in the file is audited before shipping (#436). A
+scratch DB unlike production proves the wrong thing (#428). A defect uniform
+across everything measured indicts the measurement first (#429) -- six instrument
+faults in S86, zero subject faults. Rows and the doc that regenerates them move
+together (#437). Read the writer's own signature rather than re-deriving its rule
+(#438). Never retag or delete on what a category NAME seems to mean; state it to
+the Pastor first (#440). "All churches" is not one shape -- fingerprint the lanes
+(#441). SQL flat (#209), self-verifying on its own effects (#403), stamped
+(#402), LF, committed immediately (#242), proved on ephemeral PG16 and by
+deliberate failure (#413). Files with \uXXXX escapes or non-ASCII ship as
+sha-verified UPLOADS, never inline. CC blocks never hard-code `gh` (#414).
+Elegant + scalable, never easiest (#197).
 
-STANDING FACTS about publish, so you do not re-derive them: republishing an unchanged
-document is a TRUE no-op (verified across all 12 churches, 2,447 items, `would_change=0`,
-`would_retire=0`); tombstones (`published=false`) are never retired; the Giving Journey
-lane is blocked from any church document; `sort_order` is the ONE order of record and
-publish clears `order_map`, because the map outranks it in `multiply_shared.js:3391`.
-
-DISCIPLINE (short list): BASE->patcher->WANT as ONE CC block (#347), back-checked
-byte-for-byte (#318/#215). A patcher asserts POST-CONDITIONS on its output, not just
-that the edit matched once (#419) -- and any patch to executable logic gets RUN with a
-value predicted in advance (#420). SQL flat (#209), self-verifying on its own effects
-(#403), stamped (#402), LF, committed immediately (#242), gate INSIDE the transaction and
-proved by deliberate failure (#413). Exact-count pre-gates take the three-state form
-(#422). Harnesses lift from the file under test by a path proved in the same run (#415).
-CC blocks never hard-code `gh` (#414). Elegant + scalable, never easiest (#197).
-
-Pastor Gerry writes in plain English. Confirm the lean read-in + count (**422**), name
+Pastor Gerry writes in plain English. Confirm the lean read-in + count (442), name
 what you did NOT load, then stand by.
+```
 
----
+## ✅ COMPLETED August 07, 2026 — SESSION 86 (three tool fixes shipped and tested green · the SVI weight-profile gap closed for all twelve churches · the pipeline's two missing design columns finally built · 5 PRs #285-#289 + migrations 106-109 · 11 invariants)
+
+**Opened** on a lean read-in at 431, then took the four open doors out of order because the Pastor redirected twice, both times correctly.
+
+**PR #285 — MMT reflection box above the keyboard.** Two faults stacked: `_devoAutoGrow` grew to full `scrollHeight` with no ceiling, and `.reader` is `position:fixed; inset:0` against a layout viewport Chrome/Android does not shorten when the keyboard opens. The browser saw the caret as visible while the member could not. Fixed with `interactive-widget=resizes-content` plus a cap at 45% of `visualViewport.height` divided by `--fs` (`.reader-body` is zoomed; without the division the largest font step gets a cap 40% too generous). Six predicted cases, all met. Tested green.
+
+**PR #286 — un-tick warning on engine-marked rungs.** Un-ticking an auto rung deleted the row and the WEEKLY SVI compute silently re-inserted it up to seven days later. Rather than re-derive the engine's seven-arm predicate in JS, the guard reads the engine's own stamp: `note = 'auto:<source>'` for engine rows, null for hand marks. No migration, no new predicate. Byte-identical twin in MD and MLT, asserted identical by the patcher; moves to `multiply_shared.js` when a third writer appears. Tested green on `lesson:usbong:all`.
+
+**PR #287 — "No prayer meeting this week."** The Wednesday line had no escape. Keyed to the waived SERVICE DATE, not a timed expiry -- the LC rule would have re-nagged a cancelled meeting for four days (#442). Sixteen predicted outcomes across a two-week simulation. Tested green.
+
+**PR #288 — migrations 106 + 107, the SVI gap.** A live scan found TEN of twelve churches with no weight profiles at all: `profile_used` null, zone `insufficient`, `metrics_total` 0. The no-profile guard (#282) held, so no church ever carried a wrong score, but SVI had simply never run for them and nothing on screen said so. Root cause: Rosehill got profiles in `001`; Agape got them in `034` by COPYING FROM ROSEHILL AT RUNTIME; the seven defaults had therefore never existed anywhere but the live database, and every church onboarded since depended on someone remembering. `106` puts them in a versioned function body; `107` runs it for all twelve. Proved on PG16 against a church holding a hand-tuned `default`, which received 6 and kept its own. Two defects caught in the dump: `is_active` arrived as `t` because `format`'s `%s` uses a type's output function rather than a `::text` cast, and a bare `t` in a VALUES list parses as a column reference; and `level_5`'s note named the platform author.
+
+**PR #289 — migrations 108 + 109, the pipeline's missing columns.** The Pastor's original design carries five columns. The database had three: Ministry existed as three generic placeholders across all six levels and Output did not exist at all. `108` adds 31 ministry placements (reference only, L0 inherits L1) and 15 outputs (trackable, under competency), template lane ONLY, surfacing per-pastor via `template_synced_at` opt-in. `109` removes ten shadow/duplicate coaching notes and names the EGR progression -- attend / facilitate / teach, which had looked like duplication -- across the template and the ten never-edited lanes, editing `pathway_versions.doc` in step so a later Publish cannot resurrect them (#437).
+
+**The stale base.** #288 was cut from `f7b8f72` when main was already `cd52fed`; transient proxy 503s left the ref stale and `reset --hard origin/main` faithfully reset to yesterday. Every gate passed. The branch would have reverted #287's waiver, tested green an hour earlier. Caught by `git diff --numstat origin/main` reading the DELETION column (#434/#435). Rebased, re-pushed, re-back-checked.
+
+**109 halted twice against live data and was right both times** -- nine hand-marked completions and one flipped `trackable` flag, all in ROSEHILL, a church the migration deliberately excluded. Both gates were scoped globally rather than to the edited lanes (#432). The first fix corrected one gate and left its twin eight lines below (#436). The gate conditions also moved INSIDE the DELETE, after a PG16 harness without `ON_ERROR_STOP` showed a raising `DO` block does not stop a following statement (#433).
+
+**Six instrument faults, zero subject faults.** A `_mltPwNote` token count; a LIKE pattern that degraded to `%u%` because backslash is LIKE's own escape character; an `E'` count that matched the tail of `'EXECUTE'))`; a fixture dated `now()` when production was ninety days old; two gates scoped globally; and finally a scope-audit regex that truncated before reaching the clause it sought. In every case the work was sound and the measurement was not.
+
+**Two domain corrections from the Pastor**, both of which killed a change already designed. MINISTRY means the ministries a member may JOIN, not leadership roles -- the planned retag of `lead-lc`, `coach-leaders` and `plant` was withdrawn (#440). And EGR at L0/L1/L2 is a progression, not duplication.
+
+**Also learned:** Timothy at True North is a TEST pastor in a TEST church, the Pastor's window onto the platform from outside Rosehill. Eight of the eleven non-Rosehill churches hold exactly one member -- the pastor. The only real rosters are Agape (68), Montalban (17) and GGCF (13), which settles the freeze-lift pilot without anyone having to choose.
+
+**Left open:** the freeze lift (blocked only on the Pastor writing the notice-banner sentence, since "this view is read-only" becomes false); Rosehill and True North still carrying the ten duplicates, to be cleaned by the Pastor in the editor; the `const isEditor` parse-time capture, latent not live because the editor has exactly one entry point; Jul 13 missing from every church's SVI snapshots.
 
 ## ✅ COMPLETED July 31, 2026 — SESSION 85 (Phase 4 FRONTEND: the pathway editor built end to end and the keys turned · completion rewired from quiz-counting to graduation · 9 PRs #273-#283 + migration 105)
 
