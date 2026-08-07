@@ -4455,4 +4455,114 @@ Facilitators run BTLI classes from the slides alone, so each slide carries a pri
 
 ---
 
+### **432. A gate must be scoped to exactly the lanes its change edits**
+
+Migration 109 deletes ten rungs from the template lane and the ten never-edited church lanes; Rosehill and True North are deliberately excluded. Its safety gates asked `pathway_progress` and `pathway_rungs` GLOBALLY. Rosehill had nine hand-marked completions on those coaching notes and had flipped `ref-character-baptism` to trackable in its own lane. Both gates fired against live data, twice, and stopped a cleanup of ten churches on the strength of local decisions made in a church the migration was never going to touch. The gates were right to exist and right to stop -- they were asking about the wrong lanes.
+
+**RULE:** a gate's WHERE clause must match the WHERE clause of the statement it guards. If the change is confined to a set of tenants, the gate reads only that set; if the change touches a shared lane that cannot carry the thing being checked (the template lane holds no member progress), the gate must not pretend it can. A check scoped more broadly than the change it protects will block work it has no business blocking, and it will do so in production, after passing every scratch test.
+
+**Established August 07, 2026 (Session 86). Invariant #432 added - count now 432.**
+
+---
+
+### **433. A gate and the action it guards must be the same statement**
+
+109's first form was a `DO $gate$ ... RAISE EXCEPTION` block followed by a `DELETE`. Proved on PG16 under `psql` without `ON_ERROR_STOP`: the gate raised, psql printed the error, and the DELETE ran anyway. Supabase's SQL Editor wraps a script in one transaction so it would have rolled back -- but that is an assumption about the runner, and a destructive migration must not rest on one.
+
+**RULE:** for any destructive statement, the safety conditions live INSIDE its own WHERE clause, not in a preceding block. A `DO` block that RAISEs may stay for a loud early message, but it is never the only thing standing between the script and the data. Prove it by running the migration in a harness that deliberately does NOT abort on error.
+
+**Established August 07, 2026 (Session 86). Invariant #433 added - count now 433.**
+
+---
+
+### **434. A successful `git fetch` does not mean `origin/main` is current**
+
+PR #288 was cut from `f7b8f72` when `origin/main` was already `cd52fed`. CC had run `git fetch --quiet origin` followed by `git reset --hard origin/main`; the proxy returned transient 503s, the fetch reported no error, and `reset --hard` faithfully reset to a stale ref. Every gate in that run passed. The branch sat ready to revert #287's Wednesday prayer-meeting waiver, tested green an hour earlier.
+
+**RULE:** every CC block asserts the expected `origin/main` sha immediately after fetching and halts on mismatch, or at minimum prints it with an instruction to stop if it is not the expected head. `reset --hard origin/main` is only as current as the last successful fetch, and a fetch can fail silently under a flaky proxy.
+
+**Established August 07, 2026 (Session 86). Invariant #434 added - count now 434.**
+
+---
+
+### **435. A back-check diffs against `origin/main`, never against the branch's own base**
+
+Every gate CC ran on #288 verified the files the branch ADDED: both migration shas, CR bytes, structure, ledger stamps. All passed. None could see that the branch would DELETE 54 lines from `lc_leader_tool.html`, because a gate that measures its own effect is blind to collateral damage in a file the change never intended to touch. `git diff --numstat origin/main <branch>` showed it in one line.
+
+**RULE:** the PR back-check runs `git diff --numstat origin/main refs/remotes/pr/NNN` and reads the DELETION column before anything else. Any file touched that the change did not intend to touch halts the merge. Confirming what a PR adds is necessary and never sufficient.
+
+**Established August 07, 2026 (Session 86). Invariant #435 added - count now 435.**
+
+---
+
+### **436. One over-broad gate indicts every sibling gate in the file**
+
+109's progress gate was found unscoped and corrected. Its trackable gate, eight lines below, had the identical flaw and was left. It fired against production on the very next run, cost a second live attempt, and taught nothing the first had not already taught. Six separate instrument faults surfaced in Session 86 -- a `_mltPwNote` token count, a LIKE pattern that degraded to `%u%`, an `E'` count matching the tail of `EXECUTE`, a fixture dated `now()` when production was ninety days old, and two gates scoped globally -- and in every case the subject was sound and the measurement was not.
+
+**RULE:** when one check is found to be measuring the wrong thing, audit every other check in the same file before shipping, and enumerate the audit rather than trusting memory. The audit itself is an instrument and can be wrong too -- verify it statement by statement, not with a regex that may truncate before reaching the clause it is looking for.
+
+**Established August 07, 2026 (Session 86). Invariant #436 added - count now 436.**
+
+---
+
+### **437. Rows and the authoring doc that regenerates them move together or not at all**
+
+`pathway_versions.doc` IS a church's pipeline; `publish_pathway_version()` regenerates `pathway_rungs` FROM it. Deleting rungs while leaving the doc describing them means the first pastor to press Publish resurrects every deleted row. Migration 108 was immune because opt-in ADDITIONS travel through the doc already; 109 was not, because deletions do not.
+
+**RULE:** any migration that changes `pathway_rungs` for a church must change that church's `pathway_versions.doc` in the same transaction, or the change is a time bomb with a human trigger. This applies to deletes and to in-place edits such as retitles. Additions routed through `template_synced_at` opt-in are the exception, because the pastor's acceptance writes the doc.
+
+**Established August 07, 2026 (Session 86). Invariant #437 added - count now 437.**
+
+---
+
+### **438. Read the writer's own signature rather than re-deriving its rule**
+
+Un-ticking an auto-completing rung deleted the `pathway_progress` row and the weekly engine silently re-inserted it, up to seven days later. The obvious fix was to re-derive `auto_complete_pathway_rungs()`'s seven-arm predicate in JavaScript so the UI could tell which rungs were engine-owned. That copy would have drifted from the SQL the first time either changed. The engine already stamps every row it writes with `note = 'auto:<source>'`; a hand mark leaves `note` null. The row being deleted already recorded its own author.
+
+**RULE:** before replicating a rule in a second language to answer "did X do this", look for a mark X already leaves behind. Provenance recorded at write time beats provenance inferred at read time, needs no migration, and cannot drift.
+
+**Established August 07, 2026 (Session 86). Invariant #438 added - count now 438.**
+
+---
+
+### **439. An auto-growing input caps against the VISUAL viewport, and zoom is divided out**
+
+MMT's devotional reflection box grew to its full `scrollHeight` with no ceiling. `.reader` is `position:fixed; inset:0` against a layout viewport that Chrome on Android does not shorten when the keyboard opens (`interactive-widget` defaults to `resizes-visual`), so the browser saw the caret as visible while the member could not see what they were typing. The cap must also divide by `--fs`: `.reader-body` carries `zoom:var(--fs)`, so `scrollHeight` is in the element's own CSS pixels while `visualViewport.height` is in screen pixels, and a member on the largest font step would otherwise get a cap almost 40% too generous.
+
+**RULE:** any element that grows with its content caps against `window.visualViewport.height`, divided by any `zoom` on an ancestor, and hands scrolling to the element itself past the cap. Pages with a full-viewport fixed layer set `interactive-widget=resizes-content` so the layout viewport shortens when the keyboard opens. Re-fit on `visualViewport` resize, because opening a keyboard fires no `input` event.
+
+**Established August 07, 2026 (Session 86). Invariant #439 added - count now 439.**
+
+---
+
+### **440. A category's meaning comes from the platform owner, not from its name**
+
+`lead-lc`, `coach-leaders` and `plant` were filed as `competency`, and the Ministry column read empty at L2, L3 and L5. The obvious reading -- ministry roles wearing the wrong label -- was wrong. MINISTRY means the actual ministries a member at that level may JOIN: music, children, youth. COMPETENCY means skills to develop, each with training behind it. Those three are skills, correctly filed. The retag would have put leadership roles into a column meant for teams a member joins, and it was withdrawn before shipping only because it was described to the Pastor first. The real finding was larger: Ministry held three generic placeholders across all six levels and Output did not exist at all -- two columns of the original design had never been built.
+
+**RULE:** never retag, merge or delete on the strength of what a category name appears to mean. State the intended change to the Pastor in his vocabulary and wait. Three domain corrections in Session 85 and two more in Session 86 all ran the same direction: the platform owner's account of his own pipeline beat inference from the data every time.
+
+**Established August 07, 2026 (Session 86). Invariant #440 added - count now 440.**
+
+---
+
+### **441. "All churches" is not one shape -- Rosehill has diverged, silently**
+
+Twelve lanes, four distinct fingerprints: ten churches identical at 204 rungs, Rosehill at 203 live, True North at 206, template at 210. Beyond row counts, Rosehill carries nine hand-marked completions on non-trackable coaching notes and one `trackable` flag flipped in its own lane -- none of it recorded anywhere, all of it legitimate use of the editor. Two migrations halted on exactly this.
+
+**RULE:** any migration touching church lanes fingerprints them first (`md5(string_agg(...))` over level, rung_key, title, category, trackable, completion_source) and states which shapes it targets. A migration written against "the churches" as a single shape will trip on the one lane its author uses daily. Rosehill and True North are excluded from bulk lane operations by default and cleaned by the Pastor in the editor.
+
+**Established August 07, 2026 (Session 86). Invariant #441 added - count now 441.**
+
+---
+
+### **442. A waiver expires on the shape of the obligation, not on the calendar**
+
+The LC-meeting waiver expires at the next Sunday 00:00 Manila, which suits a rolling last-7-days window with no canonical date. Copying that rule for the Wednesday prayer meeting would have been wrong: the Wednesday nag window runs Wed 22:00 through the FOLLOWING Wed 18:00, longer than a calendar week, so a timed expiry un-waives a service still inside its own window. Simulated against the deployed `_wagActiveServiceDate`: a Wednesday cancelled Aug 5 and waived Aug 6 resumes nagging Sun Aug 9 and keeps going Mon, Tue and Wed -- four days chasing a meeting the leader already said did not happen.
+
+**RULE:** a waiver for a DATED obligation stores the date it waived and is self-clearing; a waiver for a ROLLING window stores an expiry. Never copy one mechanism to the other because the affordance looks the same. Prove the choice by simulating the full cycle against the deployed window resolver, including the roll-forward that must resume nagging.
+
+**Established August 07, 2026 (Session 86). Invariant #442 added - count now 442.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
