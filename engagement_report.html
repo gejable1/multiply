@@ -294,7 +294,6 @@ function lastActiveOf(m){
 // ─── Load ───
 async function loadAll(){
   try {
-    const winISO = new Date(Date.now() - WINDOW_DAYS * 864e5).toISOString();
     const memberCols = 'id,name,pipeline_level,discipler_id,discipler_name,member_last_login';
     let onQ = db.from('members').select(memberCols)
         .not('member_pin_hash','is',null)
@@ -306,9 +305,7 @@ async function loadAll(){
     const [onRes, offRes, sessRes] = await Promise.all([
       onQ.order('name', { ascending: true }),
       offQ.order('name', { ascending: true }),
-      db.from('app_sessions').select('member_id,created_at')
-        .gte('created_at', winISO)
-        .order('created_at', { ascending: false })
+      db.rpc('engagement_visits_90d', { p_days: WINDOW_DAYS })
     ]);
     if (onRes.error)  throw onRes.error;
     if (offRes.error) throw offRes.error;
@@ -317,13 +314,13 @@ async function loadAll(){
     onboarded   = onRes.data  || [];
     unonboarded = offRes.data || [];
 
-    // Fold sessions → per-member { last, count }. Desc order ⇒ first seen = latest.
+    // Server-side aggregate (migration 111): one row per member, cap-proof.
+    // The old raw-row fetch was silently truncated at PostgREST's 1,000-row
+    // response limit, undercounting every member's visits (found S87).
     sessByMember = {};
     (sessRes.data || []).forEach(row => {
       if (!row.member_id) return;
-      const e = sessByMember[row.member_id];
-      if (e) { e.count++; }
-      else   { sessByMember[row.member_id] = { last: row.created_at, count: 1 }; }
+      sessByMember[row.member_id] = { last: row.last_sess, count: Number(row.visits) || 0 };
     });
 
     render();
