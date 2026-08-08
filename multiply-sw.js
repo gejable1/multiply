@@ -25,7 +25,7 @@
 //       .then(() => self.registration.unregister())); });
 // ─────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'multiply-shell-v5-2026-07-27';
+const CACHE_VERSION = 'multiply-shell-v6-2026-08-08';
 const SHELL_ASSETS = [
   './',
   'index.html',
