@@ -19150,6 +19150,16 @@
     },
     {
       "schema": "public",
+      "name": "engagement_visits_90d",
+      "arguments": "p_days integer",
+      "returns": "TABLE(member_id uuid, visits bigint, last_sess timestamp with time zone)",
+      "language": "sql",
+      "security_definer": false,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.engagement_visits_90d(p_days integer DEFAULT 90)\n RETURNS TABLE(member_id uuid, visits bigint, last_sess timestamp with time zone)\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\r\n  select s.member_id,\r\n         count(*)          as visits,\r\n         max(s.created_at) as last_sess\r\n    from public.app_sessions s\r\n   where s.created_at >= now() - make_interval(days => least(greatest(p_days, 1), 366))\r\n     and s.member_id is not null\r\n   group by s.member_id\r\n$function$\n"
+    },
+    {
+      "schema": "public",
       "name": "members_derive_facilitator",
       "arguments": "",
       "returns": "trigger",
