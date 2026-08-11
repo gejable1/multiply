@@ -1060,7 +1060,7 @@ function toggleFlat(){
 // this picklist AND pathway_auto_source_ok(), which the validator and publish
 // both call. The editor never invents a key (#405).
 let AUTO_OPTS = [];
-let _rfDocLevel = null, _rfDocIndex = -1;
+let _rfDocLevel = null, _rfDocIndex = -1, _rfDocCreate = false;
 async function loadAutoOptions(){
   if (AUTO_OPTS.length) return AUTO_OPTS;
   const { data, error } = await db.rpc('pathway_auto_source_options');
@@ -1085,7 +1085,7 @@ async function openDocRung(level, i){
   const items = DOC.levels[String(level)] || [];
   const it = items[i];
   if (!it) return;
-  _rfDocLevel = level; _rfDocIndex = i;
+  _rfDocLevel = level; _rfDocIndex = i; _rfDocCreate = false;
   await loadAutoOptions();
   _fillSelect(document.getElementById('rfCat'),
     Object.keys(CAT_LABEL).map(function(k){ return [k, CAT_LABEL[k]]; }), it.category);
@@ -1106,8 +1106,25 @@ async function openDocRung(level, i){
 // Write the form back into the DOCUMENT. Nothing touches a live row here -- the
 // wall keeps showing what is published until publish runs.
 async function saveDocRung(){
-  const items = (DOC && DOC.levels && DOC.levels[String(_rfDocLevel)]) || [];
-  const it = items[_rfDocIndex];
+  if (!DOC || !DOC.levels) return;
+  const lvKey = String(_rfDocLevel);
+  if (_rfDocCreate && !DOC.levels[lvKey]) DOC.levels[lvKey] = [];
+  const items = DOC.levels[lvKey] || [];
+  let it;
+  if (_rfDocCreate && _rfDocIndex === -1){
+    // Create (slice E2): the item is born here, its key slugged from the title
+    // the pastor just typed. saveRungForm has already refused an empty title;
+    // the publish validator (102) backstops key uniqueness server-side.
+    const t = document.getElementById('rfTitleIn').value.trim();
+    it = { rung_key:_slugRungKey(t, _rfDocLevel), title_en:t, title_tl:null,
+           description_en:null, description_tl:null, category:'competency',
+           completion_source:'manual', auto_source_key:null, trackable:true, meta:{} };
+    items.push(it);
+    _rfDocIndex = items.length - 1;
+    _rfDocCreate = false;
+  } else {
+    it = items[_rfDocIndex];
+  }
   if (!it) return;
   const srcEl = document.getElementById('rfSrc');
   const mode  = (srcEl && srcEl.value === 'auto') ? 'auto' : 'manual';
@@ -1212,14 +1229,18 @@ function openLibrary(level){
   document.getElementById('libCtx').textContent =
     'Level ' + level + ' ' + String.fromCharCode(0x2014) + ' ' + (LEVEL_NAME[level] || '');
   const host = document.getElementById('libList');
-  host.innerHTML = cands.length
+  const createRow =
+      '<div class="flat-row"><span class="flat-ttl" style="font-weight:700">Create a new rung</span>'
+    + '<span class="flat-cat">from scratch &middot; this level</span>'
+    + '<span style="margin-left:auto"><button class="rbtn rbtn-gold" onclick="createNewRung()">+ New</button></span></div>';
+  host.innerHTML = createRow + (cands.length
     ? cands.map(function(c, i){
         const tag = (c.source === 'yours') ? 'yours' : 'template';
         return '<div class="flat-row"><span class="flat-ttl">' + escapeHTML(c.title_en || c.rung_key) + '</span>'
              + '<span class="flat-cat">' + escapeHTML(c.category || '') + ' &middot; ' + tag + '</span>'
              + '<span style="margin-left:auto"><button class="rbtn rbtn-gold" onclick="addFromLibrary(' + i + ')">+ Add</button></span></div>';
       }).join('')
-    : '<div class="flat-empty">Everything available is already in this level.</div>';
+    : '<div class="flat-empty">Everything available is already in this level.</div>');
   LIB_CANDS = cands;
   _pwPinOverlay('libOverlay');
   document.getElementById('libOverlay').classList.add('open');
@@ -1243,6 +1264,48 @@ async function addFromLibrary(i){
   try { await saveDraft(); toast('Added to draft', 'ok'); }
   catch(e){ console.error('[draft] save failed:', e);
             toast('Could not save: ' + (e.message || e), 'err'); }
+}
+// -------- create a rung from scratch (slice E2) ------------------------------
+// A new rung is born in the DOCUMENT only -- no live row exists until publish
+// (openDocRung's meta note already covers that case). The key is a slug of the
+// title, made unique against three keyspaces at this level: the draft's own
+// items, every live row in this lane INCLUDING retired ones (a reused key would
+// re-attach the old rung's completion history at publish), and the template
+// (so Restore-vs-Delete semantics stay honest).
+function _slugRungKey(title, level){
+  let base = String(title || '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+    .replace(/-+$/g, '');
+  if (!base) base = 'rung';
+  const items = (DOC && DOC.levels && DOC.levels[String(level)]) || [];
+  const taken = function(k){
+    const lk = String(level) + '|' + k;
+    if (OVERLAY_BY_KEY[lk]) return true;
+    if (BASE_KEYS.has(lk)) return true;
+    return items.some(function(it){ return it.rung_key === k; });
+  };
+  if (!taken(base)) return base;
+  for (let n = 2; n < 100; n++){
+    if (!taken(base + '-' + n)) return base + '-' + n;
+  }
+  return base + '-' + Date.now();
+}
+async function createNewRung(){
+  if (LIB_LEVEL === null || !DOC || !DOC.levels) return;
+  const level = LIB_LEVEL;
+  closeLibrary();
+  await loadAutoOptions();
+  _fillSelect(document.getElementById('rfCat'),
+    Object.keys(CAT_LABEL).map(function(k){ return [k, CAT_LABEL[k]]; }), 'competency');
+  _fillSelect(document.getElementById('rfAuto'),
+    AUTO_OPTS.map(function(o){ return [o.key, o.label_en]; }), null);
+  const srcEl = document.getElementById('rfSrc');
+  if (srcEl) srcEl.value = 'manual';
+  _rfToggleAuto();
+  _rfDocLevel = level; _rfDocIndex = -1; _rfDocCreate = true;
+  openRungForm('doc', { level:level, category:'competency', title_en:'',
+                        trackable:true, description_en:'', meta:{} });
+  document.getElementById('rfTitle').textContent = 'New rung';
 }
 // Emptying a level is how a church starts lean instead of inheriting 200+ rungs.
 // One aggregate count for the whole level -- per-rung counts would be N queries
