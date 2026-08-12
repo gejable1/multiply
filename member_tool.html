@@ -8375,8 +8375,23 @@ async function openDevoReader(which, dateIso){
   if(which === 'today'){
     entry = todayDevo;
   } else if(which === 'date' && dateIso){
-    // Try month list first (fast); fall back to fetch
+    // Try the load-time month list, then the browse cache (any month the
+    // member has navigated to), then a direct fetch by date -- the toast is
+    // only for a date the DATABASE says has no entry, never for a date that
+    // merely is not in this month's summary (S87 fix: past months toasted
+    // 'No entry' because the miss path never asked the database).
     entry = monthDevos.find(d => d.entry_date === dateIso) || null;
+    if(!entry && typeof _browseCache !== 'undefined'){
+      const ym = dateIso.slice(0, 7);
+      entry = (_browseCache[ym] || []).find(d => d.entry_date === dateIso) || null;
+    }
+    if(!entry){
+      try{
+        const {data, error} = await db.from('devotionals')
+          .select('*').eq('entry_date', dateIso).maybeSingle();
+        if(!error && data) entry = data;
+      }catch(e){ console.warn('reader fetch failed:', e); }
+    }
     // Need full row (story/explanation/response/prayer not in browse summary)
     if(entry && (!entry.story && !entry.explanation && !entry.response && !entry.prayer)){
       try{
