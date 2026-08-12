@@ -2507,7 +2507,11 @@ body.lang-tl .tl-text{display:inline;}
 <!-- ═══════════════ BROWSE MONTH SHEET ═══════════════ -->
 <div class="browse-bd" id="browseBd" onclick="closeBrowseMonth(event)">
   <div class="browse-sheet" onclick="event.stopPropagation()">
-    <h3 id="browseTitle">…</h3>
+    <div class="browse-head" style="display:flex;align-items:center;gap:10px;justify-content:center">
+      <button id="browsePrev" onclick="_browseNav(-1)" aria-label="Previous month" style="border:none;background:none;font-size:22px;cursor:pointer;padding:4px 10px;color:inherit">&#8249;</button>
+      <h3 id="browseTitle" style="margin:0">&hellip;</h3>
+      <button id="browseNext" onclick="_browseNav(1)" aria-label="Next month" style="border:none;background:none;font-size:22px;cursor:pointer;padding:4px 10px;color:inherit">&#8250;</button>
+    </div>
     <div class="browse-sub">
       <span class="en-text">Tap any day to read</span>
       <span class="tl-text">Pindutin ang araw para basahin</span>
@@ -8887,8 +8891,52 @@ function _devoMinExitAnyway(){ _hideDevoMinWordModal(); _devoExitConfirmedShort 
 // ═══════════════════════════════════════════════════════════════
 // BROWSE-MONTH SHEET
 // ═══════════════════════════════════════════════════════════════
+let _browseY = null, _browseM = null;   // viewed month (0-based)
+const _browseCache = {};                // 'YYYY-MM' -> summary rows, session-lived
+function _browseYmKey(){
+  return _browseY + '-' + String(_browseM + 1).padStart(2, '0');
+}
 function openBrowseMonth(){
   const now = new Date();
+  _browseY = now.getFullYear(); _browseM = now.getMonth();
+  // Seed the cache with what app-load already fetched: browsing the current
+  // month costs ZERO new requests, and app load itself is untouched.
+  if (!_browseCache[_browseYmKey()]) _browseCache[_browseYmKey()] = monthDevos || [];
+  _renderBrowseMonth();
+}
+async function _browseNav(delta){
+  if (_browseY === null) return;
+  _browseM += delta;
+  if (_browseM < 0){ _browseM = 11; _browseY--; }
+  if (_browseM > 11){ _browseM = 0; _browseY++; }
+  await _ensureBrowseMonth();
+  _renderBrowseMonth();
+}
+// Fetch a month's SUMMARY rows only when the pastor of the thumb actually
+// navigates there -- never at app load -- and only once per session per month.
+async function _ensureBrowseMonth(){
+  const key = _browseYmKey();
+  if (_browseCache[key]) return;
+  const list = document.getElementById('browseList');
+  if (list) list.innerHTML = '<div class="browse-empty-row"><span class="en-text">Loading&hellip;</span><span class="tl-text">Naglo-load&hellip;</span></div>';
+  try{
+    const start = key + '-01';
+    const lastDay = new Date(_browseY, _browseM + 1, 0).getDate();
+    const end = key + '-' + String(lastDay).padStart(2, '0');
+    const {data, error} = await db.from('devotionals')
+      .select('id,entry_date,title,scripture_ref')
+      .gte('entry_date', start)
+      .lte('entry_date', end)
+      .order('entry_date');
+    if (error) throw error;
+    _browseCache[key] = data || [];
+  }catch(e){
+    console.warn('browse month load failed:', e);
+    _browseCache[key] = [];   // cached empty: no retry storm on flaky networks
+  }
+}
+function _renderBrowseMonth(){
+  const now = new Date(_browseY, _browseM, 1);
   document.getElementById('browseTitle').textContent =
     now.toLocaleDateString(undefined, { month:'long', year:'numeric' });
 
@@ -8898,7 +8946,7 @@ function openBrowseMonth(){
 
   // Build a map by ISO for quick lookup
   const byDate = {};
-  monthDevos.forEach(d => byDate[d.entry_date] = d);
+  (_browseCache[_browseYmKey()] || []).forEach(d => byDate[d.entry_date] = d);
 
   let html = '';
   for(let day=1; day<=lastDay; day++){
