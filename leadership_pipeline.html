@@ -685,6 +685,15 @@ body.edit-on .edit-hint{ display:block; }
       <label class="rf-l">Description</label>
       <textarea id="rfDesc" class="rf-in" rows="3" placeholder="Optional — shown in the rung's detail card"></textarea>
       <div id="rfDocOnly" style="display:none">
+        <label class="rf-l">Level</label>
+        <select id="rfLevel" class="rf-in">
+          <option value="0">Level 0</option>
+          <option value="1">Level 1</option>
+          <option value="2">Level 2</option>
+          <option value="3">Level 3</option>
+          <option value="4">Level 4</option>
+          <option value="5">Level 5</option>
+        </select>
         <label class="rf-l">Column</label>
         <select id="rfCat" class="rf-in"></select>
         <label class="rf-l">How does this get completed?</label>
@@ -1086,6 +1095,7 @@ async function openDocRung(level, i){
   const it = items[i];
   if (!it) return;
   _rfDocLevel = level; _rfDocIndex = i; _rfDocCreate = false;
+  var _lvEl = document.getElementById('rfLevel'); if (_lvEl) _lvEl.value = String(level);
   await loadAutoOptions();
   _fillSelect(document.getElementById('rfCat'),
     Object.keys(CAT_LABEL).map(function(k){ return [k, CAT_LABEL[k]]; }), it.category);
@@ -1135,6 +1145,11 @@ async function saveDocRung(){
   it.completion_source = mode;
   it.auto_source_key   = (mode === 'auto')
     ? (document.getElementById('rfAuto').value || null) : null;
+  const lvlEl = document.getElementById('rfLevel');
+  const lvlTarget = (lvlEl && lvlEl.value !== '') ? parseInt(lvlEl.value, 10) : _rfDocLevel;
+  if (Number.isInteger(lvlTarget) && lvlTarget !== _rfDocLevel){
+    await _moveDocRung(_rfDocLevel, _rfDocIndex, lvlTarget);
+  }
   renderFlat();
   await saveDraft();
 }
@@ -1147,6 +1162,42 @@ function _docRemove(items, i){
   const out = items.slice();
   out.splice(i, 1);
   return out;
+}
+// -------- move between levels (slice E2, part two) ---------------------------
+// The KEY travels and the LEVEL changes -- publish's existing machinery does the
+// rest: the old-level row retires (completions stay attached to it, visible to
+// the members who earned them) and the rung starts fresh at its new level.
+// Progress is NEVER silently re-credited at a level nobody earned; when
+// completions exist, the pastor is told exactly that and decides.
+async function _moveDocRung(fromLevel, i, toLevel){
+  if (!DOC || !DOC.levels) return false;
+  const fromKey = String(fromLevel), toKey = String(toLevel);
+  const items = DOC.levels[fromKey] || [];
+  const it = items[i];
+  if (!it) return false;
+  if (!Number.isInteger(toLevel) || toLevel < 0 || toLevel > 5 || toLevel === fromLevel) return false;
+  const dest = DOC.levels[toKey] || (DOC.levels[toKey] = []);
+  if (dest.some(function(d){ return d.rung_key === it.rung_key; })){
+    toast('Level ' + toLevel + ' already has "' + (it.title_en || it.rung_key) + '" -- remove one of the two first.', 'err');
+    return false;
+  }
+  const n = await countCompletions(fromLevel, it.rung_key);
+  if (n === null){
+    if (!window.confirm('Could not check completions for "' + (it.title_en || it.rung_key)
+        + '".\n\nMove it to Level ' + toLevel + ' anyway?')) return false;
+  } else if (n > 0){
+    if (!window.confirm(n + (n === 1 ? ' member has' : ' members have') + ' completed "'
+        + (it.title_en || it.rung_key) + '" at Level ' + fromLevel + '.\n\n'
+        + 'Their record stays with the retired Level-' + fromLevel + ' rung when you publish; '
+        + 'at Level ' + toLevel + ' it starts unticked.\n\nMove it?')) return false;
+  }
+  const next = _docRemove(items, i);
+  if (next === items) return false;
+  DOC.levels[fromKey] = next;
+  dest.push(it);
+  _rfDocLevel = toLevel; _rfDocIndex = dest.length - 1;
+  toast('Moved to Level ' + toLevel, 'ok');
+  return true;
 }
 // The sentence a pastor reads before taking something off the pathway. It has to
 // say the true thing: the record survives, the rung leaves. Nothing is deleted.
@@ -1303,6 +1354,7 @@ async function createNewRung(){
   if (srcEl) srcEl.value = 'manual';
   _rfToggleAuto();
   _rfDocLevel = level; _rfDocIndex = -1; _rfDocCreate = true;
+  var _lvEl = document.getElementById('rfLevel'); if (_lvEl) _lvEl.value = String(level);
   openRungForm('doc', { level:level, category:'competency', title_en:'',
                         trackable:true, description_en:'', meta:{} });
   document.getElementById('rfTitle').textContent = 'New rung';
