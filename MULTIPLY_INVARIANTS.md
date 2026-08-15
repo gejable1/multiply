@@ -4565,4 +4565,60 @@ The LC-meeting waiver expires at the next Sunday 00:00 Manila, which suits a rol
 
 ---
 
+### **443. A SHELL_ASSETS edit ships with a CACHE_VERSION bump in the same PR, or states why not.**
+
+Any PR that edits a file listed in `multiply-sw.js`'s `SHELL_ASSETS` must bump `CACHE_VERSION` in that same PR, so every client's stale cached copy is purged on next visit. Session 86 shipped three tool fixes with no bump; the Wednesday-waiver fix (PR #287) sat invisible behind a stale `v5` shell cache on the Pastor's own desktop for over a week before being noticed. If a file is NOT in `SHELL_ASSETS` (member_tool.html's modal-fetched assets, leadership_pipeline.html, engagement_report.html), the PR states that plainly instead of bumping.
+
+**Established August 2026 (Session 87). Invariant #443 added - count now 443.**
+
+---
+
+### **444. A JS-side fold over a PostgREST fetch must aggregate server-side, or prove the row cap unreachable.**
+
+PostgREST silently caps a response at 1,000 rows. `engagement_report.html` fetched raw `app_sessions` rows and folded visit counts in JS — every member's count was silently truncated to "share of the newest 1,000 sessions church-wide," an invisible horizon of one to two weeks. Verified live: 45 shown vs 267 true for one member. The cure is a SECURITY INVOKER RPC (`engagement_visits_90d()`) that aggregates where the rows live and ships eleven numbers to the browser instead of thousands of rows — correct at any church size, cap-proof by construction.
+
+**Established August 2026 (Session 87). Invariant #444 added - count now 444.**
+
+---
+
+### **445. A migration's ledger stamp is gated on the same predicates as the edits it describes.**
+
+`schema_migrations` INSERT must be conditioned (`WHERE`/`AND NOT EXISTS`) on the identical safety predicates that gate the migration's actual edits — never a bare unconditional `INSERT ... ON CONFLICT DO UPDATE`. A runner that halts on a real gate (wrong target count, unreviewed progress) must not leave the ledger claiming the migration ran. Migration 111 was corrected to add this gate mid-session.
+
+**Established August 2026 (Session 87). Invariant #445 added - count now 445.**
+
+---
+
+### **446. A presence-gate tests the presence of the content itself, never emptiness as a proxy for it.**
+
+Migration 110's chip-move guarded on `meta = '{}'::jsonb` — but `btli1` has carried `{"celebrate_publicly": true}` since migration 076 in every lane, so the guard silently no-op'd everywhere and the following DELETE removed the chip's only home (`btli-101`) from the template and ten church lanes. The migration's own self-verify PASSED because it measured the same emptiness proxy instead of the chip's actual presence (`meta ? 'title'`). Migration 112's corrective gates on content presence directly; the lesson generalizes to every future presence check.
+
+**Established August 2026 (Session 87). Invariant #446 added - count now 446.**
+
+---
+
+### **447. A PG16 proof fixture must carry production's actual data fingerprint, not a simplified or empty shape.**
+
+Migration 110's proof harness seeded `btli1.meta` as `'{}'` — a simplified shape that happened to make the (broken) guard look correct. Production's real value, `{"celebrate_publicly": true}`, was never in the fixture, so the proof couldn't catch what production would expose. "All churches" is not one shape; a fixture must fingerprint the lane it claims to represent, including flags, defaults, and grants a scratch database doesn't set up automatically.
+
+**Established August 2026 (Session 87). Invariant #447 added - count now 447.**
+
+---
+
+### **448. A function-privilege proof must replicate Supabase's own `ALTER DEFAULT PRIVILEGES`, not assume PostgreSQL's bare defaults.**
+
+Supabase projects grant EXECUTE on every new function to `anon`, `authenticated`, and `service_role` EXPLICITLY at creation via a project-level default-privileges rule — so `REVOKE ... FROM PUBLIC` alone leaves `anon` still holding its own grant. Migration 111's first pass revoked only PUBLIC and shipped `anon_cannot_exec = false` straight to production, caught live by the migration's own self-verify. The proof harness must `ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ... TO anon, authenticated` before creating any function under test, or a passing local proof is not evidence of anything.
+
+**Established August 2026 (Session 87). Invariant #448 added - count now 448.**
+
+---
+
+### **449. A claimed fallback is read from the code's own branch conditions, never inferred from a nearby similar-looking pattern.**
+
+Told that a past-month devotional reader "falls back to a fetch-by-date when the summary misses," Claude paraphrased from a nearby thin-entry-upgrade branch rather than reading the actual miss-path code — which had no fallback at all, only a toast. Every member reopening a past month's devotional got "No entry for that day" regardless of whether one existed. A described fallback, cache, or guard must be verified by reading the exact conditional it lives in, not inferred from the shape of a similar mechanism elsewhere in the same file.
+
+**Established August 2026 (Session 87). Invariant #449 added - count now 449.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
