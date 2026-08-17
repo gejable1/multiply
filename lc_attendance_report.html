@@ -527,11 +527,24 @@ function fmtDate(yyyymmdd){
 window.addEventListener('DOMContentLoaded', () => {
   const _t = new Date();
   const _iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  document.getElementById('filterStart').value = _iso(new Date(_t.getFullYear(), _t.getMonth(), 1));
-  document.getElementById('filterEnd').value = _iso(_t);
+  // S88: single-service reporting is the common case -- default both dates to
+  // the latest occurrence of the selected event's weekday (Sunday Service ->
+  // latest Sunday, Prayer Meeting -> latest Wednesday); switching event type
+  // re-snaps. Types with no canonical weekday leave the dates untouched.
+  const _latestDow = (dow) =>
+    new Date(_t.getFullYear(), _t.getMonth(), _t.getDate() - ((_t.getDay() - dow + 7) % 7));
+  const _EVENT_DOW = { 'Sunday Service': 0, 'Prayer Meeting': 3 };
+  const _snapDates = () => {
+    const dow = _EVENT_DOW[document.getElementById('filterEventType').value];
+    if (dow === undefined) return;
+    const d = _iso(_latestDow(dow));
+    document.getElementById('filterStart').value = d;
+    document.getElementById('filterEnd').value = d;
+  };
+  _snapDates();
   document.getElementById('filterStart').addEventListener('change', loadReport);
   document.getElementById('filterEnd').addEventListener('change', loadReport);
-  document.getElementById('filterEventType').addEventListener('change', loadReport);
+  document.getElementById('filterEventType').addEventListener('change', () => { _snapDates(); loadReport(); });
   loadReport();
 });
 
