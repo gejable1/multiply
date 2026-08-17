@@ -569,7 +569,7 @@ async function loadReport(){
     //    Pull discipler_id + facilitator fields too — we now derive group membership
     //    from the LC Leader (canonical), not from the optional `lc_group` text field.
     const {data:allMembers, error:mErr} = await db.from('members')
-      .select('id,name,lc_group,pipeline_level,discipler_id,is_facilitator,facilitator_role,is_test_member,is_external_user');
+      .select('id,name,lc_group,pipeline_level,discipler_id,is_facilitator,facilitator_role,is_test_member,is_external_user,status');
     if(mErr) throw mErr;
 
     // ── 2. Pull attendance rows for the selected date + event ──
@@ -587,7 +587,8 @@ async function loadReport(){
     const eventCount = new Set((attRows||[]).map(r => r.event_date)).size || 1;
 
     // ── 3. Build the group-by-LC structure ──
-    const report = buildGroups(allMembers||[], attRows||[], eventCount);
+    // S88 lifecycle: dormant/moved/deceased never enter a denominator (115).
+    const report = buildGroups((allMembers||[]).filter(m => !m.status || m.status === 'active'), attRows||[], eventCount);
 
     // ── 4. Render ──
     renderReport(report, startDate, endDate, eventType, eventCount);

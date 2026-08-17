@@ -645,12 +645,13 @@ async function loadReport(){
     //    Guests stay excluded in both cases (separate category, not part of
     //    the smoke-test universe).
     const { data: mems, error: mErr } = await db.from('members')
-      .select('id,name,lc_group,pipeline_level,is_facilitator,facilitator_role,is_test_member,is_external_user,discipler_id');
+      .select('id,name,lc_group,pipeline_level,is_facilitator,facilitator_role,is_test_member,is_external_user,discipler_id,status');
     if (mErr) throw mErr;
     const includeTest = _viewerIsTestMember(mems);
     STATE.members = (mems || []).filter(m => {
       if (m.is_external_user) return false;
       if (m.is_test_member && !includeTest) return false;
+      if (m.status && m.status !== 'active') return false;  // S88 lifecycle (115)
       return true;
     });
 
