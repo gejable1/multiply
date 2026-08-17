@@ -2696,7 +2696,7 @@ async function loadMyMembers(){
     // natural_talents, enneagram_description, sports_inclination,
     // max_interventions, leader_pin_*, member_pin_*.
     const {data, error} = await db.from('members')
-      .select('id,created_at,updated_at,name,photo_url,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
+      .select('id,created_at,updated_at,name,photo_url,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc,status')
       .order('name');
     if(error) throw error;
     allMembers = data || [];
@@ -4994,7 +4994,7 @@ async function _getMyRow(){
   if(found){ _myProfileRow = found; return found; }
   try{
     const {data, error} = await db.from('members')
-      .select('id,created_at,updated_at,name,photo_url,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc')
+      .select('id,created_at,updated_at,name,photo_url,birthday,civil_status,baptism_date,enrolled_date,lc_group,pending_lc_group,pending_facilitator_id,pending_transfer_by,transfer_date,discipler,discipler_id,discipler_name,pending_discipler,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,diagnostic_score,diagnostic_zone,diagnostic_date,facilitator_id,facilitator_name,intervention_track,intervention_status,is_facilitator,facilitator_role,strengths_top5,strengths_domain,love_language_primary,love_language_secondary,disc_primary,disc_secondary,enneagram_type,enneagram_wing,conflict_primary,is_test_member,is_external_user,share_with_lc,status')
       .eq('id', id).single();
     if(error) throw error;
     _myProfileRow = data || null;
@@ -6093,7 +6093,9 @@ function _currentAttRoster(){
   if (selectedAttType === 'General Purpose Batch' && Array.isArray(_gpBatchRoster) && _gpBatchRoster.length > 0) {
     return _gpBatchRoster;
   }
-  return myMembers || [];
+  // S88 lifecycle: the check-list holds active members only -- a dormant
+  // member who returns is flipped active FIRST (celebrate!), then logged (115).
+  return (myMembers || []).filter(m => !m.status || m.status === 'active');
 }
 
 function showAttendance(){

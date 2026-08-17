@@ -1298,6 +1298,8 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <div class="fi full"><label>Full Name *</label><input id="fn" placeholder="Full name"></div>
       <div class="fi"><label>Birthday</label><input id="fb" type="date"></div>
       <div class="fi"><label>Civil Status</label><select id="fcs"><option value="">Select...</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option></select></div>
+      <div class="fi"><label>Lifecycle Status</label><select id="fstatus"><option value="active">Active</option><option value="inactive">Inactive (dormant)</option><option value="moved">Moved away</option><option value="deceased">Deceased</option></select></div>
+      <div class="fi"><label>Status Note (private)</label><input id="fstatusnote" placeholder="Shepherding note - admin-only"></div>
       <div class="fi"><label>Date of Baptism</label><input id="fbp" type="date"></div>
       <div class="fi"><label>Date Enrolled</label><input id="fen" type="date"></div>
       <div class="fi"><label>Pipeline Level</label>
@@ -1879,7 +1881,7 @@ async function loadMembers(){
   // more efficiently, and the wire payload is smaller. Every column
   // listed here is consumed by r2l(); add columns here if r2l() adds
   // new fields. Approx 50-70% faster load on slow connections.
-  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at,photo_url').order('updated_at',{ascending:false});
+  const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at,photo_url,status,status_changed_at,status_note').order('updated_at',{ascending:false});
   if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   await _loadPathwayCache();  // S80 (PR-O): church-wide pathway_rungs+progress for table/tiles/modal
@@ -1909,6 +1911,7 @@ function l2r(m){
   const _disc_name = m.discipler_name || m.discipler || null;
   return{
     id:m.id||undefined,name:m.name,birthday:m.bday||null,civil_status:m.civil||null,
+    status:m.status||'active',status_note:m.status_note??null,status_changed_at:m.status_changed_at??null,
     baptism_date:m.baptism||null,enrolled_date:m.enrolled||null,
     discipler_id:_disc_id,discipler:_disc_name,
     discipler_name:m.discipler_name||null,
@@ -1935,6 +1938,7 @@ function l2r(m){
 function r2l(r){
   return{
     id:r.id,name:r.name,bday:r.birthday||'',civil:r.civil_status||'',
+    status:r.status||'active',status_note:r.status_note||'',status_changed_at:r.status_changed_at||null,
     photo:r.photo_url||'',
     baptism:r.baptism_date||'',enrolled:r.enrolled_date||'',
     discipler_id:r.discipler_id||'',discipler:r.discipler||'',discipler_name:r.discipler_name||'',
@@ -3291,6 +3295,8 @@ function fillF(m){
   document.getElementById('fn').value=m.name||'';
   document.getElementById('fb').value=m.bday||'';
   document.getElementById('fcs').value=m.civil||'';
+  document.getElementById('fstatus').value=m.status||'active';
+  document.getElementById('fstatusnote').value=m.status_note||'';
   document.getElementById('fbp').value=m.baptism||'';
   document.getElementById('fen').value=m.enrolled||'';
   // Discipler select - value set by populateDisciplerSelect called in openEdit
@@ -3731,10 +3737,16 @@ async function saveMember(){
   const effLcGroup  = _canEditLc
     ? ((document.getElementById('flcgroup')?.value||'').trim() || null)
     : (_existingLc || null);
+  // S88 lifecycle (115): stamp status_changed_at only on an actual transition.
+  const _exStatusRow = eid ? (members.find(x=>x.id===eid)||{}) : {};
+  const _newStatus = (document.getElementById('fstatus')?.value)||'active';
   const data={
     id:eid||undefined,name,
     bday:document.getElementById('fb').value,
     civil:document.getElementById('fcs').value,
+    status:_newStatus,
+    status_note:((document.getElementById('fstatusnote')?.value)||'').trim()||null,
+    status_changed_at:(_newStatus!==(_exStatusRow.status||'active'))?new Date().toISOString():(_exStatusRow.status_changed_at||null),
     baptism:document.getElementById('fbp').value,
     enrolled:document.getElementById('fen').value,
     discipler_id:effDiscId,

@@ -778,7 +778,7 @@ function buildWeekBuckets() {
 // ─────────────────────── Data loading ───────────────────────
 async function loadMembers() {
   const { data, error } = await db.from('members')
-    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member, is_external_user, photo_url');
+    .select('id, name, lc_group, discipler_id, is_facilitator, facilitator_role, contact, pipeline_level, is_test_member, is_external_user, photo_url, status');
   if (error) throw error;
   allMembers = data || [];
   // ─── TEST + GUEST EXCLUSION (Inv #15/#16) ───
@@ -786,7 +786,8 @@ async function loadMembers() {
   // they never appear as LC Leaders, never count toward any LCG's flock size, and
   // their attendance rows never inflate a tally. Filter at the source so the rest
   // of the report doesn't have to think about it. (Was test-only before S35.)
-  const liveOnly = allMembers.filter(m => !m.is_test_member && !m.is_external_user);
+  // S88 lifecycle: statistical denominators count status='active' only (115).
+  const liveOnly = allMembers.filter(m => !m.is_test_member && !m.is_external_user && (!m.status || m.status === 'active'));
   // LC Leaders per HANDOFF architecture key 1: is_facilitator OR facilitator_role
   lcLeaders = liveOnly.filter(m => m.is_facilitator || (m.facilitator_role && m.facilitator_role.trim()));
   // Build LCG map
@@ -853,7 +854,10 @@ function indexMeetingsByLCG() {
     wk.dates.add(row.event_date);
     const src = row.source || 'lcl_logged';
     if (LEADER_SOURCES.has(src)) wk.leaderLogged = true;
-    if (row.present) {
+    if (row.present && (!m.status || m.status === 'active')) {
+      // S88 lifecycle (115): headcount stays consistent with flockSize's
+      // active-only basis, but met/dates/leaderLogged above remain historical
+      // facts -- a later status change never un-meets a meeting that happened.
       wk.attendance += 1;
       if (src === 'self_attest') wk.selfAttestPresent += 1;
     }
