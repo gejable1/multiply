@@ -10176,6 +10176,33 @@
           "default": "false",
           "is_identity": false,
           "comment": null
+        },
+        {
+          "name": "status",
+          "ordinal": 76,
+          "data_type": "text",
+          "nullable": false,
+          "default": "'active'::text",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "status_changed_at",
+          "ordinal": 77,
+          "data_type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "status_note",
+          "ordinal": 78,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
         }
       ],
       "primary_key": [
@@ -10254,7 +10281,12 @@
         }
       ],
       "unique_constraints": [],
-      "check_constraints": [],
+      "check_constraints": [
+        {
+          "name": "members_status_check",
+          "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'moved'::text, 'deceased'::text])))"
+        }
+      ],
       "indexes": [
         {
           "name": "idx_members_church_id",
@@ -10273,6 +10305,16 @@
             "pending_facilitator_id"
           ],
           "definition": "CREATE INDEX idx_members_pending_fac ON public.members USING btree (pending_facilitator_id) WHERE (pending_facilitator_id IS NOT NULL)"
+        },
+        {
+          "name": "idx_members_status",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "status"
+          ],
+          "definition": "CREATE INDEX idx_members_status ON public.members USING btree (church_id, status)"
         },
         {
           "name": "idx_members_transfer_date",
