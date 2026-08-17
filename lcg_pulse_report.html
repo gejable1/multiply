@@ -840,7 +840,7 @@ function indexMeetingsByLCG() {
 
   meetings.forEach(row => {
     const m = memberById.get(row.member_id);
-    if (!m || m.is_test_member || m.is_external_user || (m.status && m.status !== 'active')) return;  // live+active only (Inv #15, 115)
+    if (!m || m.is_test_member || m.is_external_user) return;  // live members only (Inv #15)
     const did = m.discipler_id;
     if (!did || did === m.id) return;            // orphan / self-discipled → no LCG
     const entry = lcgMap.get(did);
@@ -854,7 +854,10 @@ function indexMeetingsByLCG() {
     wk.dates.add(row.event_date);
     const src = row.source || 'lcl_logged';
     if (LEADER_SOURCES.has(src)) wk.leaderLogged = true;
-    if (row.present) {
+    if (row.present && (!m.status || m.status === 'active')) {
+      // S88 lifecycle (115): headcount stays consistent with flockSize's
+      // active-only basis, but met/dates/leaderLogged above remain historical
+      // facts -- a later status change never un-meets a meeting that happened.
       wk.attendance += 1;
       if (src === 'self_attest') wk.selfAttestPresent += 1;
     }
