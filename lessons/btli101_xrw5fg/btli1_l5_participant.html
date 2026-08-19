@@ -111,6 +111,14 @@ textarea{min-height:75px;}
 .font-rail button:hover{background:rgba(255,255,255,.15);}
 .font-rail .fr-pct{color:rgba(255,255,255,.85);font-size:10.5px;letter-spacing:.02em;font-weight:600;min-width:34px;text-align:center;}
 @media print{.font-rail{display:none;}}
+
+/* SAVE BUTTON (added — matches BTLI canonical pattern) */
+.save-btn{width:100%;background:var(--navy,#1a2f4a);color:white;border:none;border-radius:10px;padding:13px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:filter .15s;margin:0 0 .75rem;}
+.save-btn:hover{filter:brightness(1.15);}
+.save-btn:active{filter:brightness(.9);}
+.saved-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:8px;padding:.7rem;text-align:center;font-size:13px;color:#1a5a30;margin-bottom:.75rem;}
+.saved-msg.show{display:block;}
+@media print{.save-btn,.saved-msg{display:none!important;}}
 </style>
 </head>
 <body>
@@ -486,6 +494,10 @@ textarea{min-height:75px;}
     </div>
   </div>
 
+
+  <button class="save-btn" onclick="saveAll()">💾 I-save ang lahat sa device ko</button>
+  <div class="saved-msg" id="savedMsg">✓ Nai-save na sa device mo. Pwede mong balikan anumang oras.</div>
+
   <div class="footer">
     BTLI 1 · Lesson 5 · Pagharap sa Hirap<br>
     MULTIPLY · multiplygroup.org
@@ -575,6 +587,16 @@ function updateProgress(){
   document.getElementById('progFill').style.width=pct+'%';
 }
 updateProgress();
+
+function saveAll(){
+  document.querySelectorAll('[data-save]').forEach(el=>{
+    if(el.tagName==='TEXTAREA'||(el.tagName==='INPUT'&&el.type!=='button')){
+      localStorage.setItem(LS_PREFIX+el.dataset.save,el.value);
+    }
+  });
+  const msg=document.getElementById('savedMsg');
+  if(msg){msg.classList.add('show');clearTimeout(window._sm);window._sm=setTimeout(()=>msg.classList.remove('show'),3200);}
+}
 </script>
 </body>
 </html>

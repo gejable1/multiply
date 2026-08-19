@@ -372,6 +372,14 @@
   .anchor-pill { display:inline-block; background:rgba(184,136,42,.12); border:1px solid var(--gold); color:var(--green-deep); border-radius:999px; padding:2px 10px; font-size:.8rem; font-weight:600; margin:2px 3px; }
   .path-mini { display:flex; gap:8px; align-items:center; background:var(--paper2); border-radius:8px; padding:8px 12px; margin:6px 0; border-left:3px solid var(--green); font-size:.9rem; }
   .path-mini b { color:var(--green-deep); }
+
+/* SAVE BUTTON (added — matches BTLI canonical pattern) */
+.save-btn{width:100%;background:var(--navy,#1a2f4a);color:white;border:none;border-radius:10px;padding:13px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.02em;transition:filter .15s;margin:0 0 .75rem;}
+.save-btn:hover{filter:brightness(1.15);}
+.save-btn:active{filter:brightness(.9);}
+.saved-msg{display:none;background:#d4edda;border:1px solid #a0d8b0;border-radius:8px;padding:.7rem;text-align:center;font-size:13px;color:#1a5a30;margin-bottom:.75rem;}
+.saved-msg.show{display:block;}
+@media print{.save-btn,.saved-msg{display:none!important;}}
 </style>
 </head>
 <body>
@@ -783,7 +791,34 @@
   if (savedMode && ['plan','facilitate','debrief','lcg'].includes(savedMode)) {
     switchMode(savedMode);
   }
+
+// ── Materials checklist persistence + explicit save (added) ──
+const CHK_KEY = 'btli1_l10_facilitator_checks';
+(function(){
+  const boxes = document.querySelectorAll('input[type=checkbox]');
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(CHK_KEY) || '{}'); } catch(e){}
+  boxes.forEach((b,i)=>{
+    if (saved[i]) b.checked = true;
+    b.addEventListener('change', persistChecks);
+  });
+  function persistChecks(){
+    const d = {};
+    document.querySelectorAll('input[type=checkbox]').forEach((b,i)=>{ if(b.checked) d[i]=1; });
+    localStorage.setItem(CHK_KEY, JSON.stringify(d));
+  }
+  window.persistChecks = persistChecks;
+})();
+function saveAll(){
+  window.persistChecks();
+  const msg=document.getElementById('savedMsg');
+  if(msg){msg.classList.add('show');clearTimeout(window._sm);window._sm=setTimeout(()=>msg.classList.remove('show'),3200);}
+}
 </script>
+
+
+  <button class="save-btn" onclick="saveAll()">💾 I-save ang lahat sa device ko</button>
+  <div class="saved-msg" id="savedMsg">✓ Nai-save na sa device mo. Pwede mong balikan anumang oras.</div>
 
 </body>
 </html>
