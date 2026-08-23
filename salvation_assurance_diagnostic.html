@@ -2020,12 +2020,6 @@ function goBackToComplete() {
   }
 }
 
-// ── CALCULATE & SHOW RESULTS ──────────────────────────────────
-function calcScore() {
-  // Score sections
-  var sections = { A:0, B:0, C:0, D:0, E:0, F:0, G:0 };
-  var maxes    = { A:10, B:10, C:45, D:30, E:40, F:15, G:20 };
-
 // -- SECTION WEIGHTS -----------------------------------------------------------
 // The weight of a section is a PASTORAL JUDGEMENT, declared here on purpose.
 // Before this, a section's influence was an accident of how many questions
@@ -2063,6 +2057,12 @@ function SALV_WEIGHTED_PCT(sections, maxes) {
   if (!wsum) return 0;
   return Math.round((acc / wsum) * 100);
 }
+
+// ── CALCULATE & SHOW RESULTS ──────────────────────────────────
+function calcScore() {
+  // Score sections
+  var sections = { A:0, B:0, C:0, D:0, E:0, F:0, G:0 };
+  var maxes    = { A:10, B:10, C:45, D:30, E:40, F:15, G:20 };
 
   document.querySelectorAll('input[type="radio"][data-scorable="scale"]:checked').forEach(function(r){
     var sec = r.dataset.section;
@@ -2415,6 +2415,8 @@ async function submitToDashboard() {
   btn.textContent = '⏳ Saving...';
   btn.disabled = true;
 
+  try {  // S88b: the Saving state is exception-safe -- ANY pre-network throw
+         // lands in the catch below, restores the button, and names itself.
   const scores = collectScores();
   const memberId = _selectedMemberId || document.getElementById('selectedMemberId').value || null;
   const memberName = _selectedMemberName || document.getElementById('selectedMemberName').value ||
@@ -2496,7 +2498,6 @@ async function submitToDashboard() {
       _saveErr = e;
     }
   }
-  try {
     if (_saveErr) throw _saveErr;
     try { localStorage.removeItem(SALV_DRAFT_KEY); } catch(_e){}
 
