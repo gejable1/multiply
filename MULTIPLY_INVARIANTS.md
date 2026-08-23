@@ -4621,4 +4621,44 @@ Told that a past-month devotional reader "falls back to a fetch-by-date when the
 
 ---
 
+### **450. A status or eligibility filter applied to a denominator propagates consciously to every numerator on the same population -- and history facts are never gated at all.**
+
+Lifecycle Phase 1b gated the pulse report's flockSize to active members but left the numerator reading unfiltered attendance rows: "2 members, 3 present." The first cure over-corrected -- gating the whole row-loop also gated met/dates/leaderLogged, so marking one member `moved` retroactively un-met a meeting that really happened and collapsed a leader's streak 4 -> 0. The final shape splits the two truths: whether the gathering HAPPENED derives from any live row and is immune to later status changes (forward-only, like migrations and pathway progress); how many of the CURRENT ACTIVE flock were present carries the same clause as the denominator. Every filter added to a denominator is either applied to each numerator drawing on that population or its exclusion is stated and defended.
+
+**Established August 2026 (Session 88). Invariant #450 added - count now 450.**
+
+---
+
+### **451. A pastorally critical client save path carries all five defenses: draft-before-network, hard abort timeout, bounded retries, idempotent client-generated PK, and duplicate-key-as-success.**
+
+Field reports of the salvation diagnostic "timing out" traced to supabase-js having NO default timeout -- zombie mobile connections hung "Saving..." forever and a refresh lost forty answers about a member's soul. The cure is a package, not a line: the built record stashes to localStorage BEFORE any network attempt (cleared only on confirmed success, resume banner on reload); each attempt runs under a hard AbortController timeout; retries are bounded with backoff and honest button text; the record carries a client UUID (with an RFC-4122 v4 getRandomValues fallback for pre-iOS-15.4 phones, and the assignment itself wrapped so no exotic engine can throw before the stash) so a retry after response-death collides on 23505 -- which IS success, never a second row. Secondary writes (the members update) keep their prior non-fatal contract. Server-side was audited too and found clean (#454); the client was the whole story.
+
+**Established August 2026 (Session 88). Invariant #451 added - count now 451.**
+
+---
+
+### **452. The patcher travels INSIDE the CC block that gates it; a placeholder heredoc is a HALT, and CC never authors substitute bytes toward a gated WANT.**
+
+A salv-resilient-save block shipped with `[THE PATCHER -- I will paste it below]` between the heredoc markers and nothing following. CC ran the BASE gate for a known starting state, swept uploads recursively, found nothing, HALTED, and cleaned the branch for the resend -- explicitly refusing to author a substitute because the WANT sha is reachable only from the proven bytes. That refusal is the correct behavior and is now the rule: a CC block is complete when the payload that produces the gated WANT is inside the same fenced block as its gates, and any placeholder or forward reference is treated as a missing payload, never as an invitation to improvise.
+
+**Established August 2026 (Session 88). Invariant #452 added - count now 452.**
+
+---
+
+### **453. A file the Pastor uploads directly to the repo gets the same structural post-verification as a patched file -- upload is a delivery channel, not an exemption from proof.**
+
+Two direct uploads this session -- love_language.html (three additional debias items) and five BTLI lesson files (a save-all button retrofit) -- were verified from main after landing: the Love Language structural counter re-run in full (30 pairs, each language 12x, 6 per position, all pairings x3, 120 unique strings), every script block node --check'd, tag balance swept, and the new buttons' call chains traced to their definitions (which caught that L5's saveAll is a legitimately DIFFERENT self-contained implementation, not a missing persistChecks). The gates that guard patched bytes guard uploaded bytes; only the delivery differs.
+
+**Established August 2026 (Session 88). Invariant #453 added - count now 453.**
+
+---
+
+### **454. Intermittent field slowness is diagnosed on BOTH sides before any verdict: every await on the client path read for unbounded waits, and pg_policies + triggers + indexes read for per-row server cost.**
+
+"Some members save fine, others time out" is not answered with "slow connection." The client path is read first (this session it revealed no timeout, serial round trips, and no recovery -- #451's whole case), and the server side is audited with one query over pg_policies, pg_trigger, and pg_indexes on the affected table, looking for policy subqueries against unindexed columns and per-row trigger work. Here the server came back ideal (plain tenant-equality policies, matching indexes, a JWT-stamp trigger), which is itself a finding: it closed the case at the client with evidence instead of assumption.
+
+**Established August 2026 (Session 88). Invariant #454 added - count now 454.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
