@@ -2468,7 +2468,9 @@ async function submitToDashboard() {
   // stash a draft BEFORE any network attempt so a dead connection can never
   // lose a completed assessment, then up to 3 attempts (hard 15s abort each,
   // 2s/5s backoff), insert + member update in parallel per attempt.
-  if (!diagRecord.id && window.crypto) diagRecord.id = crypto.randomUUID ? crypto.randomUUID() : _salvUuidV4();
+  // Belt-and-braces: any exotic engine where this throws falls through to the
+  // server-generated id -- the save path never dies before the draft stashes.
+  try { if (!diagRecord.id && window.crypto) diagRecord.id = crypto.randomUUID ? crypto.randomUUID() : _salvUuidV4(); } catch(_e){}
   const memberPatch = memberId ? {
     diagnostic_score: scores.pct,
     diagnostic_zone: scores.zone,
