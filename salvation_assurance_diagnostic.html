@@ -2331,6 +2331,18 @@ function collectScores() {
 // ── SUBMIT TO DASHBOARD ──
 const SALV_DRAFT_KEY = 'salv_pending_save_v1';
 
+// RFC-4122 v4 fallback for phones older than iOS 15.4 / Chrome 92 (no
+// crypto.randomUUID). getRandomValues reaches back to iOS 5, so idempotent
+// retries hold on the very phones most likely to have flaky connections.
+function _salvUuidV4() {
+  const b = new Uint8Array(16);
+  window.crypto.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, x => x.toString(16).padStart(2, '0'));
+  return h.slice(0,4).join('') + '-' + h.slice(4,6).join('') + '-' + h.slice(6,8).join('') + '-' + h.slice(8,10).join('') + '-' + h.slice(10,16).join('');
+}
+
 // S88: one attempt = insert + (optional) member update in PARALLEL, both under
 // a single hard 15s abort. supabase-js@2 supports .abortSignal() natively.
 async function _salvAttemptSave(diagRecord, memberId, memberPatch) {
@@ -2456,7 +2468,7 @@ async function submitToDashboard() {
   // stash a draft BEFORE any network attempt so a dead connection can never
   // lose a completed assessment, then up to 3 attempts (hard 15s abort each,
   // 2s/5s backoff), insert + member update in parallel per attempt.
-  if (!diagRecord.id && window.crypto && crypto.randomUUID) diagRecord.id = crypto.randomUUID();
+  if (!diagRecord.id && window.crypto) diagRecord.id = crypto.randomUUID ? crypto.randomUUID() : _salvUuidV4();
   const memberPatch = memberId ? {
     diagnostic_score: scores.pct,
     diagnostic_zone: scores.zone,
