@@ -4661,4 +4661,20 @@ Two direct uploads this session -- love_language.html (three additional debias i
 
 ---
 
+### **455. A proof of a user-triggered path begins at the ENTRY POINT -- the real handler on a rendered page -- never at a chosen line below it.**
+
+The salvation save "timeout" saga: #308 shipped five layers of network resilience, every harness green -- and every harness exercised the machinery BELOW the line that was actually throwing. Production's console named it in one screenshot: ReferenceError at collectScores <- submitToDashboard, thrown after 'Saving...' and before any try/catch, zero network involvement, 26 days of frozen buttons. Passing proofs on the lower half of a path prove nothing about whether execution reaches it; the harness must start where the user starts (the click), on rendered bytes, and drive through. Annotation for #451 and #454: both held in FORM during this arc -- the resilience package is right and the two-sided audit was performed -- but both were applied around the throwing line rather than at it. Reachability is proven first; resilience is proven second. The Pastor's refusal to accept "it should work now," through banner tests, DNS menus, and an F12 screenshot, was the harness that finally started at the entry point.
+
+**Established August 2026 (Session 88b). Invariant #455 added - count now 455.**
+
+---
+
+### **456. Scope follows every caller: when a declaration is added or moved, visibility is verified at EACH call site -- and any long-lived UI state (Saving..., Loading...) is exception-safe.**
+
+The root cause was one line of S81's #255: SALV_WEIGHTS + SALV_WEIGHTED_PCT were declared inside calcScore()'s body while the save path's collectScores() called the same function from top level -- syntactically legal (node --check passed forever), fatally scoped. Every save since July 26 threw; the members who "saved fine" were on stale pre-#255 cached pages -- the cache lottery inverted, freshness was the disease. Cure shipped as PR #310: the block hoisted VERBATIM to top level (proven byte-identical, 1673 bytes, calcScore's own behavior unchanged, #255's pastoral weights intact), plus the structural vaccine -- the try in submitToDashboard now covers record-building, so ANY future pre-network throw restores the button and names itself instead of freezing. Two rules from one line: (1) a moved or added declaration is checked against the scope of every caller, not the nearest one; (2) a UI state that says "working" must be exception-safe end to end -- a frozen 'Saving...' is a lie the user cannot diagnose.
+
+**Established August 2026 (Session 88b). Invariant #456 added - count now 456.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
