@@ -8992,7 +8992,15 @@ function _renderBrowseMonth(){
       title = MultiplyShared.escapeHTML(entry.title || 'Today\'s reading');
       tag = isToday
         ? '<span class="en-text">TODAY · TAP TO READ</span><span class="tl-text">NGAYONG ARAW · BASAHIN</span>'
-        : (entry.scripture_ref ? MultiplyShared.escapeHTML(entry.scripture_ref) : '');
+        : (function(){
+            // Browse cards are a SUMMARY surface: refuse to render body-length
+            // text even if scripture_ref is ever mis-ingested with a full
+            // passage (Sept 2026 defect). Clamp to ~80 chars; the tap-through
+            // reader always shows the complete entry.
+            var _r = (entry.scripture_ref || '').trim();
+            if (_r.length > 80) _r = _r.slice(0, 80).trim() + '\u2026';
+            return _r ? MultiplyShared.escapeHTML(_r) : '';
+          })();
     } else if(isFuture){
       title = `<span class="en-text">Coming soon</span><span class="tl-text">Hihintayin</span>`;
       tag = '';
