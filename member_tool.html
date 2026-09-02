@@ -8330,7 +8330,11 @@ function renderAnchorCard(){
 
     if(todayDevo.scripture_ref){
       refEl.style.display = '';
-      refEl.textContent = todayDevo.scripture_ref.toUpperCase();
+      // Summary surface: clamp before uppercasing so a mis-ingested full
+      // passage in scripture_ref cannot flood the today card (Sept 2026).
+      var _tref = (todayDevo.scripture_ref || '').trim();
+      if (_tref.length > 80) _tref = _tref.slice(0, 80).trim() + '\u2026';
+      refEl.textContent = _tref.toUpperCase();
     } else {
       refEl.style.display = 'none';
     }
@@ -8505,7 +8509,11 @@ function renderReaderBody(){
     html += `<div class="reader-section-label"><span class="en-text">📜 Passage</span><span class="tl-text">📜 Talata</span></div>`;
     html += `<div class="reader-passage">`;
     if(e.scripture_ref){
-      html += `<div class="reader-passage-ref">${esc(e.scripture_ref.toUpperCase())}</div>`;
+      // Ref line is a summary surface: clamp before uppercasing (Sept 2026
+      // defect: full passage mis-ingested into scripture_ref).
+      var _rref = (e.scripture_ref || '').trim();
+      if (_rref.length > 80) _rref = _rref.slice(0, 80).trim() + '\u2026';
+      html += `<div class="reader-passage-ref">${esc(_rref.toUpperCase())}</div>`;
     }
     if(e.scripture_text){
       html += `<div class="reader-passage-text">${esc(e.scripture_text)}</div>`;
