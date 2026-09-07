@@ -7586,30 +7586,59 @@ async function loadCelebrationFeed(){
   const _dates = (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates : null;
   const _toYMD = d => _dates ? _dates.toYMD(d) : (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
 
-  // ── (A) ASSESSMENT WINS (existing best-effort: recent updated_at + non-empty field)
-  const assessmentDefs = [
-    { field:'spiritual_gifts',       icon:'🎁', label_en:'completed Spiritual Gifts',   label_tl:'natapos ang Spiritual Gifts' },
-    { field:'disc_primary',          icon:'🧭', label_en:'discovered DISC style',       label_tl:'natuklasan ang DISC style' },
-    { field:'enneagram_type',        icon:'🌀', label_en:'discovered Enneagram type',   label_tl:'natuklasan ang Enneagram' },
-    { field:'love_language_primary', icon:'💝', label_en:'found Love Language',         label_tl:'natuklasan ang Love Language' },
-    { field:'strengths_top5',        icon:'⭐', label_en:'found their Strengths',       label_tl:'natuklasan ang Strengths' },
-    { field:'conflict_primary',      icon:'⚖️', label_en:'discovered Conflict Style',   label_tl:'natuklasan ang Conflict Style' },
-    { field:'diagnostic_zone',       icon:'✝️', label_en:'completed Salvation Assurance', label_tl:'natapos ang Salvation Assurance' }
-  ];
-  for(const m of eligible){
-    const upd = m.updated_at ? Date.parse(m.updated_at) : 0;
-    if(!upd || upd < cutoff) continue;
-    let primaryWin = null;
-    for(const aw of assessmentDefs){
-      const v = m[aw.field];
-      const hasIt = Array.isArray(v) ? v.length > 0 : (v != null && v !== '');
-      if(hasIt){ primaryWin = aw; break; }
-    }
-    if(primaryWin){
+  // ── (A) ASSESSMENT WINS — sourced from the per-completion tables
+  // (member_profiles + gifts_diagnostic + diagnostic_results), NEVER from
+  // members.updated_at: that row timestamp moves on ANY write (result views,
+  // later assessments syncing denormalized fields, profile edits), which
+  // re-celebrated weeks-old completions as fresh wins (Sept 2026 defect) and
+  // always mislabeled them as the first field in a fixed list. Only
+  // member_id + created_at are read from diagnostic_results — the zone never
+  // leaves the table (salvation stays no-view; the completion EVENT is the
+  // celebrable thing). A member with two genuine recent completions now gets
+  // two wins; dedupe keeps the newest per (member, kind).
+  const ASSESS_META = {
+    gifts:               { icon:'🎁', label_en:'completed Spiritual Gifts',    label_tl:'natapos ang Spiritual Gifts' },
+    disc:                { icon:'🧭', label_en:'discovered DISC style',        label_tl:'natuklasan ang DISC style' },
+    enneagram:           { icon:'🌀', label_en:'discovered Enneagram type',    label_tl:'natuklasan ang Enneagram' },
+    love_language:       { icon:'💝', label_en:'found Love Language',          label_tl:'natuklasan ang Love Language' },
+    strengths:           { icon:'⭐', label_en:'found their Strengths',        label_tl:'natuklasan ang Strengths' },
+    conflict_style:      { icon:'⚖️', label_en:'discovered Conflict Style',    label_tl:'natuklasan ang Conflict Style' },
+    salvation_assurance: { icon:'✝️', label_en:'completed Salvation Assurance', label_tl:'natapos ang Salvation Assurance' }
+  };
+  if(lcIds.length){
+    const cutoffIso = new Date(cutoff).toISOString();
+    const byId = new Map(eligible.map(m => [m.id, m]));
+    const found = new Map(); // `${member_id}|${kind}` -> newest completion (ms)
+    const _note = (mid, kind, iso) => {
+      if(!mid || !byId.has(mid) || !ASSESS_META[kind] || !iso) return;
+      const ms = Date.parse(iso);
+      if(!ms || ms < cutoff) return;
+      const k = mid + '|' + kind;
+      if(!found.has(k) || found.get(k) < ms) found.set(k, ms);
+    };
+    const { data: profRows, error: pErr } = await db.from('member_profiles')
+      .select('member_id,profile_type,created_at')
+      .in('member_id', lcIds).gte('created_at', cutoffIso);
+    if(pErr) throw pErr;
+    for(const r of (profRows || [])) _note(r.member_id, r.profile_type, r.created_at);
+    const { data: giftRows, error: gErr } = await db.from('gifts_diagnostic')
+      .select('member_id,created_at')
+      .in('member_id', lcIds).gte('created_at', cutoffIso);
+    if(gErr) throw gErr;
+    for(const r of (giftRows || [])) _note(r.member_id, 'gifts', r.created_at);
+    const { data: salvRows, error: sErr } = await db.from('diagnostic_results')
+      .select('member_id,created_at')
+      .in('member_id', lcIds).gte('created_at', cutoffIso);
+    if(sErr) throw sErr;
+    for(const r of (salvRows || [])) _note(r.member_id, 'salvation_assurance', r.created_at);
+    for(const [k, ms] of found){
+      const mid = k.slice(0, k.indexOf('|'));
+      const kind = k.slice(k.indexOf('|') + 1);
+      const m = byId.get(mid); const meta = ASSESS_META[kind];
       wins.push({
         memberId:m.id, memberName:m.name, photoUrl:m.photo_url||'', isTest:!!m.is_test_member,
-        icon:primaryWin.icon, label_en:primaryWin.label_en, label_tl:primaryWin.label_tl,
-        whenIso:m.updated_at, sortKey:upd
+        icon:meta.icon, label_en:meta.label_en, label_tl:meta.label_tl,
+        whenIso:new Date(ms).toISOString(), sortKey:ms
       });
     }
   }
