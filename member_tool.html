@@ -3289,11 +3289,10 @@ async function initMMT(){
     // parallel, then one consolidated re-render. A loader failure now
     // degrades its own section instead of bricking boot into the retry UI.
     const _safeRender = (name, fn) => { try { fn(); } catch(e){ console.warn('first-paint render failed (' + name + '):', e); } };
+    // S90 PERF PHASE 2: Home alone at first paint. The other four screens
+    // are dirty-flagged and render on first open (see _renderIfDirty); this
+    // also defers renderPathway's own pathway_rungs fetch off the boot path.
     _safeRender('home', renderHome);
-    _safeRender('pipeline', renderPipeline);
-    _safeRender('assessments', renderAssessments);
-    _safeRender('eolo', renderEolo);
-    _safeRender('profile', renderProfile);
     if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
     window.__mmtPhase('First paint');
     showApp();
@@ -3312,8 +3311,6 @@ async function initMMT(){
       ['feed',   loadCelebrationFeed],
       ['headsup config', loadHeadsUpConfig],
       ['my notices', loadMyRecentNotices],
-      ['library', loadLibraryAndProgress],
-      ['caveats', loadAssessmentCaveats],
       ['prayer',  loadPrayerData],
       ['notifications', loadMemberNotifs]
     ];
@@ -3324,11 +3321,15 @@ async function initMMT(){
       }
     });
     window.__mmtPhase('Data loaded');
+    // S90 PERF PHASE 2: repaint only what is being looked at. Home always
+    // (it is the boot batch's canvas); the other four are marked dirty and
+    // repaint on next open -- unless one is active RIGHT NOW (the pageshow
+    // return-screen hop landed there pre-boot), in which case paint it here.
+    _mmtBooted = true;
     renderHome();
-    renderPipeline();
-    renderAssessments();
-    renderEolo();
-    renderProfile();
+    Object.keys(_screenDirty).forEach(function(p){ _screenDirty[p] = true; });
+    const _activePg = document.querySelector('.screen-page.active');
+    if(_activePg) _renderIfDirty(_activePg.id.replace('page-', ''));
     window.__mmtPhase('Hydrated');
   }catch(e){
     clearTimeout(slowHintTimer);
@@ -6195,6 +6196,38 @@ async function saveModalField(){
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════
+// ---- S90 PERF PHASE 2: tab-gated loading + dirty-flag render-on-demand ----
+// First paint renders Home alone; the other four screens render the first
+// time they are LOOKED AT (goTo). Eolo/profile render from data already in
+// hand (memberRow); pipeline/assess fetch their tab-only data right then
+// (library, assessment caveats) via ensure-once loaders. After the boot
+// batch lands, only the visible screen repaints; hidden screens are marked
+// dirty and repaint on next open. A failed deferred load leaves the screen
+// dirty so the next visit retries. Pre-boot goTo (the pageshow
+// return-screen hop) leaves the flag alone; boot's final pass renders
+// whichever screen is active by then.
+let _mmtBooted = false;
+const _screenDirty = { pipeline: true, assess: true, eolo: true, profile: true };
+let _libLoaded = false, _caveatsLoaded = false;
+async function _ensureLibraryLoaded(){ if(_libLoaded) return; await loadLibraryAndProgress(); _libLoaded = true; }
+async function _ensureCaveatsLoaded(){ if(_caveatsLoaded) return; await loadAssessmentCaveats(); _caveatsLoaded = true; }
+const _screenRenderers = {
+  pipeline: async function(){ await _ensureLibraryLoaded(); renderPipeline(); },
+  assess:   async function(){ await _ensureCaveatsLoaded(); renderAssessments(); },
+  eolo:     function(){ renderEolo(); },
+  profile:  function(){ renderProfile(); }
+};
+function _renderIfDirty(pageName){
+  if(!(pageName in _screenDirty) || !_screenDirty[pageName]) return;
+  if(!_mmtBooted) return;
+  _screenDirty[pageName] = false;
+  const _fail = function(e){ _screenDirty[pageName] = true; console.warn('deferred render failed (' + pageName + '):', e); };
+  try{
+    const r = _screenRenderers[pageName]();
+    if(r && typeof r.then === 'function') r.catch(_fail);
+  }catch(e){ _fail(e); }
+}
+
 function goTo(pageName){
   try{ sessionStorage.setItem('mmt_current_screen', pageName); }catch(e){}
   document.querySelectorAll('.screen-page').forEach(p => p.classList.remove('active'));
@@ -6203,6 +6236,9 @@ function goTo(pageName){
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   const tab = document.querySelector('[data-page="'+pageName+'"]');
   if(tab) tab.classList.add('active');
+  // S90 PERF PHASE 2: render this screen now if it has never been painted
+  // (or was left dirty by the boot batch / a failed deferred load).
+  _renderIfDirty(pageName);
   // Scroll to top
   if(page){
     const content = page.querySelector('.content');
@@ -6534,8 +6570,11 @@ function setLang(lang){
   document.getElementById('langEn').classList.toggle('active', lang === 'en');
   document.getElementById('langTl').classList.toggle('active', lang === 'tl');
   try{ localStorage.setItem('multiply_mmt_lang', lang); }catch(e){}
-  // Re-render any pages whose dynamic content depends on language
-  if(memberRow){
+  // Re-render any pages whose dynamic content depends on language.
+  // S90 PERF PHASE 2: skip while Journey is still dirty (never opened) --
+  // it would paint with cold library data; first open renders in the
+  // current language anyway because every render reads the lang live.
+  if(memberRow && !_screenDirty.pipeline){
     renderPipeline();
   }
   // If the sermons screen is currently showing, sync its detail view to the
