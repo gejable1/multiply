@@ -4677,4 +4677,76 @@ The root cause was one line of S81's #255: SALV_WEIGHTS + SALV_WEIGHTED_PCT were
 
 ---
 
+### **457. The ledger stamp is schema too: read migration 023 before stamping — the column set is never recalled from memory.**
+
+Migration 116's ledger INSERT used `(version, filename, notes)` against 023's real column `note` — a guessed plural that produced prod 42703 on the Pastor's first run. Two mercies limited the damage: the Supabase editor's atomic batch rolled back everything (trigger, sweep, stamp — nothing half-applied), and the fix was one word. But the failure class is the point: the `schema_migrations` ledger is a table like any other, and #223/#407/#418's never-guess-a-column rule applies to it with zero exemption for familiarity. The stamp is written dozens of times a quarter; that is exactly the kind of muscle memory that drifts. Rule: any migration authored in a session where 023's DDL is not already in context re-reads it (or the schema dump) before writing the stamp — one grep is cheaper than one rollback.
+
+**Established September 2026 (Session 89). Invariant #457 added - count now 457.**
+
+---
+
+### **458. A fixture that mirrors your assumption instead of the source cannot catch your assumption — stubs carry the source's real DDL: columns, PKs, constraints.**
+
+Bitten twice in one session. First: the local proof harness stubbed `schema_migrations` with the invented `notes` column, so the PG16 "proof" of migration 116 passed against the same guess that prod rejected (see #457) — the fixture agreed with the author, which is agreement with nothing. Second, and subtler: the Arni-surgery fixture declared `prayer_requests (id serial)` WITHOUT `PRIMARY KEY`, so the grandchild FK (`prayer_intercessions.request_id REFERENCES prayer_requests(id)`) silently failed to create, the depth-2 test graph never existed, and the FK-descending sweep "passed" while its most important code path went unexercised — caught only because the run's NOTICE lines showed no depth-1/depth-2 deletions where the fixture should have forced them. Rule: a proof stub is built FROM the source (migration DDL, schema dump), never from the mental model being tested; and after any fixture-dependent run, verify the fixture's load-bearing rows/constraints actually exist (a graph check, a count) before trusting the green.
+
+**Established September 2026 (Session 89). Invariant #458 added - count now 458.**
+
+---
+
+### **459. A summary column never carries body text: ingestion splits at the field boundary, the database guards the boundary in ONE place, and summary display surfaces clamp as the seatbelt.**
+
+The September devotional guide docx merged "Romans 1:1–17 (NIV)" and the full passage into one 📜 paragraph; ingestion stored the whole paragraph in `scripture_ref`, and every surface that renders that column as a summary — browse-month cards, the reader's uppercased gold ref line, the today card — exploded a chapter of Scripture onto a one-line slot (Agape's read ALL-CAPS because the ref line legitimately uppercases). Three-layer cure, each at its right layer: (1) docx→SQL conversion splits ref from passage at the `\([A-Z]{2,5}\)` translation marker — a standing rule for every future guide; (2) migration 116's BEFORE INSERT/UPDATE trigger performs the same split at the database boundary, so any seeder, any church, any month is normalized on the way in — and the one-time cure sweep was a touch-UPDATE that routed existing bloat through the SAME trigger, keeping the split logic in exactly one place; (3) the three summary display surfaces clamp at 80 chars as defense-in-depth, because a summary surface that will print whatever it is handed is an explosion waiting for the next bad row. Fix data at ingestion, guard at the boundary, clamp at display — in that order of authority.
+
+**Established September 2026 (Session 89). Invariant #459 added - count now 459.**
+
+---
+
+### **460. Per-church data cures are church-blind, month-blind, and re-runnable: one church's PASS is not the platform's PASS.**
+
+Rosehill's September devotionals were cured by hand and looked done — then Agape's reader showed the same bloat weeks later, because devotionals are PER-CHURCH rows (migration 025) seeded at different times from the same defective batch, and the mental model of "the September data" quietly meant "Rosehill's September data." The cure script happened to be church-blind and idempotent, so the fix was literally "run the same file again" — that is the property to design for, not a lucky accident. Rule: any data cure on a per-church table matches by CONDITION (the defect's fingerprint), never by tenant or by the month that surfaced it; its verify is platform-wide; and it is written to re-run safely, because per-church seeding guarantees the same defect lands at different times in different lanes. Twelve churches means every "fixed" is provisional until the condition-scan says zero everywhere.
+
+**Established September 2026 (Session 89). Invariant #460 added - count now 460.**
+
+---
+
+### **461. Ownership deletes descend the FK tree from the live catalog; actor columns are detached (NULL or reassigned), never deleted.**
+
+The Arni cleanup (three fabricated members under one LC leader) proved the shape of safe member surgery. First principle: child discovery is LIVE — every declared FK to `members(id)` plus every `member_id`/`discipler_id` column even without a constraint, read from `pg_catalog`/`information_schema` at run time, because any hand-enumerated table list is stale the day after it is written (tables from migrations the script author never saw). Second: ownership rows (member_id/discipler_id/requester_id) are DELETED — but only after descending the FK tree below them, because a fake's prayer_request can carry a real member's intercession, and that intercession a reaction (prod 23503 proved depth 1 exists; the sweep goes depth 2). Third: actor-style references (logged_by_id, unlocked_by — a fake's fingerprint on a REAL member's row) are never deleted: nullable columns are SET NULL, NOT NULL columns are reassigned to the accountable human (the leader who operated the fakes) — destroying a real member's attendance because a phantom logged it is the failure mode this rule exists to prevent. All of it atomic, gated on exact target counts, with views excluded and re-run yielding the correct "found 0" no-op.
+
+**Established September 2026 (Session 89). Invariant #461 added - count now 461.**
+
+---
+
+### **462. A celebration is sourced from the table that recorded the event — a shared row's timestamp is a rumor, not a memory.**
+
+LC Celebrations showed members "completing" assessments taken weeks earlier, freshly re-dated, because the feed's assessment wins read `members.updated_at` — a whole-row timestamp that moves on ANY write: opening a result (denormalized re-sync), a later assessment's mirror update, a profile edit, sixteen different code paths. Worse, the win's LABEL was just the first non-empty field in a fixed list, so whatever a member did recently was announced as "completed Spiritual Gifts." The cure (PR #313): wins are sourced from the per-completion tables that actually recorded each event — `member_profiles` (row-per-assessment, labeled by `profile_type`), `gifts_diagnostic` (the dual-table merge the standing assessment invariant already demands), and `diagnostic_results` reading ONLY `member_id + created_at` so the salvation zone never leaves its table (the completion EVENT is celebrable; the verdict stays no-view). Dedupe keeps the newest per (member, kind); a member with two genuine recent completions now gets two celebrations. General rule: recency claims must trace to the row born at the event. A denormalized mirror answers "what is true now," never "when did it happen."
+
+**Established September 2026 (Session 89). Invariant #462 added - count now 462.**
+
+---
+
+### **463. A lesson-number rewrite must not carry sibling titles: patterns key on the stable, title-agnostic prefix.**
+
+The L12 quiz seed derived its attendance pattern from L11's row via `replace('11','12')` — mechanically correct, semantically wrong: the result was "BTLI 1 · L12 · Buhay May Misyon," L12's number wearing L11's title. Because attendance matching is a lowercase SUBSTRING check, the pattern would never have fired for any real L12 event, silently locking the quiz's attendance gate forever. The cure pinned the pattern to "BTLI 1 · L12" — the prefix that is stable across whatever the event gets named — and the same-session eyeball rule caught it: the seed's verify SELECT deliberately displays the derived pattern for the Pastor to read, which is exactly how this one was caught in prod within minutes. Two rules: derived strings that embed sibling free-text are rewritten to the invariant portion only; and any clone-from-sibling seed SURFACES its derived values in the verify output, because a human reading one line is the cheapest gate against a semantic ride-along no regex will flag.
+
+**Established September 2026 (Session 89). Invariant #463 added - count now 463.**
+
+---
+
+### **464. First paint waits for ONE round-trip, never for below-the-fold loaders: cold renders are wrapped, and a loader failure degrades its section — never the boot.**
+
+The Pastor stood in a dead spot trying to show a friend the app and waited "almost endlessly" for an interface he only wanted to LOOK at — because `showApp()` sat behind `Promise.allSettled` of ELEVEN loaders, and on spotty data allSettled means the slowest query (prayer wall, library progress, notifications) holds the whole UI hostage. Parallelizing the waterfall (a previous session's win) was necessary but not sufficient: parallel-then-gate still gates. The cure (PR #314): paint after `loadMember()` alone — every section rendered from its defaulted module state, each render wrapped so a cold-state throw can never block boot; then the one above-the-fold datum (today's devotional) loads and hydrates immediately; then the remaining ten run in parallel and re-render on landing. Structural bonus: a loader failure now degrades its own section instead of routing the entire app into the retry screen. Companion rule: nothing on the boot path spends bandwidth speculatively — the YouTube iframe API now injects only when a video card first needs it. Phase markers (First paint → Devotional hydrated → Hydrated) make the sequence auditable on-device. MLT and MD carry the same disease and are queued for the same treatment.
+
+**Established September 2026 (Session 89). Invariant #464 added - count now 464.**
+
+---
+
+### **465. Chat file delivery bypasses CC even when the Pastor uploads manually — the coder role belongs to CC, and byte lineage exists only on CC's lane.**
+
+Three times in one session (the L12 file set, then the MMT clamp + SW bump) finished files were delivered straight from chat "because it's faster," and the Pastor called it: "you have again usurped CC's role." The cost is not ceremony — it is the byte chain: BASE gate → proven patcher → WANT gate → push → byte-for-byte PR back-check exist ONLY when CC lands the bytes; a chat-delivered file has a recorded WANT sha at best, verified after the fact if ever. Restored lanes: Claude architects, proves, authors SQL, and back-checks; CC executes every file edit through the gated block; the Pastor runs SQL and merges. Standing exception, explicit rather than eroding: lesson CONTENT builds (pptx decks and their sibling HTML, binary or generated artifacts CC cannot author from a prompt) remain chat-built and Pastor-uploaded — with recorded shas so a codeload pull can confirm the landing. Delivery-mechanics rider, extending #360: patch payloads carrying emoji or any non-ASCII ship inside the CC block as base64 of the exact UTF-8 bytes (or as slice-anchors + length gates that never transit the old bytes at all), with the WANT gate as final arbiter of transit fidelity.
+
+**Established September 2026 (Session 89). Invariant #465 added - count now 465.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
