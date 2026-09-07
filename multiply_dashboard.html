@@ -1884,7 +1884,6 @@ async function loadMembers(){
   const{data,error}=await db.from('members').select('id,name,birthday,civil_status,baptism_date,enrolled_date,discipler_id,discipler,discipler_name,lc_group,pending_lc_group,diagnostic_zone,pipeline_level,spiritual_gifts,ministry,ministry_role,ministry2,ministry2_role,ministry3,ministry3_role,contact,address,family_members,checks,eolo,notes,is_facilitator,is_test_member,is_external_user,facilitator_role,diagnostic_score,diagnostic_date,intervention_track,intervention_status,facilitator_id,facilitator_name,updated_at,created_at,member_pin_hash,member_pin_set_at,photo_url,status,status_changed_at,status_note').order('updated_at',{ascending:false});
   if(error){sync('err');document.getElementById('dbs').textContent='❌ '+error.message;toast('Load error','❌');return;}
   members=(data||[]).map(r2l).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  await _loadPathwayCache();  // S80 (PR-O): church-wide pathway_rungs+progress for table/tiles/modal
   sync('ok');
   document.getElementById('dbs').textContent='✅ Connected to Supabase';
   document.getElementById('dbc').textContent = (function(){
@@ -1898,7 +1897,13 @@ async function loadMembers(){
     return parts.join(' · ');
   })();
   buildSettingsMinistries();
+  // S90 PR-B: FIRST PAINT from the members query alone -- the pathway cache
+  // (a second round trip) hydrates BEHIND the paint. Until it lands,
+  // _pwCacheReady stays false and the Progress column, pipeline tiles, and
+  // modal Pathway tab show an honest placeholder, never a false 0/N.
   renderAll();
+  await _loadPathwayCache();  // S80 (PR-O): church-wide pathway_rungs+progress for table/tiles/modal
+  renderAll();  // hydrate repaint: re-dirties all panels, repaints the active one
 }
 
 function l2r(m){
@@ -2207,7 +2212,7 @@ function renderTable(){
       <td>${dz?`<span class="zb zb${dz}">${ZL[dz]}</span>${m.diagnostic_score!=null?`<span style="font-size:10px;color:var(--muted);margin-left:4px">${m.diagnostic_score}%</span>`:''}`:
         '<span class="zb zbn">Not assessed</span>'}</td>
       <td>${intFlag}</td>
-      <td><div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div><div class="pp">${pct}% · ${done}/${_pp.total}</div></td>
+      <td>${_pwCacheReady?`<div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div><div class="pp">${pct}% · ${done}/${_pp.total}</div>`:'<div class="pp">…</div>'}</td>
       <td style="font-size:12px">${m.discipler||'—'}</td>
       <td style="font-size:12px">${(()=>{
   const mins=[{m:m.ministry,r:m.ministry_role},{m:m.ministry2,r:m.ministry2_role},{m:m.ministry3,r:m.ministry3_role}].filter(x=>x.m);
@@ -2237,8 +2242,8 @@ function rPipe(){
           <div class="av" style="${mdAvBg(m)}width:28px;height:28px;font-size:10px">${mdAvLabel(m)}${mdAvImg(m)}</div>
           <div style="font-size:12px;font-weight:600;color:var(--ink)">${MultiplyShared.escapeHTML(m.name)}</div>
         </div>
-        <div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${pct}% · ${MultiplyShared.escapeHTML(m.ministry||'Unplaced')}</div>
+        ${_pwCacheReady?`<div class="pt"><div class="pf" style="width:${pct}%;background:${LC_COLORS[l]}"></div></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${pct}% · ${MultiplyShared.escapeHTML(m.ministry||'Unplaced')}</div>`:`<div style="font-size:10px;color:var(--muted);margin-top:2px">… · ${MultiplyShared.escapeHTML(m.ministry||'Unplaced')}</div>`}
       </div>`;
     }).join('');
     return`<div style="margin-bottom:1.5rem">
@@ -3479,6 +3484,7 @@ async function updateIntStatus(id,status){
 // Church-wide cache so the members table, the distribution tiles, and the
 // member-modal Pathway tab all read ONE source of truth. Loaded once in
 // loadMembers before renderAll(). Mirrors MLT's overlay/trackable/giving logic.
+let _pwCacheReady = false;  // S90 PR-B: false until the cache lands (stays false on a failed load -- placeholders over false zeros)
 let _PW_RUNGS = {};   // level -> { rung_key: resolved_row }
 let _PW_PROG  = {};   // member_id -> Set('level|rung_key')
 let _PW_NOTE  = {};   // member_id -> { 'level|rung_key': note }  (null = hand-marked)
@@ -3508,6 +3514,7 @@ async function _loadPathwayCache(){
     });
     _PW_PROG = prog;
     _PW_NOTE = notes;
+    _pwCacheReady = true;  // S90 PR-B: success only
   }catch(e){ console.warn('[md-pathway] cache load failed:', e); _PW_RUNGS = {}; _PW_PROG = {}; _PW_NOTE = {}; }
 }
 // Trackable, published, non-giving rungs for a level (the denominator set).
@@ -3543,6 +3550,9 @@ function rPathway(m){
   const w = document.getElementById('pcl');
   if(!w) return;
   if(!m){ w.innerHTML=''; return; }
+  // S90 PR-B: the cache hydrates behind first paint; show a loading state
+  // rather than the false "No pathway rungs defined yet." empty-state.
+  if(!_pwCacheReady){ w.innerHTML='<div style="color:var(--muted);font-size:12px">Loading pathway…</div>'; return; }
   const set = _PW_PROG[m.id] || new Set();
   let h = '';
   for(let lvl=0; lvl<=5; lvl++){
