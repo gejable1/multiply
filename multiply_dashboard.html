@@ -2003,8 +2003,41 @@ function buildSettingsMinistries(){
 // ═══════════════════════════════════════
 // RENDER ALL
 // ═══════════════════════════════════════
+// ---- S90 PERF PHASE 2 (MD): selective render + dirty panels ----
+// renderAll() keeps its name and its contract for every mutation caller:
+// "the data changed, repaint". Internally it now marks EVERY mapped panel
+// dirty and repaints only the one being looked at (plus the always-cheap
+// global chrome). Hidden panels repaint on their next open via
+// _renderPanelIfDirty, which navigation (_navTo / showPanel / drillDown)
+// calls instead of renderAll -- a nav click no longer pays for eight
+// invisible panels. Panels outside this map (careRadar, disputes,
+// announcements, aiInsights, myMinistry, settings) keep their own
+// side-effect loaders and are untouched. A failed panel render re-marks
+// itself dirty so the next visit retries instead of showing a dead panel.
+const _panelRenderers = {
+  overview:      function(){ rKPI(); rPV(); rOvExtras(); },
+  members:       function(){ renderTable(); },
+  pipeline:      function(){ rPipe(); },
+  interventions: function(){ rInterventions(); },
+  eolo:          function(){ rEolo(); },
+  alerts:        function(){ rAlerts(); },
+  reports:       function(){ rReports(); }
+};
+const _panelDirty = { overview:true, members:true, pipeline:true, interventions:true, eolo:true, alerts:true, reports:true };
+function _activePanelId(){
+  const p = document.querySelector('.panel.active');
+  return p ? p.id.replace('panel-', '') : null;
+}
+function _renderPanelIfDirty(id){
+  if(!(id in _panelRenderers) || !_panelDirty[id]) return;
+  _panelDirty[id] = false;
+  try{ _panelRenderers[id](); }
+  catch(e){ _panelDirty[id] = true; console.warn('panel render failed (' + id + '):', e); }
+}
 function renderAll(){
-  rKPI();rPV();renderTable();rPipe();rInterventions();rEolo();rAlerts();rReports();rOvExtras();
+  Object.keys(_panelDirty).forEach(function(p){ _panelDirty[p] = true; });
+  const _ap = _activePanelId();
+  if(_ap) _renderPanelIfDirty(_ap);
   if(typeof updateScopeCounts === 'function') updateScopeCounts();
   document.getElementById('dbc').textContent = (function(){
     const live = liveMembers().length, total = members.length;
@@ -3926,8 +3959,9 @@ function _navTo(panelId, sideEffect, fromDrawer){
     try { sideEffect(); } catch(e){ console.warn('nav side effect failed:', e); }
   }
 
-  // 6. Re-render dashboard cards (matches old showPanel behavior)
-  if (typeof renderAll === 'function') renderAll();
+  // 6. S90 PERF PHASE 2 (MD): navigation repaints only the target panel,
+  // and only if it is dirty -- a nav click is not a data change.
+  if (typeof _renderPanelIfDirty === 'function') _renderPanelIfDirty(panelId);
 }
 
 // ── More menu (desktop overflow) ──
@@ -4030,7 +4064,8 @@ function showPanel(id,btn){
     const inMore = !!document.querySelector('.more-menu [data-nav="'+id+'"]');
     moreBtn.classList.toggle('active', inMore);
   }
-  renderAll();
+  // S90 PERF PHASE 2 (MD): navigation renders its target panel only.
+  _renderPanelIfDirty(id);
 }
 
 function resetFilter(){
@@ -4071,7 +4106,10 @@ function drillDown(filter){
   const sq = document.getElementById('sq');
   if(sq) sq.value = '';
 
-  renderAll();
+  // S90 PERF PHASE 2 (MD): the filter changed, so the members table must
+  // repaint regardless of its dirty state; other panels' data is untouched.
+  _panelDirty.members = true;
+  _renderPanelIfDirty('members');
 
   // Scroll to top
   window.scrollTo({top:0, behavior:'smooth'});
