@@ -53,7 +53,7 @@
   window.__ytApiReady = false;
   window.__ytPendingPlayers = []; // queue of {elId, videoId, resourceId} until API ready
 </script>
-<script src="https://www.youtube.com/iframe_api" async></script>
+<!-- (S89 perf) iframe_api script is injected on demand by _ensureYtApi() the moment a library video card needs it - no YouTube bytes on boot. -->
 
 <style>
 :root{
@@ -3278,19 +3278,36 @@ async function initMMT(){
     await loadMember();
     window.__mmtPhase('Member loaded');
     clearTimeout(slowHintTimer);
-    // PERF: These 8 loaders are INDEPENDENT — none depend on each
-    // other's data. Running them in parallel with Promise.allSettled
-    // cuts boot time from ~serial-sum to ~max-individual time. On a
-    // slow Philippine mobile connection that's the difference between
-    // 4-5s of waterfall waits and ~600ms of one parallel round.
-    //
-    // We use allSettled (not all) because each loader is independently
-    // resilient — one failure should not abort the rest. Errors are
-    // surfaced in console.warn just like the original sequential code.
+
+    // ── S89 PERF PHASE 1: paint after ONE round-trip; hydrate the rest. ──
+    // The interface is no longer held hostage by the slowest of eleven
+    // loaders (on spotty mobile data, allSettled meant minutes behind the
+    // spinner). Sequence now: (1) member row -> first paint from defaulted
+    // state, each section render wrapped so a cold render can never block
+    // the app; (2) today's devotional alone -- the one card the home screen
+    // is FOR -- hydrated immediately; (3) the remaining ten loaders in
+    // parallel, then one consolidated re-render. A loader failure now
+    // degrades its own section instead of bricking boot into the retry UI.
+    const _safeRender = (name, fn) => { try { fn(); } catch(e){ console.warn('first-paint render failed (' + name + '):', e); } };
+    _safeRender('home', renderHome);
+    _safeRender('pipeline', renderPipeline);
+    _safeRender('assessments', renderAssessments);
+    _safeRender('eolo', renderEolo);
+    _safeRender('profile', renderProfile);
+    if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
+    window.__mmtPhase('First paint');
+    showApp();
+
+    // Above-the-fold data next: the devotional is the one card the home
+    // screen exists for. One query, immediate hydrate.
+    try { await loadTodaysDevo(); _safeRender('home', renderHome); }
+    catch(e){ console.warn('devo load failed:', e); }
+    window.__mmtPhase('Devotional hydrated');
+
+    // Everything else in parallel (devo removed -- already loaded above).
     const _loaders = [
       ['streak', loadDevoStreak],
       ['reflection gap', loadReflectionGap],
-      ['devo',   loadTodaysDevo],
       ['lc details', loadLcDetails],
       ['feed',   loadCelebrationFeed],
       ['headsup config', loadHeadsUpConfig],
@@ -3312,9 +3329,7 @@ async function initMMT(){
     renderAssessments();
     renderEolo();
     renderProfile();
-    if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
-    window.__mmtPhase('Rendered');
-    showApp();
+    window.__mmtPhase('Hydrated');
   }catch(e){
     clearTimeout(slowHintTimer);
     if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
@@ -4457,6 +4472,18 @@ function renderLibrary(){
   _libHydrateYoutubePlayers();
 }
 
+// (S89 perf) Inject the YouTube iframe API only when a player actually
+// needs it. Boot no longer spends bandwidth on YouTube; the existing
+// __ytPendingPlayers queue + onYouTubeIframeAPIReady flush are unchanged.
+function _ensureYtApi(){
+  if (window.__ytApiReady || document.getElementById('ytIframeApiScript')) return;
+  const sc = document.createElement('script');
+  sc.id = 'ytIframeApiScript';
+  sc.src = 'https://www.youtube.com/iframe_api';
+  sc.async = true;
+  document.head.appendChild(sc);
+}
+
 // Find any unhydrated .lib-yt-player divs and convert them to real
 // API-tracked players. Re-runs are safe — hydrated players carry a
 // data-hydrated="1" marker so they're skipped on subsequent passes.
@@ -4472,6 +4499,7 @@ function _libHydrateYoutubePlayers(){
       _libCreateYoutubePlayer(elId, videoId, resourceId);
     } else {
       window.__ytPendingPlayers.push({ elId, videoId, resourceId });
+      _ensureYtApi();
     }
   });
 }
