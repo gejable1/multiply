@@ -4749,4 +4749,48 @@ Three times in one session (the L12 file set, then the MMT clamp + SW bump) fini
 
 ---
 
+### **466. Global re-render hooks (language, theme, scope) must respect deferred-render state -- never paint a never-opened surface with cold data.**
+
+Perf Phase 2 made MMT screens render on first open. setLang() unconditionally called renderPipeline() on every language toggle -- with the library loader deferred, that would have painted Journey with empty library data for a member who had never opened the tab, and the dirty flag would then be clean over a wrong paint. The cure is one guard: a global re-render hook re-renders a surface ONLY if that surface has already rendered (its dirty flag is clear); a still-dirty surface renders correctly on first open anyway, because renders read the current language live. Any future global hook (theme, scope switch, font size) inherits this rule.
+
+**Established September 2026 (Session 90). Invariant #466 added - count now 466.**
+
+### **467. A blanket-render API keeps its name and its callers' contract; selectivity lives INSIDE it.**
+
+MD's renderAll() had 13 call sites, all meaning "the data changed, repaint." Making navigation cheap did NOT mean hunting down and rewriting 13 callers -- renderAll kept its name and its mutation contract (mark every mapped panel dirty, repaint the visible one plus cheap global chrome), and only the three NAVIGATION sites moved to _renderPanelIfDirty. Preemptive application of #456: the function every caller already trusts is the safest place to put the new behavior; scattering the change across call sites is how one gets missed.
+
+**Established September 2026 (Session 90). Invariant #467 added - count now 467.**
+
+### **468. Readiness flags are success-only: set inside the try, never in the catch -- a failed load shows an honest placeholder, never a false zero.**
+
+MD's pathway cache hydrates behind first paint. If _pwCacheReady were set unconditionally after the load call, a failed fetch (caught and swallowed by the loader's own catch) would flip every Progress cell from an honest ellipsis to a false "0% - 0/0" -- #450's false-zero blindness reborn at the client. The flag is set as the LAST line of the try; the catch resets caches and leaves it false. Extends #450 (honest denominators) and #464 (fail-soft loaders) to client-side caches: degradation must be VISIBLY a placeholder, never a plausible wrong number.
+
+**Established September 2026 (Session 90). Invariant #468 added - count now 468.**
+
+### **469. Syntax gates on multi-document deliveries run PER DOCUMENT, never concatenated -- a gate must model the runtime it claims to protect.**
+
+The promo close-fix block's syntax gate glued the inline scripts of THREE separate HTML documents into one file; mastery_cards' top-level `const KEY` collided with testimony's and node --check failed a program that exists nowhere -- in a browser each page is its own document and the two never meet. CC diagnosed it correctly, halted per instruction, and verified per-file 3/3. The failure was the GATE'S construction, not the code -- extends #427 (a gate measures only the thing it gates) and #392 (harnesses must exercise what actually runs): the unit of syntax checking is the unit the runtime loads.
+
+**Established September 2026 (Session 90). Invariant #469 added - count now 469.**
+
+### **470. The committed migration IS the bytes that ran -- a superseded version never reaches the repo, gated on the run-version's SHA.**
+
+Migration 117 v1 partially failed on live and was superseded by v2, which ran all-PASS. CC, executing the pre-supersession block, correctly landed v1 on the branch -- its SHA gate passed because v1 WAS what that block shipped. The follow-up block re-based the file to v2 gated on v2's sha (18085757...), so the merged tree matches the live run. The rule: when a migration is corrected after a live run, the repo file is replaced with the RUN bytes before the PR merges, and the WANT gate pins the run-version's sha -- the ledger's promise (#212/#457) is only as honest as the file it points to.
+
+**Established September 2026 (Session 90). Invariant #470 added - count now 470.**
+
+### **471. Canonical-lane rows are church_id NULL: join them NULL-safe (IS NOT DISTINCT FROM), stamp their strict-RLS side rows with a real church, and set unlocked_at on unlocks.**
+
+Rows created through catalogWrite (cohort_programs, base pipeline_lessons) live in the CANONICAL lane -- church_id IS NULL, shared across churches like BTLI 101, readable under 033's base-or-mine policy. Migration 117 v1 joined lesson to program on `church_id =` and inserted the grant with the program's NULL church: NULL = NULL is not true (0 grants), and even a landed NULL-church grant would be INVISIBLE to members because pipeline_lesson_grants and cohort_lesson_unlocks are strict mine-only (016). The pattern for any seed touching the canonical lane: church comparisons IS NOT DISTINCT FROM; grants/unlocks stamped from a real church row (derive from the cohort, never hardcode); unlocked_at set because the resolver treats NULL unlocked_at as still locked; and the PG16 proof carries the REAL RLS policies with a two-persona visibility test (own-church sees all; outsider sees only the canonical row and resolves no access).
+
+**Established September 2026 (Session 90). Invariant #471 added - count now 471.**
+
+### **472. Deck geometry derives from the deck's own canvas, and question-slide typography follows the Pastor's ladder: 54/44/36/30 question text, 28 header, 24 sub, body floor 20.**
+
+The L8 question slides first rendered left-biased with a mid-height page number because positions assumed the spec's 10x5.625in canvas while the actual decks are 13.33x7.5 -- read prs.slide_width/height and derive every position; the file is the truth, the spec line is stale until updated. Then the Pastor calibrated the type himself: his L7 base revision upscaled titles 36 -> 48-54, subheads -> 40-44, body floor 20, and killed the 9pt chrome ("so much empty space in the slides"). His ladder is the house standard from L7 onward: question text 54pt (<80 chars) / 44 (<140) / 36 (<200) / 30, movement header 28, PG pill 16, sub-instruction 24. Learned from the sz-attribute diff of his own bytes, not guessed.
+
+**Established September 2026 (Session 90). Invariant #472 added - count now 472.**
+
+---
+
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
