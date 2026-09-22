@@ -46,7 +46,7 @@ Galatians 5:22-23 lists **9 fruits**: Love, Joy, Peace, Patience, Kindness, Good
 | **Love** | L9, L19 | Evangelism (L9) + Caring for Others (L19) — both are love-in-action |
 | **Joy** | L3, L11 | Surrender / Pagsuko (L3 — *"O the joy of full salvation!"* — responsive love grounded in Rom 12:1 mercy) + Living on Mission (L11 — Mac Lake's own pairing for the mission anchor). *L3 reassigned from Self-Control → Joy on May 15, 2026 per scan-driven reading.* |
 | **Peace** | L5, L18 | Facing Hardship (L5 — peace in trial) + Adorning God in Worship (L18 — peace in His presence) |
-| **Patience** | L13 | Servant Leadership Pt.1 (L13 — long-suffering with people) — *L2 was originally proposed here in skeleton but reassigned to Faithfulness May 15 to pair with L1 under one Month-1 anchor* |
+| **Patience** | — | *Originally L13 (and before that L2 in skeleton, reassigned to Faithfulness May 15). L13 locked Sep 22 with Mac Lake's **Selflessness** anchor per Pastor — Patience currently unassigned in the cycle; candidate for a later slot on next map revision* |
 | **Kindness** | L6 | Christian Fellowship — kindness is the relational glue |
 | **Goodness** | L4, L16 | Personal Holiness (L4) + Modelling Christlikeness (L16) — moral integrity made visible |
 | **Faithfulness** | L1, L2, L7 | Prayer (L1 — faithful talking *to* God) + Bible Meditation (L2 — faithful listening *to* God) + Church Worship (L7 — faithful gathering). **L1+L2 share Faithfulness as the Month-1 unified anchor: "showing up daily for the two-way conversation."** |
@@ -376,11 +376,11 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 ### **L13 — Learning Servant Leadership (Pt.1)**
 - **Source:** UNLAD-L3
 - **Memory Verse:** **Mark 10:43-44** *(confirmed from UNLAD leader's guide)*
-- **🌿 Character (proposed):** **Patience** — servant leadership tolerates the slow pace of others
+- **🌿 Character (locked):** **Selflessness (Di-makasarili · Ikaw Muna Bago Ako)** — Mac Lake LY-3 anchor confirmed by Pastor at build time (Sep 22, 2026); Apat na Marka ng Puso from Philippians 2
 - **⚡ Competence:** **Teamwork** ✓ (Mac Lake LY Module 3) — the canonical pairing
-- **LY Pair:** ✓ Module 3 (Teamwork · Selflessness) — *Note: LY's character anchor is Selflessness, which overlaps with our Patience/Gentleness assignment. Reconcile in lesson design.*
+- **LY Pair:** ✓ Module 3 (Teamwork · Selflessness) — *Resolved at build: Pastor confirmed Selflessness as the L13 anchor ("Selflessness is ok"); Patience returned to the unassigned pool.*
 - **Pairing Confidence:** **Strong** — UNLAD-L3 is explicitly about servant leadership, LY Module 3 is teamwork rooted in selflessness, near-identical theme
-- **Status:** ☐ Not started
+- **Status:** ✅ **BUILT & SHIPPED Sep 22, 2026** — deck (32 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
 ### **L14 — Learning Servant Leadership (Pt.2)**
 - **Source:** UNLAD-L4
@@ -453,7 +453,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 | Lesson | LY Module | Character | Competence | Confidence |
 |---|---|---|---|---|
 | **L11** | LY-1 | Joy | Living on Mission | Strong ⭐ |
-| **L13** | LY-3 | Selflessness/Patience | Teamwork | Strong |
+| **L13** | LY-3 | Selflessness ✅ | Teamwork | Strong |
 | **L17** | LY-6 | Honor/Gentleness | Developing Influence | Acceptable |
 | **L19** | LY-5 | Consistency/Love | Maximizing Your Energy | Acceptable |
 
@@ -473,6 +473,9 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - ✅ L1 fully locked from `UL01-Pananalangin.pdf` scan (Scripture, character, competence, 5-movement flow, GRACE/Pipeline tagging)
 - ✅ L2 fully locked from `UL02-Bible_Meditation.pdf` scan; character anchor revised Patience → **Faithfulness** to unify L1+L2 under one Month-1 fruit; S.O.A.P → S.O.A.P.S 5-box decision documented in build-time note
 - ✅ All UNLAD memory verses (L12–L20) confirmed from `unladleadersguide.pdf`
+
+**Completed Sep 22, 2026:**
+- ✅ **L13 fully built & shipped** (Puso ng Servant-Leader): character anchor revised Patience → **Selflessness** per Pastor's build-time confirmation; L13=puso / L14=gilas two-lesson arc on Philippians 2 established; deliverables + DB seed live
 - ✅ **Rename of L1→L11 deliverables: PARKED** by Pastor's call (no re-pitch — surface only when Pastor brings it up)
 
 **Remaining work (per-lesson, as scans arrive):**
