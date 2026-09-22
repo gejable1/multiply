@@ -50,7 +50,7 @@ Galatians 5:22-23 lists **9 fruits**: Love, Joy, Peace, Patience, Kindness, Good
 | **Kindness** | L6 | Christian Fellowship — kindness is the relational glue |
 | **Goodness** | L4, L16 | Personal Holiness (L4) + Modelling Christlikeness (L16) — moral integrity made visible |
 | **Faithfulness** | L1, L2, L7 | Prayer (L1 — faithful talking *to* God) + Bible Meditation (L2 — faithful listening *to* God) + Church Worship (L7 — faithful gathering). **L1+L2 share Faithfulness as the Month-1 unified anchor: "showing up daily for the two-way conversation."** |
-| **Gentleness** | L14, L17 | Servant Leadership Pt.2 (L14 — power held under restraint) + Right Relationships (L17 — gentle correction) |
+| **Gentleness** | L17 | Right Relationships (L17 — gentle correction). *Originally also L14; L14 locked Sep 22 with Mac Lake's **Openness** anchor per LY-4 pairing — Gentleness now carried by L17 alone* |
 | **Self-Control** | L8, L10 | Stewardship (L8 — controlled spending) + Ministry (L10 — controlled commitment). *L3 reassigned from Self-Control → Joy on May 15, 2026.* |
 | *Tribute to Mac Lake's anchors* | L12, L15, L20 | Unique Design (L12 = Mac Lake "Self-Control" → reassigned **Goodness/Faithfulness**); Identifying Needs (L15 = Mac Lake "Selflessness" → reassigned **Kindness**); Telling the Good News (L20 = **Love**) |
 
@@ -382,14 +382,14 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - **Pairing Confidence:** **Strong** — UNLAD-L3 is explicitly about servant leadership, LY Module 3 is teamwork rooted in selflessness, near-identical theme
 - **Status:** ✅ **BUILT & SHIPPED Sep 22, 2026** — deck (32 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
-### **L14 — Learning Servant Leadership (Pt.2)**
-- **Source:** UNLAD-L4
-- **Memory Verse:** **Psalm 78:72** *(confirmed from UNLAD leader's guide)*
-- **🌿 Character (proposed):** **Gentleness** — power held under restraint (the servant leader's defining mark)
-- **⚡ Competence (Claude-authored):** *Situational Servant Leadership* — when to direct, coach, support, delegate (continuation of L13's teamwork into 4-mode situational application)
-- **LY Pair:** ✗ None native (LY Module 3 was used in L13; this is the second-half teamwork application)
-- **Pairing Confidence:** Original (extends LY Module 3)
-- **Status:** ☐ Not started
+### **L14 — Learning Servant Leadership (Pt.2) · "Gilas ng Servant-Leader"**
+- **Source:** UNLAD-L4 (Walong Kasanayan ni Nehemiah)
+- **Memory Verse:** **Psalm 78:72** *(confirmed from UNLAD leader's guide)* — "true heart and skillful hands"; shared verse of the L13–L14 puso-at-gilas arc
+- **🌿 Character (LOCKED):** **Openness (Bukas ang Isip)** — *Superseded the earlier Gentleness proposal at build: the UNLAD-L4 + LY-4 pairing surfaced Openness as the native anchor (no gilas is learned by a closed mind). Gentleness returned to L17 alone.*
+- **⚡ Competence:** **Teachability** ✓ (Mac Lake LY Module 4) — the canonical pairing. *Supersedes the earlier Claude-authored "Situational Servant Leadership" placeholder.*
+- **LY Pair:** ✓ Module 4 (Teachability · Openness) — *Resolved at build: the earlier "✗ None native" assessment was wrong; LY-4 (5 teachability proficiencies + 3 practice assignments) pairs directly with UNLAD-L4's skills focus.*
+- **Pairing Confidence:** **Strong** — UNLAD-L4 is Nehemiah's eight skills (gilas); LY Module 4 is teachability — both are about growing competence, near-identical theme
+- **Status:** ✅ **BUILT & SHIPPED Sep 22, 2026** — deck (32 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
 ### **L15 — Identifying Needs**
 - **Source:** UNLAD-L5
@@ -454,6 +454,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 |---|---|---|---|---|
 | **L11** | LY-1 | Joy | Living on Mission | Strong ⭐ |
 | **L13** | LY-3 | Selflessness ✅ | Teamwork | Strong |
+| **L14** | LY-4 | Openness ✅ | Teachability | Strong |
 | **L17** | LY-6 | Honor/Gentleness | Developing Influence | Acceptable |
 | **L19** | LY-5 | Consistency/Love | Maximizing Your Energy | Acceptable |
 
@@ -476,6 +477,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 
 **Completed Sep 22, 2026:**
 - ✅ **L13 fully built & shipped** (Puso ng Servant-Leader): character anchor revised Patience → **Selflessness** per Pastor's build-time confirmation; L13=puso / L14=gilas two-lesson arc on Philippians 2 established; deliverables + DB seed live
+- ✅ **L14 fully built & shipped** (Gilas ng Servant-Leader): LY-4 pairing locked (Teachability · Openness), superseding the map's earlier Gentleness proposal and Claude-authored Situational SL placeholder; Walong Kasanayan ni Nehemiah as spine; hagdan + A–E + 7-day reading tracker artifacts; deliverables + DB seed live (quiz verified q_count=10, linked)
 - ✅ **Rename of L1→L11 deliverables: PARKED** by Pastor's call (no re-pitch — surface only when Pastor brings it up)
 
 **Remaining work (per-lesson, as scans arrive):**
