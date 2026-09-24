@@ -4791,6 +4791,12 @@ The L8 question slides first rendered left-biased with a mid-height page number 
 
 **Established September 2026 (Session 90). Invariant #472 added - count now 472.**
 
+### **473. Every CREATE TABLE in public ships its three Data-API GRANTs in the same script (Supabase policy effective Oct 30, 2026).**
+
+From October 30, 2026, Supabase stops auto-granting Data API access to NEW tables in the public schema: a table created without explicit GRANTs exists but returns permission-denied through supabase-js/PostgREST until granted. Existing tables keep their grants — the L13/L14-era seeds and every INSERT-only script are unaffected; the rule bites only at table creation (including migrations, preview branches, and local db resets). The pattern: any script that creates a public table ends, in the SAME script, with `GRANT SELECT ON public.<t> TO anon;` + `GRANT SELECT, INSERT, UPDATE, DELETE ON public.<t> TO authenticated;` + `GRANT SELECT, INSERT, UPDATE, DELETE ON public.<t> TO service_role;` — then RLS still gates the rows (#183/#471): GRANT opens the door to the API, policy decides who sees which rows, and a granted table with no policy is NOT open to all. Symptom to recognize: fresh table + permission-denied naming the exact GRANT to run = this policy, not RLS.
+
+**Established September 2026 (Session 90, L14 close-out). Invariant #473 added - count now 473.**
+
 ---
 
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
