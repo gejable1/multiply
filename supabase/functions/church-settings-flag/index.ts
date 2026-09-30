@@ -1,12 +1,16 @@
 // supabase/functions/church-settings-flag/index.ts
 //
 // MULTIPLY — pastor-gated toggle for a single church UI feature flag.
-// Sets churches.settings.mlt_add_member (boolean) for the CALLER'S OWN church only.
+// Sets ALLOWLISTED churches.settings keys for the CALLER'S OWN church only (S91).
 // Service-role (bypasses RLS); merges ONE key so name/branding/other settings stay untouched.
 // Gate: caller's HS256 JWT verified here; member must be pipeline_level >= 5 (pastor)
 //       AND belong to the church named in the JWT church_id claim.
 //
-// Contract:  POST { enabled: boolean }  ->  { data: { mlt_add_member: boolean }, error }
+// Contract:  POST { key?: string, enabled: boolean }            (boolean toggles;
+//                key defaults to "mlt_add_member" so the S51 caller is unchanged)
+//            POST { key: "mmt_lock_cancel", event, date|null }  (pastor cancels/
+//                restores one service date church-wide; null date = restore)
+//         -> { data: { [key]: value }, error }
 // Church is derived from the JWT (never the body) — a pastor can only flip their OWN church.
 //
 // Deploy:  supabase functions deploy church-settings-flag --no-verify-jwt
@@ -57,10 +61,29 @@ Deno.serve(async (req) => {
   if (!sub || typeof sub !== "string") return fail("invalid_token", 401);
   if (!churchClaim || typeof churchClaim !== "string") return fail("no_church_claim", 401);
 
-  let body: { enabled?: unknown };
+  let body: { key?: unknown; enabled?: unknown; event?: unknown; date?: unknown };
   try { body = await req.json(); } catch { return fail("bad_json", 400); }
-  if (typeof body.enabled !== "boolean") return fail("enabled_must_be_boolean", 400);
-  const enabled = body.enabled;
+  // S91: generalized. Boolean toggles by allowlist (missing key defaults to
+  // mlt_add_member, keeping the S51 caller byte-unchanged) + the service-
+  // cancellation object key. Anything else is refused server-side.
+  const BOOL_KEYS = ["mlt_add_member", "mmt_attendance_lock"];
+  const CANCEL_KEY = "mmt_lock_cancel";
+  const CANCEL_EVENTS = ["Sunday Service", "Prayer Meeting"];
+  const key = (typeof body.key === "string" && body.key.length) ? body.key : "mlt_add_member";
+  let enabled = false;
+  let cancelEvent = "";
+  let cancelDate: string | null = null;
+  if (BOOL_KEYS.includes(key)) {
+    if (typeof body.enabled !== "boolean") return fail("enabled_must_be_boolean", 400);
+    enabled = body.enabled;
+  } else if (key === CANCEL_KEY) {
+    if (typeof body.event !== "string" || !CANCEL_EVENTS.includes(body.event)) return fail("bad_cancel_event", 400);
+    if (body.date !== null && (typeof body.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date))) return fail("bad_cancel_date", 400);
+    cancelEvent = body.event;
+    cancelDate = body.date as string | null;
+  } else {
+    return fail("key_not_allowed", 400);
+  }
 
   const SB_URL = Deno.env.get("SUPABASE_URL")!;
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -82,7 +105,16 @@ Deno.serve(async (req) => {
 
   const existing = (ch.settings && typeof ch.settings === "object" && !Array.isArray(ch.settings))
     ? ch.settings as Record<string, unknown> : {};
-  const merged = { ...existing, mlt_add_member: enabled };
+  let merged: Record<string, unknown>;
+  if (key === CANCEL_KEY) {
+    const cur = (existing[CANCEL_KEY] && typeof existing[CANCEL_KEY] === "object" && !Array.isArray(existing[CANCEL_KEY]))
+      ? { ...(existing[CANCEL_KEY] as Record<string, unknown>) } : {};
+    if (cancelDate === null) delete cur[cancelEvent];
+    else cur[cancelEvent] = cancelDate;
+    merged = { ...existing, [CANCEL_KEY]: cur };
+  } else {
+    merged = { ...existing, [key]: enabled };
+  }
 
   const { error: upErr } = await db
     .from("churches")
@@ -90,5 +122,5 @@ Deno.serve(async (req) => {
     .eq("id", churchClaim);
   if (upErr) return fail(upErr.message, 400);
 
-  return json({ data: { mlt_add_member: enabled }, error: null });
+  return json({ data: (key === CANCEL_KEY ? { [CANCEL_KEY]: merged[CANCEL_KEY] } : { [key]: enabled }), error: null });
 });

@@ -428,7 +428,7 @@ tbody tr:hover{background:var(--green-light);}
 // when neither CommonJS nor AMD is available.
 window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 </script>
-<script src="multiply_shared.js?v=14"></script>
+<script src="multiply_shared.js?v=15"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -1032,6 +1032,27 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <button class="sbtn" id="mltAddMemberToggleBtn" style="margin-top:0;background:var(--muted);min-width:104px" onclick="toggleMltAddMember()">…</button>
     </div>
     <div id="mltAddMemberStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+    <div style="border-top:1px solid var(--surface2);margin:.9rem 0 .85rem"></div>
+    <div class="sr" style="align-items:center">
+      <span class="sl" style="display:flex;flex-direction:column;gap:2px">
+        <span>Require attendance report before Member Tool (MMT lock) <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;background:rgba(94,125,82,.18);color:var(--green);padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:6px;vertical-align:1px"><span style="font-size:9.5px">🔒</span>Leaders</span></span>
+        <span style="font-size:10.5px;color:var(--lighter);font-weight:400">When on, an LC Leader with unlogged Sunday/Wednesday attendance is walled out of the Member Tool until they log it (present or absent both count as reporting). Leaders who log on time never see it.</span>
+      </span>
+      <button class="sbtn" id="mmtLockToggleBtn" style="margin-top:0;background:var(--muted);min-width:104px" onclick="toggleMmtLock()">…</button>
+    </div>
+    <div id="mmtLockStatus" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+    <div id="mmtCancelPanel" style="display:none;background:var(--surface2);border-radius:8px;padding:.7rem .8rem;margin-top:.4rem">
+      <div style="font-size:11px;font-weight:700;margin-bottom:.45rem">Extreme cases — cancel a service church-wide (waives the lock + the MLT reminder for that date)</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin:.3rem 0">
+        <span id="mmtCancelSunLbl" style="font-size:11.5px">Sunday Service</span>
+        <button class="sbtn" id="mmtCancelSunBtn" style="margin-top:0;min-width:96px;background:var(--muted)" onclick="_mdCancelSvc('Sunday Service')">…</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin:.3rem 0">
+        <span id="mmtCancelWedLbl" style="font-size:11.5px">Prayer Meeting (Wed)</span>
+        <button class="sbtn" id="mmtCancelWedBtn" style="margin-top:0;min-width:96px;background:var(--muted)" onclick="_mdCancelSvc('Prayer Meeting')">…</button>
+      </div>
+      <div id="mmtCancelStatus" style="font-size:11px;color:var(--muted);margin-top:4px;min-height:13px"></div>
+    </div>
   </div>
 
   <!-- ─── DIAGNOSTIC SETTINGS (Pastor-configurable) ─── -->
@@ -1670,6 +1691,8 @@ paintLeaderBadge();
 // safe to re-run from the embed re-sync once the session lands.
 // ─── MLT add-member permission toggle (Pastor-only, writes via church-settings-flag EF, Inv #227) ───
 let _mltAddMemberOn = false;
+let _mmtLockOn = false;
+let _mmtLockCancel = {};
 function _renderMltToggle(){
   const btn = document.getElementById('mltAddMemberToggleBtn');
   if (!btn) return;
@@ -1684,8 +1707,11 @@ async function initMltAddMemberToggle(){
   try {
     const { data } = await db.from('churches').select('settings').limit(1).maybeSingle();
     _mltAddMemberOn = !!(data && data.settings && data.settings.mlt_add_member === true);
-  } catch(e){ _mltAddMemberOn = false; }
+    _mmtLockOn = !!(data && data.settings && data.settings.mmt_attendance_lock === true);
+    _mmtLockCancel = (data && data.settings && data.settings.mmt_lock_cancel && typeof data.settings.mmt_lock_cancel === 'object') ? data.settings.mmt_lock_cancel : {};
+  } catch(e){ _mltAddMemberOn = false; _mmtLockOn = false; _mmtLockCancel = {}; }
   _renderMltToggle();
+  _renderMmtLockUi();
 }
 async function toggleMltAddMember(){
   const btn = document.getElementById('mltAddMemberToggleBtn');
@@ -1712,6 +1738,83 @@ async function toggleMltAddMember(){
   } finally {
     if (btn){ btn.disabled = false; btn.style.opacity='1'; }
   }
+}
+
+// ── S91: MMT attendance lock — pastor controls ───────────────────
+async function _efSetting(bodyObj) {
+  let token = null;
+  try { const j = JSON.parse(sessionStorage.getItem('multiply_jwt')||'null'); token = j && j.token; } catch(e){}
+  if (!token) throw new Error('Session expired — please sign in again.');
+  const res = await fetch(SB_URL + '/functions/v1/church-settings-flag', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'apikey': SB_KEY, 'Authorization':'Bearer '+token },
+    body: JSON.stringify(bodyObj)
+  });
+  const j = await res.json().catch(()=>null);
+  if (!res.ok || !j || j.error){ throw new Error((j && j.error) || ('HTTP '+res.status)); }
+  return j.data;
+}
+async function toggleMmtLock(){
+  const btn = document.getElementById('mmtLockToggleBtn');
+  const stat = document.getElementById('mmtLockStatus');
+  const next = !_mmtLockOn;
+  if (btn){ btn.disabled = true; btn.style.opacity='.6'; }
+  if (stat){ stat.textContent='Saving…'; stat.style.color='var(--muted)'; }
+  try {
+    const d = await _efSetting({ key:'mmt_attendance_lock', enabled: next });
+    _mmtLockOn = !!(d && d.mmt_attendance_lock);
+    _renderMmtLockUi();
+    if (stat){ stat.textContent = _mmtLockOn ? '✓ MMT lock is ON — leaders with unlogged attendance are walled until they report.' : '✓ MMT lock turned off.'; stat.style.color='var(--green)'; }
+  } catch(e){
+    if (stat){ stat.textContent = '⚠ '+(e.message||'Could not save — try again.'); stat.style.color='var(--red)'; }
+  } finally {
+    if (btn){ btn.disabled = false; btn.style.opacity='1'; }
+  }
+}
+async function _mdCancelSvc(eventName){
+  const stat = document.getElementById('mmtCancelStatus');
+  const AG = MultiplyShared.attendanceGate;
+  const w = AG.windows(AG.nowManila());
+  const date = (eventName === 'Sunday Service') ? w.sundayDate : w.wedDate;
+  if (!date) return;
+  const cancelled = (_mmtLockCancel[eventName] === date);
+  if (!cancelled && !confirm('Cancel ' + eventName + ' (' + AG.prettyDate(date) + ') for the WHOLE church? Leaders will not be nagged or locked for it.')) return;
+  if (stat){ stat.textContent='Saving…'; stat.style.color='var(--muted)'; }
+  try {
+    const d = await _efSetting({ key:'mmt_lock_cancel', event: eventName, date: cancelled ? null : date });
+    _mmtLockCancel = (d && d.mmt_lock_cancel && typeof d.mmt_lock_cancel === 'object') ? d.mmt_lock_cancel : {};
+    _renderMmtLockUi();
+    if (stat){ stat.textContent = cancelled ? '✓ Service restored.' : '✓ Service cancelled church-wide for that date.'; stat.style.color='var(--green)'; }
+  } catch(e){
+    if (stat){ stat.textContent = '⚠ '+(e.message||'Could not save — try again.'); stat.style.color='var(--red)'; }
+  }
+}
+function _renderMmtLockUi(){
+  const btn = document.getElementById('mmtLockToggleBtn');
+  if (btn){
+    btn.textContent = _mmtLockOn ? 'ON — turn off' : 'OFF — turn on';
+    btn.style.background = _mmtLockOn ? 'var(--green)' : 'var(--muted)';
+  }
+  const panel = document.getElementById('mmtCancelPanel');
+  if (panel) panel.style.display = _mmtLockOn ? '' : 'none';
+  try {
+    const AG = MultiplyShared.attendanceGate;
+    const w = AG.windows(AG.nowManila());
+    const rows = [
+      ['Sunday Service', w.sundayDate, 'mmtCancelSunLbl', 'mmtCancelSunBtn', 'Sunday Service'],
+      ['Prayer Meeting', w.wedDate,   'mmtCancelWedLbl', 'mmtCancelWedBtn', 'Prayer Meeting (Wed)']
+    ];
+    rows.forEach(function(r){
+      const ev=r[0], date=r[1], lbl=document.getElementById(r[2]), b=document.getElementById(r[3]), base=r[4];
+      if (!lbl || !b) return;
+      if (!date){ lbl.textContent = base + ' — no open window right now'; b.disabled = true; b.textContent='—'; b.style.background='var(--muted)'; return; }
+      const cancelled = (_mmtLockCancel[ev] === date);
+      lbl.textContent = base + ' — ' + AG.prettyDate(date) + (cancelled ? ' (CANCELLED)' : '');
+      b.disabled = false;
+      b.textContent = cancelled ? 'Restore' : 'Cancel';
+      b.style.background = cancelled ? 'var(--green)' : 'var(--red)';
+    });
+  } catch(e){ /* shared not ready — next render pass fills it */ }
 }
 let _churchNamePainted = false;
 async function paintChurchName(){
