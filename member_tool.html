@@ -39,7 +39,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
-<script src="multiply_shared.js?v=14" onerror="__mmtMarkDepFailed('shared')"></script>
+<script src="multiply_shared.js?v=15" onerror="__mmtMarkDepFailed('shared')"></script>
 <script src="multiply_brand.js?v=1"></script>
 
 <!-- YOUTUBE IFRAME PLAYER API
@@ -3296,6 +3296,7 @@ async function initMMT(){
     if (typeof __masterTimeout !== 'undefined') clearTimeout(__masterTimeout);
     window.__mmtPhase('First paint');
     showApp();
+    _mmtAttendanceLock();  // S91: per-church attendance hard-gate (post-paint, fail-soft)
 
     // Above-the-fold data next: the devotional is the one card the home
     // screen exists for. One query, immediate hydrate.
@@ -3377,6 +3378,74 @@ function showApp(){
 // ═══════════════════════════════════════════════════════════════
 // DATA LOADING
 // ═══════════════════════════════════════════════════════════════
+// ── S91: MMT attendance hard-gate ───────────────────────────────
+// When churches.settings.mmt_attendance_lock is ON, an L2+ leader with at
+// least one active disciple who has NOT reported Sunday/Wednesday attendance
+// (per the shared resolver; any-row counts — logging absents IS reporting;
+// the pastor's church-wide cancellation is the only waiver) is walled out of
+// MMT until they log. Fail-soft everywhere: an outage never locks anyone.
+async function _mmtAttendanceLock() {
+  try {
+    const lvl = (memberRow && memberRow.pipeline_level) || 0;
+    if (lvl < 2) return;
+    const AG = MultiplyShared.attendanceGate;
+    if (!AG) return;
+    const st = await AG.churchSettings(db);
+    if (!st.lockOn) { _mmtLockHide(); return; }
+    // Flock guard: no active disciples = nothing to log = never locked.
+    const { data: flock, error: fe } = await db.from('members').select('id')
+      .eq('discipler_id', memberRow.id).eq('status', 'active').limit(1);
+    if (fe || !flock || !flock.length) return;
+    const res = await AG.computeLock(db, memberRow.id, st.cancellations);
+    if (!res.missing.length) { _mmtLockHide(); return; }
+    _mmtLockShow(res.missing);
+  } catch (e) { console.warn('_mmtAttendanceLock fail-soft:', e); }
+}
+function _mmtLockHide() {
+  const el = document.getElementById('mmtAttLock');
+  if (el) el.remove();
+}
+function _mmtLockShow(missing) {
+  _mmtLockHide();
+  const ov = document.createElement('div');
+  ov.id = 'mmtAttLock';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,24,18,.97);display:flex;align-items:center;justify-content:center;padding:1.2rem';
+  const rows = missing.map(function(m){
+    return '<div style="background:rgba(255,255,255,.07);border:1px solid rgba(212,168,84,.45);border-radius:9px;padding:.6rem .8rem;margin:.35rem 0;font-weight:700">\u26A0\uFE0F ' + m.label + '</div>';
+  }).join('');
+  ov.innerHTML =
+    '<div style="max-width:430px;width:100%;background:#123527;border:1px solid rgba(212,168,84,.5);border-radius:16px;padding:1.4rem 1.2rem;color:#FDFBF6;text-align:center">' +
+      '<div style="font-size:2rem">\uD83D\uDD12</div>' +
+      '<div style="font-size:1.15rem;font-weight:800;margin:.35rem 0">' +
+        '<span class="en-text">Attendance report needed</span>' +
+        '<span class="tl-text">Kailangan muna ang attendance report</span>' +
+      '</div>' +
+      '<div style="font-size:.92rem;line-height:1.5;color:#e8e2d2;margin-bottom:.6rem">' +
+        '<span class="en-text">Kapatid, your flock\u2019s attendance for the services below has not been logged yet. The Member Tool opens again the moment it\u2019s reported \u2014 present or absent, logging it is the report.</span>' +
+        '<span class="tl-text">Kapatid, hindi pa nailo-log ang attendance ng iyong grupo para sa (mga) service sa ibaba. Bubukas ulit ang Member Tool sa sandaling mai-report ito \u2014 present man o absent, ang paglo-log ang report.</span>' +
+      '</div>' + rows +
+      '<button onclick="location.href=\'lc_leader_tool.html\'" style="display:block;width:100%;margin-top:.8rem;padding:.85rem;border:0;border-radius:10px;background:#D4A854;color:#141628;font-weight:800;font-size:1rem;cursor:pointer">' +
+        '<span class="en-text">\uD83D\uDCDD Log attendance now (Leader Tool)</span>' +
+        '<span class="tl-text">\uD83D\uDCDD Mag-log ng attendance ngayon (Leader Tool)</span>' +
+      '</button>' +
+      '<button onclick="_mmtLockRecheck(this)" style="display:block;width:100%;margin-top:.5rem;padding:.7rem;border:1px solid rgba(212,168,84,.6);border-radius:10px;background:transparent;color:#D4A854;font-weight:700;font-size:.92rem;cursor:pointer">' +
+        '<span class="en-text">\u2705 I\u2019ve logged it \u2014 check again</span>' +
+        '<span class="tl-text">\u2705 Nakapag-log na ako \u2014 i-check ulit</span>' +
+      '</button>' +
+      '<div style="font-size:.75rem;color:#b9c4ba;margin-top:.7rem">' +
+        '<span class="en-text">If a service was cancelled church-wide, your pastor can waive it from the Dashboard.</span>' +
+        '<span class="tl-text">Kung na-cancel ang service para sa buong church, maaaring i-waive ito ng pastor mula sa Dashboard.</span>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+}
+async function _mmtLockRecheck(btn) {
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  try { await _mmtAttendanceLock(); } finally {
+    if (btn && document.getElementById('mmtAttLock')) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
 async function loadMember(){
   // Race the fetch against a hard 15s timeout — Supabase calls on flaky
   // Philippine mobile data have been seen to hang silently for 30+ minutes,

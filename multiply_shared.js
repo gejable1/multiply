@@ -3512,4 +3512,105 @@
       openProposalsCount:    _xferOpenProposalsCount
     }
   };
+
+  // ── Attendance gate (S91) ───────────────────────────────────────
+  // ONE resolver for what counts as 'reported' and for which service date
+  // (#405): the MLT weekly nag and the MMT hard lock both read THIS.
+  // Service-window math ported VERBATIM from lc_leader_tool.html (S21/S76
+  // model). All math in Manila wall-clock (UTC+8).
+  global.MultiplyShared.attendanceGate = {
+    TZ_OFFSET_MIN: 8 * 60,
+    SERVICES: {
+      sunday:    { dow: 0, openMin: 12 * 60, closeMin: 8 * 60 },   // open Sun 12:00, close next Sun 08:00
+      wednesday: { dow: 3, openMin: 22 * 60, closeMin: 18 * 60 }   // open Wed 22:00, close next Wed 18:00
+    },
+    nowManila() { return new Date(Date.now() + this.TZ_OFFSET_MIN * 60000); },
+    fmt(d) { return d.toISOString().slice(0, 10); },
+    minOfDay(d) { return d.getUTCHours() * 60 + d.getUTCMinutes(); },
+    activeServiceDate(nowManila, svc) {
+      const dow = nowManila.getUTCDay();
+      const nowMin = this.minOfDay(nowManila);
+      let backDays = (dow - svc.dow + 7) % 7;
+      const thisOccur = new Date(nowManila.getTime() - backDays * 86400000);
+      const prevOccur = new Date(thisOccur.getTime() - 7 * 86400000);
+      const self = this;
+      function withinWindow(occ) {
+        const occDate = self.fmt(occ);
+        const nowDate = self.fmt(nowManila);
+        const closeOcc = new Date(occ.getTime() + 7 * 86400000);
+        const closeDate = self.fmt(closeOcc);
+        if (nowDate < occDate) return false;
+        if (nowDate === occDate && nowMin < svc.openMin) return false;
+        if (nowDate > closeDate) return false;
+        if (nowDate === closeDate && nowMin >= svc.closeMin) return false;
+        return true;
+      }
+      if (withinWindow(thisOccur)) return this.fmt(thisOccur);
+      if (withinWindow(prevOccur)) return this.fmt(prevOccur);
+      return null;  // quiet gap — no active obligation for this service
+    },
+    windows(nowM) {
+      return {
+        sundayDate: this.activeServiceDate(nowM, this.SERVICES.sunday),
+        wedDate:    this.activeServiceDate(nowM, this.SERVICES.wednesday)
+      };
+    },
+    prettyDate(iso) {
+      if (!iso) return '';
+      const parts = iso.split('-').map(Number);
+      const months = ['January','February','March','April','May','June','July',
+        'August','September','October','November','December'];
+      return months[parts[1] - 1] + ' ' + parts[2];
+    },
+    // Did this leader log a row of event_type on dateISO? presentOnly:true
+    // preserves the MLT nag's historic semantics; the LOCK counts ANY row
+    // (present or absent) — honestly logging absents IS reporting.
+    async loggedOnDate(db, leaderId, eventType, dateISO, opts) {
+      try {
+        let q = db.from('attendance').select('id')
+          .eq('logged_by_id', leaderId)
+          .eq('event_type', eventType)
+          .eq('event_date', dateISO);
+        if (opts && opts.presentOnly) q = q.eq('present', true);
+        const { data, error } = await q.limit(1);
+        if (error) { console.warn('attendanceGate.loggedOnDate failed (fail-soft):', error); return null; }
+        return (data && data.length > 0);
+      } catch (e) { console.warn('attendanceGate.loggedOnDate threw (fail-soft):', e); return null; }
+    },
+    // Church settings row (own-row RLS SELECT). Both flags in one read.
+    async churchSettings(db) {
+      try {
+        const { data } = await db.from('churches').select('settings').limit(1).maybeSingle();
+        const st = (data && data.settings && typeof data.settings === 'object') ? data.settings : {};
+        const cx = (st.mmt_lock_cancel && typeof st.mmt_lock_cancel === 'object' && !Array.isArray(st.mmt_lock_cancel)) ? st.mmt_lock_cancel : {};
+        return { lockOn: st.mmt_attendance_lock === true, cancellations: cx };
+      } catch (e) { return { lockOn: false, cancellations: {} }; }
+    },
+    // Convenience for the MLT nag: just the cancellation map.
+    async cancellations(db) { return (await this.churchSettings(db)).cancellations; },
+    // THE LOCK PREDICATE (MMT): Sunday + Wednesday only. The pastor's
+    // church-wide cancellation is the ONLY waiver — a leader's own
+    // localStorage waiver softens the MLT nag but never unlocks MMT.
+    // Fail-soft: an errored read NEVER contributes to missing.
+    async computeLock(db, leaderId, cancellations) {
+      const nowM = this.nowManila();
+      const w = this.windows(nowM);
+      const cx = cancellations || {};
+      const checks = [
+        ['Sunday Service', w.sundayDate,  'Sunday service'],
+        ['Prayer Meeting', w.wedDate,     'Wednesday service']
+      ];
+      const missing = []; let errored = false;
+      for (const c of checks) {
+        const ev = c[0], date = c[1], lbl = c[2];
+        if (!date) continue;                 // quiet gap
+        if (cx[ev] === date) continue;       // pastor cancelled this service
+        const r = await this.loggedOnDate(db, leaderId, ev, date);
+        if (r === null) { errored = true; continue; }
+        if (r === false) missing.push({ key: ev, date: date, label: lbl + ' ' + EMDASH + ' ' + this.prettyDate(date) });
+      }
+      return { missing: missing, errored: errored };
+    }
+  };
+  const EMDASH = '\u2014';
 })(typeof window !== 'undefined' ? window : globalThis);
