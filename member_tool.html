@@ -8934,11 +8934,15 @@ async function _persistDevoReflection(opts){
       if(error) throw error;
       currentReflectionRow.reflection = finalText;
     } else if((finalText || '').trim()){
-      const {data, error} = await db.from('devotional_reflections').insert({
+      // S93: UPSERT on the natural key -- if the preload failed (spotty net)
+      // or an autosave response was lost, a row may already exist; upsert
+      // makes the write idempotent instead of tripping the unique constraint.
+      const {data, error} = await db.from('devotional_reflections').upsert({
         member_id: MEMBER.memberId,
         entry_date: currentReaderEntry.entry_date,
-        reflection: finalText
-      }).select().single();
+        reflection: finalText,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'member_id,entry_date' }).select().single();
       if(error) throw error;
       currentReflectionRow = data; // capture id so later saves UPDATE, never re-insert
     } else {
