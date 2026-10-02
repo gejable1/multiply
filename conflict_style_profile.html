@@ -1987,7 +1987,13 @@ async function saveToDashboard(){
   const msg = document.getElementById('submitMsg');
 
   try {
+    // S92: RLS requires an authenticated, church-stamped insert (migration 021).
+    // Without an app session the save can never pass — fail friendly, not raw.
+    if (!(window.MultiplyTenancy && MultiplyTenancy.hasValidSession())) {
+      throw new Error('Para ma-save sa dashboard, buksan ang assessment mula sa MULTIPLY app habang naka-sign in. (Pwede pa ring i-print ang resulta.)');
+    }
     const { error } = await getDB().from('member_profiles').insert({
+      church_id: (window.MultiplyTenancy && MultiplyTenancy.churchId()) || null,  // S92
       member_id: memberId,
       member_name: name,
       lc_group: lcGroup,
