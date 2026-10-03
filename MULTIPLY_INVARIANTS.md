@@ -4797,6 +4797,30 @@ From October 30, 2026, Supabase stops auto-granting Data API access to NEW table
 
 **Established September 2026 (Session 90, L14 close-out). Invariant #473 added - count now 473.**
 
+### **474. A generalized endpoint must make old-server + new-client calls FAIL LOUDLY — a backward-compat default key may never let the new call silently succeed at the WRONG key.**
+
+S91 generalized `church-settings-flag` to `{key, enabled}` with `key` defaulting to `mlt_add_member` so the S51 caller stayed byte-unchanged. The cost surfaced the same day: the Pastor flipped the NEW MMT-lock toggle before redeploying the EF, and the OLD server — ignorant of `key` — accepted the call and quietly wrote `mlt_add_member` instead: the switch snapped back off AND a different setting flipped as collateral. Compatibility defaults buy smooth upgrades at the price of silent misfires in the deploy gap. The pattern: when a contract gains a discriminator, the SERVER must reject shapes it does not understand (require the new field, or version the contract) so an un-upgraded server returns an error the UI can show — never a success at the wrong key. Symptom to recognize: new toggle won't turn on + an adjacent setting changed = old server still live.
+
+**Established October 2026 (Session 91). Invariant #474 added - count now 474.**
+
+### **475. Every client INSERT on a tenant table stamps `church_id` from the session (`MultiplyTenancy.churchId()`), and when a migration tightens RLS, every writer of that table is re-tested in the SAME session.**
+
+Migration 021 (S42) locked `gifts_diagnostic` + `member_profiles` to authenticated inserts `WITH CHECK (church_id = auth_church_id())` — and all SIX assessment tools kept inserting without `church_id`. A NULL can never equal the claim, so every in-app Save-to-Dashboard died the day 021 ran, silently, until a member finally pressed Save months later (S92). The cure was one stamped field + a friendly no-session guard for guests (who can still Print); the lesson is two-sided: (a) tenant-table INSERT payloads carry `church_id: MultiplyTenancy.churchId()` as a standing pattern — the JWT trigger (#182) stamps server-side inserts, but PostgREST evaluates WITH CHECK against the PROPOSED row, so the client must supply it; (b) an RLS-tightening migration's definition of done includes re-exercising every writer of that table, because the migration's own verify proves the policy, never the callers.
+
+**Established October 2026 (Session 92). Invariant #475 added - count now 475.**
+
+### **476. Client writes to a table with a natural unique key go through UPSERT on that key — never bare INSERT keyed off what the client believes exists.**
+
+`devotional_reflections` is UNIQUE(member_id, entry_date). MMT's save chose INSERT vs UPDATE from `currentReflectionRow`, populated by a reader-open preload that fails SOFT on spotty connections — so a flaky signal convinced the app no row existed, Save ran INSERT, and the member got `23505 duplicate key` while the Pastor (stable connection, preload always wins) could never reproduce it (S93). Lost autosave responses produce the same race. The cure is idempotence, not smarter state: `.upsert({...}, { onConflict: 'member_id,entry_date' })` makes the write correct regardless of what the client knows. The rule generalizes: wherever the schema declares a natural key, the client write path uses it — INSERT-or-UPDATE branching on cached reads is a bet against the network.
+
+**Established October 2026 (Session 93). Invariant #476 added - count now 476.**
+
+### **477. Deck speaker notes carry the FULL teach-from-slides run layer, and legacy-deck font enlargement is a tiered run-size rescale + normAutofit + full-deck render QA.**
+
+The Pastor teaches purely from slides — the guides are reference, and he was hand-writing the missing notes himself (S91-93, said in his own words at the L8 refresh). So the standard rises: every deck's notes carry the whole run layer — source stories VERBATIM (the Cage story with all fifteen houses), SAY scripts, full verse texts, quiz questions word for word, movement timing targets, intern cues and sensitivity guardrails — at one sentence per paragraph (#CRLF rule) with a movement/minutes header per slide; L8's 122-line/16-slide deck is the exemplar. Enlarging an existing deck to the #472 ladder: rescale RUN sizes by tier (body 13-18 → 20-24, titles → 40-54), leave chrome, arm `<a:normAutofit/>` on touched frames, then render EVERY slide — run-size edits alone do not fix a wrapping badge (L8's "Contentment" pill wrapped at three sizes; the cure was zeroing the textbox's lIns/rIns — wide faces like DejaVu + default insets were the real culprit, found only by render).
+
+**Established October 2026 (Sessions 91-93, L8 refresh). Invariant #477 added - count now 477.**
+
 ---
 
 *"A student who is fully trained will be like their teacher." — Luke 6:40*
