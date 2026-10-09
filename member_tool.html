@@ -12955,28 +12955,26 @@ async function _loadPrayerEngagement(){
   const ids = _prayerFeed.map(r => r.id);
   if(!ids.length) return;
   try{
-    const { data: inter, error: ierr } = await db.from('prayer_intercessions')
-      .select('request_id, member_id')
-      .in('request_id', ids);
-    if(ierr) throw ierr;
-    const interSets = {};
-    (inter || []).forEach(row => {
-      (interSets[row.request_id] = interSets[row.request_id] || new Set()).add(row.member_id);
-      if(row.member_id === MEMBER.memberId) _prayerMyPrayedIds.add(row.request_id);
+    // S94 (mig 118): counting happens in the DB. The old raw-row read hit the
+    // 1,000-row response cap once taps passed 1,000 -- a member's own taps
+    // could fall off the page, so "Pray" reset to green and counts read low.
+    // Both reads below are bounded by feed size, never by tap volume.
+    const [cRes, mRes] = await Promise.all([
+      db.from('v_prayer_engagement_counts')
+        .select('request_id, praying_count, saved_by_count')
+        .in('request_id', ids),
+      db.from('v_prayer_my_intercessions')
+        .select('request_id')
+        .eq('member_id', MEMBER.memberId)
+        .in('request_id', ids)
+    ]);
+    if(cRes.error) throw cRes.error;
+    if(mRes.error) throw mRes.error;
+    (cRes.data || []).forEach(row => {
+      if(row.praying_count  > 0) _prayerPrayingCounts[row.request_id] = row.praying_count;
+      if(row.saved_by_count > 0) _prayerSavedByCounts[row.request_id] = row.saved_by_count;
     });
-    Object.keys(interSets).forEach(k => { _prayerPrayingCounts[k] = interSets[k].size; });
-
-    const { data: saves, error: serr } = await db.from('prayer_list_items')
-      .select('request_id, member_id')
-      .in('request_id', ids)
-      .neq('status', 'removed');
-    if(serr) throw serr;
-    const saveSets = {};
-    (saves || []).forEach(row => {
-      if(!row.request_id) return;
-      (saveSets[row.request_id] = saveSets[row.request_id] || new Set()).add(row.member_id);
-    });
-    Object.keys(saveSets).forEach(k => { _prayerSavedByCounts[k] = saveSets[k].size; });
+    (mRes.data || []).forEach(row => _prayerMyPrayedIds.add(row.request_id));
   }catch(e){
     console.warn('prayer engagement load failed (non-fatal):', e);
   }
