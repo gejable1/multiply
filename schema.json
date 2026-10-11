@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 79,
+  "table_count": 80,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -7416,6 +7416,274 @@
         {
           "name": "trg_set_church_id",
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lc_meeting_responses FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
+        }
+      ]
+    },
+    "lc_stand_ins": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "leader_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "stand_in_id",
+          "ordinal": 4,
+          "data_type": "uuid",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "starts_on",
+          "ordinal": 5,
+          "data_type": "date",
+          "nullable": false,
+          "default": "((now() AT TIME ZONE 'Asia/Manila'::text))::date",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "ends_on",
+          "ordinal": 6,
+          "data_type": "date",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "note",
+          "ordinal": 7,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_by",
+          "ordinal": 8,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 9,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "ended_at",
+          "ordinal": 10,
+          "data_type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "ended_by",
+          "ordinal": 11,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "lc_stand_ins_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id)"
+        },
+        {
+          "name": "lc_stand_ins_created_by_fkey",
+          "columns": [
+            "created_by"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (created_by) REFERENCES members(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "lc_stand_ins_ended_by_fkey",
+          "columns": [
+            "ended_by"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (ended_by) REFERENCES members(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "lc_stand_ins_leader_id_fkey",
+          "columns": [
+            "leader_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (leader_id) REFERENCES members(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "lc_stand_ins_stand_in_id_fkey",
+          "columns": [
+            "stand_in_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "definition": "FOREIGN KEY (stand_in_id) REFERENCES members(id) ON DELETE CASCADE"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [
+        {
+          "name": "lc_stand_ins_date_order",
+          "definition": "CHECK (((ends_on IS NULL) OR (ends_on >= starts_on)))"
+        },
+        {
+          "name": "lc_stand_ins_not_self",
+          "definition": "CHECK ((leader_id <> stand_in_id))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_lc_stand_ins_church",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id"
+          ],
+          "definition": "CREATE INDEX idx_lc_stand_ins_church ON public.lc_stand_ins USING btree (church_id)"
+        },
+        {
+          "name": "idx_lc_stand_ins_stand_in",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "stand_in_id"
+          ],
+          "definition": "CREATE INDEX idx_lc_stand_ins_stand_in ON public.lc_stand_ins USING btree (stand_in_id) WHERE (ended_at IS NULL)"
+        },
+        {
+          "name": "lc_stand_ins_one_active_per_leader",
+          "is_unique": true,
+          "is_primary": false,
+          "columns": [
+            "leader_id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lc_stand_ins_one_active_per_leader ON public.lc_stand_ins USING btree (leader_id) WHERE (ended_at IS NULL)"
+        },
+        {
+          "name": "lc_stand_ins_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX lc_stand_ins_pkey ON public.lc_stand_ins USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "lc_stand_ins_insert",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "INSERT",
+          "using": null,
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 3) AND (created_by = auth_member_id()))"
+        },
+        {
+          "name": "lc_stand_ins_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "(church_id = auth_church_id())",
+          "with_check": null
+        },
+        {
+          "name": "lc_stand_ins_update",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "UPDATE",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 3))",
+          "with_check": "((church_id = auth_church_id()) AND (auth_level() >= 3))"
+        }
+      ],
+      "triggers": [
+        {
+          "name": "trg_set_church_id",
+          "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.lc_stand_ins FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
     },
