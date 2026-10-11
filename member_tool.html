@@ -3552,7 +3552,7 @@ async function loadDevoStreak(){
 // is today or yesterday - same rule as computeStreak). A Saturday streak thus
 // stays celebratable through the following Saturday. Ties prefer the live run.
 function heldStreak(rows, holdDays){
-  const out = { streak:0, live:false };
+  const out = { streak:0, live:false, start:null, end:null };
   if(!rows || !rows.length) return out;
   const fmt = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   const dates = new Set(rows.map(r => r.event_date));
@@ -3566,7 +3566,10 @@ function heldStreak(rows, holdDays){
     let n = 0; const cur = new Date(end);
     while(dates.has(fmt(cur))){ n++; cur.setDate(cur.getDate() - 1); }
     const live = back <= 1;
-    if(n > out.streak || (n === out.streak && live && !out.live)){ out.streak = n; out.live = live; }
+    if(n > out.streak || (n === out.streak && live && !out.live)){
+      const first = new Date(cur); first.setDate(cur.getDate() + 1);   // cur stepped one past the run
+      out.streak = n; out.live = live; out.start = fmt(first); out.end = fmt(end);
+    }
   }
   return out;
 }
@@ -7896,6 +7899,19 @@ async function loadCelebrationFeed(){
   const streakWins = [];
   // S97: live run -> "is on a N-day streak"; held (ended within 7 days) -> "completed".
   const _stEn = (h) => h.live ? `is on a ${h.streak}-day devotional streak` : `completed a ${h.streak}-day devotional streak`;
+  // S98: the dates the streak covers. Completed "Oct 3-11"; live "Since Oct 3".
+  const _MEN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const _MTL = ['Ene','Peb','Mar','Abr','May','Hun','Hul','Ago','Set','Okt','Nob','Dis'];
+  const _stRange = (h, M) => {
+    if(!h.start || !h.end) return '';
+    const a = h.start.split('-').map(Number), b = h.end.split('-').map(Number);
+    const A = M[a[1]-1] + ' ' + a[2];
+    if(h.live) return A;
+    if(a[0] === b[0] && a[1] === b[1]) return A + '\u2013' + b[2];
+    return A + ' \u2013 ' + M[b[1]-1] + ' ' + b[2];
+  };
+  const _stRangeEn = (h) => { const r = _stRange(h, _MEN); return r ? (h.live ? 'Since ' + r : r) : ''; };
+  const _stRangeTl = (h) => { const r = _stRange(h, _MTL); return r ? (h.live ? 'Mula ' + r : r) : ''; };
   const _stTl = (h) => h.live ? `${h.streak} araw nang sunud-sunod sa devotional` : `nakabuo ng ${h.streak} araw na sunud-sunod na devotional`;
   for(const m of eligible){
     const h = streakByMember.get(m.id) || { streak:0, live:false };
@@ -7906,6 +7922,7 @@ async function loadCelebrationFeed(){
         icon:'🔥',
         label_en:_stEn(h),
         label_tl:_stTl(h),
+        range_en:_stRangeEn(h), range_tl:_stRangeTl(h),
         streak:s
       });
     }
@@ -7921,6 +7938,7 @@ async function loadCelebrationFeed(){
         icon:'🔥',
         label_en:_stEn(lh),
         label_tl:_stTl(lh),
+        range_en:_stRangeEn(lh), range_tl:_stRangeTl(lh),
         streak: ls
       });
     }
@@ -8138,7 +8156,9 @@ function renderCelebrationFeed(){
     // Only assessment wins carry a timestamp; streaks/birthdays don't.
     const whenHtml = w.whenIso
       ? `<div class="win-when">${MultiplyShared.escapeHTML(timeAgo(w.whenIso))}</div>`
-      : '';
+      : (w.range_en
+        ? `<div class="win-when"><span class="en-text">${MultiplyShared.escapeHTML(w.range_en)}</span><span class="tl-text">${MultiplyShared.escapeHTML(w.range_tl || w.range_en)}</span></div>`
+        : '');
     // Face avatar: initials (from the real name, even when the text shows
     // "You") are the base; photo overlays via <img onerror=remove> (Inv #133);
     // the win-type emoji rides as a small badge in the corner.
