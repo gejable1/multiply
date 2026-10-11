@@ -3570,7 +3570,10 @@
         let q = db.from('attendance').select('id')
           .eq('logged_by_id', leaderId)
           .eq('event_type', eventType)
-          .eq('event_date', dateISO);
+          .eq('event_date', dateISO)
+          // S96: rows a stand-in logged for ANOTHER leader's group never
+          // satisfy the stand-in's own lock / nag.
+          .or('source.is.null,source.neq.stand_in');
         if (opts && opts.presentOnly) q = q.eq('present', true);
         const { data, error } = await q.limit(1);
         if (error) { console.warn('attendanceGate.loggedOnDate failed (fail-soft):', error); return null; }

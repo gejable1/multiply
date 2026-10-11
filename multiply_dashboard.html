@@ -428,7 +428,7 @@ tbody tr:hover{background:var(--green-light);}
 // when neither CommonJS nor AMD is available.
 window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
 </script>
-<script src="multiply_shared.js?v=15"></script>
+<script src="multiply_shared.js?v=16"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
   body { visibility: hidden; }
@@ -1469,6 +1469,15 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
                • The viewer isn't Pastor
                • In self-edit mode (leader editing self)
         ─────────────────────────────────────────────────────────── -->
+        <!-- S96: STAND-IN for this leader's LC group (L3+; MD is L3-gated). -->
+        <div id="standInSection" style="display:none;margin-top:18px;padding-top:16px;border-top:1.5px dashed var(--border)">
+          <label style="margin:0 0 6px;display:block;font-size:13px;font-weight:600;color:var(--ink)">&#x1F91D; Stand-in for attendance</label>
+          <div id="siBody"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+            While this leader is temporarily unavailable, the stand-in logs Sunday Service, Prayer Meeting and LC Meeting attendance for their group from the Member Tool. Members stay under this leader, and this leader is exempt from the Member Tool attendance lock while covered.
+          </div>
+        </div>
+
         <div id="bulkAssignSection" style="display:none;margin-top:18px;padding-top:16px;border-top:1.5px dashed var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <label style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">➕ Assign Unassigned Members <span id="baCountBadge" style="background:var(--gold-bg);color:var(--gold);font-size:10px;padding:1px 8px;border-radius:10px;font-weight:700;margin-left:4px">0</span></label>
@@ -2776,6 +2785,123 @@ function _disciplesTree(rootId){
   return result;
 }
 
+// == S96: Stand-in attendance (assign / end) ===================================
+let _siMd = { leaderId:null, active:null, pick:null };
+function _siMdToday(){ const AG = MultiplyShared.attendanceGate; return AG.fmt(AG.nowManila()); }
+function _siMdEsc(t){ return MultiplyShared.escapeHTML(t == null ? '' : String(t)); }
+function _siMdName(id){ const m = members.find(function(x){ return x.id === id; }); return m ? m.name : '(member)'; }
+
+async function renderStandInSection(leaderId, directCount){
+  const sec = document.getElementById('standInSection');
+  if (!sec) return;
+  _siMd.leaderId = leaderId; _siMd.pick = null;
+  let active = null;
+  try {
+    const { data, error } = await db.from('lc_stand_ins')
+      .select('id,stand_in_id,starts_on,ends_on,note,created_by,created_at')
+      .eq('leader_id', leaderId).is('ended_at', null).limit(1);
+    if (error) { sec.style.display = 'none'; return; }   // pre-migration / outage: hide
+    active = (data && data[0]) || null;
+  } catch (e) { sec.style.display = 'none'; return; }
+  if (_siMd.leaderId !== leaderId) return;   // user moved on to another member
+  _siMd.active = active;
+  if (!active && !directCount) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  _siMdRender();
+}
+
+function _siMdRender(){
+  const body = document.getElementById('siBody'); if (!body) return;
+  const a = _siMd.active;
+  if (a) {
+    const today = _siMdToday();
+    const pending = a.starts_on > today;
+    const lapsed = a.ends_on && a.ends_on < today;
+    const state = pending ? 'starts ' + _siMdEsc(a.starts_on) : lapsed ? 'ended ' + _siMdEsc(a.ends_on) + ' (lapsed)' : 'active';
+    body.innerHTML =
+      '<div style="background:var(--gold-bg);border:1px solid rgba(184,136,42,.3);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--ink);line-height:1.55">' +
+        '<strong>' + _siMdEsc(_siMdName(a.stand_in_id)) + '</strong> is standing in &middot; ' + state + '<br>' +
+        '<span style="color:var(--muted)">From ' + _siMdEsc(a.starts_on) + (a.ends_on ? ' to ' + _siMdEsc(a.ends_on) : ' (no end date)') +
+        (a.note ? ' &middot; ' + _siMdEsc(a.note) : '') + '</span>' +
+      '</div>' +
+      '<button type="button" onclick="endStandIn()" id="siEndBtn" style="margin-top:8px;background:var(--surface2);color:var(--red,#b03a2e);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer">End stand-in</button>';
+    return;
+  }
+  const today = _siMdToday();
+  body.innerHTML =
+    '<input type="search" id="siSearch" placeholder="&#x1F50D; Search the stand-in by name..." oninput="_siMdSearch()" ' +
+      'style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:13px">' +
+    '<div id="siResults" style="margin-top:4px"></div>' +
+    '<div id="siPicked" style="font-size:12.5px;color:var(--ink);margin:6px 0"></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<label style="font-size:11px;color:var(--muted);flex:1;min-width:120px">Starts<input type="date" id="siStart" value="' + today + '" style="display:block;width:100%;margin-top:2px;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--ink);font-family:inherit"></label>' +
+      '<label style="font-size:11px;color:var(--muted);flex:1;min-width:120px">Ends (optional)<input type="date" id="siEnd" style="display:block;width:100%;margin-top:2px;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--ink);font-family:inherit"></label>' +
+    '</div>' +
+    '<input type="text" id="siNote" maxlength="200" placeholder="Note (optional) - e.g. abroad until December" style="width:100%;margin-top:8px;background:var(--surface2);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--ink);font-family:inherit;font-size:12.5px">' +
+    '<button type="button" onclick="saveStandIn()" id="siSaveBtnMd" disabled style="margin-top:8px;width:100%;background:var(--green);color:#fff;border:none;border-radius:7px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;opacity:.6">Assign stand-in</button>';
+}
+
+function _siMdSearch(){
+  const q = ((document.getElementById('siSearch') || {}).value || '').trim().toLowerCase();
+  const out = document.getElementById('siResults'); if (!out) return;
+  if (q.length < 2) { out.innerHTML = ''; return; }
+  const hits = members.filter(function(m){
+    return m.id !== _siMd.leaderId && (m.status || 'active') === 'active' && (m.name || '').toLowerCase().indexOf(q) !== -1;
+  }).slice(0, 8);
+  out.innerHTML = hits.length ? hits.map(function(m){
+    return '<button type="button" onclick="_siMdPick(\'' + m.id + '\')" style="display:block;width:100%;text-align:left;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-top:3px;font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer">' + _siMdEsc(m.name) + '</button>';
+  }).join('') : '<div style="font-size:11.5px;color:var(--muted);padding:4px 2px">No active member matches.</div>';
+}
+
+function _siMdPick(id){
+  _siMd.pick = id;
+  document.getElementById('siResults').innerHTML = '';
+  document.getElementById('siSearch').value = '';
+  document.getElementById('siPicked').innerHTML = 'Stand-in: <strong>' + _siMdEsc(_siMdName(id)) + '</strong>';
+  const b = document.getElementById('siSaveBtnMd'); if (b) { b.disabled = false; b.style.opacity = '1'; }
+}
+
+async function saveStandIn(){
+  const leaderId = _siMd.leaderId;
+  if (!leaderId || !_siMd.pick) { toast('Pick the stand-in first', '\u26A0\uFE0F'); return; }
+  if (!LEADER || !LEADER.leaderId) { toast('Sign in again to assign a stand-in', '\u26A0\uFE0F'); return; }
+  const starts = (document.getElementById('siStart').value || _siMdToday());
+  const ends = document.getElementById('siEnd').value || null;
+  if (ends && ends < starts) { toast('End date is before the start date', '\u26A0\uFE0F'); return; }
+  const note = (document.getElementById('siNote').value || '').trim() || null;
+  const b = document.getElementById('siSaveBtnMd'); if (b) { b.disabled = true; b.textContent = 'Saving\u2026'; }
+  try {
+    const { error } = await db.from('lc_stand_ins').insert({
+      leader_id: leaderId, stand_in_id: _siMd.pick, starts_on: starts, ends_on: ends, note: note,
+      created_by: LEADER.leaderId
+    });
+    if (error) throw error;
+    toast('Stand-in assigned: ' + _siMdName(_siMd.pick), '\uD83E\uDD1D');
+  } catch (e) {
+    console.warn('saveStandIn failed:', e);
+    const dup = e && (e.code === '23505' || /one_active/.test(e.message || ''));
+    toast(dup ? 'This leader already has a stand-in' : 'Could not assign the stand-in', '\u26A0\uFE0F');
+  }
+  renderStandInSection(leaderId, 1);
+}
+
+async function endStandIn(){
+  const a = _siMd.active; if (!a) return;
+  if (!confirm('End ' + _siMdName(a.stand_in_id) + '\u2019s stand-in for this group?')) return;
+  const b = document.getElementById('siEndBtn'); if (b) { b.disabled = true; b.textContent = 'Ending\u2026'; }
+  try {
+    const { error } = await db.from('lc_stand_ins')
+      .update({ ended_at: new Date().toISOString(), ended_by: LEADER.leaderId || null })
+      .eq('id', a.id);
+    if (error) throw error;
+    toast('Stand-in ended', '\u2713');
+  } catch (e) {
+    console.warn('endStandIn failed:', e);
+    toast('Could not end the stand-in', '\u26A0\uFE0F');
+  }
+  renderStandInSection(_siMd.leaderId, 1);
+}
+
 // Render the panel for the currently-edited member (eid).
 function renderDisciplesPanel(){
   const panel = document.getElementById('disciplesPanel');
@@ -2785,6 +2911,7 @@ function renderDisciplesPanel(){
 
   const direct = _disciplesDirect(eid);
   const tree   = _disciplesTree(eid);
+  renderStandInSection(eid, direct.length);   // S96 (async, fail-soft)
 
   // Update the tab badge so the Disciples tab shows count without needing
   // to be clicked — handy when scanning multiple members.

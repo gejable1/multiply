@@ -39,7 +39,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="__mmtMarkDepFailed('supabase')"></script>
-<script src="multiply_shared.js?v=15" onerror="__mmtMarkDepFailed('shared')"></script>
+<script src="multiply_shared.js?v=16" onerror="__mmtMarkDepFailed('shared')"></script>
 <script src="multiply_brand.js?v=1"></script>
 
 <!-- YOUTUBE IFRAME PLAYER API
@@ -1086,6 +1086,21 @@ body.lang-tl .tl-text{display:inline;}
 .prayer-cta-card .pcc-body{flex:1;min-width:0;}
 .prayer-cta-card .pcc-title{font-family:'Fraunces',serif;font-weight:600;font-size:13.5px;color:var(--ink);margin-bottom:2px;}
 .prayer-cta-card .pcc-meta{font-size:11px;color:var(--muted);margin-top:1px;}
+/* S96 stand-in attendance */
+#standInCtaBtn{border-color:var(--gold);background:var(--gold-soft);}
+.si-pills{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px;}
+.si-pill{font:inherit;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;border:1.5px solid var(--line-strong);background:var(--paper);color:var(--ink-soft);cursor:pointer;}
+.si-pill.on{background:var(--forest);border-color:var(--forest);color:#fff;}
+.si-row{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid var(--line);}
+.si-row:last-child{border-bottom:0;}
+.si-name{flex:1;font-size:14px;color:var(--ink);min-width:0;}
+.si-name small{display:block;font-size:10.5px;color:var(--muted);}
+.si-tog{font:inherit;font-size:12px;font-weight:700;min-width:74px;padding:7px 8px;border-radius:8px;border:1.5px solid var(--line-strong);background:var(--paper);color:var(--muted);cursor:pointer;}
+.si-tog.on{background:#e3f4ea;border-color:#2a7a52;color:#1d5c3c;}
+.si-mode{font:inherit;font-size:15px;padding:5px 7px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);cursor:pointer;}
+.si-lbl{display:block;font-size:12px;color:var(--muted);margin:6px 0 3px;}
+.si-save{display:block;width:100%;margin-top:12px;padding:12px;border:0;border-radius:10px;background:var(--forest);color:#fff;font:inherit;font-weight:800;font-size:15px;cursor:pointer;}
+.si-save:disabled{opacity:.6;cursor:default;}
 .prayer-cta-card .pcc-badge{
   background:var(--forest);color:#fef9ec;font-size:10.5px;font-weight:700;
   padding:2px 9px;border-radius:99px;white-space:nowrap;
@@ -1994,6 +2009,18 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
+      <!-- S96: Stand-in attendance CTA - shown ONLY to an active stand-in. -->
+      <button class="prayer-cta-card" onclick="openStandInSheet()" id="standInCtaBtn" style="display:none">
+        <div class="pcc-icon">&#x1F91D;</div>
+        <div class="pcc-body">
+          <div class="pcc-title">
+            <span class="en-text">Stand-in Attendance</span><span class="tl-text">Attendance bilang Kahalili</span>
+          </div>
+          <div class="pcc-meta" id="standInCtaMeta"></div>
+        </div>
+        <div style="color:var(--muted);font-size:18px">&rsaquo;</div>
+      </button>
+
       <!-- Heads-up to leader button -->
       <button class="headsup-btn" onclick="openHeadsUpModal()">
         <div class="hu-icon">🙏</div>
@@ -2676,6 +2703,19 @@ body.lang-tl .tl-text{display:inline;}
      sheets. The picker/status keep their ids (#attestCard / #attestPickerRow /
      #attestStatusRow) so renderAttestCard works untouched; the history button sits
      OUTSIDE #attestCard so it's reachable even with no attestable service. -->
+<!-- S96: Stand-in attendance sheet. -->
+<div class="lc-detail-backdrop" id="standInBackdrop" onclick="closeStandInSheet(event)">
+  <div class="lc-detail" id="standInSheet" onclick="event.stopPropagation()">
+    <button class="pr-top-close" onclick="closeStandInSheet()" aria-label="Close &middot; Isara">&#x2715;</button>
+    <h2><span class="en-text">&#x1F91D; Stand-in Attendance</span><span class="tl-text">&#x1F91D; Attendance bilang Kahalili</span></h2>
+    <div class="lc-detail-meta" id="standInWho"></div>
+    <div id="standInBody"></div>
+    <button class="lc-detail-close" onclick="closeStandInSheet()">
+      <span class="en-text">Close</span><span class="tl-text">Isara</span>
+    </button>
+  </div>
+</div>
+
 <div class="lc-detail-backdrop" id="attestBackdrop" onclick="closeAttestSheet(event)">
   <div class="lc-detail" id="attestSheet" onclick="event.stopPropagation()">
     <button class="pr-top-close" onclick="closeAttestSheet()" aria-label="Close · Isara">✕</button>
@@ -3297,6 +3337,7 @@ async function initMMT(){
     window.__mmtPhase('First paint');
     showApp();
     _mmtAttendanceLock();  // S91: per-church attendance hard-gate (post-paint, fail-soft)
+    _mmtStandInInit();     // S96: stand-in attendance CTA (only for an active stand-in; fail-soft)
 
     // Above-the-fold data next: the devotional is the one card the home
     // screen exists for. One query, immediate hydrate.
@@ -3396,6 +3437,9 @@ async function _mmtAttendanceLock() {
     const { data: flock, error: fe } = await db.from('members').select('id')
       .eq('discipler_id', memberRow.id).eq('status', 'active').limit(1);
     if (fe || !flock || !flock.length) return;
+    // S96: a leader whose group is covered by an active stand-in is exempt
+    // while covered. A failed read means "not covered" (normal lock rules).
+    if (await _mmtIsCovered(memberRow.id)) { _mmtLockHide(); return; }
     const res = await AG.computeLock(db, memberRow.id, st.cancellations);
     if (!res.missing.length) { _mmtLockHide(); return; }
     _mmtLockShow(res.missing);
@@ -8279,6 +8323,229 @@ let _myGratitude = [];
 //    (#attestCard / #attestPickerRow / #attestStatusRow) relocated into the sheet
 //    unchanged, so renderAttestCard keeps working. Open refreshes the card; close
 //    mirrors closePrayerSheet (a backdrop tap never dismisses).
+// == S96: Stand-in attendance ==================================================
+// An L3+ assigns (in MD) a stand-in for an L2 who is temporarily unavailable.
+// The stand-in ONLY logs Sunday Service / Prayer Meeting / LC Meeting for that
+// leader's active disciples; members stay under their own leader (reports keep
+// crediting the leader's group). Rows carry source='stand_in'.
+const SI_EVENTS = [
+  { key:'Sunday Service', en:'Sunday Service', tl:'Sunday Service', live:true  },
+  { key:'Prayer Meeting', en:'Prayer Meeting', tl:'Prayer Meeting', live:true  },
+  { key:'LC Meeting',     en:'LC Meeting',     tl:'LC Meeting',     live:false }
+];
+let _siCovers = [];
+const _si = { idx:0, ev:'Sunday Service', date:'', roster:[], present:{}, mode:{}, existing:{}, loading:false };
+
+function _siToday(){ const AG = MultiplyShared.attendanceGate; return AG.fmt(AG.nowManila()); }
+function _siIsActive(r, today){ return !r.ended_at && r.starts_on <= today && (!r.ends_on || r.ends_on >= today); }
+function _siAddDays(iso, n){ const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+function _siEsc(t){ return MultiplyShared.escapeHTML(t == null ? '' : String(t)); }
+function _siBi(en, tl){ return '<span class="en-text">' + en + '</span><span class="tl-text">' + tl + '</span>'; }
+
+async function _mmtIsCovered(leaderId){
+  try {
+    const today = _siToday();
+    const { data, error } = await db.from('lc_stand_ins').select('id,starts_on,ends_on,ended_at')
+      .eq('leader_id', leaderId).is('ended_at', null).limit(1);
+    if (error || !data || !data.length) return false;
+    return _siIsActive(data[0], today);
+  } catch (e) { return false; }
+}
+
+async function _mmtStandInInit(){
+  try {
+    if (!memberRow || !memberRow.id) return;
+    const today = _siToday();
+    const { data, error } = await db.from('lc_stand_ins')
+      .select('id,leader_id,starts_on,ends_on,note,ended_at')
+      .eq('stand_in_id', memberRow.id).is('ended_at', null);
+    if (error || !data) { _siCovers = []; _siCtaRender(); return; }
+    const act = data.filter(function(r){ return _siIsActive(r, today); });
+    if (!act.length) { _siCovers = []; _siCtaRender(); return; }
+    const { data: ls } = await db.from('members').select('id,name,lc_group')
+      .in('id', act.map(function(r){ return r.leader_id; }));
+    const byId = {}; (ls || []).forEach(function(l){ byId[l.id] = l; });
+    _siCovers = act.map(function(r){
+      return Object.assign({}, r, { leader: byId[r.leader_id] || { id:r.leader_id, name:'(leader)', lc_group:'' } });
+    }).sort(function(a,b){ return (a.leader.name||'').localeCompare(b.leader.name||''); });
+    _siCtaRender();
+  } catch (e) { console.warn('_mmtStandInInit fail-soft:', e); }
+}
+
+function _siCtaRender(){
+  const btn = document.getElementById('standInCtaBtn');
+  if (!btn) return;
+  if (!_siCovers.length) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  const names = _siCovers.map(function(c){ return _siEsc((c.leader.name||'').split(' ')[0] || c.leader.name); }).join(', ');
+  document.getElementById('standInCtaMeta').innerHTML =
+    _siBi('Log attendance for ' + names + '\u2019s LC group', 'Mag-log ng attendance para sa LC group ni ' + names);
+}
+
+// Default date per event: the open service window (same resolver as the lock),
+// else the most recent occurrence of that weekday; LC Meeting = today.
+function _siDefaultDate(ev){
+  const AG = MultiplyShared.attendanceGate;
+  const nowM = AG.nowManila();
+  const today = AG.fmt(nowM);
+  if (ev === 'LC Meeting') return today;
+  const svc = ev === 'Sunday Service' ? AG.SERVICES.sunday : AG.SERVICES.wednesday;
+  const open = AG.activeServiceDate(nowM, svc);
+  if (open) return open;
+  const back = (nowM.getUTCDay() - svc.dow + 7) % 7;
+  return _siAddDays(today, -back);
+}
+
+function openStandInSheet(){
+  if (!_siCovers.length) return;
+  if (_si.idx >= _siCovers.length) _si.idx = 0;
+  if (!_si.date) _si.date = _siDefaultDate(_si.ev);
+  document.getElementById('standInBackdrop').classList.add('show');
+  _siLoad();
+}
+function closeStandInSheet(e){
+  if (e) return;   // backdrop tap never dismisses (mirrors the other sheets)
+  document.getElementById('standInBackdrop').classList.remove('show');
+}
+
+function _siPickLeader(i){ _si.idx = i; _siLoad(); }
+function _siPickEvent(k){ _si.ev = k; _si.date = _siDefaultDate(k); _siLoad(); }
+function _siPickDate(v){ if (v) { _si.date = v; _siLoad(); } }
+
+async function _siLoad(){
+  const c = _siCovers[_si.idx]; if (!c) return;
+  _si.loading = true; _siRender();
+  try {
+    const { data: ms, error: me } = await db.from('members')
+      .select('id,name,lc_group,diagnostic_zone,pipeline_level')
+      .eq('discipler_id', c.leader_id).eq('status', 'active').order('name');
+    if (me) throw me;
+    _si.roster = ms || [];
+    _si.present = {}; _si.mode = {}; _si.existing = {};
+    if (_si.roster.length) {
+      const { data: ex, error: xe } = await db.from('attendance')
+        .select('id,member_id,present,attendance_mode,source,logged_by')
+        .eq('event_type', _si.ev).eq('event_date', _si.date)
+        .in('member_id', _si.roster.map(function(m){ return m.id; }));
+      if (xe) throw xe;
+      (ex || []).forEach(function(r){
+        _si.existing[r.member_id] = r;
+        _si.present[r.member_id] = !!r.present;
+        _si.mode[r.member_id] = r.attendance_mode === 'online' ? 'online' : 'in_person';
+      });
+    }
+  } catch (e) {
+    console.warn('stand-in load failed:', e);
+    showToast('Could not load the group. Check your connection and try again.', true);
+    _si.roster = [];
+  }
+  _si.loading = false; _siRender();
+}
+
+function _siToggle(id){ _si.present[id] = !_si.present[id]; _siRender(); }
+function _siToggleMode(id){ _si.mode[id] = _si.mode[id] === 'online' ? 'in_person' : 'online'; _siRender(); }
+function _siAllPresent(){ _si.roster.forEach(function(m){ _si.present[m.id] = true; }); _siRender(); }
+
+function _siRender(){
+  const c = _siCovers[_si.idx]; if (!c) return;
+  const ev = SI_EVENTS.filter(function(e){ return e.key === _si.ev; })[0] || SI_EVENTS[0];
+  const lname = _siEsc(c.leader.name);
+  document.getElementById('standInWho').innerHTML =
+    _siBi('Standing in for ' + lname + (c.ends_on ? ' until ' + _siEsc(c.ends_on) : ''),
+          'Kahalili ni ' + lname + (c.ends_on ? ' hanggang ' + _siEsc(c.ends_on) : ''));
+  let h = '';
+  if (_siCovers.length > 1) {
+    h += '<span class="si-lbl">' + _siBi('Group', 'Grupo') + '</span><div class="si-pills">' +
+      _siCovers.map(function(cv, i){
+        return '<button type="button" class="si-pill' + (i === _si.idx ? ' on' : '') + '" onclick="_siPickLeader(' + i + ')">' + _siEsc(cv.leader.name) + '</button>';
+      }).join('') + '</div>';
+  }
+  h += '<span class="si-lbl">' + _siBi('Event', 'Event') + '</span><div class="si-pills">' +
+    SI_EVENTS.map(function(e){
+      return '<button type="button" class="si-pill' + (e.key === _si.ev ? ' on' : '') + '" onclick="_siPickEvent(\'' + e.key + '\')">' + _siBi(e.en, e.tl) + '</button>';
+    }).join('') + '</div>';
+  const today = _siToday();
+  const minD = _siAddDays(c.starts_on, -7);
+  h += '<label class="si-lbl" for="siDate">' + _siBi('Date', 'Petsa') + '</label>' +
+    '<input type="date" id="siDate" value="' + _siEsc(_si.date) + '" min="' + minD + '" max="' + today + '" onchange="_siPickDate(this.value)" ' +
+    'style="width:100%;padding:9px 10px;border:1.5px solid var(--line-strong);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;font-size:14px">';
+  if (_si.loading) {
+    h += '<div style="text-align:center;color:var(--muted);padding:18px 0;font-size:13px">' + _siBi('Loading\u2026', 'Naglo-load\u2026') + '</div>';
+  } else if (!_si.roster.length) {
+    h += '<div style="text-align:center;color:var(--muted);padding:18px 0;font-size:13px">' +
+      _siBi('No active members under this leader.', 'Walang aktibong miyembro sa ilalim ng leader na ito.') + '</div>';
+  } else {
+    const n = _si.roster.filter(function(m){ return _si.present[m.id]; }).length;
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px">' +
+      '<span style="font-size:12.5px;color:var(--ink-soft);font-weight:700">' + n + ' / ' + _si.roster.length + ' ' + _siBi('present', 'present') + '</span>' +
+      '<button type="button" onclick="_siAllPresent()" style="font:inherit;font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid var(--line-strong);background:var(--paper);color:var(--forest);cursor:pointer">' +
+      _siBi('Mark all present', 'Lahat present') + '</button></div>';
+    h += '<div style="border:1px solid var(--line);border-radius:10px;padding:2px 6px;background:var(--paper)">' +
+      _si.roster.map(function(m){
+        const on = !!_si.present[m.id];
+        const ex = _si.existing[m.id];
+        const tag = ex ? '<small>' + _siBi('on record', 'naka-record') + (ex.logged_by ? ' \u00B7 ' + _siEsc(ex.logged_by) : '') + '</small>' : '';
+        const mode = ev.live
+          ? '<button type="button" class="si-mode" title="In person / Online" onclick="_siToggleMode(\'' + m.id + '\')">' + (_si.mode[m.id] === 'online' ? '\uD83C\uDF10' : '\uD83C\uDFDB\uFE0F') + '</button>'
+          : '';
+        return '<div class="si-row"><div class="si-name">' + _siEsc(m.name) + tag + '</div>' + mode +
+          '<button type="button" class="si-tog' + (on ? ' on' : '') + '" onclick="_siToggle(\'' + m.id + '\')">' +
+          (on ? _siBi('\u2713 Present', '\u2713 Present') : _siBi('Absent', 'Absent')) + '</button></div>';
+      }).join('') + '</div>';
+    h += '<button type="button" class="si-save" id="siSaveBtn" onclick="_siSave()">' + _siBi('\uD83D\uDCBE Save attendance', '\uD83D\uDCBE I-save ang attendance') + '</button>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">' +
+      _siBi('Logging absents counts too. Members stay under ' + lname + '; you are only recording for them.',
+            'Kasama sa report ang absent. Mananatili ang mga miyembro kay ' + lname + '; nagre-record ka lang para sa kanila.') + '</div>';
+  }
+  document.getElementById('standInBody').innerHTML = h;
+}
+
+async function _siSave(){
+  const c = _siCovers[_si.idx]; if (!c || !_si.roster.length) return;
+  const btn = document.getElementById('siSaveBtn');
+  if (btn && btn.disabled) return;
+  if (!_si.date || _si.date > _siToday()) { showToast('Pick a valid date.', true); return; }
+  const ev = SI_EVENTS.filter(function(e){ return e.key === _si.ev; })[0] || SI_EVENTS[0];
+  if (btn) { btn.disabled = true; btn.textContent = '\u23F3 Saving\u2026'; }
+  const me = { id: memberRow.id, name: memberRow.name || 'Stand-in' };
+  const toInsert = [], toUpdate = [];
+  _si.roster.forEach(function(m){
+    const present = !!_si.present[m.id];
+    const mode = (ev.live && _si.mode[m.id] === 'online') ? 'online' : 'in_person';
+    const row = {
+      member_id: m.id, member_name: m.name, event_date: _si.date, event_type: _si.ev, event_name: null,
+      present: present, attendance_mode: mode,
+      member_lc_group: m.lc_group || '', member_zone: m.diagnostic_zone ?? null, member_level: m.pipeline_level ?? null,
+      event_lc_group: c.leader.lc_group || '',
+      logged_by: me.name, logged_by_id: me.id, source: 'stand_in'
+    };
+    const ex = _si.existing[m.id];
+    if (!ex) { toInsert.push(row); return; }
+    const exMode = ex.attendance_mode === 'online' ? 'online' : 'in_person';
+    if (!!ex.present === present && exMode === mode) return;   // unchanged - keep the original record
+    toUpdate.push({ id: ex.id, row: row });
+  });
+  let fail = 0, lastErr = null;
+  try {
+    if (toInsert.length) {
+      const { error } = await db.from('attendance').insert(toInsert);
+      if (error) { fail += toInsert.length; lastErr = error; }
+    }
+    const res = await Promise.all(toUpdate.map(function(u){
+      return db.from('attendance').update(u.row).eq('id', u.id);
+    }));
+    res.forEach(function(r){ if (r && r.error) { fail++; lastErr = r.error; } });
+  } catch (e) { fail = toInsert.length + toUpdate.length; lastErr = e; }
+  if (fail) {
+    console.warn('stand-in save failed:', lastErr);
+    showToast('Some rows did not save (' + fail + '). Please try again.', true);
+  } else {
+    const n = toInsert.length + toUpdate.length;
+    showToast(n ? ('\u2705 Saved \u2014 ' + _si.ev + ', ' + _si.date) : 'Nothing changed \u2014 already on record.');
+  }
+  await _siLoad();
+}
+
 async function openAttestSheet(){
   document.getElementById('attestBackdrop').classList.add('show');
   try{ await renderAttestCard(); }catch(e){ console.warn('attest sheet render failed (non-fatal):', e); }

@@ -474,7 +474,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
      dashboard. If no valid session exists, redirect to the central
      login page. This replaces the old open-name-search login.
 ─────────────────────────────────────────────────────────────── -->
-<script src="multiply_shared.js?v=15"></script>
+<script src="multiply_shared.js?v=16"></script>
 <script src="multiply_brand.js?v=1"></script>
 <script src="multiply_reports.js"></script>
 <style id="leader-gate-style">
@@ -3111,6 +3111,7 @@ async function _wagLoggedLcgRecently(leaderId, dateList) {
       .eq('event_type', 'LC Meeting')
       .eq('present', true)
       .in('event_date', dateList)
+      .or('source.is.null,source.neq.stand_in')   // S96: stand-in logs don't count for self
       .limit(1);
     if (error) { console.warn('_wagLoggedLcgRecently failed (fail-soft):', error); return null; }
     return (data && data.length > 0);
