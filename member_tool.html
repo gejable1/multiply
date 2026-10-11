@@ -3546,6 +3546,31 @@ async function loadDevoStreak(){
   }
 }
 
+// S97: celebration-feed streak with a HOLD. Returns the longest run of
+// consecutive devotional days whose LAST day is within `holdDays` of today
+// (local date), as { streak, live }. live = the run is still going (last day
+// is today or yesterday - same rule as computeStreak). A Saturday streak thus
+// stays celebratable through the following Saturday. Ties prefer the live run.
+function heldStreak(rows, holdDays){
+  const out = { streak:0, live:false };
+  if(!rows || !rows.length) return out;
+  const fmt = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  const dates = new Set(rows.map(r => r.event_date));
+  const today = new Date(); today.setHours(0,0,0,0);
+  const hold = (holdDays == null) ? 7 : holdDays;
+  for(let back = 0; back <= hold; back++){
+    const end = new Date(today); end.setDate(today.getDate() - back);
+    if(!dates.has(fmt(end))) continue;
+    const next = new Date(end); next.setDate(end.getDate() + 1);
+    if(back > 0 && dates.has(fmt(next))) continue;   // not the END of its run
+    let n = 0; const cur = new Date(end);
+    while(dates.has(fmt(cur))){ n++; cur.setDate(cur.getDate() - 1); }
+    const live = back <= 1;
+    if(n > out.streak || (n === out.streak && live && !out.live)){ out.streak = n; out.live = live; }
+  }
+  return out;
+}
+
 function computeStreak(rows){
   if(!rows.length) return 0;
   // Walk back from today; only count if today or yesterday has an entry
@@ -7864,32 +7889,38 @@ async function loadCelebrationFeed(){
       if(!grouped.has(r.member_id)) grouped.set(r.member_id, []);
       grouped.get(r.member_id).push(r);
     }
-    for(const [mid, rows] of grouped){ streakByMember.set(mid, computeStreak(rows)); }
+    // S97: hold a qualifying streak for 7 days after its last day (next-week LC).
+    for(const [mid, rows] of grouped){ streakByMember.set(mid, heldStreak(rows, 7)); }
   }
   const STREAK_FLOOR = 6; // 6+ days qualifies (Pastor's call)
   const streakWins = [];
+  // S97: live run -> "is on a N-day streak"; held (ended within 7 days) -> "completed".
+  const _stEn = (h) => h.live ? `is on a ${h.streak}-day devotional streak` : `completed a ${h.streak}-day devotional streak`;
+  const _stTl = (h) => h.live ? `${h.streak} araw nang sunud-sunod sa devotional` : `nakabuo ng ${h.streak} araw na sunud-sunod na devotional`;
   for(const m of eligible){
-    const s = streakByMember.get(m.id) || 0;
+    const h = streakByMember.get(m.id) || { streak:0, live:false };
+    const s = h.streak;
     if(s >= STREAK_FLOOR){
       streakWins.push({
         memberId:m.id, memberName:m.name, photoUrl:m.photo_url||'', isTest:!!m.is_test_member,
         icon:'🔥',
-        label_en:`is on a ${s}-day devotional streak`,
-        label_tl:`${s} araw nang sunud-sunod sa devotional`,
+        label_en:_stEn(h),
+        label_tl:_stTl(h),
         streak:s
       });
     }
   }
   // LC leader modeling streak (always-on; flagged for the LC LEADER tag in render).
   if(leaderRow){
-    const ls = streakByMember.get(leaderRow.id) || 0;
+    const lh = streakByMember.get(leaderRow.id) || { streak:0, live:false };
+    const ls = lh.streak;
     if(ls >= STREAK_FLOOR){
       streakWins.push({
         memberId: leaderRow.id, memberName: leaderRow.name, photoUrl: leaderRow.photo_url||'',
         isTest: !!leaderRow.is_test_member, isLeader: true,
         icon:'🔥',
-        label_en:`is on a ${ls}-day devotional streak`,
-        label_tl:`${ls} araw nang sunud-sunod sa devotional`,
+        label_en:_stEn(lh),
+        label_tl:_stTl(lh),
         streak: ls
       });
     }
@@ -8031,12 +8062,13 @@ async function loadCelebrationFeed(){
   }
   // 2) LCG devotional streak — how many are on a 6+ day streak this week.
   let streakBadge = null;
-  const streakerCount = eligible.filter(m => (streakByMember.get(m.id) || 0) >= STREAK_FLOOR).length;
+  // S97: map values are {streak, live}; counts live AND held (same 7-day hold).
+  const streakerCount = eligible.filter(m => ((streakByMember.get(m.id) || {}).streak || 0) >= STREAK_FLOOR).length;
   if(streakerCount >= 1){
     streakBadge = {
       icon:'🔥',
-      label_en:`Your LCG: ${streakerCount} ${streakerCount===1?'member is':'members are'} on a 6+ day devotional streak`,
-      label_tl:`Ang LCG mo: ${streakerCount} miyembro ang 6+ araw nang sunud-sunod sa devotional`
+      label_en:`Your LCG: ${streakerCount} ${streakerCount===1?'member':'members'} reached a 6+ day devotional streak this week`,
+      label_tl:`Ang LCG mo: ${streakerCount} miyembro ang umabot ng 6+ araw na sunud-sunod na devotional ngayong linggo`
     };
   }
   // 3) Pastor celebration (Phase 2b) — the LC leader's most recent ACKNOWLEDGED
