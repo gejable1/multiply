@@ -47,7 +47,7 @@ Galatians 5:22-23 lists **9 fruits**: Love, Joy, Peace, Patience, Kindness, Good
 | **Joy** | L3, L11 | Surrender / Pagsuko (L3 — *"O the joy of full salvation!"* — responsive love grounded in Rom 12:1 mercy) + Living on Mission (L11 — Mac Lake's own pairing for the mission anchor). *L3 reassigned from Self-Control → Joy on May 15, 2026 per scan-driven reading.* |
 | **Peace** | L5, L18 | Facing Hardship (L5 — peace in trial) + Adorning God in Worship (L18 — peace in His presence) |
 | **Patience** | — | *Originally L13 (and before that L2 in skeleton, reassigned to Faithfulness May 15). L13 locked Sep 22 with Mac Lake's **Selflessness** anchor per Pastor — Patience currently unassigned in the cycle; candidate for a later slot on next map revision* |
-| **Kindness** | L6 | Christian Fellowship — kindness is the relational glue |
+| **Kindness** | L15 | Identifying Needs (L15 — kabaitang nakakakita at kumikilos). *L6 was the original skeleton slot but locked as Brotherly Love (USAD virtues palette, Inv #75) — L15 is now Kindness's UNLAD home* |
 | **Goodness** | L4, L16 | Personal Holiness (L4) + Modelling Christlikeness (L16) — moral integrity made visible |
 | **Faithfulness** | L1, L2, L7 | Prayer (L1 — faithful talking *to* God) + Bible Meditation (L2 — faithful listening *to* God) + Church Worship (L7 — faithful gathering). **L1+L2 share Faithfulness as the Month-1 unified anchor: "showing up daily for the two-way conversation."** |
 | **Gentleness** | L17 | Right Relationships (L17 — gentle correction). *Originally also L14; L14 locked Sep 22 with Mac Lake's **Openness** anchor per LY-4 pairing — Gentleness now carried by L17 alone* |
@@ -391,14 +391,15 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - **Pairing Confidence:** **Strong** — UNLAD-L4 is Nehemiah's eight skills (gilas); LY Module 4 is teachability — both are about growing competence, near-identical theme
 - **Status:** ✅ **BUILT & SHIPPED Sep 22, 2026** — deck (32 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
-### **L15 — Identifying Needs**
-- **Source:** UNLAD-L5
-- **Memory Verse:** **Galatians 6:10** *(confirmed from UNLAD leader's guide)*
-- **🌿 Character (proposed):** **Kindness** — seeing the need before it's asked is kindness's most powerful form
-- **⚡ Competence (Claude-authored):** *Needs Discernment Walk* — the practice of asking "what need is going unseen?" in your home, LCG, workplace
-- **LY Pair:** ✗ None (LY's Selflessness/Teamwork module was used in L13)
+### **L15 — Identifying Needs · "Mata ng Servant-Leader"**
+- **Source:** UNLAD-L5 (Ang Apat na M ng Pagpapakain sa Limang Libo) — opens Leading Others; arc L13 puso · L14 gilas · L15 mata
+- **Memory Verse:** **Galatians 6:10** *(confirmed from UNLAD leader's guide)* — "basta may pagkakataon"
+- **🌿 Character (LOCKED):** **Kindness · Kabaitan** (*chrestotes*, Gal 5:22) — kabaitang nakakakita ng pangangailangan at kumikilos para tugunan ito. *Pastor chose option (a) at build, Oct 9, 2026.*
+- **⚡ Competence (Claude-authored):** **Identifying Needs** — lantad vs tago needs; tamang tulong, hindi basta tulong; Apat na M (Mahabaging Puso · Malugod na Pagtanggap · Matinong Pananaw · Mapagtiwalang Pag-asa). Artifacts: 10-blank guided notes, Galatians Circles, A–E Identifying Needs (5 BTLI-authored proficiencies), 7-day Needs Walk. *Supersedes the "Needs Discernment Walk" placeholder.*
+- **LY Pair:** ✗ None — LY-5 (Maximizing Your Energy · Consistency) was weighed at build and **kept at L19** (forced pairing would dilute both; TALAKAY Q2 on healthy boundaries is the bridge to L19)
 - **Pairing Confidence:** Original
-- **Status:** ☐ Not started
+- **Format first:** first lesson under the Pastor's Oct 9 rule — **facilitator guide = complete** (all stories in full, SAY scripts, answer key); **participant guide = guided notes** (story title + non-spoiling recall line + fill-in blanks)
+- **Status:** ✅ **BUILT & SHIPPED Oct 9, 2026** — deck (29 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz, verified q_count=10, linked) in `lessons/btli101_xrw5fg/`
 
 ### **L16 — Modelling Christlikeness**
 - **Source:** UNLAD-L6
@@ -478,6 +479,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 **Completed Sep 22, 2026:**
 - ✅ **L13 fully built & shipped** (Puso ng Servant-Leader): character anchor revised Patience → **Selflessness** per Pastor's build-time confirmation; L13=puso / L14=gilas two-lesson arc on Philippians 2 established; deliverables + DB seed live
 - ✅ **L14 fully built & shipped** (Gilas ng Servant-Leader): LY-4 pairing locked (Teachability · Openness), superseding the map's earlier Gentleness proposal and Claude-authored Situational SL placeholder; Walong Kasanayan ni Nehemiah as spine; hagdan + A–E + 7-day reading tracker artifacts; deliverables + DB seed live (quiz verified q_count=10, linked)
+- ✅ **L15 fully built & shipped** (Mata ng Servant-Leader, Oct 9, 2026): Kindness · Identifying Needs (Claude-authored); LY-5 kept at L19; first lesson with complete-facilitator / guided-notes-participant split; deliverables + DB seed live (quiz verified q_count=10, linked)
 - ✅ **Rename of L1→L11 deliverables: PARKED** by Pastor's call (no re-pitch — surface only when Pastor brings it up)
 
 **Remaining work (per-lesson, as scans arrive):**
