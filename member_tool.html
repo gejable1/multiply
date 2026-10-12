@@ -3537,7 +3537,7 @@ async function loadDevoStreak(){
       .eq('event_type', 'devotional')
       .eq('present', true)
       .order('event_date', { ascending:false })
-      .limit(60);
+      .limit(370);   // S99: streaks no longer reset weekly - room for long runs
     if(error) throw error;
     devoStreak = computeStreak(data || []);
   }catch(e){
@@ -3546,28 +3546,38 @@ async function loadDevoStreak(){
   }
 }
 
+// S99: Sundays are devotional-free in the church guide, so a Sunday neither
+// counts toward nor breaks a devotional streak (Pastor, Oct 12: Sundays only -
+// holidays/gap days still break it). These helpers step over Sundays.
+function _devoPrevDay(d){ const x = new Date(d); x.setDate(x.getDate() - 1); if(x.getDay() === 0) x.setDate(x.getDate() - 1); return x; }
+function _devoNextDay(d){ const x = new Date(d); x.setDate(x.getDate() + 1); if(x.getDay() === 0) x.setDate(x.getDate() + 1); return x; }
+function _devoLatestDay(today){ const x = new Date(today); if(x.getDay() === 0) x.setDate(x.getDate() - 1); return x; }
+
 // S97: celebration-feed streak with a HOLD. Returns the longest run of
-// consecutive devotional days whose LAST day is within `holdDays` of today
-// (local date), as { streak, live }. live = the run is still going (last day
-// is today or yesterday - same rule as computeStreak). A Saturday streak thus
-// stays celebratable through the following Saturday. Ties prefer the live run.
+// consecutive devotional days (S99: Sundays skipped) whose LAST day is within
+// `holdDays` calendar days of today (local date), as { streak, live, start, end }.
+// live = the run is still going (last day is the latest devotional day or the
+// one before it - same rule as computeStreak). A Saturday streak thus stays
+// celebratable through the following Saturday. Ties prefer the live run.
 function heldStreak(rows, holdDays){
   const out = { streak:0, live:false, start:null, end:null };
   if(!rows || !rows.length) return out;
   const fmt = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   const dates = new Set(rows.map(r => r.event_date));
   const today = new Date(); today.setHours(0,0,0,0);
+  const d0 = _devoLatestDay(today);
+  const liveEnds = new Set([fmt(d0), fmt(_devoPrevDay(d0))]);
   const hold = (holdDays == null) ? 7 : holdDays;
   for(let back = 0; back <= hold; back++){
     const end = new Date(today); end.setDate(today.getDate() - back);
+    if(end.getDay() === 0) continue;                  // Sundays never end a run
     if(!dates.has(fmt(end))) continue;
-    const next = new Date(end); next.setDate(end.getDate() + 1);
-    if(back > 0 && dates.has(fmt(next))) continue;   // not the END of its run
-    let n = 0; const cur = new Date(end);
-    while(dates.has(fmt(cur))){ n++; cur.setDate(cur.getDate() - 1); }
-    const live = back <= 1;
+    const next = _devoNextDay(end);
+    if(next.getTime() <= today.getTime() && dates.has(fmt(next))) continue;   // not the END of its run
+    let n = 0, first = null, cur = new Date(end);
+    while(dates.has(fmt(cur))){ n++; first = cur; cur = _devoPrevDay(cur); }
+    const live = liveEnds.has(fmt(end));
     if(n > out.streak || (n === out.streak && live && !out.live)){
-      const first = new Date(cur); first.setDate(cur.getDate() + 1);   // cur stepped one past the run
       out.streak = n; out.live = live; out.start = fmt(first); out.end = fmt(end);
     }
   }
@@ -3586,14 +3596,16 @@ function computeStreak(rows){
   // (which is stored via local-date todayIso()). Match the rest of this file.
   const fmt = d => (window.MultiplyShared && MultiplyShared.dates) ? MultiplyShared.dates.toYMD(d) : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
 
-  // Find the most recent date that's in the set (today or yesterday)
-  let cursor = dates.has(fmt(today)) ? today : (dates.has(fmt(yesterday)) ? yesterday : null);
+  // S99: start from the latest devotional day (today, or Saturday on a Sunday)
+  // or the one before it; walk back stepping over Sundays.
+  const d0 = _devoLatestDay(today), d1 = _devoPrevDay(d0);
+  let cursor = dates.has(fmt(d0)) ? new Date(d0) : (dates.has(fmt(d1)) ? new Date(d1) : null);
   if(!cursor) return 0;
 
   let streak = 0;
   while(dates.has(fmt(cursor))){
     streak++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = _devoPrevDay(cursor);
   }
   return streak;
 }
