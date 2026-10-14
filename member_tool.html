@@ -759,6 +759,10 @@ body.lang-tl .tl-text{display:inline;}
 .lc-card .lc-meta{font-size:11px;color:var(--muted);}
 
 /* ═══════════════ HOME — CELEBRATION FEED ═══════════════ */
+.celeb-scope{display:flex;gap:6px;margin:0 0 8px;flex-wrap:wrap;}
+.celeb-scope button{font:inherit;font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1.5px solid var(--line-strong);background:var(--paper);color:var(--ink-soft);cursor:pointer;}
+.celeb-scope button.on{background:var(--forest);border-color:var(--forest);color:#fff;}
+.celeb-scope button:disabled{opacity:.6;cursor:default;}
 .celebration-card{
   background:var(--paper);
   border:1px solid var(--line);
@@ -2082,6 +2086,7 @@ body.lang-tl .tl-text{display:inline;}
           <span class="tl-text">🎉 Mga tagumpay sa LC</span>
         </div>
       </div>
+      <div id="celebScopeToggle" class="celeb-scope" style="display:none"></div>
       <div class="celebration-card" id="celebrationCard">
         <div class="celebration-empty">
           <span class="en-text">No recent wins yet — be the first this week.</span>
@@ -6956,6 +6961,9 @@ let lcMembers = [];        // fellow LC members (filtered by share_with_lc)
 let lcDisciplerInfo = null;
 let lcMeetingDay = null;
 let celebrationWins = [];  // recent individual wins from same LC
+// S101: which LC the feed shows when the viewer both LEADS a flock and BELONGS to one.
+let _celebScope = (function(){ try{ return localStorage.getItem('mmt_celeb_scope') || 'lead'; }catch(e){ return 'lead'; } })();
+let _celebScopes = { lead:null, belong:null };
 let celebrationGroupBadges = [];  // LCG-wide badges (pinned atop the feed)
 let saveStatusTimer = null;
 
@@ -7767,18 +7775,22 @@ async function loadCelebrationFeed(){
   //    → show the LC they BELONG to (their discipler's flock). UNCHANGED.
   //  • ONLY top-of-tree pastoral staff (NO discipler) who actually lead a flock
   //    anchor on the LC they LEAD (their own flock), so they aren't left empty.
-  let lcLeaderId = memberRow.discipler_id || null;
-  const _noDiscipler = !memberRow.discipler_id || memberRow.discipler_id === MEMBER.memberId;
-  if(_noDiscipler){
-    lcLeaderId = null;
-    try{
-      const { count: _flock } = await db.from('members')
-        .select('id', { count:'exact', head:true })
-        .eq('discipler_id', MEMBER.memberId)
-        .neq('is_external_user', true);
-      if(_flock && _flock > 0) lcLeaderId = MEMBER.memberId;
-    }catch(e){ console.warn('LC-leader detection failed (non-fatal):', e); }
-  }
+  // S101: resolve BOTH anchors. belong = the LC I am in (my discipler's flock);
+  // lead = the LC I lead (my own flock). With both, a toggle picks (default lead).
+  const _belongId = (memberRow.discipler_id && memberRow.discipler_id !== MEMBER.memberId) ? memberRow.discipler_id : null;
+  let _leadId = null;
+  try{
+    const { count: _flock } = await db.from('members')
+      .select('id', { count:'exact', head:true })
+      .eq('discipler_id', MEMBER.memberId)
+      .neq('is_external_user', true);
+    if(_flock && _flock > 0) _leadId = MEMBER.memberId;
+  }catch(e){ console.warn('LC-leader detection failed (non-fatal):', e); }
+  _celebScopes = { lead:_leadId, belong:_belongId };
+  let _scope = _celebScope;
+  if(_scope === 'lead' && !_leadId) _scope = 'belong';
+  if(_scope === 'belong' && !_belongId) _scope = 'lead';
+  let lcLeaderId = _scope === 'lead' ? _leadId : _belongId;
   if(!lcLeaderId){
     celebrationWins = []; celebrationGroupBadges = [];
     return;
@@ -8130,7 +8142,46 @@ async function loadCelebrationFeed(){
   celebrationGroupBadges = [pastorCelebrationBadge, attendanceBadge, prayerAttendanceBadge, streakBadge].filter(Boolean);
 }
 
+// S101: toggle only when the viewer both leads a flock AND belongs to one.
+function _renderCelebScopeToggle(){
+  const el = document.getElementById('celebScopeToggle');
+  if(!el) return;
+  const sc = _celebScopes || {};
+  if(!sc.lead || !sc.belong){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const cur = (_celebScope === 'belong') ? 'belong' : 'lead';
+  const first = ((memberRow && memberRow.discipler_name) || '').trim().split(/\s+/)[0] || '';
+  const esc = MultiplyShared.escapeHTML;
+  const belongEn = first ? (esc(first) + '\u2019s LCG') : 'My leader\u2019s LCG';
+  const belongTl = first ? ('LCG ni ' + esc(first)) : 'LCG ng aking leader';
+  el.innerHTML =
+    '<button type="button" class="' + (cur === 'lead' ? 'on' : '') + '" onclick="_setCelebScope(\'lead\')">' +
+      '<span class="en-text">My LCG</span><span class="tl-text">Aking LCG</span></button>' +
+    '<button type="button" class="' + (cur === 'belong' ? 'on' : '') + '" onclick="_setCelebScope(\'belong\')">' +
+      '<span class="en-text">' + belongEn + '</span><span class="tl-text">' + belongTl + '</span></button>';
+  el.style.display = '';
+}
+async function _setCelebScope(scope){
+  if(scope !== 'lead' && scope !== 'belong') return;
+  if(scope === _celebScope) return;
+  _celebScope = scope;
+  try{ localStorage.setItem('mmt_celeb_scope', scope); }catch(e){}
+  const el = document.getElementById('celebScopeToggle');
+  if(el) el.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+  try{ await loadCelebrationFeed(); }catch(e){ console.warn('celebration scope switch failed:', e); }
+  try{ renderCelebrationFeed(); }catch(e){ console.warn(e); }
+}
+// S101: when the subject is "You", English verbs agree ("You are on...", not "You is on...").
+function _youVerb(t){
+  return String(t || '')
+    .replace(/^is on /, 'are on ')
+    .replace(/^has a birthday/, 'have a birthday')
+    .replace(/^celebrates /, 'celebrate ')
+    .replace(/^praises /, 'praise ')
+    .replace(/^found their /, 'found your ');
+}
+
 function renderCelebrationFeed(){
+  try{ _renderCelebScopeToggle(); }catch(e){ console.warn('celeb toggle:', e); }
   const card = document.getElementById('celebrationCard');
   if(!card) return;
   const badges = celebrationGroupBadges || [];
@@ -8184,7 +8235,7 @@ function renderCelebrationFeed(){
         <div class="win-body">
           <div class="win-text">
             <span class="name">${MultiplyShared.escapeHTML(displayName)}</span>${testTag}${leaderTag}
-            <span class="en-text"> ${MultiplyShared.escapeHTML(w.label_en)}</span>
+            <span class="en-text"> ${MultiplyShared.escapeHTML(isMe ? _youVerb(w.label_en) : w.label_en)}</span>
             <span class="tl-text"> ${MultiplyShared.escapeHTML(w.label_tl)}</span>
           </div>
           ${whenHtml}
