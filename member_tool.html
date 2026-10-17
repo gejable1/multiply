@@ -13430,6 +13430,7 @@ async function loadPrayerMyList(){
 function _computePrayerRelevance(){
   _prayerRelevanceCount = _prayerFeed.filter(r =>
     r.status === 'open' && r.requester_id !== MEMBER.memberId && !_prayerSavedReqIds.has(r.id)
+    && !_prayerMyPrayedIds.has(r.id)   // S105: already prayed for -> no longer "to pray"
   ).length;
 }
 
@@ -14011,6 +14012,7 @@ async function prayForRequest(reqId, btnEl){
       _prayerPrayingCounts[reqId] = (_prayerPrayingCounts[reqId] || 0) + 1;
     }
     renderPrayerFeed();
+    _computePrayerRelevance(); renderPrayerCta();   // S105: badge drops by one right away
     showToast(tl ? 'Naipanalangin. Salamat sa pagdarasal 🙏' : 'Prayed. Thank you for interceding 🙏');
   }catch(e){
     console.warn('prayForRequest failed:', e);
