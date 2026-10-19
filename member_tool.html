@@ -7896,11 +7896,11 @@ async function loadCelebrationFeed(){
 
   const streakByMember = new Map();
   if(streakIds.length){
-    const since = new Date(); since.setDate(since.getDate() - 120); // covers up to ~100-day streaks
+    const since = new Date(); since.setDate(since.getDate() - 450); // S107: was 120 - clipped long runs (badge 122 vs feed 103); 450 covers the badge's 370-row reach
     const sinceYMD = _toYMD(since);
     const devoRows = [];
     const PAGE = 1000;
-    for(let from=0; from<8000; from+=PAGE){
+    for(let from=0; from<30000; from+=PAGE){   // S107: wider window -> more rows
       const { data, error: derr } = await db.from('attendance')
         .select('member_id,event_date')
         .eq('event_type','devotional').eq('present', true)
