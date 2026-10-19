@@ -4,7 +4,7 @@
   "schemas": [
     "public"
   ],
-  "table_count": 80,
+  "table_count": 81,
   "tables": {
     "_backup_devo_attendance_cleanup_20260620": {
       "kind": "table",
@@ -622,6 +622,183 @@
           "definition": "CREATE TRIGGER trg_set_church_id BEFORE INSERT ON public.absence_notices FOR EACH ROW EXECUTE FUNCTION set_church_id_from_jwt()"
         }
       ]
+    },
+    "ai_usage_log": {
+      "kind": "table",
+      "comment": null,
+      "rls_enabled": true,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "data_type": "bigint",
+          "nullable": false,
+          "default": "nextval('ai_usage_log_id_seq'::regclass)",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "church_id",
+          "ordinal": 2,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 3,
+          "data_type": "uuid",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "feature",
+          "ordinal": 4,
+          "data_type": "text",
+          "nullable": false,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "model",
+          "ordinal": 5,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "input_tokens",
+          "ordinal": 6,
+          "data_type": "integer",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "output_tokens",
+          "ordinal": 7,
+          "data_type": "integer",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "ok",
+          "ordinal": 8,
+          "data_type": "boolean",
+          "nullable": false,
+          "default": "false",
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "error",
+          "ordinal": 9,
+          "data_type": "text",
+          "nullable": true,
+          "default": null,
+          "is_identity": false,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 10,
+          "data_type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "is_identity": false,
+          "comment": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "ai_usage_log_church_id_fkey",
+          "columns": [
+            "church_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "churches",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "definition": "FOREIGN KEY (church_id) REFERENCES churches(id)"
+        },
+        {
+          "name": "ai_usage_log_member_id_fkey",
+          "columns": [
+            "member_id"
+          ],
+          "foreign_schema": "public",
+          "foreign_table": "members",
+          "foreign_columns": [
+            "id"
+          ],
+          "on_update": "NO ACTION",
+          "on_delete": "SET NULL",
+          "definition": "FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE SET NULL"
+        }
+      ],
+      "unique_constraints": [],
+      "check_constraints": [],
+      "indexes": [
+        {
+          "name": "ai_usage_log_pkey",
+          "is_unique": true,
+          "is_primary": true,
+          "columns": [
+            "id"
+          ],
+          "definition": "CREATE UNIQUE INDEX ai_usage_log_pkey ON public.ai_usage_log USING btree (id)"
+        },
+        {
+          "name": "idx_ai_usage_church_month",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "church_id",
+            "created_at"
+          ],
+          "definition": "CREATE INDEX idx_ai_usage_church_month ON public.ai_usage_log USING btree (church_id, created_at)"
+        },
+        {
+          "name": "idx_ai_usage_member_day",
+          "is_unique": false,
+          "is_primary": false,
+          "columns": [
+            "member_id",
+            "feature",
+            "created_at"
+          ],
+          "definition": "CREATE INDEX idx_ai_usage_member_day ON public.ai_usage_log USING btree (member_id, feature, created_at)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "ai_usage_log_pastor_select",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "authenticated"
+          ],
+          "command": "SELECT",
+          "using": "((church_id = auth_church_id()) AND (auth_level() >= 5))",
+          "with_check": null
+        }
+      ],
+      "triggers": []
     },
     "announcement_acks": {
       "kind": "table",
