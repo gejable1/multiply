@@ -401,22 +401,22 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - **Format first:** first lesson under the Pastor's Oct 9 rule — **facilitator guide = complete** (all stories in full, SAY scripts, answer key); **participant guide = guided notes** (story title + non-spoiling recall line + fill-in blanks)
 - **Status:** ✅ **BUILT & SHIPPED Oct 9, 2026** — deck (29 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz, verified q_count=10, linked) in `lessons/btli101_xrw5fg/`
 
-### **L16 — Modelling Christlikeness**
-- **Source:** UNLAD-L6
-- **Memory Verse:** **1 Corinthians 11:1** *(confirmed from UNLAD leader's guide)*
-- **🌿 Character (proposed):** **Goodness** — moral integrity made visible to those who watch you
-- **⚡ Competence (Claude-authored):** *The Watched Life* — recognizing who's watching (the 3 audiences: family, LCG, workplace) and how your visible Christlikeness reads to each
-- **LY Pair:** ✗ None native (could loosely pair with LY Module 6 Developing Influence / Honor — see L17)
-- **Pairing Confidence:** Original (with optional LY-6 cross-reference)
-- **Status:** ☐ Not started
+### **L16 — Modelling Christlikeness · "Salamin ng Servant-Leader"**
+- **Source:** UNLAD-L6 (Paano Ako Mabubuhay na Katulad ni Cristo?) — arc L13 puso · L14 gilas · L15 mata · L16 salamin
+- **Memory Verse:** **1 Corinthians 11:1** *(confirmed from UNLAD leader's guide)* — "Tularan ninyo ako, gaya ng pagtulad ko kay Cristo."
+- **🌿 Character (LOCKED):** **Goodness · Kabutihan** (*agathosune*, Gal 5:22) — kabutihang nakikita (1 Pet 2:12), with LY-6's **Honor** woven in (1 Pet 2:17) as how goodness treats every person. *Pastor's call at build, Oct 19, 2026.*
+- **⚡ Competence (LY-6):** **Developing Influence** — four skills paired to the four Eph 4:25-32 contrasts: Tunay na Relasyon (katotohanan) · Mahusay na Pakikinig (pagpapatawad) · Pare-parehong Halimbawa (marangal na paggawa) · Salitang Nagpapalakas (mabuting pananalita). Artifacts: 10-blank guided notes, "Lakad Kasama si Jesus" chart (BTLI-authored; book's TUGON chart page not in scan), LY-6 A–E (5 proficiencies), 4 LY-6 assignments, 7-day Salamin Tracker. *Supersedes "The Watched Life" placeholder.*
+- **LY Pair:** ✓ Module 6 (Developing Influence · Honor) — *moved here from L17 by Pastor, Oct 19, 2026: "Be a Consistent Model" + "Encouraging Words" match UNLAD-L6 directly.*
+- **Pairing Confidence:** **Strong**
+- **Status:** ✅ **BUILT Oct 19, 2026** — deck (30 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
 ### **L17 — Pursuing Right Relationships**
 - **Source:** UNLAD-L7
 - **Memory Verse:** **Proverbs 27:17** *(confirmed from UNLAD leader's guide)*
 - **🌿 Character (proposed):** **Gentleness** — right relationships require gentle correction and gentle vulnerability
-- **⚡ Competence:** **Developing Influence** ✓ (Mac Lake LY Module 6) — relational influence is the foundation of right relationships
-- **LY Pair:** ✓ Module 6 (Developing Influence · Honor) — *Note: LY's character anchor is Honor. Our Gentleness assignment and LY's Honor are complementary (you honor others gently) — reconcile in lesson design.*
-- **Pairing Confidence:** **Acceptable** — themes overlap but aren't identical
+- **⚡ Competence:** *To be chosen at build* — LY-6 (Developing Influence) moved to L16 on Oct 19, 2026. Candidates: LY-2 Emotional Intelligence (adjacent, unused) or a Claude-authored gentle-correction skill.
+- **LY Pair:** ✗ None now (LY-6 moved to L16); LY-2 is the open candidate
+- **Pairing Confidence:** Original (pending)
 - **Status:** ☐ Not started
 
 ### **L18 — Adorning God in Worship**
@@ -456,7 +456,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 | **L11** | LY-1 | Joy | Living on Mission | Strong ⭐ |
 | **L13** | LY-3 | Selflessness ✅ | Teamwork | Strong |
 | **L14** | LY-4 | Openness ✅ | Teachability | Strong |
-| **L17** | LY-6 | Honor/Gentleness | Developing Influence | Acceptable |
+| **L16** | LY-6 | Goodness ✅ (+ Honor) | Developing Influence | Strong |
 | **L19** | LY-5 | Consistency/Love | Maximizing Your Energy | Acceptable |
 
 **Only 4 strong/acceptable native pairings.** That means **16 of 20 lessons (80%) will have Claude-authored character+competence material**. This is a real editorial commitment per lesson — Pastor should review the authored material more carefully than the paired material.
@@ -480,12 +480,13 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - ✅ **L13 fully built & shipped** (Puso ng Servant-Leader): character anchor revised Patience → **Selflessness** per Pastor's build-time confirmation; L13=puso / L14=gilas two-lesson arc on Philippians 2 established; deliverables + DB seed live
 - ✅ **L14 fully built & shipped** (Gilas ng Servant-Leader): LY-4 pairing locked (Teachability · Openness), superseding the map's earlier Gentleness proposal and Claude-authored Situational SL placeholder; Walong Kasanayan ni Nehemiah as spine; hagdan + A–E + 7-day reading tracker artifacts; deliverables + DB seed live (quiz verified q_count=10, linked)
 - ✅ **L15 fully built & shipped** (Mata ng Servant-Leader, Oct 9, 2026): Kindness · Identifying Needs (Claude-authored); LY-5 kept at L19; first lesson with complete-facilitator / guided-notes-participant split; deliverables + DB seed live (quiz verified q_count=10, linked)
+- ✅ **L16 fully built** (Salamin ng Servant-Leader, Oct 19, 2026): Goodness (+ Honor) · Developing Influence; LY-6 moved here from L17; Eph 4:22-32 hubarin/isuot spine with four LY-6 skills; deliverables + seed SQL
 - ✅ **Rename of L1→L11 deliverables: PARKED** by Pastor's call (no re-pitch — surface only when Pastor brings it up)
 
 **Remaining work (per-lesson, as scans arrive):**
 
 1. **L2–L10 (USAD spine):** For each lesson, when Pastor uploads the participant book scan, complete the row to "🔒 LOCKED" status — Scripture, character, competence (book-aligned when possible), 5-movement flow from PUKAW to DALHIN, GRACE/Pipeline tagging.
-2. **L12–L20 (UNLAD spine):** Same pattern, but with the added step of confirming the LY pairing where one exists (L13, L17, L19) and reconciling LY's character anchor (Selflessness/Honor/Consistency) with the Galatians fruit assignment.
+2. **L12–L20 (UNLAD spine):** Same pattern, but with the added step of confirming the LY pairing where one exists (L13, L14, L16, L19) and reconciling LY's character anchor (Selflessness/Honor/Consistency) with the Galatians fruit assignment.
 3. **Galatians fruit cycle revision** — pending Pastor's verdict on the Self-Control ×3 distribution flagged in the original skeleton.
 4. **Optional Tier 3:** Canonize a `BTLI_LESSON_TEMPLATE.md` capturing the 4-file + PPTX structure from May 14 once 2–3 more lessons are built.
 
