@@ -2,12 +2,15 @@
 //
 // MULTIPLY - S106 pilot: run the MLT Meeting Prep prompt on the Claude API so a
 // leader gets the four guides (EN/TL facilitator + participant) without copy-paste.
+// S108: second feature - the Salvation Assurance debrief analysis (facilitator_debrief_guide).
+//   body.feature = "meeting_prep" (default) | "salvation_debrief"; each feature has its
+//   own prompt check, output budget and daily cap; the church monthly cap is shared.
 // The API key lives ONLY here (secret ANTHROPIC_API_KEY); the browser never sees it.
 //
 // Contract:
-//   POST { action: "status" }
+//   POST { action: "status", feature? }
 //     -> { data: { allowed, remaining_today, daily_cap }, error }
-//   POST { action: "generate", prompt: string }
+//   POST { action: "generate", feature?, prompt: string }
 //     -> { data: { text, truncated, remaining_today, model }, error }
 //
 // Gate (all must pass):
@@ -16,10 +19,11 @@
 //   * PILOT: pastor (level >= 5) OR member id listed in churches.settings.ai_pilot_members
 //   * daily cap per member (AI_DAILY_CAP, default 5) and monthly cap per church
 //     (AI_MONTHLY_CAP, default 300), counted from public.ai_usage_log
-//   * prompt must be the Meeting Prep prompt (contains the ===FACILITATOR_EN=== fence)
-//     and <= 60,000 characters - this function is not a general-purpose chatbot.
-// No member data is sent to the AI: the prompt is built only from the devotional or
-// the material the leader pasted.
+//   * prompt must be that feature's own prompt (fixed markers, <= 60,000 characters) -
+//     this function is not a general-purpose chatbot.
+// Meeting Prep sends no member data. The salvation debrief sends the member's name and
+// written diagnostic answers (Pastor's decision, Oct 19); nothing of it is stored here -
+// ai_usage_log keeps only who/when/model/token counts. API data is not used for training.
 //
 // Deploy:  Supabase Dashboard -> Edge Functions -> Deploy a new function
 //          name "meeting-prep-ai", paste this file, and turn OFF "Verify JWT"
@@ -35,11 +39,15 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
 };
-const FEATURE = "meeting_prep";
 const MIN_LEVEL = 2;
 const PASTOR_LEVEL = 5;
 const MAX_PROMPT_CHARS = 60000;
-const FENCE = "===FACILITATOR_EN===";
+type Feature = { markers: string[]; maxTokens: number; capEnv: string };
+const FEATURES: Record<string, Feature> = {
+  meeting_prep:      { markers: ["===FACILITATOR_EN==="], maxTokens: 16000, capEnv: "AI_DAILY_CAP" },
+  salvation_debrief: { markers: ["Salvation Assurance Diagnostic", "MEMBER DATA", "\"analyses\""],
+                       maxTokens: 12000, capEnv: "AI_DEBRIEF_DAILY_CAP" },
+};
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -79,10 +87,13 @@ Deno.serve(async (req) => {
   if (!sub || typeof sub !== "string") return fail("invalid_token", 401);
   if (!churchClaim || typeof churchClaim !== "string") return fail("no_church_claim", 401);
 
-  let body: { action?: unknown; prompt?: unknown };
+  let body: { action?: unknown; prompt?: unknown; feature?: unknown };
   try { body = await req.json(); } catch { return fail("bad_json", 400); }
   const action = body.action === "generate" ? "generate" : body.action === "status" ? "status" : "";
   if (!action) return fail("bad_action", 400);
+  const FEATURE = body.feature == null ? "meeting_prep" : String(body.feature);
+  const cfg = FEATURES[FEATURE];
+  if (!cfg) return fail("bad_feature", 400);
 
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false } });
@@ -100,7 +111,7 @@ Deno.serve(async (req) => {
   const inPilot = level >= MIN_LEVEL && (level >= PASTOR_LEVEL || pilot.includes(sub));
 
   // -- 3. Caps --
-  const DAILY = intEnv("AI_DAILY_CAP", 5), MONTHLY = intEnv("AI_MONTHLY_CAP", 300);
+  const DAILY = intEnv(cfg.capEnv, 5), MONTHLY = intEnv("AI_MONTHLY_CAP", 300);
   const { day, month } = manilaStarts();
   const { count: usedToday } = await db.from("ai_usage_log").select("id", { count: "exact", head: true })
     .eq("member_id", sub).eq("feature", FEATURE).eq("ok", true).gte("created_at", day);
@@ -118,7 +129,7 @@ Deno.serve(async (req) => {
   if ((usedMonth ?? 0) >= MONTHLY) return fail("monthly_limit", 429);
 
   const prompt = typeof body.prompt === "string" ? body.prompt : "";
-  if (prompt.length < 200 || prompt.length > MAX_PROMPT_CHARS || !prompt.includes(FENCE)) {
+  if (prompt.length < 200 || prompt.length > MAX_PROMPT_CHARS || !cfg.markers.every((m) => prompt.includes(m))) {
     return fail("bad_prompt", 400);
   }
 
@@ -133,7 +144,7 @@ Deno.serve(async (req) => {
       method: "POST",
       signal: ctrl.signal,
       headers: { "content-type": "application/json", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model, max_tokens: 16000, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model, max_tokens: cfg.maxTokens, messages: [{ role: "user", content: prompt }] }),
     });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j) {
