@@ -1225,7 +1225,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
            is about IN-APP navigation to our own pages. These are third-party
            origins that never shared our sessionStorage, so noopener is simply the
            right security default. -->
-      <div id="mpAiHint" style="font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.45">
+      <!-- S106: MULTIPLY AI pilot - one tap instead of copy/paste. Hidden unless the
+     meeting-prep-ai function says this leader is in the pilot. -->
+<div id="mpGenWrap" style="display:none;margin-top:10px;padding:10px;border-radius:9px;border:1px solid rgba(212,168,84,.45);background:rgba(212,168,84,.08)">
+<button id="mpGenBtn" onclick="mpGenerateAI()" style="width:100%;background:var(--gold);color:#0f0f13;border:none;border-radius:8px;padding:11px 16px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer">&#x2728; Generate with MULTIPLY AI</button>
+<div id="mpGenStatus" style="font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.45"></div>
+</div>
+<div id="mpAiHint" style="font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.45">
         Copy the prompt, then open an AI and paste it in. <strong style="color:var(--ink);font-weight:600">New to this? Tap Gemini</strong> — it opens with your Google account, no sign-up.
       </div>
       <div id="mpAiLinks" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding:8px;border-radius:8px;border:1px solid transparent;transition:border-color .2s ease,background .2s ease">
@@ -1657,6 +1663,7 @@ function _mpLangTag(g){
   return '<span style="font-size:10px;color:var(--muted)">'+(tl?'EN · TL':'EN only')+'</span>';
 }
 async function _mpNewLesson(){
+  _mpAiCheck();   // S106: show the AI button only for pilot leaders (fire-and-forget)
   document.getElementById('mpListView').style.display = 'none';
   document.getElementById('mpCreateView').style.display = '';
   const d = document.getElementById('mpDate'); if(d) d.value = _mpToday();
@@ -2291,6 +2298,75 @@ function _mpArmAiLinks(){
     row.style.borderColor = 'var(--gold)';
     row.style.background  = 'rgba(184,136,42,.07)';
   }
+}
+
+// == S106: MULTIPLY AI (pilot) ==============================================
+// Same prompt as Copy Prompt, run by the meeting-prep-ai Edge Function (the API key
+// never reaches the browser). The reply goes into #mpPaste and through mpParse(),
+// so the leader reviews and edits exactly as before. Copy-paste remains the fallback.
+let _mpAiStatus = null;
+function _mpAiRenderStatus(extra){
+  const st = document.getElementById('mpGenStatus'); if(!st) return;
+  const left = _mpAiStatus && typeof _mpAiStatus.remaining_today === 'number'
+    ? (_mpAiStatus.remaining_today + ' of ' + (_mpAiStatus.daily_cap || 5) + ' left today') : '';
+  st.textContent = (extra ? extra + ' ' : '') + (left ? '(' + left + ')' : '');
+  const b = document.getElementById('mpGenBtn');
+  if(b && _mpAiStatus) b.disabled = !(_mpAiStatus.remaining_today > 0);
+}
+async function _mpAiCheck(){
+  const w = document.getElementById('mpGenWrap'); if(!w) return;
+  try{
+    const { data, error } = await db.functions.invoke('meeting-prep-ai', { body: { action: 'status' } });
+    if(error || !data || !data.data){ w.style.display = 'none'; return; }
+    _mpAiStatus = data.data;
+    w.style.display = _mpAiStatus.allowed ? '' : 'none';
+    _mpAiRenderStatus('Writes all four guides (English + Tagalog) in about a minute.');
+  }catch(e){ w.style.display = 'none'; }
+}
+function _mpAiErrText(code){
+  const m = {
+    daily_limit: 'You have used today\u2019s AI guides.',
+    monthly_limit: 'The church\u2019s AI allowance for this month is used up.',
+    not_in_pilot: 'MULTIPLY AI is not turned on for your account yet.',
+    bad_prompt: 'Pick the source first (step 1).',
+    ai_busy: 'The AI is busy right now. Try again in a few minutes.',
+    timeout: 'The AI took too long. Try again.',
+    invalid_token: 'Your session expired. Please sign in again.'
+  };
+  return m[code] || 'Something went wrong.';
+}
+async function mpGenerateAI(){
+  const prompt = (document.getElementById('mpPrompt') || {}).value || '';
+  if(!prompt.trim()){ toast('Pick the source first (step 1)','\u26A0\uFE0F'); return; }
+  const btn = document.getElementById('mpGenBtn');
+  if(btn && btn.disabled) return;
+  if(btn){ btn.disabled = true; btn.textContent = '\u23F3 Writing your guides\u2026'; }
+  _mpAiRenderStatus('About a minute \u2014 please keep this screen open.');
+  let ok = false;
+  try{
+    const { data, error } = await db.functions.invoke('meeting-prep-ai', { body: { action: 'generate', prompt: prompt } });
+    if(error){
+      let code = null;
+      try{ const j = await error.context.json(); code = j && j.error; }catch(_){}
+      throw new Error(code || 'ai_error');
+    }
+    if(!data || data.error || !data.data || !data.data.text) throw new Error((data && data.error) || 'ai_error');
+    document.getElementById('mpPaste').value = data.data.text;
+    mpParse();
+    if(_mpAiStatus) _mpAiStatus.remaining_today = data.data.remaining_today;
+    ok = true;
+    _mpAiRenderStatus(data.data.truncated
+      ? '\u26A0 The reply was cut short \u2014 check the end of each guide.'
+      : '\u2705 Done \u2014 review and edit below before saving.');
+    const pv = document.getElementById('mpPreview'); if(pv && pv.scrollIntoView) pv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }catch(e){
+    _mpAiRenderStatus('\u26A0 ' + _mpAiErrText(e && e.message) + ' You can still use Copy Prompt below.');
+  }finally{
+    if(btn){ btn.textContent = '\u2728 Generate with MULTIPLY AI'; }
+    if(_mpAiStatus && btn) btn.disabled = !(_mpAiStatus.remaining_today > 0);
+    else if(btn) btn.disabled = false;
+  }
+  return ok;
 }
 
 function mpParse(){
