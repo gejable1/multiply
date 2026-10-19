@@ -2166,6 +2166,12 @@ window.buildAIPrompt = function() {
       'Copy the prompt below, paste into your preferred AI tool, then paste the response back here for a structured view (optional).' +
     '</div>' +
 
+    // S108: MULTIPLY AI (pilot) - one tap instead of copy/paste. Hidden unless allowed.
+    '<div id="dbGenWrap" style="display:none;margin-bottom:16px;padding:12px;border-radius:9px;border:1.5px solid #d4a854;background:#fffaf0">' +
+      '<button id="dbGenBtn" onclick="dbGenerateAI()" style="width:100%;background:#b8882a;color:#fff;border:none;border-radius:8px;padding:12px 16px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer">&#x2728; Analyze with MULTIPLY AI</button>' +
+      '<div id="dbGenStatus" style="font-size:11.5px;color:#6b5f4f;margin-top:7px;line-height:1.45"></div>' +
+    '</div>' +
+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
       '<button class="ai-run-btn" onclick="copyAIPromptText()" style="background:#2a5c40">📋 Copy Prompt</button>' +
       '<button onclick="openInAI(\'chatgpt\')" style="padding:10px 14px;border-radius:8px;border:1.5px solid #e2d8cc;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">💬 ChatGPT</button>' +
@@ -2195,6 +2201,7 @@ window.buildAIPrompt = function() {
     '<div class="ai-disclaimer" style="margin-top:18px;">AI assistance only. Always use your own pastoral judgment. These questions are starting points — not scripts. The Holy Spirit is the primary guide in this conversation.</div>';
 
   // Update the run button label since the panel is now showing the prompt.
+  _dbAiCheck();   // S108: reveal the MULTIPLY AI button for pilot leaders
   var btn = document.getElementById('aiRunBtn');
   if (btn) btn.textContent = '↺ Rebuild Prompt';
 };
@@ -2294,6 +2301,84 @@ window.parseAIResponse = function() {
   if (_aiParsedJson && _aiParsedJson.tailored && Object.keys(_aiParsedJson.tailored).length) {
     applyTailoredGuide();
   }
+};
+
+// == S108: MULTIPLY AI (pilot) ==============================================
+// Same assembled prompt as Copy Prompt, run by the meeting-prep-ai Edge Function
+// (feature "salvation_debrief"; the API key never reaches the browser). The reply
+// goes into #aiResponseInput and through parseAIResponse(), so review, the tailored
+// guide and saving behave exactly as with copy-paste. Copy-paste stays the fallback.
+var _dbAiStatus = null;
+function _dbAiRenderStatus(extra){
+  var st = document.getElementById('dbGenStatus'); if (!st) return;
+  var left = (_dbAiStatus && typeof _dbAiStatus.remaining_today === 'number')
+    ? (_dbAiStatus.remaining_today + ' of ' + (_dbAiStatus.daily_cap || 5) + ' left today') : '';
+  st.textContent = (extra ? extra + ' ' : '') + (left ? '(' + left + ')' : '');
+  var b = document.getElementById('dbGenBtn');
+  if (b && _dbAiStatus) b.disabled = !(_dbAiStatus.remaining_today > 0);
+}
+async function _dbAiCheck(){
+  var w = document.getElementById('dbGenWrap'); if (!w) return;
+  try {
+    if (!_dbAiStatus) {
+      var r = await db.functions.invoke('meeting-prep-ai', { body: { action: 'status', feature: 'salvation_debrief' } });
+      if (r.error || !r.data || !r.data.data) { w.style.display = 'none'; return; }
+      _dbAiStatus = r.data.data;
+    }
+    w = document.getElementById('dbGenWrap'); if (!w) return;
+    w.style.display = _dbAiStatus.allowed ? '' : 'none';
+    _dbAiRenderStatus('Reads the written answers and suggests follow-up questions in about a minute.');
+  } catch (e) { if (w) w.style.display = 'none'; }
+}
+function _dbAiErrText(code){
+  var m = {
+    daily_limit: 'You have used today\u2019s AI analyses.',
+    monthly_limit: 'The church\u2019s AI allowance for this month is used up.',
+    not_in_pilot: 'MULTIPLY AI is not turned on for your account yet.',
+    bad_prompt: 'Tap Build AI Prompt first.',
+    ai_busy: 'The AI is busy right now. Try again in a few minutes.',
+    timeout: 'The AI took too long. Try again.',
+    invalid_token: 'Your session expired. Please sign in again.'
+  };
+  return m[code] || 'Something went wrong.';
+}
+window.dbGenerateAI = async function(){
+  if (!_aiAssembledPrompt) { aiToast('Tap Build AI Prompt first', true); return false; }
+  var btn = document.getElementById('dbGenBtn');
+  if (btn && btn.disabled) return false;
+  if (btn) { btn.disabled = true; btn.textContent = '\u23F3 Reading the answers\u2026'; }
+  _dbAiRenderStatus('About a minute \u2014 please keep this screen open.');
+  var ok = false;
+  try {
+    var r = await db.functions.invoke('meeting-prep-ai', { body: { action: 'generate', feature: 'salvation_debrief', prompt: _aiAssembledPrompt } });
+    if (r.error) {
+      var code = null;
+      try { var j = await r.error.context.json(); code = j && j.error; } catch (_) {}
+      throw new Error(code || 'ai_error');
+    }
+    var d = r.data;
+    if (!d || d.error || !d.data || !d.data.text) throw new Error((d && d.error) || 'ai_error');
+    var inp = document.getElementById('aiResponseInput');
+    if (inp) inp.value = d.data.text;
+    _aiParsedJson = null;
+    parseAIResponse();
+    if (_dbAiStatus) _dbAiStatus.remaining_today = d.data.remaining_today;
+    ok = !!_aiParsedJson;
+    _dbAiRenderStatus(!ok
+      ? '\u26A0 The AI replied, but not in the expected format \u2014 see the note below.'
+      : (d.data.truncated
+        ? '\u26A0 The reply was cut short \u2014 some questions may be missing.'
+        : '\u2705 Done \u2014 review the suggestions below. Your pastoral judgment decides.'));
+    var out = document.getElementById('aiParsedResults');
+    if (out && out.scrollIntoView) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    _dbAiRenderStatus('\u26A0 ' + _dbAiErrText(e && e.message) + ' You can still use Copy Prompt below.');
+  } finally {
+    if (btn) btn.textContent = '\u2728 Analyze with MULTIPLY AI';
+    if (_dbAiStatus && btn) btn.disabled = !(_dbAiStatus.remaining_today > 0);
+    else if (btn) btn.disabled = false;
+  }
+  return ok;
 };
 
 // Module-scope buffers so saveDebrief can persist AI work alongside the typed summary
