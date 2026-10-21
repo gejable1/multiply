@@ -525,6 +525,7 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
       <div id="moreMenu" class="more-menu" role="menu">
         <button class="mm-item" data-nav="disputes"      onclick="_navTo('disputes', loadDisputeQueue)">⚠️ Disputes <span id="navDisputeBadgeMore" class="mm-badge mm-badge-red" style="display:none"></span></button>
         <button class="mm-item" data-nav="announcements" onclick="_navTo('announcements', loadAnnouncementQueue)">📣 Announcements <span id="navAnnBadgeMore" class="mm-badge mm-badge-gold" style="display:none"></span></button>
+        <button class="mm-item" id="navSvcMore" data-nav="services" onclick="_navTo('services', loadSvcQueue)" style="display:none">&#x26EA; Service Requests <span id="navSvcBadgeMore" class="mm-badge mm-badge-gold" style="display:none"></span></button>
         <button class="mm-item" data-nav="aiInsights"    onclick="_navTo('aiInsights', loadAiInsights)">🤖 AI Insights</button>
         <button class="mm-item"                          onclick="hideMoreMenu(); openTransfers();">🔄 Transfers <span id="navTxBadgeMore" class="mm-badge mm-badge-gold" style="display:none"></span></button>
         <!-- My Ministry: visibility toggled at runtime by _refreshMyMinistryNav() — only leaders who head ≥1 ministry see it -->
@@ -585,6 +586,10 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </button>
   <button class="nd-item"                          onclick="closeDrawer(); openTransfers();">
     <span>🔄 Transfers</span><span id="navTxBadgeDrawer" class="nd-badge nd-badge-gold" style="display:none"></span>
+  </button>
+
+  <button class="nd-item" id="navSvcDrawer" data-nav="services" onclick="_navTo('services', loadSvcQueue, true)" style="display:none">
+    <span>&#x26EA; Service Requests</span><span id="navSvcBadgeDrawer" class="nd-badge nd-badge-gold" style="display:none"></span>
   </button>
 
   <div class="nd-section">Insights &amp; admin</div>
@@ -750,6 +755,19 @@ window.bcrypt = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
   </div>
   <div style="display:flex;gap:.4rem;margin-bottom:1rem;" id="annTabsBar"></div>
   <div id="announcementQueue"></div>
+</div></div>
+
+<!-- S109: SERVICE REQUESTS (Pastor L5) -->
+<div id="panel-services" class="panel"><div class="pw">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;gap:.5rem;flex-wrap:wrap;">
+    <h2 style="margin:0;">&#x26EA; Service Requests</h2>
+    <button onclick="loadSvcQueue()" style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:.45rem .8rem;font-weight:700;cursor:pointer;">&#x21BB; Refresh</button>
+  </div>
+  <div style="background:#fef9ed;border:1px solid #f0d680;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;font-size:13px;line-height:1.5;color:#7a5800;">
+    Members ask for blessings, dedications, weddings, birthday celebrations, renewal of vows and funeral services here. Funeral requests are marked urgent and listed first. Schedule each one and choose who officiates &mdash; the member, their LC leader and the officiant are notified. Mark it done afterward; if the member agreed, it is celebrated in their LC feed.
+  </div>
+  <div style="display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap;" id="svcTabsBar"></div>
+  <div id="svcQueue"></div>
 </div></div>
 
 <!-- AI INSIGHTS -->
@@ -4269,7 +4287,8 @@ function _setNavBadge(name, count){
   const map = {
     dispute: { ids: ['navDisputeBadgeMore','navDisputeBadgeDrawer'] },
     ann:     { ids: ['navAnnBadgeMore','navAnnBadgeDrawer'] },
-    tx:      { ids: ['navTxBadgeMore','navTxBadgeDrawer'] }
+    tx:      { ids: ['navTxBadgeMore','navTxBadgeDrawer'] },
+    svc:     { ids: ['navSvcBadgeMore','navSvcBadgeDrawer'] }   // S109
   };
   const cfg = map[name]; if (!cfg) return;
   cfg.ids.forEach(id => {
@@ -4279,7 +4298,7 @@ function _setNavBadge(name, count){
     else el.style.display = 'none';
   });
   // Aggregate: if anything in More has a badge, show the red dot on More
-  const total = ['dispute','ann','tx'].reduce((acc, k) => {
+  const total = ['dispute','ann','tx','svc'].reduce((acc, k) => {
     const probe = document.getElementById(map[k].ids[0]);
     return acc + (probe && probe.style.display !== 'none' ? 1 : 0);
   }, 0);
@@ -12740,6 +12759,326 @@ async function dismissAllNotifs(){
 // Initial load + poll every 60 seconds for fresh notifications.
 loadNotifications();
 setInterval(loadNotifications, 60000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// S109 · SERVICE REQUESTS QUEUE (Pastor L5)
+// Members request house / business / vehicle blessings, child dedication,
+// weddings, birthday celebrations and renewal of vows from MMT. The Pastor
+// schedules (date, time, officiant), marks done, or declines. Every step
+// notifies the member; scheduling also notifies the officiant and the LC
+// leader. RLS (migration 123) allows UPDATE only for L5.
+// ═══════════════════════════════════════════════════════════════════════
+const SVC_MD_TYPES = {
+  house_blessing:    { icon:'\u{1F3E0}', en:'House blessing',       tl:'Blessing ng bahay' },
+  business_blessing: { icon:'\u{1F3EA}', en:'Business blessing',    tl:'Blessing ng negosyo' },
+  vehicle_blessing:  { icon:'\u{1F697}', en:'Vehicle blessing',     tl:'Blessing ng sasakyan' },
+  child_dedication:  { icon:'\u{1F476}', en:'Child dedication',     tl:'Child dedication' },
+  wedding:           { icon:'\u{1F48D}', en:'Wedding',              tl:'Kasal' },
+  birthday:          { icon:'\u{1F382}', en:'Birthday celebration', tl:'Pagdiriwang ng kaarawan' },
+  vow_renewal:       { icon:'\u{1F49E}', en:'Renewal of vows',      tl:'Renewal of vows' },
+  funeral:           { icon:'\u{1F54A}\uFE0F', en:'Funeral service', tl:'Serbisyo sa lamay / libing', urgent:true }
+};
+const SVC_MD_LABELS = {
+  family_name:'Family / owner', business_name:'Business', business_type:'Kind of business',
+  vehicle:'Vehicle', plate_no:'Plate no.', child_name:'Child', child_birthdate:'Child’s birthdate',
+  parents:'Parents', father_name:'Father', mother_name:'Mother', sponsors:'Sponsors',
+  deceased_name:'Deceased', date_of_death:'Date of passing', relationship:'Requester\u2019s relationship', funeral_part:'Service needed',
+  groom_name:'Groom', bride_name:'Bride', celebrant:'Celebrant', age:'Age turning',
+  couple:'Couple', years_married:'Years married'
+};
+let _svcRows = [];
+let _svcTab = 'requested';
+let _svcEditId = null;
+
+function _svcIsPastor(){ return !!(LEADER && (LEADER.leaderLevel || 0) >= 5); }
+function _svcEsc(t){ return MultiplyShared.escapeHTML(t == null ? '' : String(t)); }
+function _svcDate(iso){
+  if(!iso) return '';
+  const d = new Date(String(iso).slice(0,10) + 'T00:00:00');
+  return d.toLocaleDateString('en-PH', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+}
+function _svcTime(t){
+  if(!t) return '';
+  const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return String(t);
+  let h = parseInt(m[1], 10); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  return h + ':' + m[2] + ' ' + ap;
+}
+function _svcMemberName(id){
+  const m = (typeof members !== 'undefined' && members) ? members.find(function(x){ return x.id === id; }) : null;
+  return m ? m.name : '';
+}
+
+function _svcInitNav(){
+  if(!_svcIsPastor()) return;
+  ['navSvcMore','navSvcDrawer'].forEach(function(id){ const el = document.getElementById(id); if(el) el.style.display = ''; });
+  _svcRefreshBadge();
+}
+
+async function _svcRefreshBadge(){
+  if(!_svcIsPastor()) return;
+  try{
+    const { count, error } = await db.from('service_requests')
+      .select('id', { count:'exact', head:true }).eq('status', 'requested');
+    if(error) throw error;
+    _setNavBadge('svc', count || 0);
+  }catch(e){ console.warn('service badge (non-fatal):', e.message || e); }
+}
+
+async function loadSvcQueue(){
+  const wrap = document.getElementById('svcQueue');
+  if(!_svcIsPastor()){
+    if(wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Service Requests are handled by the Pastor (L5).</div>';
+    return;
+  }
+  if(wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);">Loading…</div>';
+  try{
+    const { data, error } = await db.from('service_requests')
+      .select('*').order('created_at', { ascending:false }).limit(300);
+    if(error) throw error;
+    _svcRows = data || [];
+    _svcEditId = null;
+    renderSvcQueue();
+    _setNavBadge('svc', _svcRows.filter(function(r){ return r.status === 'requested'; }).length);
+  }catch(e){
+    console.error('[service-queue] load failed:', e);
+    if(wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:#9a2727;">Error loading service requests: ' + _svcEsc(e.message) + '</div>';
+  }
+}
+
+function setSvcTab(t){ _svcTab = t; _svcEditId = null; renderSvcQueue(); }
+
+function _svcTabRows(tab){
+  if(tab === 'requested') return _svcRows.filter(function(r){ return r.status === 'requested'; })
+    .sort(function(a,b){
+      const ua = (SVC_MD_TYPES[a.service_type] || {}).urgent ? 0 : 1, ub = (SVC_MD_TYPES[b.service_type] || {}).urgent ? 0 : 1;
+      return (ua - ub) || String(a.preferred_date).localeCompare(String(b.preferred_date)); });
+  if(tab === 'scheduled') return _svcRows.filter(function(r){ return r.status === 'scheduled'; })
+    .sort(function(a,b){ return String(a.scheduled_date).localeCompare(String(b.scheduled_date)); });
+  if(tab === 'done') return _svcRows.filter(function(r){ return r.status === 'done'; });
+  return _svcRows.filter(function(r){ return r.status === 'declined' || r.status === 'cancelled'; });
+}
+
+function renderSvcQueue(){
+  const bar = document.getElementById('svcTabsBar');
+  const wrap = document.getElementById('svcQueue');
+  if(!bar || !wrap) return;
+  const tabs = [['requested','New'],['scheduled','Scheduled'],['done','Done'],['closed','Declined / cancelled']];
+  bar.innerHTML = tabs.map(function(t){
+    const n = _svcTabRows(t[0]).length;
+    const on = _svcTab === t[0];
+    return '<button onclick="setSvcTab(\'' + t[0] + '\')" style="border:1px solid ' + (on ? 'var(--green)' : 'var(--border)') + ';background:' + (on ? 'var(--green)' : '#fff') + ';color:' + (on ? '#fff' : 'var(--ink)') + ';border-radius:16px;padding:.35rem .8rem;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">'
+      + t[1] + ' <span style="opacity:.8">(' + n + ')</span></button>';
+  }).join('');
+  const rows = _svcTabRows(_svcTab);
+  if(!rows.length){
+    wrap.innerHTML = '<div style="padding:3rem 1rem;text-align:center;color:var(--muted);font-size:14px;">✓ Nothing here.</div>';
+    return;
+  }
+  wrap.innerHTML = rows.map(_svcCard).join('');
+}
+
+function _svcCard(r){
+  const t = SVC_MD_TYPES[r.service_type] || { icon:'⛪', en:r.service_type };
+  const name = _svcMemberName(r.requester_id) || r.requester_name || '—';
+  const lcl = r.discipler_id ? _svcMemberName(r.discipler_id) : '';
+  const det = r.details && typeof r.details === 'object' ? r.details : {};
+  const detHtml = Object.keys(det).map(function(k){
+    const FP = { wake:'Wake service / necrological', interment:'Funeral & interment', both:'Wake and interment' };
+    const v = (k === 'child_birthdate' || k === 'date_of_death') ? _svcDate(det[k]) : (k === 'funeral_part' ? (FP[det[k]] || det[k]) : det[k]);
+    return '<div><span style="color:var(--muted)">' + _svcEsc(SVC_MD_LABELS[k] || k) + ':</span> ' + _svcEsc(v).replace(/\n/g, '<br>') + '</div>';
+  }).join('');
+  const pref = _svcDate(r.preferred_date) + (r.preferred_time ? ' · ' + _svcTime(r.preferred_time) : '')
+    + (r.alt_date ? ' <span style="color:var(--muted)">(alt ' + _svcEsc(_svcDate(r.alt_date)) + ')</span>' : '');
+  const flags = []
+    .concat(r.service_type === 'wedding' ? [r.ack_requirements ? '✓ counseling acknowledged' : '⚠ counseling NOT acknowledged'] : [])
+    .concat(t.urgent ? ['\u{1F54A}\uFE0F urgent \u2014 bereaved family'] : [r.share_consent ? '\u{1F389} may be celebrated in LC feed' : '\u{1F512} keep private']);
+  let statusLine = '';
+  if(r.status === 'scheduled' || r.status === 'done'){
+    statusLine = '<div style="margin-top:.45rem;font-size:12.5px;background:#eef6f1;border-left:3px solid var(--green);padding:.4rem .6rem;border-radius:4px;">'
+      + (r.status === 'done' ? '✅ Done' : '\u{1F4C5} Scheduled') + ': <strong>' + _svcEsc(_svcDate(r.scheduled_date)) + (r.scheduled_time ? ' · ' + _svcEsc(_svcTime(r.scheduled_time)) : '') + '</strong>'
+      + (r.officiant_name ? ' · officiant: <strong>' + _svcEsc(r.officiant_name) + '</strong>' : '')
+      + (r.pastor_note ? '<div style="color:var(--muted);margin-top:2px">' + _svcEsc(r.pastor_note) + '</div>' : '') + '</div>';
+  } else if(r.status === 'declined' || r.status === 'cancelled'){
+    statusLine = '<div style="margin-top:.45rem;font-size:12.5px;background:#f3f4f6;border-left:3px solid #9ca3af;padding:.4rem .6rem;border-radius:4px;">'
+      + (r.status === 'cancelled' ? 'Cancelled by the member' : 'Declined') + (r.pastor_note ? ': ' + _svcEsc(r.pastor_note) : '') + '</div>';
+  }
+  const btn = function(label, onclick, bg){ return '<button onclick="' + onclick + '" style="background:' + bg + ';color:#fff;border:none;border-radius:6px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:12.5px;font-family:inherit;">' + label + '</button>'; };
+  let actions = '';
+  if(r.status === 'requested'){
+    actions = btn('\u{1F4C5} Schedule', "openSvcSchedule('" + r.id + "')", '#1f6b3a') + btn('✕ Decline', "declineSvc('" + r.id + "')", '#9a2727');
+  } else if(r.status === 'scheduled'){
+    actions = btn('✅ Mark done', "markSvcDone('" + r.id + "')", '#1f6b3a') + btn('\u{1F4C5} Reschedule', "openSvcSchedule('" + r.id + "')", 'var(--gold)') + btn('✕ Decline', "declineSvc('" + r.id + "')", '#9a2727');
+  }
+  const form = (_svcEditId === r.id) ? _svcScheduleForm(r) : '';
+  const contact = r.contact_number ? '<a href="tel:' + _svcEsc(String(r.contact_number).replace(/[^0-9+]/g,'')) + '" style="color:var(--green)">' + _svcEsc(r.contact_number) + '</a>' : '—';
+  return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem;">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;">'
+      + '<div style="min-width:0;flex:1;">'
+        + '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.3rem;">'
+          + '<span style="font-size:20px">' + t.icon + '</span><strong style="font-size:14.5px;">' + _svcEsc(t.en) + '</strong>'
+          + '<span style="font-size:12.5px;color:var(--ink)">· ' + _svcEsc(name) + '</span>'
+          + (lcl ? '<span style="font-size:11.5px;color:var(--muted)">(LC: ' + _svcEsc(lcl) + ')</span>' : '')
+        + '</div>'
+        + '<div style="font-size:12.5px;line-height:1.6;">'
+          + '<div><span style="color:var(--muted)">Preferred:</span> ' + pref + '</div>'
+          + detHtml
+          + '<div><span style="color:var(--muted)">Place:</span> ' + _svcEsc(r.location || '—') + '</div>'
+          + '<div><span style="color:var(--muted)">Contact:</span> ' + contact + '</div>'
+          + (r.notes ? '<div><span style="color:var(--muted)">Notes:</span> ' + _svcEsc(r.notes) + '</div>' : '')
+          + '<div style="color:var(--muted);font-size:11.5px;margin-top:2px">' + flags.map(_svcEsc).join(' · ') + ' · sent ' + _svcEsc(_svcDate(r.created_at)) + '</div>'
+        + '</div>'
+        + statusLine
+      + '</div>'
+      + (actions ? '<div style="display:flex;flex-direction:column;gap:.4rem;min-width:140px;">' + actions + '</div>' : '')
+    + '</div>'
+    + form
+  + '</div>';
+}
+
+function _svcOfficiantOptions(selectedId){
+  const pool = (typeof members !== 'undefined' && members ? members : [])
+    .filter(function(m){ return (m.level || 0) >= 3 && !m.is_test_member && !m.is_external_user; })   // MD rows are r2l-mapped: level, not pipeline_level
+    .sort(function(a,b){ return (b.level||0) - (a.level||0) || String(a.name).localeCompare(String(b.name)); });
+  const me = LEADER && LEADER.leaderId;
+  let html = '<option value="">— choose —</option>';
+  pool.forEach(function(m){
+    const sel = (selectedId ? selectedId === m.id : m.id === me) ? ' selected' : '';
+    html += '<option value="' + m.id + '"' + sel + '>' + _svcEsc(m.name) + ' (L' + (m.level || 0) + ')</option>';
+  });
+  html += '<option value="__other">Someone else (type a name)…</option>';
+  return html;
+}
+
+function _svcScheduleForm(r){
+  const d = r.scheduled_date || r.preferred_date || '';
+  const tm = r.scheduled_time || r.preferred_time || '';
+  const inp = 'width:100%;padding:.45rem .55rem;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;';
+  return '<div style="margin-top:.8rem;padding:.8rem;border:1px dashed var(--green);border-radius:8px;background:#f7fbf8;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem;">'
+    + '<label style="font-size:11.5px;font-weight:700;color:var(--muted)">DATE<input type="date" id="svcSchDate" value="' + _svcEsc(String(d).slice(0,10)) + '" style="' + inp + '"></label>'
+    + '<label style="font-size:11.5px;font-weight:700;color:var(--muted)">TIME<input type="time" id="svcSchTime" value="' + _svcEsc(tm) + '" style="' + inp + '"></label>'
+    + '<label style="font-size:11.5px;font-weight:700;color:var(--muted)">OFFICIANT<select id="svcSchOff" onchange="document.getElementById(\'svcSchOffOther\').style.display=(this.value===\'__other\')?\'\':\'none\'" style="' + inp + '">' + _svcOfficiantOptions(r.officiant_id) + '</select>'
+      + '<input type="text" id="svcSchOffOther" placeholder="Name" style="' + inp + 'margin-top:.3rem;display:none" maxlength="80"></label>'
+    + '<label style="font-size:11.5px;font-weight:700;color:var(--muted);grid-column:1/-1">NOTE TO THE MEMBER (optional)<input type="text" id="svcSchNote" value="' + _svcEsc(r.pastor_note || '') + '" maxlength="300" style="' + inp + '"></label>'
+    + '<div style="grid-column:1/-1;display:flex;gap:.5rem;justify-content:flex-end;">'
+      + '<button onclick="_svcEditId=null;renderSvcQueue()" style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:.45rem .8rem;cursor:pointer;font-family:inherit;">Cancel</button>'
+      + '<button id="svcSchSave" onclick="saveSvcSchedule(\'' + r.id + '\')" style="background:#1f6b3a;color:#fff;border:none;border-radius:6px;padding:.45rem .9rem;font-weight:700;cursor:pointer;font-family:inherit;">Save schedule &amp; notify</button>'
+    + '</div></div>';
+}
+
+function openSvcSchedule(id){ _svcEditId = id; renderSvcQueue(); }
+
+async function _svcNotify(rows){
+  rows = rows.filter(function(x){ return x && x.recipient_id; });
+  if(!rows.length) return;
+  try{
+    const { error } = await db.from('notifications').insert(rows);
+    if(error) throw error;
+  }catch(e){ console.warn('service notify (non-fatal):', e.message || e); }
+}
+
+async function saveSvcSchedule(id){
+  const r = _svcRows.find(function(x){ return x.id === id; }); if(!r) return;
+  const t = SVC_MD_TYPES[r.service_type] || { en:r.service_type, tl:r.service_type };
+  const date = (document.getElementById('svcSchDate') || {}).value || '';
+  const time = (document.getElementById('svcSchTime') || {}).value || '';
+  const offSel = (document.getElementById('svcSchOff') || {}).value || '';
+  const offOther = ((document.getElementById('svcSchOffOther') || {}).value || '').trim();
+  const note = ((document.getElementById('svcSchNote') || {}).value || '').trim();
+  if(!date){ toast('Pick a date', '⚠️'); return; }
+  if(!offSel || (offSel === '__other' && !offOther)){ toast('Choose who officiates', '⚠️'); return; }
+  const offId = offSel === '__other' ? null : offSel;
+  const offName = offSel === '__other' ? offOther : (_svcMemberName(offSel) || '');
+  const btn = document.getElementById('svcSchSave'); if(btn) btn.disabled = true;
+  const wasScheduled = r.status === 'scheduled';
+  try{
+    const { error } = await db.from('service_requests').update({
+      status:'scheduled', scheduled_date:date, scheduled_time:time || null,
+      officiant_id:offId, officiant_name:offName || null, pastor_note:note || null,
+      decided_by:LEADER.leaderId, decided_at:new Date().toISOString()
+    }).eq('id', id);
+    if(error) throw error;
+    const when = _svcDate(date) + (time ? ', ' + _svcTime(time) : '');
+    const who = _svcMemberName(r.requester_id) || r.requester_name || 'A member';
+    const verbEn = wasScheduled ? 'rescheduled' : 'scheduled';
+    const verbTl = wasScheduled ? 'inilipat ang schedule ng' : 'naka-schedule na ang';
+    const rows = [{
+      recipient_id: r.requester_id, kind:'service_request_scheduled',
+      title: t.en + ' ' + verbEn + ' · ' + (wasScheduled ? 'Bagong schedule: ' : 'Naka-schedule na: ') + t.tl,
+      body: 'Your ' + t.en.toLowerCase() + ' is ' + verbEn + ' for ' + when + (offName ? ', with ' + offName + ' officiating' : '') + '.' + (note ? ' ' + note : '')
+        + '\n\n' + 'Ang hiniling mong ' + t.tl.toLowerCase() + ' ay ' + (wasScheduled ? 'inilipat sa ' : 'naka-schedule sa ') + when + (offName ? ', pangungunahan ni ' + offName : '') + '.' + (note ? ' ' + note : ''),
+      payload:{ service_request_id:id }
+    }];
+    if(offId && offId !== LEADER.leaderId && offId !== r.requester_id){
+      rows.push({ recipient_id: offId, kind:'service_officiant',
+        title: 'You will officiate: ' + t.en + ' · Ikaw ang mangunguna: ' + t.tl,
+        body: who + ' — ' + when + (r.location ? ' at ' + r.location : '') + '.' + (r.contact_number ? ' Contact: ' + r.contact_number + '.' : '')
+          + '\n\n' + who + ' — ' + when + (r.location ? ' sa ' + r.location : '') + '.' + (r.contact_number ? ' Contact: ' + r.contact_number + '.' : ''),
+        payload:{ service_request_id:id } });
+    }
+    if(r.discipler_id && r.discipler_id !== LEADER.leaderId && r.discipler_id !== offId){
+      rows.push({ recipient_id: r.discipler_id, kind:'service_request_lcl',
+        title: who + ': ' + t.en + ' ' + verbEn + ' · ' + who + ': ' + t.tl,
+        body: who + '’s ' + t.en.toLowerCase() + ' is ' + verbEn + ' for ' + when + '. You may want to be there to support.'
+          + '\n\n' + verbTl.charAt(0).toUpperCase() + verbTl.slice(1) + ' ' + t.tl.toLowerCase() + ' ni ' + who + ' sa ' + when + '. Mainam kung makakadalo ka para sumuporta.',
+        payload:{ service_request_id:id } });
+    }
+    await _svcNotify(rows);
+    toast(wasScheduled ? 'Rescheduled — notified' : 'Scheduled — notified', '\u{1F4C5}');
+    _svcTab = 'scheduled';
+    await loadSvcQueue();
+  }catch(e){
+    toast('Could not save: ' + e.message, '⚠️');
+    if(btn) btn.disabled = false;
+  }
+}
+
+async function markSvcDone(id){
+  const r = _svcRows.find(function(x){ return x.id === id; }); if(!r) return;
+  const t = SVC_MD_TYPES[r.service_type] || { en:r.service_type, tl:r.service_type };
+  if(!confirm('Mark this ' + t.en.toLowerCase() + ' as done?' + (r.share_consent && !t.urgent ? ' It will be celebrated in the member’s LC feed.' : ''))) return;
+  try{
+    const { error } = await db.from('service_requests')
+      .update({ status:'done', done_at:new Date().toISOString() }).eq('id', id);
+    if(error) throw error;
+    await _svcNotify([{ recipient_id:r.requester_id, kind:'service_request_done',
+      title: t.urgent ? 'With you in prayer \u00B7 Kasama ninyo sa panalangin' : 'Praise God! \u00B7 Salamat sa Diyos!',
+      body: t.urgent
+        ? 'Thank you for letting the church serve your family. May the God of all comfort be near you (2 Corinthians 1:3-4).'
+          + '\n\n' + 'Salamat sa pagpapahintulot na mapaglingkuran ng iglesia ang inyong pamilya. Nawa\u2019y samahan kayo ng Dios ng lahat ng kaaliwan (2 Corinthians 1:3-4).'
+        : 'Your ' + t.en.toLowerCase() + ' is done. May the Lord bless what has been dedicated to Him.'
+          + '\n\n' + 'Tapos na ang ' + t.tl.toLowerCase() + '. Pagpalain nawa ng Panginoon ang inihandog sa Kaniya.',
+      payload:{ service_request_id:id } }]);
+    toast('Marked done', '✅');
+    await loadSvcQueue();
+  }catch(e){ toast('Could not update: ' + e.message, '⚠️'); }
+}
+
+async function declineSvc(id){
+  const r = _svcRows.find(function(x){ return x.id === id; }); if(!r) return;
+  const t = SVC_MD_TYPES[r.service_type] || { en:r.service_type, tl:r.service_type };
+  const note = prompt('Decline this ' + t.en.toLowerCase() + '? Add a short note for the member (optional):', '');
+  if(note === null) return;
+  try{
+    const { error } = await db.from('service_requests').update({
+      status:'declined', pastor_note:(note || '').trim() || null,
+      decided_by:LEADER.leaderId, decided_at:new Date().toISOString()
+    }).eq('id', id);
+    if(error) throw error;
+    const n = (note || '').trim();
+    await _svcNotify([{ recipient_id:r.requester_id, kind:'service_request_declined',
+      title:'About your ' + t.en.toLowerCase() + ' request · Tungkol sa hiling mong ' + t.tl.toLowerCase(),
+      body:(n || 'The Pastor could not schedule this request.') + ' The Pastor will reach out to you.'
+        + '\n\n' + (n || 'Hindi ito ma-schedule ng Pastor sa ngayon.') + ' Kakausapin ka ng Pastor.',
+      payload:{ service_request_id:id } }]);
+    toast('Declined — member notified', '✕');
+    await loadSvcQueue();
+  }catch(e){ toast('Could not update: ' + e.message, '⚠️'); }
+}
+
+// S109: show the Service Requests nav + badge for the Pastor (fail-soft)
+try { _svcInitNav(); } catch(e){ console.warn('service nav init:', e); }
+
 
 // ═══════════════════════════════════════════════════════════════════════
 // DISPUTED ATTENDANCE REVIEW QUEUE  (Pastor + L3+)

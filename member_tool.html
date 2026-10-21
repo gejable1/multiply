@@ -1633,6 +1633,20 @@ body.lang-tl .tl-text{display:inline;}
 .hu-btn.submit{background:var(--forest);color:#fff;flex:1;}
 .hu-btn.cancel{background:var(--cream);color:var(--ink-soft);border:1px solid var(--line);}
 
+/* S109 - service request modal + list */
+.svc-types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.svc-type{display:flex;align-items:center;gap:8px;padding:10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink);text-align:left;cursor:pointer;line-height:1.25;}
+.svc-type .svc-ico{font-size:18px;flex-shrink:0;}
+.svc-type.on{border-color:var(--forest);background:rgba(47,109,79,.08);}
+.svc-rules{background:#fff7e6;border:1px solid #f0d89a;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;color:#6b4e00;margin-bottom:12px;}
+.svc-warn{font-size:11.5px;color:#9a3412;margin-top:5px;line-height:1.4;}
+.svc-check{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:var(--ink);margin:4px 0 10px;cursor:pointer;}
+.svc-check input{margin-top:2px;flex-shrink:0;width:17px;height:17px;}
+.hu-row .hu-row-status.svc-scheduled{background:#dbeafe;color:#1e3a8a;}
+.hu-row .hu-row-status.svc-done{background:#d1f5e3;color:#0e3a2c;}
+.hu-row .hu-row-status.svc-declined{background:#f3f4f6;color:#4b5563;}
+.svc-cancel-link{background:none;border:none;color:var(--muted);font-family:inherit;font-size:10.5px;text-decoration:underline;cursor:pointer;padding:0;margin-top:3px;}
+
 /* ═══════════════ MODAL (edit field) ═══════════════ */
 .modal-backdrop{
   position:fixed;inset:0;background:rgba(28,24,16,.55);
@@ -2041,6 +2055,22 @@ body.lang-tl .tl-text{display:inline;}
         <div style="color:var(--muted);font-size:18px">›</div>
       </button>
 
+      <!-- S109: Request a pastoral service (blessings, dedication, wedding, birthday, vows) -->
+      <button class="headsup-btn" onclick="openSvcModal()" style="margin-top:.5rem">
+        <div class="hu-icon">&#x26EA;</div>
+        <div class="hu-body">
+          <div class="hu-title">
+            <span class="en-text">Request a church service</span>
+            <span class="tl-text">Humiling ng serbisyo ng iglesia</span>
+          </div>
+          <div class="hu-meta">
+            <span class="en-text">Blessings, dedication, wedding, birthday, vows, funeral</span>
+            <span class="tl-text">Blessing, dedication, kasal, kaarawan, vows, lamay / libing</span>
+          </div>
+        </div>
+        <div style="color:var(--muted);font-size:18px">&rsaquo;</div>
+      </button>
+
       <!-- ⛪ Sunday Sermons — opens a screen with summaries Pastor publishes weekly.
            Visible always; "no sermon yet" handled gracefully on the screen itself. -->
       <button class="headsup-btn" onclick="openSermonsScreen()" style="margin-top:.5rem">
@@ -2077,6 +2107,17 @@ body.lang-tl .tl-text{display:inline;}
           </div>
         </div>
         <div id="myHeadsUpsList"></div>
+      </div>
+
+      <!-- S109: My service requests (only shown if any) -->
+      <div id="mySvcSection" style="display:none">
+        <div class="section-label">
+          <div class="title">
+            <span class="en-text">My service requests</span>
+            <span class="tl-text">Mga hiniling kong serbisyo</span>
+          </div>
+        </div>
+        <div id="mySvcList"></div>
       </div>
 
       <!-- Celebration Feed -->
@@ -2554,6 +2595,81 @@ body.lang-tl .tl-text{display:inline;}
     <button class="browse-close" onclick="closeBrowseMonth()">
       <span class="en-text">Close</span><span class="tl-text">Isara</span>
     </button>
+  </div>
+</div>
+
+<!-- ═══════════════ S109: SERVICE REQUEST MODAL ═══════════════ -->
+<div class="hu-bd" id="svcBackdrop" onclick="closeSvcModal(event)">
+  <div class="hu-modal" onclick="event.stopPropagation()">
+    <div class="hu-modal-head">
+      <h3>
+        <span class="en-text">Request a church service &#x26EA;</span>
+        <span class="tl-text">Humiling ng serbisyo ng iglesia &#x26EA;</span>
+      </h3>
+      <p>
+        <span class="en-text">The Pastor will confirm the schedule and who will officiate. Your LC leader will be informed.</span>
+        <span class="tl-text">Kukumpirmahin ng Pastor ang schedule at kung sino ang mangunguna. Ipapaalam din sa LC leader mo.</span>
+      </p>
+    </div>
+
+    <div class="hu-field">
+      <label><span class="en-text">What service?</span><span class="tl-text">Anong serbisyo?</span></label>
+      <div class="svc-types" id="svcTypes"></div>
+    </div>
+
+    <div id="svcFormBody" style="display:none">
+      <div id="svcRules" class="svc-rules" style="display:none"></div>
+      <div id="svcDetailFields"></div>
+
+      <div class="hu-field">
+        <label><span class="en-text">Preferred date</span><span class="tl-text">Gustong petsa</span></label>
+        <input type="date" id="svcDate">
+        <div class="svc-warn" id="svcDateWarn" style="display:none"></div>
+      </div>
+      <div class="hu-field">
+        <label><span class="en-text">Preferred time (optional)</span><span class="tl-text">Gustong oras (opsyonal)</span></label>
+        <input type="time" id="svcTime">
+      </div>
+      <div class="hu-field">
+        <label><span class="en-text">Alternate date (optional)</span><span class="tl-text">Ibang petsa kung hindi puwede (opsyonal)</span></label>
+        <input type="date" id="svcAltDate">
+      </div>
+      <div class="hu-field">
+        <label><span class="en-text">Place / address</span><span class="tl-text">Lugar / address</span></label>
+        <input type="text" id="svcLocation" maxlength="200" autocomplete="off">
+      </div>
+      <div class="hu-field">
+        <label><span class="en-text">Contact number</span><span class="tl-text">Contact number</span></label>
+        <input type="tel" id="svcContact" maxlength="40" autocomplete="tel">
+      </div>
+      <div class="hu-field">
+        <label><span class="en-text">Anything else? (optional)</span><span class="tl-text">May iba pa? (opsyonal)</span></label>
+        <textarea id="svcNotes" rows="2" maxlength="500" placeholder="..."></textarea>
+      </div>
+      <label class="svc-check" id="svcAckWrap" style="display:none">
+        <input type="checkbox" id="svcAck">
+        <span>
+          <span class="en-text">We will attend pre-marital counseling with the Pastor before the wedding.</span>
+          <span class="tl-text">Dadalo kami sa pre-marital counseling kasama ang Pastor bago ang kasal.</span>
+        </span>
+      </label>
+      <label class="svc-check">
+        <input type="checkbox" id="svcConsent" checked>
+        <span>
+          <span class="en-text">When it's done, celebrate it with my LC in the celebration feed.</span>
+          <span class="tl-text">Kapag tapos na, ipagdiwang ito kasama ang LC ko sa celebration feed.</span>
+        </span>
+      </label>
+    </div>
+
+    <div class="hu-actions">
+      <button class="hu-btn cancel" onclick="closeSvcModal()">
+        <span class="en-text">Cancel</span><span class="tl-text">I-cancel</span>
+      </button>
+      <button class="hu-btn submit" id="svcSubmitBtn" onclick="submitSvcRequest()" disabled>
+        <span class="en-text">Send request</span><span class="tl-text">Ipadala ang hiling</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -3358,6 +3474,7 @@ async function initMMT(){
       ['feed',   loadCelebrationFeed],
       ['headsup config', loadHeadsUpConfig],
       ['my notices', loadMyRecentNotices],
+      ['my services', loadMySvcRequests],   // S109
       ['prayer',  loadPrayerData],
       ['notifications', loadMemberNotifs]
     ];
@@ -8060,8 +8177,43 @@ async function loadCelebrationFeed(){
     gratitudeWins.sort((a,b) => b.sortKey - a.sortKey);
   }
 
-  // ── INDIVIDUAL ORDER: birthdays → answered prayers → gratitude → streaks → assessments; cap 8.
-  celebrationWins = [...bdayWins, ...prayerWins, ...gratitudeWins, ...streakWins, ...wins].slice(0, 8);
+  // -- (G) S109 SERVICE CELEBRATIONS --
+  // Done + consented service requests, read from v_service_celebrations (only
+  // who / what / when - never the address or notes). Same subject set as
+  // gratitude (same-LCG sharers + the LC leader).
+  const svcWins = [];
+  const SVC_WIN = {
+    house_blessing:    { icon:'\u{1F3E0}', en:'had their home dedicated to the Lord',     tl:'inihandog sa Panginoon ang kanilang tahanan' },
+    business_blessing: { icon:'\u{1F3EA}', en:'had their business dedicated to the Lord', tl:'inihandog sa Panginoon ang kanilang negosyo' },
+    vehicle_blessing:  { icon:'\u{1F697}', en:'had their vehicle dedicated to the Lord',  tl:'inihandog sa Panginoon ang kanilang sasakyan' },
+    child_dedication:  { icon:'\u{1F476}', en:'dedicated their child to the Lord',        tl:'inihandog sa Panginoon ang kanilang anak' },
+    wedding:           { icon:'\u{1F48D}', en:'were joined in marriage before God',       tl:'ikinasal sa harap ng Diyos' },
+    birthday:          { icon:'\u{1F382}', en:'celebrated a birthday with thanksgiving',  tl:'nagdiwang ng kaarawan nang may pasasalamat' },
+    vow_renewal:       { icon:'\u{1F49E}', en:'renewed their marriage vows before God',   tl:'nag-renew ng kanilang marriage vows sa harap ng Diyos' }
+  };
+  if(_gratIds.length){
+    try{
+      const { data: svcRows, error: svErr } = await db.from('v_service_celebrations')
+        .select('requester_id, service_type, done_at')
+        .in('requester_id', _gratIds)
+        .gte('done_at', new Date(cutoff).toISOString());
+      if(svErr) throw svErr;
+      for(const sr of (svcRows || [])){
+        const m = eligibleById.get(sr.requester_id) || ((leaderRow && sr.requester_id === leaderRow.id) ? leaderRow : null);
+        const meta = SVC_WIN[sr.service_type];
+        if(!m || !meta) continue;
+        svcWins.push({
+          memberId: m.id, memberName: m.name, photoUrl: m.photo_url || '', isTest: !!m.is_test_member,
+          icon: meta.icon, label_en: meta.en, label_tl: meta.tl,
+          whenIso: sr.done_at, sortKey: sr.done_at ? Date.parse(sr.done_at) : 0
+        });
+      }
+      svcWins.sort((a,b) => b.sortKey - a.sortKey);
+    }catch(e){ console.warn('service celebrations (non-fatal):', e.message || e); }
+  }
+
+  // ── INDIVIDUAL ORDER: birthdays → answered prayers → services (S109) → gratitude → streaks → assessments; cap 8.
+  celebrationWins = [...bdayWins, ...prayerWins, ...svcWins, ...gratitudeWins, ...streakWins, ...wins].slice(0, 8);
 
   // ── (D) GROUP BADGES (pinned atop, not counted in the cap)
   // 1) Perfect attendance last Sunday — fires ONLY if the whole sharing LCG
@@ -8177,7 +8329,10 @@ function _youVerb(t){
     .replace(/^has a birthday/, 'have a birthday')
     .replace(/^celebrates /, 'celebrate ')
     .replace(/^praises /, 'praise ')
-    .replace(/^found their /, 'found your ');
+    .replace(/^found their /, 'found your ')
+    .replace(/^had their /, 'had your ')
+    .replace(/^dedicated their /, 'dedicated your ')
+    .replace(/^renewed their /, 'renewed your ');   // S109
 }
 
 function renderCelebrationFeed(){
@@ -8298,6 +8453,7 @@ renderHome = function(){
   try{ renderLcCard(); }catch(e){ console.warn(e); }
   try{ renderCelebrationFeed(); }catch(e){ console.warn(e); }
   try{ renderMyHeadsUps(); }catch(e){ console.warn(e); }
+  try{ renderMySvcRequests(); }catch(e){ console.warn(e); }   // S109
   try{ renderGratitudeCard(); }catch(e){ console.warn(e); }
 };
 
@@ -9761,6 +9917,326 @@ function renderMyHeadsUps(){
       </div>
     `;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// S109 · SERVICE REQUESTS (member side)
+// A member asks for a pastoral service. The Pastor (L5) schedules it in MD
+// and assigns who officiates; the member's LC leader is notified. Rules:
+// wedding = 3 months notice + pre-marital counseling acknowledgment (hard);
+// everything else = 2 weeks (earlier allowed, with a warning).
+// ═══════════════════════════════════════════════════════════════
+const SVC_TYPES = [
+  { key:'house_blessing',    icon:'\u{1F3E0}', en:'House blessing',    tl:'Blessing ng bahay',
+    fields:[ ['family_name','Family / owner name','Pangalan ng pamilya / may-ari'] ] },
+  { key:'business_blessing', icon:'\u{1F3EA}', en:'Business blessing', tl:'Blessing ng negosyo',
+    fields:[ ['business_name','Business name','Pangalan ng negosyo'], ['business_type','Kind of business','Uri ng negosyo'] ] },
+  { key:'vehicle_blessing',  icon:'\u{1F697}', en:'Vehicle blessing',  tl:'Blessing ng sasakyan',
+    fields:[ ['vehicle','Vehicle (make / model)','Sasakyan (make / model)'], ['plate_no','Plate number','Plate number'] ] },
+  { key:'child_dedication',  icon:'\u{1F476}', en:'Child dedication',  tl:'Child dedication',
+    // Pastor (Oct 21): complete names of the child, of both parents (if applicable), and the sponsors.
+    fields:[ ['child_name','Child\u2019s complete name','Buong pangalan ng bata'], ['child_birthdate','Child\u2019s birthdate','Kaarawan ng bata','date'],
+             ['father_name','Father\u2019s complete name (if applicable)','Buong pangalan ng ama (kung mayroon)','text',true],
+             ['mother_name','Mother\u2019s complete name (if applicable)','Buong pangalan ng ina (kung mayroon)','text',true],
+             ['sponsors','Sponsors (ninong / ninang) \u2014 complete names, one per line','Mga sponsor (ninong / ninang) \u2014 buong pangalan, isa bawat linya','textarea'] ],
+    oneOf:[['father_name','mother_name','Please give the complete name of at least one parent.','Ilagay ang buong pangalan ng kahit isang magulang.']] },
+  { key:'wedding',           icon:'\u{1F48D}', en:'Wedding',           tl:'Kasal',
+    fields:[ ['groom_name','Groom’s full name','Buong pangalan ng lalaki'], ['bride_name','Bride’s full name','Buong pangalan ng babae'] ] },
+  { key:'birthday',          icon:'\u{1F382}', en:'Birthday celebration', tl:'Pagdiriwang ng kaarawan',
+    fields:[ ['celebrant','Celebrant’s name','Pangalan ng may kaarawan'], ['age','Age turning','Edad na sasapitin','number'] ] },
+  { key:'vow_renewal',       icon:'\u{1F49E}', en:'Renewal of vows',   tl:'Renewal of vows',
+    fields:[ ['couple','Couple’s names','Pangalan ng mag-asawa'], ['years_married','Years married','Ilang taon nang kasal','number'] ] },
+  // Funeral (Pastor, Oct 21): urgent - no notice rule, never celebrated in the feed.
+  { key:'funeral',           icon:'\u{1F54A}\uFE0F', en:'Funeral service',  tl:'Serbisyo sa lamay / libing', urgent:true, noCelebrate:true,
+    fields:[ ['deceased_name','Complete name of the deceased','Buong pangalan ng yumao'], ['date_of_death','Date of passing','Petsa ng pagpanaw','date'],
+             ['relationship','Your relationship to the deceased','Kaugnayan mo sa yumao'],
+             ['funeral_part','Service needed','Serbisyong kailangan','select',false,[['wake','Wake service / necrological','Lamay / necrological service'],['interment','Funeral & interment','Libing'],['both','Both','Pareho']]] ] }
+];
+const SVC_STATUS = {
+  requested:{ en:'Requested', tl:'Hiniling',      cls:'pending' },
+  scheduled:{ en:'Scheduled', tl:'Naka-schedule', cls:'svc-scheduled' },
+  done:     { en:'Done',      tl:'Tapos na',      cls:'svc-done' },
+  declined: { en:'Declined',  tl:'Hindi natuloy', cls:'svc-declined' },
+  cancelled:{ en:'Cancelled', tl:'Kinansela',     cls:'svc-declined' }
+};
+const SVC_WEDDING_DAYS = 90, SVC_GENERAL_DAYS = 14;
+let _svcType = null;
+let mySvcRequests = [];
+
+function _svcTl(){ return document.body.classList.contains('lang-tl'); }
+function _svcMeta(key){ return SVC_TYPES.find(function(t){ return t.key === key; }) || null; }
+function _svcAddDays(iso, n){
+  const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function _svcFmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(_svcTl() ? 'fil-PH' : 'en-PH', { month:'short', day:'numeric', year:'numeric' });
+}
+function _svcFmtTime(t){
+  if(!t) return '';
+  const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return String(t);
+  let h = parseInt(m[1], 10); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  return h + ':' + m[2] + ' ' + ap;
+}
+
+async function loadMySvcRequests(){
+  try{
+    const { data, error } = await db.from('service_requests')
+      .select('id,service_type,preferred_date,status,scheduled_date,scheduled_time,officiant_name,pastor_note,created_at')
+      .eq('requester_id', MEMBER.memberId)
+      .order('created_at', { ascending:false })
+      .limit(5);
+    if(error) throw error;
+    mySvcRequests = data || [];
+  }catch(e){
+    console.warn('My service requests load failed:', e.message);
+    mySvcRequests = [];
+  }
+}
+
+function renderMySvcRequests(){
+  const section = document.getElementById('mySvcSection');
+  const list = document.getElementById('mySvcList');
+  if(!section || !list) return;
+  const rows = mySvcRequests.filter(function(r){ return r.status !== 'cancelled'; });
+  if(!rows.length){ section.style.display = 'none'; return; }
+  section.style.display = '';
+  const E = MultiplyShared.escapeHTML;
+  list.innerHTML = rows.map(function(r){
+    const t = _svcMeta(r.service_type) || { icon:'⛪', en:r.service_type, tl:r.service_type };
+    const st = SVC_STATUS[r.status] || SVC_STATUS.requested;
+    let metaEn, metaTl;
+    if(r.status === 'scheduled' || r.status === 'done'){
+      const when = _svcFmtDate(r.scheduled_date) + (r.scheduled_time ? ' · ' + _svcFmtTime(r.scheduled_time) : '');
+      const who = r.officiant_name ? ' · ' + r.officiant_name : '';
+      metaEn = when + who; metaTl = when + who;
+    } else if(r.status === 'declined'){
+      metaEn = r.pastor_note ? r.pastor_note : 'The Pastor will reach out to you.';
+      metaTl = r.pastor_note ? r.pastor_note : 'Kakausapin ka ng Pastor.';
+    } else {
+      metaEn = 'Asked for ' + _svcFmtDate(r.preferred_date) + ' · sent ' + timeAgo(r.created_at);
+      metaTl = 'Para sa ' + _svcFmtDate(r.preferred_date) + ' · ipinadala ' + timeAgo(r.created_at);
+    }
+    const cancelBtn = r.status === 'requested'
+      ? '<button class="svc-cancel-link" onclick="cancelSvcRequest(\'' + r.id + '\')"><span class="en-text">Cancel request</span><span class="tl-text">Kanselahin</span></button>'
+      : '';
+    return '<div class="hu-row">'
+      + '<div class="hu-row-icon">' + t.icon + '</div>'
+      + '<div class="hu-row-body">'
+        + '<div class="hu-row-event"><span class="en-text">' + E(t.en) + '</span><span class="tl-text">' + E(t.tl) + '</span></div>'
+        + '<div class="hu-row-meta"><span class="en-text">' + E(metaEn) + '</span><span class="tl-text">' + E(metaTl) + '</span></div>'
+        + cancelBtn
+      + '</div>'
+      + '<div class="hu-row-status ' + st.cls + '"><span class="en-text">' + st.en + '</span><span class="tl-text">' + st.tl + '</span></div>'
+    + '</div>';
+  }).join('');
+}
+
+function openSvcModal(){
+  _svcType = null;
+  const E = MultiplyShared.escapeHTML;
+  document.getElementById('svcTypes').innerHTML = SVC_TYPES.map(function(t){
+    return '<button type="button" class="svc-type" data-k="' + t.key + '" onclick="pickSvcType(\'' + t.key + '\')">'
+      + '<span class="svc-ico">' + t.icon + '</span>'
+      + '<span><span class="en-text">' + E(t.en) + '</span><span class="tl-text">' + E(t.tl) + '</span></span></button>';
+  }).join('');
+  ['svcDate','svcTime','svcAltDate','svcLocation','svcNotes'].forEach(function(id){ document.getElementById(id).value = ''; });
+  document.getElementById('svcContact').value = (memberRow && memberRow.contact) || '';
+  document.getElementById('svcAck').checked = false;
+  document.getElementById('svcConsent').checked = true;
+  document.getElementById('svcFormBody').style.display = 'none';
+  document.getElementById('svcSubmitBtn').disabled = true;
+  document.getElementById('svcBackdrop').classList.add('show');
+}
+
+function closeSvcModal(e){
+  if(e && e.target && !e.target.classList.contains('hu-bd')) return;
+  document.getElementById('svcBackdrop').classList.remove('show');
+}
+
+function pickSvcType(key){
+  const t = _svcMeta(key); if(!t) return;
+  _svcType = key;
+  document.querySelectorAll('#svcTypes .svc-type').forEach(function(b){ b.classList.toggle('on', b.dataset.k === key); });
+  const E = MultiplyShared.escapeHTML;
+  // field = [key, en, tl, type ('text'|'date'|'number'|'textarea'|'select'), optional, selectOptions]
+  document.getElementById('svcDetailFields').innerHTML = t.fields.map(function(f){
+    const typ = f[3] || 'text';
+    const lbl = '<label><span class="en-text">' + E(f[1]) + '</span><span class="tl-text">' + E(f[2]) + '</span></label>';
+    let ctl;
+    if(typ === 'textarea'){
+      ctl = '<textarea id="svcF_' + f[0] + '" rows="3" maxlength="600"></textarea>';
+    } else if(typ === 'select'){
+      ctl = '<select id="svcF_' + f[0] + '"><option value=""></option>' + (f[5] || []).map(function(o){
+        return '<option value="' + E(o[0]) + '">' + E(_svcTl() ? o[2] : o[1]) + '</option>'; }).join('') + '</select>';
+    } else {
+      ctl = '<input type="' + typ + '" id="svcF_' + f[0] + '" maxlength="120" autocomplete="off"' + (typ === 'number' ? ' min="0" max="150"' : '') + (typ === 'date' ? ' max="' + todayIso() + '"' : '') + '>';
+    }
+    return '<div class="hu-field">' + lbl + ctl + '</div>';
+  }).join('');
+  const isWed = key === 'wedding';
+  const today = todayIso();
+  const minDays = isWed ? SVC_WEDDING_DAYS : 0;
+  const dateEl = document.getElementById('svcDate');
+  dateEl.min = _svcAddDays(today, minDays);
+  dateEl.value = t.urgent ? today : _svcAddDays(today, isWed ? SVC_WEDDING_DAYS : SVC_GENERAL_DAYS);
+  document.getElementById('svcAltDate').min = dateEl.min;
+  const rules = document.getElementById('svcRules');
+  rules.style.display = '';
+  rules.innerHTML = t.urgent
+    ? '<span class="en-text">\u{1F54A}\uFE0F We are so sorry for your loss. The Pastor will be notified right away \u2014 you may also call him directly.</span>'
+      + '<span class="tl-text">\u{1F54A}\uFE0F Nakikiramay kami sa inyong pagdadalamhati. Agad itong ipapaalam sa Pastor \u2014 puwede rin ninyo siyang tawagan nang direkta.</span>'
+    : isWed
+    ? '<span class="en-text">\u{1F48D} Weddings need at least <strong>3 months</strong> notice and <strong>pre-marital counseling</strong> with the Pastor.</span>'
+      + '<span class="tl-text">\u{1F48D} Ang kasal ay kailangang ipaalam nang hindi bababa sa <strong>3 buwan</strong> bago ang petsa, at may <strong>pre-marital counseling</strong> kasama ang Pastor.</span>'
+    : '<span class="en-text">\u{1F4C5} Please give at least <strong>2 weeks</strong> notice so the Pastor can arrange it.</span>'
+      + '<span class="tl-text">\u{1F4C5} Pakisabi nang hindi bababa sa <strong>2 linggo</strong> bago ang petsa para maihanda ito ng Pastor.</span>';
+  document.getElementById('svcAckWrap').style.display = isWed ? '' : 'none';
+  const consentWrap = document.getElementById('svcConsent').closest('label');
+  if(consentWrap) consentWrap.style.display = t.noCelebrate ? 'none' : '';
+  document.getElementById('svcConsent').checked = !t.noCelebrate;
+  document.getElementById('svcFormBody').style.display = '';
+  document.getElementById('svcSubmitBtn').disabled = false;
+  _svcCheckDate();
+  dateEl.onchange = _svcCheckDate;
+}
+
+// Returns 'ok' | 'soon' (allowed with a warning) | 'blocked'.
+function _svcCheckDate(){
+  const warn = document.getElementById('svcDateWarn');
+  const v = document.getElementById('svcDate').value;
+  const today = todayIso();
+  let state = 'ok';
+  if(!v){ state = 'blocked'; }
+  else if(v < today){ state = 'blocked'; }
+  else if(_svcType === 'wedding' && v < _svcAddDays(today, SVC_WEDDING_DAYS)){ state = 'blocked'; }
+  else if(_svcType !== 'wedding' && !(_svcMeta(_svcType) || {}).urgent && v < _svcAddDays(today, SVC_GENERAL_DAYS)){ state = 'soon'; }
+  if(state === 'soon'){
+    warn.style.display = '';
+    warn.innerHTML = '<span class="en-text">⚠ Less than 2 weeks away — you may still send it, but the Pastor may not be available.</span>'
+      + '<span class="tl-text">⚠ Wala pang 2 linggo — puwede pa ring ipadala, pero baka hindi available ang Pastor.</span>';
+  } else if(state === 'blocked' && v){
+    warn.style.display = '';
+    warn.innerHTML = _svcType === 'wedding'
+      ? '<span class="en-text">⚠ Weddings need at least 3 months notice. Please pick a later date.</span><span class="tl-text">⚠ Kailangan ng hindi bababa sa 3 buwan para sa kasal. Pumili ng mas huling petsa.</span>'
+      : '<span class="en-text">⚠ Please pick a date from today onward.</span><span class="tl-text">⚠ Pumili ng petsa mula ngayon.</span>';
+  } else {
+    warn.style.display = 'none';
+    warn.innerHTML = '';
+  }
+  return state;
+}
+
+async function submitSvcRequest(){
+  const tl = _svcTl();
+  const t = _svcMeta(_svcType);
+  if(!t){ showToast(tl ? 'Pumili muna ng serbisyo' : 'Pick a service first', true); return; }
+  const details = {};
+  for(const f of t.fields){
+    const el = document.getElementById('svcF_' + f[0]);
+    const v = el ? (el.value || '').trim() : '';
+    if(!v && !f[4]){ showToast(tl ? 'Pakisagutan: ' + f[2] : 'Please fill in: ' + f[1], true); if(el) el.focus(); return; }
+    if(v) details[f[0]] = v;
+  }
+  for(const g of (t.oneOf || [])){
+    if(!details[g[0]] && !details[g[1]]){ showToast(tl ? g[3] : g[2], true); return; }
+  }
+  const dstate = _svcCheckDate();
+  if(dstate === 'blocked'){ showToast(tl ? 'Pakiayos ang petsa' : 'Please fix the date', true); return; }
+  const location = (document.getElementById('svcLocation').value || '').trim();
+  if(!location){ showToast(tl ? 'Pakilagay ang lugar / address' : 'Please add the place / address', true); return; }
+  const contact = (document.getElementById('svcContact').value || '').trim();
+  if(!contact){ showToast(tl ? 'Pakilagay ang contact number' : 'Please add a contact number', true); return; }
+  const isWed = t.key === 'wedding';
+  const ack = document.getElementById('svcAck').checked;
+  if(isWed && !ack){ showToast(tl ? 'Paki-check ang pre-marital counseling' : 'Please tick the pre-marital counseling box', true); return; }
+
+  const btn = document.getElementById('svcSubmitBtn');
+  if(btn) btn.disabled = true;
+  try{
+    const payload = {
+      requester_id: MEMBER.memberId,
+      requester_name: memberRow.name || null,
+      discipler_id: (memberRow.discipler_id && memberRow.discipler_id !== MEMBER.memberId) ? memberRow.discipler_id : null,
+      service_type: t.key,
+      details: details,
+      preferred_date: document.getElementById('svcDate').value,
+      preferred_time: document.getElementById('svcTime').value || null,
+      alt_date: document.getElementById('svcAltDate').value || null,
+      location: location,
+      contact_number: contact,
+      notes: (document.getElementById('svcNotes').value || '').trim() || null,
+      share_consent: t.noCelebrate ? false : !!document.getElementById('svcConsent').checked,
+      ack_requirements: isWed ? ack : false,
+      status: 'requested'
+    };
+    const { error } = await db.from('service_requests').insert(payload);
+    if(error) throw error;
+    _svcNotifyNewRequest(t, payload);   // fire-and-forget
+    closeSvcModal();
+    showToast(tl ? 'Naipadala na sa Pastor, kapatid \u{1F64F}' : 'Sent to the Pastor, kapatid \u{1F64F}');
+    await loadMySvcRequests();
+    renderMySvcRequests();
+  }catch(e){
+    console.error('Service request failed:', e);
+    showToast((tl ? 'Hindi naipadala: ' : 'Could not send: ') + e.message, true);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+// Notify every Pastor (L5) and the member's LC leader. Best-effort: a failed
+// notification never undoes the request (it is already in the Pastor's queue).
+async function _svcNotifyNewRequest(t, p){
+  try{
+    const who = memberRow.name || 'A member';
+    const when = _svcFmtDate(p.preferred_date);
+    const { data: pastors } = await db.from('members')
+      .select('id').gte('pipeline_level', 5).neq('is_external_user', true);
+    const rows = [];
+    (pastors || []).forEach(function(x){
+      if(x.id === MEMBER.memberId) return;
+      rows.push({
+        recipient_id: x.id, kind: 'service_request_new',
+        title: (t.urgent ? '\u{1F54A}\uFE0F URGENT: ' : '') + t.en + ' request · ' + (t.urgent ? 'AGARAN: ' : '') + 'Hiling na ' + t.tl,
+        body: who + ' asked for a ' + t.en.toLowerCase() + ' on ' + when + '. Open MD → Service Requests to schedule it.'
+          + '\n\n' + who + ' ay humiling ng ' + t.tl.toLowerCase() + ' sa ' + when + '. Buksan ang MD → Service Requests para i-schedule.',
+        payload: { service_type: t.key, requester_id: MEMBER.memberId }
+      });
+    });
+    if(p.discipler_id){
+      rows.push({
+        recipient_id: p.discipler_id, kind: 'service_request_lcl',
+        title: who + ': ' + t.en + ' · ' + who + ': ' + t.tl,
+        body: who + ' from your LC asked the Pastor for a ' + t.en.toLowerCase() + ' on ' + when + '. You may want to be there to support.'
+          + '\n\n' + who + ' mula sa LC mo ay humiling sa Pastor ng ' + t.tl.toLowerCase() + ' sa ' + when + '. Mainam kung makakadalo ka para sumuporta.',
+        payload: { service_type: t.key, requester_id: MEMBER.memberId }
+      });
+    }
+    if(rows.length){
+      const { error } = await db.from('notifications').insert(rows);
+      if(error) throw error;
+    }
+  }catch(e){ console.warn('service request notify failed (non-fatal):', e.message || e); }
+}
+
+async function cancelSvcRequest(id){
+  const tl = _svcTl();
+  if(!confirm(tl ? 'Kanselahin ang hiling na ito?' : 'Cancel this request?')) return;
+  try{
+    const { error } = await db.from('service_requests')
+      .update({ status:'cancelled', cancelled_at: new Date().toISOString() })
+      .eq('id', id).eq('status', 'requested');
+    if(error) throw error;
+    await loadMySvcRequests();
+    renderMySvcRequests();
+    showToast(tl ? 'Nakansela na' : 'Request cancelled');
+  }catch(e){
+    showToast((tl ? 'Hindi nakansela: ' : 'Could not cancel: ') + e.message, true);
+  }
 }
 
 function openHeadsUpModal(){
