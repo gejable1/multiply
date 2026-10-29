@@ -20322,6 +20322,26 @@
     },
     {
       "schema": "public",
+      "name": "public_devotional",
+      "arguments": "p_date date",
+      "returns": "TABLE(entry_date date, title text, scripture_ref text, scripture_text text, story text, explanation text, response text, prayer text, reflection_questions text[], weekly_summary text, author text, source_note text)",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.public_devotional(p_date date DEFAULT NULL::date)\n RETURNS TABLE(entry_date date, title text, scripture_ref text, scripture_text text, story text, explanation text, response text, prayer text, reflection_questions text[], weekly_summary text, author text, source_note text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  WITH t AS (SELECT (now() AT TIME ZONE 'Asia/Manila')::date AS today)\r\n  SELECT d.entry_date, d.title, d.scripture_ref, d.scripture_text, d.story, d.explanation,\r\n         d.response, d.prayer, d.reflection_questions, d.weekly_summary, d.author, d.source_note\r\n    FROM public.devotionals d, t\r\n   WHERE d.church_id = (SELECT id FROM public.churches WHERE slug = 'rosehill')\r\n     AND d.entry_date = COALESCE(p_date, t.today)\r\n     AND d.entry_date <= t.today\r\n     AND d.entry_date >= t.today - 60\r\n   LIMIT 1;\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "name": "public_devotional_dates",
+      "arguments": "p_days integer",
+      "returns": "TABLE(entry_date date, title text)",
+      "language": "sql",
+      "security_definer": true,
+      "kind": "function",
+      "definition": "CREATE OR REPLACE FUNCTION public.public_devotional_dates(p_days integer DEFAULT 60)\n RETURNS TABLE(entry_date date, title text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  WITH t AS (SELECT (now() AT TIME ZONE 'Asia/Manila')::date AS today)\r\n  SELECT d.entry_date, d.title\r\n    FROM public.devotionals d, t\r\n   WHERE d.church_id = (SELECT id FROM public.churches WHERE slug = 'rosehill')\r\n     AND d.entry_date <= t.today\r\n     AND d.entry_date >= t.today - LEAST(GREATEST(COALESCE(p_days, 60), 1), 60)\r\n   ORDER BY d.entry_date DESC;\r\n$function$\n"
+    },
+    {
+      "schema": "public",
       "name": "publish_pathway_version",
       "arguments": "p_version_id uuid",
       "returns": "TABLE(church uuid, version integer, upserted integer, retired integer, restored integer, archived_previous integer, order_map_cleared integer)",
