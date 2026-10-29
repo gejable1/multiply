@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Daily Devotional · Rosehill Christian Church</title>
+<meta name="description" content="Today's devotional from Rosehill Christian Church — Scripture, story, explanation, response and prayer.">
+<meta name="theme-color" content="#0e3a2c">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=DM+Sans:wght@400;500;600;700&display=swap">
+<!--
+  S111 - Public daily devotional (no login) for The Eastbridge School apps.
+  Open as  devotional.html?app=soar  (students / SOAR)
+       or  devotional.html?app=epic  (parents / EPIC)
+  Reads ONLY published-to-date Rosehill devotionals through the read-only
+  RPCs public_devotional / public_devotional_dates (migration 125). No member
+  data. Reflections stay on this device (localStorage) and are never sent.
+-->
+<style>
+:root{
+  --forest:#0e3a2c; --green:#2a5c40; --gold:#b8882a; --gold-soft:#f3e6c6;
+  --paper:#fbf7ef; --cream:#f5f0e6; --card:#ffffff; --ink:#1c1810; --ink-soft:#3d342a;
+  --muted:#6b5f4f; --line:#e2d8c6;
+  --font-read:'Literata','Charter','Georgia',serif; --font-ui:'DM Sans',system-ui,sans-serif; --font-head:'Fraunces','Georgia',serif;
+  --scale:1;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{background:var(--paper);color:var(--ink);}
+body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased;min-height:100vh;}
+button{font-family:inherit;}
+.top{background:var(--forest);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;position:sticky;top:0;z-index:5;}
+.top-in{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:10px;}
+.top-t{flex:1;min-width:0;}
+.top-k{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-soft);font-weight:700;}
+.top-h{font-family:var(--font-head);font-size:20px;font-weight:700;line-height:1.2;}
+.fs{display:flex;gap:4px;}
+.fs button{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 9px;font-size:13px;font-weight:700;cursor:pointer;min-width:38px;min-height:36px;}
+.fs button:disabled{opacity:.4;cursor:default;}
+.nav{max-width:680px;margin:0 auto;padding:12px 16px 0;display:flex;align-items:center;gap:8px;}
+.nav button{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;min-height:38px;}
+.nav button:disabled{opacity:.4;cursor:default;}
+.nav .date{flex:1;text-align:center;font-size:11.5px;letter-spacing:.1em;font-weight:700;color:var(--gold);text-transform:uppercase;}
+main{max-width:680px;margin:0 auto;padding:10px 16px 40px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 18px;box-shadow:0 2px 10px rgba(28,24,16,.04);}
+.h1{font-family:var(--font-head);font-size:calc(26px * var(--scale));line-height:1.2;color:var(--forest);margin-bottom:4px;}
+.src{font-size:calc(12.5px * var(--scale));color:var(--muted);font-style:italic;margin-bottom:6px;}
+.sec{margin-top:22px;}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--gold);margin-bottom:8px;}
+.prose{font-family:var(--font-read);font-size:calc(16.5px * var(--scale));line-height:1.75;color:var(--ink-soft);white-space:pre-wrap;}
+.passage{background:var(--cream);border-left:4px solid var(--green);border-radius:0 12px 12px 0;padding:14px 16px;}
+.passage .ref{font-size:calc(12px * var(--scale));font-weight:700;letter-spacing:.08em;color:var(--green);margin-bottom:6px;}
+.passage .txt{font-family:var(--font-read);font-style:italic;font-size:calc(16.5px * var(--scale));line-height:1.7;white-space:pre-wrap;}
+.prayer{font-family:var(--font-read);font-style:italic;font-size:calc(16.5px * var(--scale));line-height:1.75;color:var(--forest);white-space:pre-wrap;background:#f4f9f6;border-radius:12px;padding:14px 16px;}
+.qs{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.qs li{font-family:var(--font-read);font-size:calc(16px * var(--scale));line-height:1.6;padding-left:26px;position:relative;color:var(--ink-soft);}
+.qs li::before{content:attr(data-n);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;background:var(--gold-soft);color:#7a5518;font:700 11px/19px var(--font-ui);text-align:center;}
+.refl{margin-top:22px;background:var(--cream);border:1px dashed #d9c9a8;border-radius:14px;padding:14px;}
+.refl textarea{width:100%;min-height:110px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:var(--font-read);font-size:calc(15.5px * var(--scale));line-height:1.6;background:#fff;color:var(--ink);resize:vertical;}
+.refl textarea:focus{outline:2px solid var(--green);outline-offset:1px;}
+.refl .hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.45;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;}
+.btn{border:none;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;}
+.btn.primary{background:var(--green);color:#fff;}
+.btn.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink-soft);}
+.credit{margin-top:22px;text-align:center;font-size:12px;color:var(--muted);line-height:1.6;}
+.credit strong{color:var(--forest);}
+.note{background:#fff7e6;border:1px solid #f0d89a;color:#6b4e00;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;margin-bottom:12px;}
+.state{text-align:center;padding:48px 16px;color:var(--muted);}
+.state .e{font-size:40px;margin-bottom:10px;}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;}
+.toast.show{opacity:1;}
+@media (max-width:380px){ .h1{font-size:calc(23px * var(--scale));} .nav button{padding:8px 10px;} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="top-t">
+      <div class="top-k" id="kicker">Rosehill Christian Church</div>
+      <div class="top-h">Daily Devotional</div>
+    </div>
+    <div class="fs" role="group" aria-label="Text size">
+      <button id="fsDown" type="button" aria-label="Smaller text">A&minus;</button>
+      <button id="fsUp" type="button" aria-label="Larger text">A+</button>
+    </div>
+  </div>
+</header>
+<div class="nav">
+  <button id="prevBtn" type="button" aria-label="Previous day">&lsaquo; Prev</button>
+  <div class="date" id="dateLbl">&nbsp;</div>
+  <button id="todayBtn" type="button">Today</button>
+  <button id="nextBtn" type="button" aria-label="Next day">Next &rsaquo;</button>
+</div>
+<main id="main"><div class="state"><div class="e">&#x1F4D6;</div>Loading today&rsquo;s devotional&hellip;</div></main>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  var SB_URL = 'https://tirzeikbflolaclgtket.supabase.co';
+  var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpcnplaWtiZmxvbGFjbGd0a2V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTYwOTksImV4cCI6MjA5MjY5MjA5OX0.ejHouXj7NOB3yUmcdOuUFfk-HHPbfyCmQACb4xNk2V8';
+  var APPS = {
+    soar: { kicker:'The Eastbridge School · SOAR', reflKey:'soar' },
+    epic: { kicker:'The Eastbridge School · Parents', reflKey:'epic' }
+  };
+  var params = new URLSearchParams(location.search);
+  var appKey = (params.get('app') || '').toLowerCase();
+  var app = APPS[appKey] || { kicker:'Rosehill Christian Church', reflKey:'web' };
+  document.getElementById('kicker').textContent = app.kicker;
+
+  var dates = [];          // available dates, newest first (YYYY-MM-DD)
+  var current = null;      // date being shown
+  var STEPS = [0.9, 1, 1.12, 1.25, 1.4];
+  var stepIdx = 1;
+
+  function ls(op, k, v){ try{ if(op === 'get') return localStorage.getItem(k); if(op === 'set') localStorage.setItem(k, v); }catch(e){} return null; }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function toast(m){ var t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
+  function manilaToday(){
+    var d = new Date(Date.now() + 8 * 3600 * 1000);
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+  }
+  function fmtDate(iso){
+    var d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('en-PH', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  }
+
+  function rpc(fn, body){
+    return fetch(SB_URL + '/rest/v1/rpc/' + fn, {
+      method:'POST',
+      headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer ' + SB_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  }
+
+  // ---- text size ----
+  function applyScale(){
+    document.documentElement.style.setProperty('--scale', STEPS[stepIdx]);
+    document.getElementById('fsDown').disabled = stepIdx <= 0;
+    document.getElementById('fsUp').disabled = stepIdx >= STEPS.length - 1;
+  }
+  var savedStep = parseInt(ls('get', 'pubdevo_scale'), 10);
+  if(!isNaN(savedStep) && savedStep >= 0 && savedStep < STEPS.length) stepIdx = savedStep;
+  applyScale();
+  document.getElementById('fsDown').onclick = function(){ stepIdx = Math.max(0, stepIdx - 1); ls('set', 'pubdevo_scale', String(stepIdx)); applyScale(); };
+  document.getElementById('fsUp').onclick = function(){ stepIdx = Math.min(STEPS.length - 1, stepIdx + 1); ls('set', 'pubdevo_scale', String(stepIdx)); applyScale(); };
+
+  // ---- navigation ----
+  function paintNav(){
+    var i = dates.indexOf(current);
+    document.getElementById('prevBtn').disabled = !(i >= 0 && i < dates.length - 1);
+    document.getElementById('nextBtn').disabled = !(i > 0);
+    document.getElementById('todayBtn').disabled = !dates.length || current === dates[0];
+    document.getElementById('dateLbl').textContent = current ? fmtDate(current) : '';
+  }
+  document.getElementById('prevBtn').onclick = function(){ var i = dates.indexOf(current); if(i >= 0 && i < dates.length - 1) show(dates[i + 1]); };
+  document.getElementById('nextBtn').onclick = function(){ var i = dates.indexOf(current); if(i > 0) show(dates[i - 1]); };
+  document.getElementById('todayBtn').onclick = function(){ if(dates.length) show(dates[0]); };
+
+  function section(label, inner){ return '<div class="sec"><div class="lbl">' + label + '</div>' + inner + '</div>'; }
+
+  function render(e, note){
+    var h = '';
+    if(note) h += '<div class="note">' + note + '</div>';
+    h += '<article class="card">';
+    if(e.title) h += '<h1 class="h1">' + esc(e.title) + '</h1>';
+    if(e.source_note) h += '<div class="src">(' + esc(e.source_note) + ')</div>';
+    if(e.story) h += section('&#x1F331; Illustrative Story', '<div class="prose">' + esc(e.story) + '</div>');
+    if(e.scripture_ref || e.scripture_text){
+      var ref = String(e.scripture_ref || '').trim(); if(ref.length > 80) ref = ref.slice(0, 80).trim() + '…';
+      h += section('&#x1F4DC; Passage', '<div class="passage">' + (ref ? '<div class="ref">' + esc(ref.toUpperCase()) + '</div>' : '')
+        + (e.scripture_text ? '<div class="txt">' + esc(e.scripture_text) + '</div>' : '') + '</div>');
+    }
+    if(e.explanation) h += section('&#x270D;&#xFE0F; Explanation', '<div class="prose">' + esc(e.explanation) + '</div>');
+    if(e.response) h += section('&#x1F463; Response', '<div class="prose">' + esc(e.response) + '</div>');
+    var qs = Array.isArray(e.reflection_questions) ? e.reflection_questions.filter(function(q){ return q && String(q).trim(); }) : [];
+    if(qs.length) h += section('&#x1F4AD; Reflect', '<ol class="qs">' + qs.map(function(q, i){ return '<li data-n="' + (i + 1) + '">' + esc(q) + '</li>'; }).join('') + '</ol>');
+    if(e.prayer) h += section('&#x1F64F; Prayer', '<div class="prayer">' + esc(e.prayer) + '</div>');
+    if(e.weekly_summary) h += section('&#x1F4DD; Weekly Summary', '<div class="prose">' + esc(e.weekly_summary) + '</div>');
+    h += '<div class="refl"><div class="lbl">My Reflection</div>'
+      + '<textarea id="refl" placeholder="What is God teaching you today?"></textarea>'
+      + '<div class="hint">Saved only on this phone &mdash; no one else can see it.</div></div>';
+    h += '<div class="actions"><button class="btn primary" id="shareBtn" type="button">Share today&rsquo;s devotional</button></div>';
+    h += '</article>';
+    h += '<div class="credit">Devotional by <strong>' + esc(e.author || 'Pastor Gerry') + '</strong><br>Rosehill Christian Church</div>';
+    document.getElementById('main').innerHTML = h;
+
+    var key = 'pubdevo_refl_' + app.reflKey + '_' + e.entry_date;
+    var ta = document.getElementById('refl');
+    ta.value = ls('get', key) || '';
+    var timer = null;
+    ta.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(function(){ ls('set', key, ta.value); }, 600); });
+    ta.addEventListener('blur', function(){ ls('set', key, ta.value); });
+
+    document.getElementById('shareBtn').onclick = function(){
+      var url = location.origin + location.pathname + (appKey ? '?app=' + encodeURIComponent(appKey) : '');
+      var text = (e.title ? e.title + ' — ' : '') + (e.scripture_ref ? String(e.scripture_ref).slice(0, 80) : 'Daily Devotional');
+      if(navigator.share){ navigator.share({ title:'Daily Devotional', text:text, url:url }).catch(function(){}); }
+      else if(navigator.clipboard){ navigator.clipboard.writeText(text + '\n' + url).then(function(){ toast('Link copied'); }, function(){ toast(url); }); }
+      else toast(url);
+    };
+  }
+
+  function show(date, note){
+    current = date; paintNav();
+    document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4D6;</div>Loading&hellip;</div>';
+    rpc('public_devotional', { p_date: date }).then(function(rows){
+      var e = rows && rows[0];
+      if(!e){ document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4ED;</div>No devotional for this day.</div>'; return; }
+      render(e, note);
+      window.scrollTo(0, 0);
+    }).catch(function(){
+      document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4F6;</div>Could not load the devotional. Please check your connection and try again.</div>';
+    });
+  }
+
+  rpc('public_devotional_dates', { p_days: 60 }).then(function(rows){
+    dates = (rows || []).map(function(r){ return String(r.entry_date).slice(0, 10); });
+    if(!dates.length){
+      paintNav();
+      document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4ED;</div>No devotionals have been published yet.</div>';
+      return;
+    }
+    var today = manilaToday();
+    var want = params.get('date');
+    if(want && dates.indexOf(want) >= 0) return show(want);
+    if(dates[0] === today) return show(today);
+    show(dates[0], 'There is no devotional for today (Sundays are rest days). Here is the most recent one.');
+  }).catch(function(){
+    document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4F6;</div>Could not load the devotional. Please check your connection and try again.</div>';
+  });
+})();
+</script>
+</body>
+</html>
