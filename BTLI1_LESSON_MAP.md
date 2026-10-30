@@ -50,7 +50,7 @@ Galatians 5:22-23 lists **9 fruits**: Love, Joy, Peace, Patience, Kindness, Good
 | **Kindness** | L15 | Identifying Needs (L15 — kabaitang nakakakita at kumikilos). *L6 was the original skeleton slot but locked as Brotherly Love (USAD virtues palette, Inv #75) — L15 is now Kindness's UNLAD home* |
 | **Goodness** | L4, L16 | Personal Holiness (L4) + Modelling Christlikeness (L16) — moral integrity made visible |
 | **Faithfulness** | L1, L2, L7 | Prayer (L1 — faithful talking *to* God) + Bible Meditation (L2 — faithful listening *to* God) + Church Worship (L7 — faithful gathering). **L1+L2 share Faithfulness as the Month-1 unified anchor: "showing up daily for the two-way conversation."** |
-| **Gentleness** | L17 | Right Relationships (L17 — gentle correction). *Originally also L14; L14 locked Sep 22 with Mac Lake's **Openness** anchor per LY-4 pairing — Gentleness now carried by L17 alone* |
+| **Gentleness** | L17 | Right Relationships (L17 — LOCKED Oct 30: kahinahunan, "walang bahid ng kagaspangan" + Prov 27:17 sharpening). *Originally also L14; L14 locked Sep 22 with Mac Lake's **Openness** anchor per LY-4 pairing — Gentleness now carried by L17 alone* |
 | **Self-Control** | L8, L10 | Stewardship (L8 — controlled spending) + Ministry (L10 — controlled commitment). *L3 reassigned from Self-Control → Joy on May 15, 2026.* |
 | *Tribute to Mac Lake's anchors* | L12, L15, L20 | Unique Design (L12 = Mac Lake "Self-Control" → reassigned **Goodness/Faithfulness**); Identifying Needs (L15 = Mac Lake "Selflessness" → reassigned **Kindness**); Telling the Good News (L20 = **Love**) |
 
@@ -410,14 +410,15 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - **Pairing Confidence:** **Strong**
 - **Status:** ✅ **BUILT Oct 19, 2026** — deck (30 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
-### **L17 — Pursuing Right Relationships**
-- **Source:** UNLAD-L7
-- **Memory Verse:** **Proverbs 27:17** *(confirmed from UNLAD leader's guide)*
-- **🌿 Character (proposed):** **Gentleness** — right relationships require gentle correction and gentle vulnerability
-- **⚡ Competence:** *To be chosen at build* — LY-6 (Developing Influence) moved to L16 on Oct 19, 2026. Candidates: LY-2 Emotional Intelligence (adjacent, unused) or a Claude-authored gentle-correction skill.
-- **LY Pair:** ✗ None now (LY-6 moved to L16); LY-2 is the open candidate
-- **Pairing Confidence:** Original (pending)
-- **Status:** ☐ Not started
+### **L17 — Pursuing Right Relationships · "Ugnayan ng Servant-Leader"**
+- **Source:** UNLAD-L7 (Ano-anong Mahahalagang Relationships ang Dapat Nating Pahalagahan Bilang Servant-Leaders?) — arc L13 puso · L14 gilas · L15 mata · L16 salamin · L17 ugnayan
+- **Memory Verse:** **Proverbs 27:17** *(Ang Biblia, as printed in UNLAD)* — "Ang bakal ay nagpapatalas sa bakal; at ang tao ang nagpapatalas sa isa pang tao."
+- **🌿 Character (LOCKED):** **Gentleness · Kahinahunan** (*prautes*, Gal 5:23) — lakas na marunong humawak nang maingat; UNLAD's own hook: Paul treated his co-workers "walang bahid ng kagaspangan"; rooted in Matt 23:12 (spiritual gravity).
+- **⚡ Competence (UNLAD-native):** **Anim na Direksyon ng Ugnayan** — ⬆ Upward (sa Dios, John 15) · ⬇ Inward (sa sarili, Rom 12:3) · ↔ Sideward (sa co-workers, 1 Thess 3:2; 1 Cor 1:10) · ↖ Onward (sa mentor, Barnabas; Rehoboam as warning) · ➡ Forward (sa disciple, 2 Tim 2:2) · 🌍 Outward (sa non-believers, 2 Cor 5:11). Artifacts: 10-blank guided notes, UNLAD's Personal Relationship Evaluation (6 relationships × 5 emoticons, replaces A–E), Ang Anim na Pangalan challenge, 3 assignments (mentor · co-worker · potential disciple), 7-Day Reading.
+- **LY Pair:** ✗ None — *Pastor, Oct 30, 2026: "No more LY reference, only from Unlad." LY-2 not used.*
+- **Pairing Confidence:** **Original (UNLAD-only)**
+- **Format:** L14 format (two TUKLAS sections · TUGON challenge + self-assessment · 3 assignments + 7-day reading), with the L15+ complete-facilitator / guided-notes split
+- **Status:** ✅ **BUILT Oct 30, 2026** — deck (30 slides) + participant/facilitator/intern guides + seed SQL (lesson + 10-question quiz) in `lessons/btli101_xrw5fg/`
 
 ### **L18 — Adorning God in Worship**
 - **Source:** UNLAD-L8
@@ -462,7 +463,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 **Only 4 strong/acceptable native pairings.** That means **16 of 20 lessons (80%) will have Claude-authored character+competence material**. This is a real editorial commitment per lesson — Pastor should review the authored material more carefully than the paired material.
 
 **LY Modules NOT used:**
-- **Module 2 (Self-Control · Emotional Intelligence)** — adjacent themes to L3 (Surrender) and L17 (Right Relationships) but not forced into pairing
+- **Module 2 (Self-Control · Emotional Intelligence)** — adjacent themes to L3 (Surrender) and L17 (Right Relationships) but not forced into pairing. *L17 built UNLAD-only on Oct 30, 2026 (Pastor: no LY reference).*
 - **Module 4 (Openness · Teachability)** — adjacent to L20 (Evangelism — requires teachability about what you don't yet know about the EOLO person) but not forced
 
 **Pastor's decision:** Should we **force** these adjacent pairings for higher LY coverage, or leave them as parallel references? My recommendation: **leave as parallel references**. Forced pairings dilute both sources. The Claude-authored material can borrow concepts from LY-2 and LY-4 without claiming them as canonical pairings.
@@ -481,6 +482,7 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - ✅ **L14 fully built & shipped** (Gilas ng Servant-Leader): LY-4 pairing locked (Teachability · Openness), superseding the map's earlier Gentleness proposal and Claude-authored Situational SL placeholder; Walong Kasanayan ni Nehemiah as spine; hagdan + A–E + 7-day reading tracker artifacts; deliverables + DB seed live (quiz verified q_count=10, linked)
 - ✅ **L15 fully built & shipped** (Mata ng Servant-Leader, Oct 9, 2026): Kindness · Identifying Needs (Claude-authored); LY-5 kept at L19; first lesson with complete-facilitator / guided-notes-participant split; deliverables + DB seed live (quiz verified q_count=10, linked)
 - ✅ **L16 fully built** (Salamin ng Servant-Leader, Oct 19, 2026): Goodness (+ Honor) · Developing Influence; LY-6 moved here from L17; Eph 4:22-32 hubarin/isuot spine with four LY-6 skills; deliverables + seed SQL
+- ✅ **L17 fully built** (Ugnayan ng Servant-Leader, Oct 30, 2026): Gentleness · Anim na Direksyon ng Ugnayan (UNLAD-native, no LY); L14 format; Personal Relationship Evaluation (emoticons) + Anim na Pangalan + 7-Day Reading; deliverables + seed SQL
 - ✅ **Rename of L1→L11 deliverables: PARKED** by Pastor's call (no re-pitch — surface only when Pastor brings it up)
 
 **Remaining work (per-lesson, as scans arrive):**
