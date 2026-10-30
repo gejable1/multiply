@@ -336,16 +336,15 @@ The printed template on p.20 has 4 boxes (S/O/A/P) but the TUGON narrative names
 - **USAD elements available:** Child abandonment story (sobering ethical opener) · One Verse Evangelism (Appendix A from USAD)
 - **Status:** ✅ **SHIPPED + DEPLOYED** — confirmed by Pastor (Session 24). ⚠️ Character/competence/MV above are the pre-build skeleton (Inv #75, not binding); backfill locked metadata from the build-session record.
 
-### **L10 — Ministry: Paglilingkod sa Diyos at Kapwa**
-- **Source:** USAD-L10
-- **Memory Verse:** Matthew 28:19
-- **🌿 Character (proposed):** **Self-Control** — sustained ministry requires self-control over time, energy, comfort
-- **⚡ Competence (Claude-authored):** *Spiritual Gifts → Ministry Match* — using the gifts survey to identify the right ministry fit (ties beautifully into the MULTIPLY platform's Ministry Recommender)
+### **L10 — Ministry: Paglilingkod sa Dios at Kapwa**
+- **Source:** USAD-L10 (Ano ang Tunay na Kahulugan ng Paglilingkod?) — the USAD finale; hands off to UNLAD (L11)
+- **Memory Verse:** **Mark 10:45** *(from the USAD scan)* — "Sapagkat ang Anak ng Tao ay naparito hindi upang paglingkuran kundi upang maglingkod at upang mag-alay ng kanyang buhay bilang pantubos sa marami."
+- **🌿 Character (LOCKED):** **Goodness · Kabutihan** — service is goodness made useful to others (1 Pet 4:10; Ps 116:12; "Tapat at mabuting lingkod," Matt 25:21). *Revised from the skeleton's Self-Control at the original build (Inv #75 — USAD virtues palette).*
+- **⚡ Competence (USAD-native):** **The Bondservant Path** — Suriin (slave · hireling · servant · bondservant) · Tuklasin (Spiritual Gift Survey, 1 Cor 12:11) · Itugma (LCG leader/pastor + prayer) · Ipangako (SGA, Appendix B + Ministry Covenant, Appendix C). Self-assessment: Bondservant Self-Check (A–E, 5 statements from the lesson: kagalakan · pag-ibig · para sa iba · maningas · walang "quit").
 - **LY Pair:** ✗ None
-- **Pairing Confidence:** Original
-- **USAD elements available:** Polycarp martyrdom story · Spiritual Gift Survey · Spiritual Growth Assessment · Ministry Covenant (Appendices B + C)
-- **Cross-reference:** This lesson should naturally hand off the participant to BTLI 2 (Leading Others) or to a continuing apprenticeship in their gift-aligned ministry. Worth noting in DALHIN.
-- **Status:** ✅ **SHIPPED + DEPLOYED** — confirmed by Pastor (Session 24). ⚠️ Character/competence/MV above are the pre-build skeleton (Inv #75, not binding); backfill locked metadata from the build-session record.
+- **Pairing Confidence:** **Original (USAD-only)**
+- **Stories:** Polycarp (TANAW) · Ang Alila ng mga Alipin — John 13 footwashing (TUKLAS) · Jim Elliot and the five missionaries (TUGON)
+- **Status:** ✅ **REBUILT Oct 30, 2026 on L14 specs** — 30-slide deck + guided-notes participant guide (10 blanks, Bondservant Path, Self-Check, 7-Day Reading) + complete facilitator guide + intern guide in `lessons/btli101_xrw5fg/`. Lesson row and quiz in the DB kept from the original build. The old `btli1_l10_slides.html` stays in place (as with the L9 rebuild).
 
 ---
 
