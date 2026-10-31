@@ -166,6 +166,16 @@ textarea.light:focus{border-color:rgba(255,255,255,.5);}
 .walk-d{flex:0 0 3.6rem;font-size:12px;font-weight:700;color:#7a5518;}
 .day-count{font-size:12px;color:#6b5f4f;margin:.2rem 0 .6rem;}
 .walk-in{flex:1;min-width:0;font:inherit;font-size:13.5px;border:1px solid #e2d8cc;border-radius:6px;padding:.4rem .5rem;background:#fefcf8;}
+.mk-verse{font-style:italic;font-size:14.5px;line-height:2.1;background:#fefcf8;border:1px solid #e2d8cc;border-radius:10px;padding:.7rem .9rem;margin:.4rem 0 .6rem;}
+.mk-ref{display:block;font-style:normal;font-size:11.5px;color:#2a5c40;font-weight:600;}
+.mk{font:inherit;font-style:italic;background:transparent;border:2px solid transparent;border-bottom:2px dotted #b8882a;border-radius:6px;padding:0 .3em;cursor:pointer;color:inherit;}
+.mk-circle.on{border:2px solid #2a5c40;border-radius:999px;background:#eaf4ee;color:#1d4a33;font-weight:700;}
+.mk-x.on{text-decoration:line-through;text-decoration-color:#b03a2e;text-decoration-thickness:2px;color:#8a2020;border-bottom-color:transparent;}
+.mk-x.on::after{content:" ✗";color:#b03a2e;font-style:normal;font-weight:700;}
+.mk-check.on{color:#1d4a33;font-weight:700;border-bottom-color:transparent;background:#eaf4ee;}
+.mk-check.on::after{content:" ✓";color:#2a5c40;font-style:normal;font-weight:700;}
+.mk-line.on{border-bottom:3px solid #b8882a;border-radius:0;background:#fdf6e8;font-weight:700;}
+.mk-hint{font-size:11.5px;color:#6b5f4f;margin:-.2rem 0 .7rem;}
 .lk{display:flex;flex-direction:column;gap:.7rem;margin:.6rem 0 1rem;}
 .lk-row{border:2px solid #2a5c40;border-radius:12px;padding:.6rem .7rem;background:#fff;display:flex;flex-direction:column;gap:.35rem;}
 .lk-h{font-weight:700;color:#2a5c40;font-size:13.5px;}
@@ -277,8 +287,9 @@ textarea.light:focus{border-color:rgba(255,255,255,.5);}
 <div class="field"><div class="q-label">Sino ang maituturing mong personal mentor? Paano ka niya natulungan sa iyong personal growth?</div><textarea id="tuklas4" placeholder="Isulat dito..." rows="2"></textarea></div>
 <div class="ae-stage">➡ FORWARD · Relasyon sa Dinidisipulo</div>
 <div class="ae-intro">Walang success kung walang <input class="blank" id="b10" style="width:8em" autocomplete="off" aria-label="Patlang 10">. Sabi ni Andy Stanley: <em>"...maaaring ang pinakamalaki mong ambag sa mundo ay hindi kung ano ang iyong ginawa kundi kung sino ang iyong inihanda."</em></div>
-<div class="vline"><div class="vl-t">"Ang mga narinig mo sa akin sa harap ng maraming saksi ay ipagkatiwala mo rin sa mga taong may katapatan at may kakayahang magturo naman sa iba."</div><div class="vl-r">2 Timothy 2:2</div></div>
-<div class="ae-intro">Bilugan ang dalawang qualities na hinahanap ni Paul: <strong>may katapatan</strong> at <strong>may kakayahang magturo</strong>. Life-long process ang pagdidisipulo.</div>
+<div class="ae-intro">✍️ <strong>I-tap para bilugan</strong> ang dalawang qualities na hinahanap ni Paul:</div>
+<div class="mk-verse">"Ang mga narinig mo sa akin sa harap ng maraming saksi ay ipagkatiwala mo rin sa mga taong <button type="button" class="mk mk-circle" data-k="t_tapat" aria-pressed="false">may katapatan</button> at <button type="button" class="mk mk-circle" data-k="t_turo" aria-pressed="false">may kakayahang magturo naman sa iba</button>."<span class="mk-ref">2 Timothy 2:2</span></div>
+<div class="ae-intro">Life-long process ang pagdidisipulo.</div>
 <div class="field"><div class="q-label">Mayroon ka na bang disciples o potential disciples? Paano mo sila mine-mentor?</div><textarea id="tuklas5" placeholder="Isulat dito..." rows="2"></textarea></div>
 <div class="ae-stage">🌍 OUTWARD · Relasyon sa mga Di Mananampalataya</div>
 <div class="ae-intro">Inihiwalay tayo para sa Dios — hindi para mawalan ng silbi sa mundo. Tandaan ang Great Commission (Matthew 28:19) at ang Great Commandment (Matthew 22:37-39). <em>"...sinisikap naming hikayatin ang mga tao na manumbalik sa (Dios)..."</em> (2 Corinthians 5:11). Lalaliman natin ito sa Lesson 20.</div>
@@ -421,6 +432,7 @@ function updateProgress() {
 // ── SAVE / LOAD ───────────────────────────────
 function save() {
   const data = { savedAt: new Date().toISOString() };
+  data.marks = _marks;
   ALL_IDS.forEach(id => { const el = document.getElementById(id); if (el) data[id] = el.value; });
   writeJSON(DATA_KEY, data);
   const msg = document.getElementById('savedMsg');
@@ -430,9 +442,10 @@ function save() {
 }
 function loadSaved() {
   const data = readJSON(DATA_KEY);
+  _marks = (data.marks && typeof data.marks === 'object') ? data.marks : {};
   Object.keys(data).forEach(k => {
     const el = document.getElementById(k);
-    if (el && k !== 'savedAt') el.value = data[k];
+    if (el && k !== 'savedAt' && k !== 'marks') el.value = data[k];
   });
 }
 // ── AUTO-WIRE (autosave on change — nothing lost if they forget the button) ──
@@ -443,8 +456,21 @@ ALL_IDS.forEach(id => {
   el.addEventListener('input', () => { updateProgress(); clearTimeout(_t); _t = setTimeout(save, 1200); });
   el.addEventListener('change', updateProgress);
 });
+// ── TAP-TO-MARK (bilugan · ekis · check · guhitan) — saved with the answers ──
+let _marks = {};
+function paintMarks(){
+  document.querySelectorAll('.mk').forEach(b=>{
+    const on = !!_marks[b.dataset.k];
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+document.querySelectorAll('.mk').forEach(b=>{
+  b.addEventListener('click', ()=>{ _marks[b.dataset.k] = !_marks[b.dataset.k]; paintMarks(); clearTimeout(_t); _t = setTimeout(save, 600); });
+});
 // ── INIT ──────────────────────────────────────
 loadSaved();
+paintMarks();
 initAePills();
 updateProgress();
 // ── FONT SIZE SLIDER ──────────────────────────
