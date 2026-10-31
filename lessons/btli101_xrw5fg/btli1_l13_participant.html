@@ -142,6 +142,14 @@ textarea.light:focus{border-color:rgba(255,255,255,.5);}
 .ft-btn:hover:not(:disabled){background:var(--gold-bg);color:var(--gold);}
 .ft-btn:disabled{opacity:.35;cursor:not-allowed;}
 .ft-label{font-size:10.5px;font-weight:700;color:var(--ink);padding:0 5px;min-width:34px;text-align:center;}
+
+/* TAP-TO-MARK (Oct 31) — bilugan · ekis · check · guhitan, doable on a phone; saved on this device */
+.mk{display:inline;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-box-decoration-break:clone;box-decoration-break:clone;font:inherit;font-style:inherit;background:transparent;border:2px solid transparent;border-bottom:2px dotted #b8882a;border-radius:6px;padding:0 .3em;cursor:pointer;color:inherit;text-align:inherit;line-height:inherit;}
+.mk-circle.on{border:2px solid #2a5c40;border-radius:999px;background:#eaf4ee;color:#1d4a33;font-weight:700;}
+.mk-line.on{border-bottom:3px solid #b8882a;border-radius:0;background:#fdf6e8;font-weight:700;}
+.mk-hint{font-size:12px;color:#6b5f4f;margin:.2rem 0 .5rem;font-style:italic;}
+.verse-card .mk{border-bottom-color:rgba(255,255,255,.55);}
+.verse-card .mk-line.on{background:rgba(255,255,255,.16);border-bottom-color:#fcd968;color:#fff;}
 </style>
 </head>
 <body>
@@ -218,9 +226,9 @@ textarea.light:focus{border-color:rgba(255,255,255,.5);}
     <div class="section-body">
       <div class="ae-stage">💡 BIG IDEA</div>
       <div class="ae-intro"><strong>"Tayong mga mananampalataya'y mga lingkod na namumuno at hindi mga pinunong nagpapaka-lingkod."</strong> Iba ang konsepto ng mundo: hinahangaan ang nasa taas, hinahamak ang nasa baba.</div>
-      <div class="ae-intro">Minsang humiling sina James at John na maupo sa kanan at kaliwa ni Jesus (Mark 10:37) — gustong maging top 1 at 2 sa Disciples' Roster. Nang malaman ng Sampu, <em>nagliyab sila</em> (v.41). Basahin ang sagot ni Jesus at <strong>guhitan o bilugan ang mga salitang tumatak sa iyo:</strong></div>
+      <div class="ae-intro">Minsang humiling sina James at John na maupo sa kanan at kaliwa ni Jesus (Mark 10:37) — gustong maging top 1 at 2 sa Disciples' Roster. Nang malaman ng Sampu, <em>nagliyab sila</em> (v.41). Basahin ang sagot ni Jesus at <strong>guhitan ang mga salitang tumatak sa iyo</strong> — i-tap ang bahagi ng talata (i-tap ulit para alisin):</div>
       <div class="verse-card" style="margin:.75rem 0">
-        <div class="vc-verse" style="font-size:1rem">"Alam ninyo na ang mga itinuturing na pinuno ng mga Hentil ay namumuno bilang mga panginoon sa kanila, at ang mga dinadakila ang siyang nangangasiwa sa kanila. Ngunit hindi ganyan ang dapat umiral sa inyo. Ang sinuman sa inyo na nais maging dakila ay dapat maging lingkod ninyo, at ang sinumang nais maging pinuno ay dapat maging alipin ng lahat."</div>
+        <div class="vc-verse" style="font-size:1rem">"<span role="button" tabindex="0" class="mk mk-line" data-k="ma" aria-pressed="false">Alam ninyo na ang mga itinuturing na pinuno ng mga Hentil ay namumuno bilang mga panginoon sa kanila,</span> <span role="button" tabindex="0" class="mk mk-line" data-k="mb" aria-pressed="false">at ang mga dinadakila ang siyang nangangasiwa sa kanila.</span> <span role="button" tabindex="0" class="mk mk-line" data-k="mc" aria-pressed="false">Ngunit hindi ganyan ang dapat umiral sa inyo.</span> <span role="button" tabindex="0" class="mk mk-line" data-k="md" aria-pressed="false">Ang sinuman sa inyo na nais maging dakila ay dapat maging lingkod ninyo,</span> <span role="button" tabindex="0" class="mk mk-line" data-k="me" aria-pressed="false">at ang sinumang nais maging pinuno ay dapat maging alipin ng lahat.</span>"</div>
         <div class="vc-ref">Mark 10:42-44 — "Dapat maging lingkod kayo" ay hindi advice. UTOS.</div>
       </div>
       <div class="field">
@@ -570,5 +578,15 @@ function changeFontScale(direction) {
 })();
 </script>
 
+<script>
+// TAP-TO-MARK (Oct 31): own key, independent of the answer save — nothing else changes.
+(function(){
+  var K='btli1_l13_marks', m={};
+  try{ m=JSON.parse(localStorage.getItem(K)||'{}')||{}; }catch(e){ m={}; }
+  function paint(){ document.querySelectorAll('.mk').forEach(function(b){ var on=!!m[b.dataset.k]; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on?'true':'false'); }); }
+  document.querySelectorAll('.mk').forEach(function(b){ function tog(){ m[b.dataset.k]=!m[b.dataset.k]; try{ localStorage.setItem(K,JSON.stringify(m)); }catch(e){} paint(); } b.addEventListener('click',tog); b.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); tog(); } }); });
+  paint();
+})();
+</script>
 </body>
 </html>
