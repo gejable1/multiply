@@ -960,37 +960,28 @@ async function autofillNext12(){
 
   // ─── PASS 2: Compute pointers from DB history ───
   const recMemberIds = new Set(recurring.map(p => p.member_id));
-  const rotationMemberIds = new Set(rotation.map(p => p.member_id));
 
   const { data: histAll } = await db.from('wednesday_preaching')
-    .select('preach_date,service_type,preacher_member_id')
+    .select('preach_date,service_type,preacher_member_id,original_preacher_member_id')
     .lt('preach_date', winStart)
     .order('preach_date', { ascending: true });
   const history = histAll || [];
 
+  // Fallback only (Spec 001 C.4): the old count-based cycle position, used
+  // when there is no mainstay Wednesday in history to anchor on.
   let histWedSlotsInCycle = 0;
-  let histRotationWedCount = 0;
   for (const a of history) {
     if (a.service_type !== 'wednesday') continue;
     if (recMemberIds.has(a.preacher_member_id)) continue;
     histWedSlotsInCycle++;
-    if (rotationMemberIds.has(a.preacher_member_id)) {
-      histRotationWedCount++;
-    }
   }
 
-  let histLastSunRotationCount = 0;
-  for (const a of history) {
-    if (a.service_type !== 'sunday') continue;
-    if (!rotationMemberIds.has(a.preacher_member_id)) continue;
-    const d = new Date(a.preach_date + 'T00:00:00');
-    if (!isLastSundayOfMonth(d)) continue;
-    histLastSunRotationCount++;
-  }
-
-  let wedCyclePos      = histWedSlotsInCycle % 3;
-  let wedRotationIdx   = rotation.length > 0 ? (histRotationWedCount % rotation.length) : 0;
-  let sunRotationIdx   = rotation.length > 0 ? (histLastSunRotationCount % rotation.length) : 0;
+  // Spec 001: anchor-based pointers — continue after the LAST scheduled
+  // rotation preacher instead of counting history (the count drifted when
+  // the roster changed, slots were swapped, or preachers left).
+  const rotationIdx = new Map(rotation.map((p, i) => [p.member_id, i]));
+  let { wedRotationIdx, sunRotationIdx, wedCyclePos } = _autofillAnchorPointers(
+    history, rotation, mainstay.member_id, recMemberIds, histWedSlotsInCycle % 3);
 
   // ─── PASS 3: Walk chronologically, fill slots, advance pointers ───
   for (const sd of serviceDays) {
@@ -1004,8 +995,11 @@ async function autofillNext12(){
           ? recMemberIds.has(existing.preacher_member_id)
           : recurringClaimed;
         if (!isRecurringSlot) {
-          if (existing && rotationMemberIds.has(existing.preacher_member_id)) {
-            wedRotationIdx = (wedRotationIdx + 1) % Math.max(rotation.length, 1);
+          // Spec 001 D: an existing rotation slot re-anchors the pointer to
+          // just after that (scheduled) preacher.
+          const exSched = existing ? (existing.original_preacher_member_id ?? existing.preacher_member_id) : null;
+          if (existing && rotationIdx.has(exSched)) {
+            wedRotationIdx = (rotationIdx.get(exSched) + 1) % rotation.length;
           }
           wedCyclePos = (wedCyclePos + 1) % 3;
         }
@@ -1053,8 +1047,9 @@ async function autofillNext12(){
       const k = assignmentKey(sd.dateStr, 'sunday');
       const existing = assignedKeys.get(k);
       if (existing) {
-        if (sd.isLastSunday && rotationMemberIds.has(existing.preacher_member_id)) {
-          sunRotationIdx = (sunRotationIdx + 1) % Math.max(rotation.length, 1);
+        const exSched = existing.original_preacher_member_id ?? existing.preacher_member_id;
+        if (sd.isLastSunday && rotationIdx.has(exSched)) {
+          sunRotationIdx = (rotationIdx.get(exSched) + 1) % rotation.length;   // Spec 001 D
         }
         continue;
       }
@@ -1144,6 +1139,48 @@ function _recurrenceCycleLength(pattern){
     case 'every_4th': return 4;
     default: return null;
   }
+}
+
+// Spec 001 — anchor-based auto-fill pointers, from history before the window
+// (ascending by preach_date). Uses the SCHEDULED person
+// (original_preacher_member_id ?? preacher_member_id) so swaps don't shift the
+// rotation, and the preach_date weekday, not service_type (Inv #146).
+//   A. wedRotationIdx: newest Wednesday by someone still in `rotation`
+//      (mainstay / recurring skipped) -> their index + 1; none -> 0.
+//   B. sunRotationIdx: same, last-Sunday-of-month rows only; none -> 0.
+//   C. wedCyclePos: non-mainstay Wednesdays since the newest mainstay
+//      Wednesday, capped at 2; no mainstay Wednesday (or no rotation at all,
+//      so behaviour stays as before) -> fallbackCyclePos.
+function _autofillAnchorPointers(history, rotation, mainstayId, recMemberIds, fallbackCyclePos){
+  const sched = a => a.original_preacher_member_id ?? a.preacher_member_id;
+  const dateOf = a => new Date(a.preach_date + 'T00:00:00');
+  const idx = new Map(rotation.map((p, i) => [p.member_id, i]));
+  const newestFirst = history.slice().reverse();
+  let wedRotationIdx = 0, sunRotationIdx = 0;
+  if (rotation.length > 0) {
+    for (const a of newestFirst) {
+      if (dateOf(a).getDay() !== 3) continue;
+      const id = sched(a);
+      if (id === mainstayId || recMemberIds.has(id)) continue;
+      if (idx.has(id)) { wedRotationIdx = (idx.get(id) + 1) % rotation.length; break; }
+    }
+    for (const a of newestFirst) {
+      if (!isLastSundayOfMonth(dateOf(a))) continue;
+      const id = sched(a);
+      if (id === mainstayId) continue;
+      if (idx.has(id)) { sunRotationIdx = (idx.get(id) + 1) % rotation.length; break; }
+    }
+  }
+  let sinceMainstay = 0, sawMainstay = false;
+  for (const a of newestFirst) {
+    if (dateOf(a).getDay() !== 3) continue;
+    const id = sched(a);
+    if (recMemberIds.has(id)) continue;
+    if (id === mainstayId) { sawMainstay = true; break; }
+    sinceMainstay++;
+  }
+  const wedCyclePos = (sawMainstay && rotation.length > 0) ? Math.min(sinceMainstay, 2) : fallbackCyclePos;
+  return { wedRotationIdx, sunRotationIdx, wedCyclePos };
 }
 
 // Used by autofill — load a specific range without changing the calendar's view
