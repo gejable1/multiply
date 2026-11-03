@@ -1700,6 +1700,10 @@ body.lang-tl .tl-text{display:inline;}
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .toast.error{background:var(--red);}
+/* Spec 002: while the devotional reader is open, show toasts over its fixed
+   top bar so a streak toast (now also fired by auto-save while typing) never
+   covers the reflection box. Browsers without :has() keep the bottom toast. */
+body:has(#devoReader.show) .toast{bottom:auto;top:max(14px, env(safe-area-inset-top));}
 
 /* ═══════════════ LOADING ═══════════════ */
 .loading-screen{
@@ -4138,7 +4142,16 @@ function computeNextSteps(){
 
 // Internal: mark today as read (silent — fired by reader-close, not a button anymore).
 // Idempotent: if already marked today, no-op. Updates streak in-place.
-async function markDevoReadSilent(){
+// Spec 002: calls run one at a time. A Save/✕ that lands while an auto-save
+// credit is in flight waits for it, then the maybeSingle() check below sees
+// that row instead of inserting a second one (returns false: no second toast).
+let _devoMarkChain = Promise.resolve();
+function markDevoReadSilent(){
+  const run = _devoMarkChain.then(_markDevoReadSilentOnce, _markDevoReadSilentOnce);
+  _devoMarkChain = run.catch(() => {});
+  return run;
+}
+async function _markDevoReadSilentOnce(){
   // Use local-date (not UTC) — see comment on todayIso() above. Otherwise
   // early-morning reads (before 8 AM Manila) get logged with yesterday's
   // date and the streak tracker counts the wrong day.
@@ -9290,7 +9303,7 @@ function renderReaderBody(){
       // S51 silent autosave net: persist ~1.5s after typing stops so words
       // survive ANY exit (phone Home, refresh, app-kill), not just the back arrow.
       clearTimeout(_devoAutosaveTimer);
-      _devoAutosaveTimer = setTimeout(() => { _persistDevoReflection({silent:true}); }, 1500);
+      _devoAutosaveTimer = setTimeout(_devoAutosaveAndCredit, 1500);
     });
   }
 }
@@ -9495,6 +9508,25 @@ async function _persistDevoReflection(opts){
     }
     return { saved:false, error:e };
   }
+}
+
+// Spec 002: the silent auto-save also credits TODAY's streak day (>=10 words,
+// same rule as Save/✕), so a member who types and then leaves (Home button,
+// phone locks, app switch, tab closed) keeps the day as well as the words.
+// Catch-up (past) entries never credit. Toast only when the streak advanced.
+async function _devoAutosaveAndCredit(){
+  const entry = currentReaderEntry;
+  if(!entry) return;
+  const res = await _persistDevoReflection({silent:true});
+  if(!res || res.error) return;
+  if(currentReaderEntry !== entry) return; // reader closed / switched meanwhile
+  if(entry.entry_date !== todayIso() || _wordCount(currentReflection) < 10) return;
+  const advanced = await markDevoReadSilent();
+  if(!advanced) return;
+  const tl = document.body.classList.contains('lang-tl');
+  showToast(devoStreak === 1
+    ? (tl?'🔥 Naumpisahan ang streak!':'🔥 Started a new streak!')
+    : (tl?('🔥 Araw '+devoStreak+' — tuloy lang!'):('🔥 Day '+devoStreak+' — keep going!')));
 }
 
 // Manual Save button — persists immediately, keeps the reader open, shows a
