@@ -25,7 +25,7 @@
 //       .then(() => self.registration.unregister())); });
 // ─────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'multiply-shell-v18-2026-09-30';
+const CACHE_VERSION = 'multiply-shell-v19-2026-11-18';
 const SHELL_ASSETS = [
   './',
   'index.html',
@@ -75,7 +75,12 @@ self.addEventListener('fetch', event => {
     || url.pathname.endsWith('/');
   const isJS = req.destination === 'script' || url.pathname.endsWith('.js');
 
-  if (isDoc || isJS) { event.respondWith(networkFirst(req)); return; }
+  // Spec 003: HTML is cached under its URL WITHOUT the query string, so
+  // member_tool.html?embed=1 (opened by the shell) and plain member_tool.html
+  // share ONE entry that every fetch refreshes - no install-time copy left
+  // behind to be served stale. JS keeps its full URL (?v= cache-busting).
+  if (isDoc) { event.respondWith(networkFirst(req, url.origin + url.pathname)); return; }
+  if (isJS) { event.respondWith(networkFirst(req)); return; }
   event.respondWith(cacheFirst(req));
 });
 
@@ -83,7 +88,8 @@ self.addEventListener('fetch', event => {
 // page for navigations) when the network is unreachable.
 const SW_NET_TIMEOUT_MS = 3500;
 
-async function networkFirst(req) {
+async function networkFirst(req, cacheKey) {
+  const key = cacheKey || req;   // Spec 003: query-less key for HTML
   // Real network fetch; also refreshes the cache. Kept alive so it can revalidate
   // the cache in the background even when the timeout below wins the race.
   const netPromise = fetch(req).then(fresh => {
@@ -96,7 +102,7 @@ async function networkFirst(req) {
       // an UNHANDLED rejection and a cache write that silently never happens.
       const copy = fresh.clone();
       caches.open(CACHE_VERSION)
-        .then(c => c.put(req, copy))
+        .then(c => c.put(key, copy))
         .catch(() => {});
     }
     return fresh;
@@ -114,7 +120,7 @@ async function networkFirst(req) {
   if (res !== '__NET_TIMEOUT__' && res) return res; // network answered in time
 
   // Stalled/failed -> serve cache if we have it (background fetch keeps it fresh).
-  const cached = await caches.match(req);
+  const cached = await caches.match(key);
   if (cached) return cached;
 
   // No cache (cold, non-precached resource) -> don't abandon; wait for the real fetch.

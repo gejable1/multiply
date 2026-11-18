@@ -9477,6 +9477,7 @@ async function _persistDevoReflection(opts){
   const wasText = currentReflectionRow ? (currentReflectionRow.reflection || '') : '';
   if((finalText || '').trim() === wasText.trim()) return { saved:false, changed:false };
   try{
+   try{
     if(currentReflectionRow && currentReflectionRow.id){
       const {error} = await db.from('devotional_reflections').update({
         reflection: finalText,
@@ -9499,12 +9500,36 @@ async function _persistDevoReflection(opts){
     } else {
       return { saved:false, changed:false };
     }
+   }catch(e1){
+    // Spec 003 safety net: a duplicate key (23505) means today's row already
+    // exists (e.g. the auto-save wrote it). Re-read it by (member_id,
+    // entry_date) and UPDATE it by id - once, no loop - then carry on as saved.
+    if(!e1 || e1.code !== '23505') throw e1;
+    console.warn('reflection persist: duplicate key, updating the existing row', e1);
+    const {data: row, error: rErr} = await db.from('devotional_reflections')
+      .select('*')
+      .eq('member_id', MEMBER.memberId)
+      .eq('entry_date', currentReaderEntry.entry_date)
+      .maybeSingle();
+    if(rErr) throw rErr;
+    if(!row || !row.id) throw e1;
+    const {error: uErr} = await db.from('devotional_reflections').update({
+      reflection: finalText,
+      updated_at: new Date().toISOString()
+    }).eq('id', row.id);
+    if(uErr) throw uErr;
+    currentReflectionRow = Object.assign({}, row, { reflection: finalText });
+   }
     return { saved:true, changed:true };
   }catch(e){
     console.error('reflection persist failed:', e);
     if(!opts.silent){
+      // Spec 003: a friendly message; the raw error stays in the console and
+      // the textbox is never cleared, so the member can simply tap Save again.
       const tl = document.body.classList.contains('lang-tl');
-      showToast((tl?'Hindi na-save ang tugon: ':'Could not save reflection: ')+e.message, true);
+      showToast(tl
+        ? 'Hindi pa na-save — nandito pa ang isinulat mo. Tingnan ang signal at i-tap muli ang Save.'
+        : 'Not saved yet — your words are still here. Check your signal and tap Save again.', true);
     }
     return { saved:false, error:e };
   }
@@ -9589,6 +9614,9 @@ async function closeDevoReader(){
   // Save reflection if changed — centralized persist (same path as autosave + Save button)
   clearTimeout(_devoAutosaveTimer); // closing now; cancel any pending autosave
   const _res = await _persistDevoReflection({silent:false});
+  // Spec 003: if the save failed, keep the reader open with the words still in
+  // the box (the friendly toast asks them to tap Save again) - never discard.
+  if(_res && _res.error) return;
   let savedReflection = !!(_res && _res.saved);
 
   // Mark today complete (silent) ONLY for TODAY's entry with a >=10-word reflection (Inv #62)
