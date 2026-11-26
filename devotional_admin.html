@@ -163,6 +163,21 @@ body{
   position:absolute;top:6px;right:7px;
   font-size:13px;color:var(--forest);
 }
+.cal-cell .tl-badge{
+  align-self:flex-start;margin-top:4px;max-width:100%;overflow:hidden;
+  font-size:8px;font-weight:700;letter-spacing:.03em;
+  padding:1px 4px;border-radius:5px;line-height:1.3;white-space:nowrap;
+}
+.cal-cell.has-tl .day-title{-webkit-line-clamp:1;}
+.cal-cell .tl-badge.draft{background:#fff1d6;color:#8a5a00;border:1px solid #f0c66b;}
+.cal-cell .tl-badge.ok{background:#dff5e8;color:#1d6b3f;border:1px solid #8fd1aa;}
+/* Spec 004: Tagalog version section in the single-entry editor */
+.tl-section{margin:0.4rem 0 1rem;border:1.5px solid var(--line);border-radius:12px;background:var(--cream);}
+.tl-section > summary{cursor:pointer;padding:12px 14px;font-weight:700;font-size:14px;color:var(--ink);list-style-position:inside;}
+.tl-section[open] > summary{border-bottom:1px solid var(--line);}
+.tl-section .tl-body{padding:12px 14px 2px;}
+.tl-section select{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;background:#fff;}
+.tl-note{margin:0.4rem 0 1rem;font-size:12.5px;color:var(--muted);}
 .cal-cell .sunday-tag{
   position:absolute;bottom:5px;right:7px;
   font-size:8.5px;color:var(--muted);font-weight:700;
@@ -483,6 +498,30 @@ body{
       <textarea id="fWeeklySummary" rows="6" placeholder="Recap of the week's devotionals plus a 'Next week…' lookahead. Leave blank for Mon–Fri entries."></textarea>
     </div>
 
+    <!-- Spec 004: Tagalog version (needs migration 129; hidden until the columns exist) -->
+    <div class="tl-note" id="tlNote" style="display:none">Run migration 129 to add Tagalog.</div>
+    <details class="tl-section" id="tlSection" style="display:none">
+      <summary>🇵🇭 Tagalog version <span id="tlSummaryState" style="color:var(--muted);font-weight:500;font-size:12px"></span></summary>
+      <div class="tl-body">
+        <div class="field">
+          <label>Status <span style="color:var(--muted);font-weight:400;font-size:11px">(members see Tagalog only when Reviewed; a blank field shows the English)</span></label>
+          <select id="fTlStatus">
+            <option value="">None</option>
+            <option value="draft">Draft</option>
+            <option value="reviewed">Reviewed</option>
+          </select>
+        </div>
+        <div class="field"><label>Title (Tagalog)</label><input id="fTitleTl" type="text"></div>
+        <div class="field"><label>Scripture Text (Tagalog)</label><textarea id="fScriptureTl" rows="4"></textarea></div>
+        <div class="field"><label>Illustrative Story (Tagalog)</label><textarea id="fStoryTl" rows="6"></textarea></div>
+        <div class="field"><label>Expository Explanation (Tagalog)</label><textarea id="fExplanationTl" rows="6"></textarea></div>
+        <div class="field"><label>Response / Application (Tagalog)</label><textarea id="fResponseTl" rows="6"></textarea></div>
+        <div class="field"><label>Prayer (Tagalog)</label><textarea id="fPrayerTl" rows="5"></textarea></div>
+        <div class="field"><label>Reflection Questions (Tagalog) <span style="color:var(--muted);font-weight:400;font-size:11px">(one per line)</span></label><textarea id="fQuestionsTl" rows="4"></textarea></div>
+        <div class="field"><label>📝 Weekly Summary (Tagalog)</label><textarea id="fWeeklySummaryTl" rows="5"></textarea></div>
+      </div>
+    </details>
+
     <div class="edit-actions">
       <button class="btn danger sm" id="deleteBtn" onclick="confirmDelete()" style="display:none">🗑 Delete</button>
       <button class="btn" onclick="cancelEdit()">Cancel</button>
@@ -599,12 +638,23 @@ let entriesByDate = {}; // 'YYYY-MM-DD' -> row
 let editingDate = null; // null = create new, otherwise editing existing
 let editingId = null;   // db id when editing existing
 let parsedPreview = []; // result of bulk parse, awaiting save
+// Spec 004: true once migration 129's Tagalog columns exist. Fail-closed:
+// any probe error (column missing OR network) keeps the Tagalog UI hidden.
+let _tlReady = false;
+async function _probeTagalog(){
+  try{
+    const {error} = await db.from('devotionals').select('tl_status').limit(1);
+    _tlReady = !error;
+    if(error) console.warn('Tagalog columns not available (migration 129 not run?):', error.message);
+  }catch(e){ _tlReady = false; console.warn('Tagalog probe failed:', e); }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 async function initAdmin(){
   document.getElementById('whoName').textContent = LEADER.leaderName || 'Pastor';
+  await _probeTagalog();
   await loadMonth();
   document.getElementById('bootScreen').style.display = 'none';
   document.getElementById('appShell').style.display = '';
@@ -698,8 +748,15 @@ function renderCalendar(){
 
     let inner = `<div class="day-num">${day}</div>`;
     if(entry && entry.title){
-      inner += `<div class="day-title">${escapeHTML(entry.title)}</div>`;
       inner += `<div class="check">✓</div>`;
+      // Spec 004: Tagalog status badge (in flow under the day number, so it never covers it)
+      if(entry.tl_status === 'reviewed' || entry.tl_status === 'draft'){
+        cell.classList.add('has-tl');
+        inner += entry.tl_status === 'reviewed'
+          ? `<div class="tl-badge ok" title="Tagalog reviewed">TL ✓</div>`
+          : `<div class="tl-badge draft" title="Tagalog loaded, not yet reviewed">TL draft</div>`;
+      }
+      inner += `<div class="day-title">${escapeHTML(entry.title)}</div>`;
       entryCount++;
     } else if(isSunday){
       inner += `<div class="sunday-tag">SUN</div>`;
@@ -760,6 +817,24 @@ function openEdit(iso){
   document.getElementById('fPrayer').value      = entry?.prayer || '';
   document.getElementById('fWeeklySummary').value = entry?.weekly_summary || '';
 
+  // Spec 004: Tagalog section (only once migration 129 has run)
+  document.getElementById('tlSection').style.display = _tlReady ? '' : 'none';
+  document.getElementById('tlNote').style.display = _tlReady ? 'none' : '';
+  if(_tlReady){
+    const st = entry?.tl_status || '';
+    document.getElementById('fTlStatus').value = (st === 'draft' || st === 'reviewed') ? st : '';
+    document.getElementById('fTitleTl').value         = entry?.title_tl || '';
+    document.getElementById('fScriptureTl').value     = entry?.scripture_text_tl || '';
+    document.getElementById('fStoryTl').value         = entry?.story_tl || '';
+    document.getElementById('fExplanationTl').value   = entry?.explanation_tl || '';
+    document.getElementById('fResponseTl').value      = entry?.response_tl || '';
+    document.getElementById('fPrayerTl').value        = entry?.prayer_tl || '';
+    document.getElementById('fQuestionsTl').value     = Array.isArray(entry?.reflection_questions_tl) ? entry.reflection_questions_tl.join('\n') : '';
+    document.getElementById('fWeeklySummaryTl').value = entry?.weekly_summary_tl || '';
+    document.getElementById('tlSummaryState').textContent = st === 'reviewed' ? '· Reviewed' : st === 'draft' ? '· Draft' : '';
+    document.getElementById('tlSection').open = !!st;
+  }
+
   // Show delete button only if editing existing
   document.getElementById('deleteBtn').style.display = entry ? '' : 'none';
 }
@@ -787,6 +862,22 @@ async function saveEntry(){
     author:         LEADER.leaderName || 'Pastor',
     updated_at:     new Date().toISOString()
   };
+  // Spec 004: Tagalog fields + status (only when migration 129's columns exist)
+  if(_tlReady){
+    const qs = (document.getElementById('fQuestionsTl').value || '').split('\n').map(x => x.trim()).filter(Boolean);
+    const st = document.getElementById('fTlStatus').value;
+    Object.assign(payload, {
+      title_tl:                val('fTitleTl'),
+      scripture_text_tl:       val('fScriptureTl'),
+      story_tl:                val('fStoryTl'),
+      explanation_tl:          val('fExplanationTl'),
+      response_tl:             val('fResponseTl'),
+      prayer_tl:               val('fPrayerTl'),
+      reflection_questions_tl: qs.length ? qs : null,
+      weekly_summary_tl:       val('fWeeklySummaryTl'),
+      tl_status:               (st === 'draft' || st === 'reviewed') ? st : null
+    });
+  }
   if(!payload.title){
     showToast('Title is required', true);
     return;
@@ -1208,6 +1299,9 @@ async function bulkSave(replaceExisting){
   // Save one by one (could batch but easier to report progress this way)
   let okCount = 0, errCount = 0;
   for(const e of toSave){
+    // Spec 004: ENGLISH ONLY. This payload must never include any *_tl column
+    // or tl_status -- a "replace" re-import updates only these English fields,
+    // so the Tagalog version (and its review status) on that date survives.
     const payload = {
       entry_date:     e.entry_date,
       title:          e.title,

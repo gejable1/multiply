@@ -2001,9 +2001,16 @@ async function mpLoadDevotional(){
   const titleEl = document.getElementById('mpDevoTitle');
   _mpDevo = null;
   try{
-    const { data, error } = await db.from('devotionals')
-      .select('id,entry_date,title,scripture_ref,scripture_text,story,explanation,response,prayer,reflection_questions')
+    const MP_DEVO_COLS = 'id,entry_date,title,scripture_ref,scripture_text,story,explanation,response,prayer,reflection_questions';
+    // Spec 004: also read the Tagalog version. If migration 129 hasn't been run
+    // the _tl columns don't exist and this errors -- fall back to English only.
+    let { data, error } = await db.from('devotionals')
+      .select(MP_DEVO_COLS + ',title_tl,scripture_text_tl,story_tl,explanation_tl,response_tl,prayer_tl,reflection_questions_tl,tl_status')
       .eq('entry_date', date).maybeSingle();
+    if(error){
+      console.warn('devo load (Tagalog columns unavailable, using English only):', error.message);
+      ({ data, error } = await db.from('devotionals').select(MP_DEVO_COLS).eq('entry_date', date).maybeSingle());
+    }
     if(error) throw error;
     _mpDevo = data;
   }catch(e){ console.error('devo load', e); }
@@ -2019,6 +2026,31 @@ async function mpLoadDevotional(){
     document.getElementById('mpPrompt').value = '';
     document.getElementById('mpStep2').style.display = 'none';
   }
+}
+
+// Spec 004: the reviewed Tagalog version as an extra prompt block, right after
+// DEVOTIONAL. Same fields as the English block; a blank Tagalog field falls back
+// to the English one. Returns '' (prompt byte-identical) unless tl_status is
+// 'reviewed'.
+function _mpTagalogBlock(d){
+  if(!d || d.tl_status !== 'reviewed') return '';
+  const pick = (f) => {
+    const t = d[f + '_tl'];
+    const has = Array.isArray(t) ? t.some(x => x && String(x).trim()) : (t != null && String(t).trim() !== '');
+    return has ? t : d[f];
+  };
+  const q = (pick('reflection_questions')||'').toString().trim();
+  return `
+
+DEVOTIONAL (TAGALOG VERSION — use this wording for FACILITATOR_TL and PARTICIPANT_TL)
+Title: ${pick('title')||''}
+Scripture: ${d.scripture_ref||''}
+${pick('scripture_text')||''}
+Story: ${pick('story')||''}
+Explanation: ${pick('explanation')||''}
+Response: ${pick('response')||''}
+Prayer: ${pick('prayer')||''}
+Reflection questions: ${q}`;
 }
 
 function mpBuildPrompt(d){
@@ -2039,7 +2071,7 @@ Story: ${d.story||''}
 Explanation: ${d.explanation||''}
 Response: ${d.response||''}
 Prayer: ${d.prayer||''}
-Reflection questions: ${q}
+Reflection questions: ${q}${_mpTagalogBlock(d)}
 
 THE FACILITATOR'S GUIDE MUST FOLLOW THIS TIMED 1-HOUR FLOW
 0:00-0:03  Celebrate (the leader opens by naming the LC's wins from the past week - answered prayers, milestones, a member who reached out, the group meeting its goal - and the group gives thanks to God together)

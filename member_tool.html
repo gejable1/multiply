@@ -1281,6 +1281,11 @@ body.lang-tl .tl-text{display:inline;}
   margin-bottom:14px;
   letter-spacing:-.01em;
 }
+/* Spec 004: devotional EN | TL pill (only when a reviewed Tagalog version exists).
+   Switches the devotional text only -- never the app language. */
+.devo-lang-pill{display:inline-flex;border:1.5px solid var(--line, #e2d8c6);border-radius:999px;overflow:hidden;margin:0 0 14px;background:#fff;}
+.devo-lang-pill button{border:none;background:transparent;color:var(--ink-soft, #3d342a);font:700 13px/1 'DM Sans',system-ui,sans-serif;letter-spacing:.06em;padding:0 18px;min-height:40px;min-width:56px;cursor:pointer;}
+.devo-lang-pill button[aria-pressed="true"]{background:var(--forest, #0e3a2c);color:#fff;}
 .reader-source-note{
   display:inline-block;
   font-family:'Caveat',cursive;font-weight:600;
@@ -8974,6 +8979,42 @@ function isSundayDate(iso){
   return new Date(iso + 'T00:00:00').getDay() === 0;
 }
 
+// ───── Spec 004: bilingual devotionals ─────
+// Tagalog shows only when tl_status = 'reviewed'. Field-by-field fallback: a
+// blank Tagalog field shows the English one. Rows are read with select('*'),
+// so before migration 129 the _tl fields are simply absent -> English.
+const _DEVO_TL_FIELDS = ['title','scripture_text','story','explanation','response','prayer','reflection_questions','weekly_summary'];
+function _devoHasTl(e){ return !!(e && e.tl_status === 'reviewed'); }
+function _devoStoredLang(){
+  try{ const v = localStorage.getItem('mmt_devo_lang'); return (v === 'en' || v === 'tl') ? v : null; }catch(_e){ return null; }
+}
+// The member's choice wins; otherwise follow the app language.
+function _devoLangFor(e){
+  if(!_devoHasTl(e)) return 'en';
+  return _devoStoredLang() || (document.body.classList.contains('lang-tl') ? 'tl' : 'en');
+}
+function _devoView(e, lang){
+  if(!e || lang !== 'tl' || !_devoHasTl(e)) return e;
+  const v = Object.assign({}, e);
+  _DEVO_TL_FIELDS.forEach(f => {
+    const t = e[f + '_tl'];
+    const has = Array.isArray(t) ? t.some(x => x && String(x).trim()) : (t != null && String(t).trim() !== '');
+    if(has) v[f] = t;
+  });
+  return v;
+}
+let _readerDevoLang = 'en';
+function setDevoLang(lang){
+  if(lang !== 'en' && lang !== 'tl') return;
+  try{ localStorage.setItem('mmt_devo_lang', lang); }catch(_e){}
+  _readerDevoLang = lang;
+  // Re-render ONLY the devotional text; the reflection box (and its typing) is untouched.
+  const box = document.getElementById('readerDevoText');
+  if(box && currentReaderEntry) box.innerHTML = _devoTextHTML(_devoView(currentReaderEntry, lang));
+  document.querySelectorAll('#readerBody .devo-lang-pill button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  try{ renderAnchorCard(); }catch(_e){}
+}
+
 // ───── Load today's entry + the rest of this month for browse ─────
 async function loadTodaysDevo(){
   const today = todayIso();
@@ -9032,9 +9073,13 @@ function renderAnchorCard(){
 
   if(todayDevo){
     // ── Today has an entry ──
+    // Spec 004: the title follows the devotional language (stored choice, else the app language)
+    const _tdChoice = _devoHasTl(todayDevo) ? _devoStoredLang() : 'en';
+    const _tdEn = _devoView(todayDevo, _tdChoice || 'en').title;
+    const _tdTl = _devoView(todayDevo, _tdChoice || 'tl').title;
     titleEl.innerHTML =
-      `<span class="en-text">${MultiplyShared.escapeHTML(todayDevo.title || "Today's reading")}</span>` +
-      `<span class="tl-text">${MultiplyShared.escapeHTML(todayDevo.title || "Ngayong araw")}</span>`;
+      `<span class="en-text">${MultiplyShared.escapeHTML(_tdEn || "Today's reading")}</span>` +
+      `<span class="tl-text">${MultiplyShared.escapeHTML(_tdTl || "Ngayong araw")}</span>`;
 
     // Snippet: first 120 chars of story (or response if no story)
     let snippet = (todayDevo.story || todayDevo.response || todayDevo.explanation || '').trim();
@@ -9201,8 +9246,26 @@ function renderReaderBody(){
     dt.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric', year:'numeric' }).toUpperCase();
 
   const esc = MultiplyShared.escapeHTML;
-  const isBilingualOk = true; // body content is single-language (Pastor's), no per-section TL/EN
+  // Spec 004: EN | TL pill when a reviewed Tagalog version exists; the text block
+  // lives in #readerDevoText so switching never touches the reflection box.
+  _readerDevoLang = _devoLangFor(e);
+  let html = '';
+  if(_devoHasTl(e)){
+    html += `<div class="devo-lang-pill" role="group" aria-label="Devotional language">`
+      + `<button type="button" data-lang="en" lang="en" aria-pressed="${_readerDevoLang === 'en'}" onclick="setDevoLang('en')">EN</button>`
+      + `<button type="button" data-lang="tl" lang="tl" aria-pressed="${_readerDevoLang === 'tl'}" onclick="setDevoLang('tl')">TL</button></div>`;
+  }
+  html += `<div id="readerDevoText">${_devoTextHTML(_devoView(e, _readerDevoLang))}</div>`;
 
+  // Reflection box
+  html += _devoReflectionBoxHTML();
+  document.getElementById('readerBody').innerHTML = html;
+  _devoBindReflectionBox();
+}
+
+// Spec 004: the devotional text sections (unchanged markup, moved out of renderReaderBody)
+function _devoTextHTML(e){
+  const esc = MultiplyShared.escapeHTML;
   let html = '';
   if(e.title){
     html += `<div class="reader-h1">${esc(e.title)}</div>`;
@@ -9268,8 +9331,12 @@ function renderReaderBody(){
     html += `<div class="reader-prose">${esc(e.weekly_summary)}</div>`;
     html += `</div>`;
   }
+  return html;
+}
 
-  // Reflection box
+function _devoReflectionBoxHTML(){
+  const esc = MultiplyShared.escapeHTML;
+  let html = '';
   html += `<div class="reflection-box">`;
   html += `<div class="rb-label"><span class="en-text">MY REFLECTION</span><span class="tl-text">AKING TUGON</span></div>`;
   html += `<div class="rb-sub"><span class="en-text">What is the Spirit saying to you, kapatid?</span><span class="tl-text">Ano ang sinasabi ng Espiritu sa iyo, kapatid?</span></div>`;
@@ -9278,9 +9345,10 @@ function renderReaderBody(){
   html += `<button id="reflectionSaveBtn" class="rb-save" type="button" onclick="saveDevoReflection()"><span class="en-text">Save reflection</span><span class="tl-text">I-save ang tugon</span></button>`;
   html += `<div class="rb-autohint"><span class="en-text">Auto-saves as you write — your words are kept even if you leave this page.</span><span class="tl-text">Awtomatikong sine-save habang nagsusulat — hindi mawawala ang sinulat mo kahit umalis ka.</span></div>`;
   html += `</div>`;
+  return html;
+}
 
-  document.getElementById('readerBody').innerHTML = html;
-
+function _devoBindReflectionBox(){
   // Set the textbox value AFTER innerHTML so it doesn't get clobbered
   const ref = document.getElementById('reflectionInput');
   if(ref){
