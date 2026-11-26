@@ -69,6 +69,10 @@ main{max-width:680px;margin:0 auto;padding:10px 16px 40px;}
 .note{background:#fff7e6;border:1px solid #f0d89a;color:#6b4e00;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;margin-bottom:12px;}
 .state{text-align:center;padding:48px 16px;color:var(--muted);}
 .state .e{font-size:40px;margin-bottom:10px;}
+/* Spec 004: EN | TL pill (shown only when a reviewed Tagalog version exists) */
+.lang-pill{display:inline-flex;border:1.5px solid var(--line);border-radius:999px;overflow:hidden;margin-bottom:14px;background:var(--cream);}
+.lang-pill button{border:none;background:transparent;color:var(--ink-soft);font:700 13px/1 var(--font-ui);letter-spacing:.06em;padding:0 18px;min-height:40px;min-width:56px;cursor:pointer;}
+.lang-pill button[aria-pressed="true"]{background:var(--forest);color:#fff;}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;}
 .toast.show{opacity:1;}
 @media (max-width:380px){ .h1{font-size:calc(23px * var(--scale));} .nav button{padding:8px 10px;} }
@@ -161,10 +165,18 @@ main{max-width:680px;margin:0 auto;padding:10px 16px 40px;}
 
   function section(label, inner){ return '<div class="sec"><div class="lbl">' + label + '</div>' + inner + '</div>'; }
 
-  function render(e, note){
+  // Spec 004: Tagalog. tlRow comes from public_devotional_tl (reviewed rows only).
+  // Field-by-field fallback: a blank Tagalog field shows the English one.
+  var TL_FIELDS = ['title','scripture_text','story','explanation','response','prayer','reflection_questions','weekly_summary'];
+  function hasText(v){ return Array.isArray(v) ? v.some(function(x){ return x && String(x).trim(); }) : (v != null && String(v).trim() !== ''); }
+  function viewFor(e, tlRow, lang){
+    if(lang !== 'tl' || !tlRow) return e;
+    var v = {}; for(var k in e) v[k] = e[k];
+    TL_FIELDS.forEach(function(f){ if(hasText(tlRow[f + '_tl'])) v[f] = tlRow[f + '_tl']; });
+    return v;
+  }
+  function textHTML(e){
     var h = '';
-    if(note) h += '<div class="note">' + note + '</div>';
-    h += '<article class="card">';
     if(e.title) h += '<h1 class="h1">' + esc(e.title) + '</h1>';
     if(e.source_note) h += '<div class="src">(' + esc(e.source_note) + ')</div>';
     if(e.story) h += section('&#x1F331; Illustrative Story', '<div class="prose">' + esc(e.story) + '</div>');
@@ -179,6 +191,21 @@ main{max-width:680px;margin:0 auto;padding:10px 16px 40px;}
     if(qs.length) h += section('&#x1F4AD; Reflect', '<ol class="qs">' + qs.map(function(q, i){ return '<li data-n="' + (i + 1) + '">' + esc(q) + '</li>'; }).join('') + '</ol>');
     if(e.prayer) h += section('&#x1F64F; Prayer', '<div class="prayer">' + esc(e.prayer) + '</div>');
     if(e.weekly_summary) h += section('&#x1F4DD; Weekly Summary', '<div class="prose">' + esc(e.weekly_summary) + '</div>');
+    return h;
+  }
+
+  function render(base, note, tlRow){
+    var lang = (tlRow && ls('get', 'pub_devo_lang') === 'tl') ? 'tl' : 'en';   // default EN
+    var e = viewFor(base, tlRow, lang);
+    var h = '';
+    if(note) h += '<div class="note">' + note + '</div>';
+    h += '<article class="card">';
+    if(tlRow){
+      h += '<div class="lang-pill" role="group" aria-label="Devotional language">'
+        + '<button type="button" data-lang="en" lang="en" aria-pressed="' + (lang === 'en') + '">EN</button>'
+        + '<button type="button" data-lang="tl" lang="tl" aria-pressed="' + (lang === 'tl') + '">TL</button></div>';
+    }
+    h += '<div id="devoText">' + textHTML(e) + '</div>';
     h += '<div class="refl"><div class="lbl">My Reflection</div>'
       + '<textarea id="refl" placeholder="What is God teaching you today?"></textarea>'
       + '<div class="hint">Saved only on this phone &mdash; no one else can see it.</div></div>';
@@ -186,6 +213,17 @@ main{max-width:680px;margin:0 auto;padding:10px 16px 40px;}
     h += '</article>';
     h += '<div class="credit">Devotional from <strong>Rosehill Christian Church</strong></div>';
     document.getElementById('main').innerHTML = h;
+
+    // Spec 004: switching re-renders ONLY the devotional text (reflection box untouched)
+    Array.prototype.forEach.call(document.querySelectorAll('.lang-pill button'), function(b){
+      b.onclick = function(){
+        lang = b.getAttribute('data-lang');
+        ls('set', 'pub_devo_lang', lang);
+        e = viewFor(base, tlRow, lang);
+        document.getElementById('devoText').innerHTML = textHTML(e);
+        Array.prototype.forEach.call(document.querySelectorAll('.lang-pill button'), function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      };
+    });
 
     var key = 'pubdevo_refl_' + app.reflKey + '_' + e.entry_date;
     var ta = document.getElementById('refl');
@@ -206,11 +244,17 @@ main{max-width:680px;margin:0 auto;padding:10px 16px 40px;}
   function show(date, note){
     current = date; paintNav();
     document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4D6;</div>Loading&hellip;</div>';
+    // Spec 004: the Tagalog read is optional. If public_devotional_tl is missing
+    // (migration 129 not run), fails, or returns nothing -> English only, no pill.
+    var tlP = rpc('public_devotional_tl', { p_date: date }).then(function(r){ return (r && r[0]) || null; }, function(){ return null; });
     rpc('public_devotional', { p_date: date }).then(function(rows){
       var e = rows && rows[0];
       if(!e){ document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4ED;</div>No devotional for this day.</div>'; return; }
-      render(e, note);
-      window.scrollTo(0, 0);
+      return tlP.then(function(tl){
+        if(current !== date) return;   // the reader moved on while this loaded
+        render(e, note, tl);
+        window.scrollTo(0, 0);
+      });
     }).catch(function(){
       document.getElementById('main').innerHTML = '<div class="state"><div class="e">&#x1F4F6;</div>Could not load the devotional. Please check your connection and try again.</div>';
     });
